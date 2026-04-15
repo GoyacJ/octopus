@@ -34,7 +34,6 @@ mod snapshot_store;
 mod subrun_orchestrator;
 mod team_runtime;
 mod trace_context;
-mod turn_submit;
 mod worker_runtime;
 mod workflow_runtime;
 
@@ -93,10 +92,10 @@ use adapter_state::{
     merge_project_assignments, optional_project_id, sync_runtime_session_detail, RuntimeAggregate,
     RuntimeAggregateMetadata, RuntimeState,
 };
-use executor::ExecutionResponse;
+use executor::ModelExecutionResult;
 pub use executor::{
-    LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeConversationRequest,
-    RuntimeModelExecutor,
+    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationRequest,
+    RuntimeModelDriver,
 };
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
@@ -118,7 +117,7 @@ impl RuntimeAdapter {
             paths,
             observation,
             authorization,
-            Arc::new(LiveRuntimeModelExecutor::new()),
+            Arc::new(LiveRuntimeModelDriver::new()),
         )
     }
 
@@ -127,7 +126,7 @@ impl RuntimeAdapter {
         paths: WorkspacePaths,
         observation: Arc<dyn ObservationService>,
         authorization: Arc<dyn AuthorizationService>,
-        executor: Arc<dyn RuntimeModelExecutor>,
+        executor: Arc<dyn RuntimeModelDriver>,
     ) -> Self {
         let config_loader = ConfigLoader::new(&paths.root, paths.runtime_config_dir.clone());
         let adapter = Self {

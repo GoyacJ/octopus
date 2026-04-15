@@ -529,34 +529,6 @@ impl CapabilityExecutor {
                     .map(|output| ToolExecutionOutcome::Allow { output })
                     .map_err(|error| ToolError::new(error.to_string()))
             }
-            "SkillDiscovery" => {
-                let input: crate::SkillDiscoveryInput = serde_json::from_value(input)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                let output = runtime.skill_discovery(
-                    &input.query,
-                    input.max_results.unwrap_or(5),
-                    planner_input,
-                );
-                serde_json::to_string_pretty(&output)
-                    .map(|output| ToolExecutionOutcome::Allow { output })
-                    .map_err(|error| ToolError::new(error.to_string()))
-            }
-            "SkillTool" => {
-                let input: crate::SkillToolInput = serde_json::from_value(input)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                match runtime.execute_skill_detailed(&input.skill, input.arguments, planner_input) {
-                    Ok(output) => {
-                        self.apply_skill_execution_result(&output, store);
-                        serde_json::to_string_pretty(&output)
-                            .map(|output| ToolExecutionOutcome::Allow { output })
-                            .map_err(|error| ToolError::new(error.to_string()))
-                    }
-                    Err(failure) => {
-                        self.apply_skill_state_updates(&failure.state_updates, store);
-                        Err(ToolError::new(failure.message))
-                    }
-                }
-            }
             _ => match request.dispatch_kind {
                 CapabilityDispatchKind::BuiltinOrPlugin => runtime
                     .execute_local_tool(tool_name, &input)

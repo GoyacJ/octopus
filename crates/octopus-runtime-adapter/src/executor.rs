@@ -16,20 +16,20 @@ pub struct RuntimeConversationRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExecutionResponse {
+pub struct ModelExecutionResult {
     pub content: String,
     pub request_id: Option<String>,
     pub total_tokens: Option<u32>,
 }
 
 #[async_trait]
-pub trait RuntimeModelExecutor: Send + Sync {
-    async fn execute_turn(
+pub trait RuntimeModelDriver: Send + Sync {
+    async fn execute_prompt(
         &self,
         target: &ResolvedExecutionTarget,
         input: &str,
         system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError>;
+    ) -> Result<ModelExecutionResult, AppError>;
 
     async fn execute_conversation(
         &self,
@@ -50,7 +50,7 @@ pub trait RuntimeModelExecutor: Send + Sync {
         let system_prompt =
             (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n"));
         let response = self
-            .execute_turn(target, fallback_input.as_str(), system_prompt.as_deref())
+            .execute_prompt(target, fallback_input.as_str(), system_prompt.as_deref())
             .await?;
         let mut events = vec![AssistantEvent::TextDelta(response.content)];
         if let Some(total_tokens) = response.total_tokens {
@@ -67,11 +67,11 @@ pub trait RuntimeModelExecutor: Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct LiveRuntimeModelExecutor {
+pub struct LiveRuntimeModelDriver {
     http: reqwest::Client,
 }
 
-impl LiveRuntimeModelExecutor {
+impl LiveRuntimeModelDriver {
     pub fn new() -> Self {
         Self {
             http: build_http_client_or_default(),
@@ -79,20 +79,20 @@ impl LiveRuntimeModelExecutor {
     }
 }
 
-impl Default for LiveRuntimeModelExecutor {
+impl Default for LiveRuntimeModelDriver {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl RuntimeModelExecutor for LiveRuntimeModelExecutor {
-    async fn execute_turn(
+impl RuntimeModelDriver for LiveRuntimeModelDriver {
+    async fn execute_prompt(
         &self,
         target: &ResolvedExecutionTarget,
         input: &str,
         system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError> {
+    ) -> Result<ModelExecutionResult, AppError> {
         match target.protocol_family.as_str() {
             "anthropic_messages" => execute_anthropic_messages(target, input, system_prompt).await,
             "openai_chat" => execute_openai_chat(target, input, system_prompt).await,
@@ -137,7 +137,7 @@ impl RuntimeModelExecutor for LiveRuntimeModelExecutor {
                 let system_prompt = (!request.system_prompt.is_empty())
                     .then(|| request.system_prompt.join("\n\n"));
                 let response = self
-                    .execute_turn(target, input.as_str(), system_prompt.as_deref())
+                    .execute_prompt(target, input.as_str(), system_prompt.as_deref())
                     .await?;
                 let mut events = vec![AssistantEvent::TextDelta(response.content)];
                 if let Some(total_tokens) = response.total_tokens {
@@ -163,20 +163,20 @@ impl RuntimeModelExecutor for LiveRuntimeModelExecutor {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct MockRuntimeModelExecutor;
+pub struct MockRuntimeModelDriver;
 
 #[async_trait]
-impl RuntimeModelExecutor for MockRuntimeModelExecutor {
-    async fn execute_turn(
+impl RuntimeModelDriver for MockRuntimeModelDriver {
+    async fn execute_prompt(
         &self,
         target: &ResolvedExecutionTarget,
         input: &str,
         system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError> {
+    ) -> Result<ModelExecutionResult, AppError> {
         let prompt_prefix = system_prompt
             .map(|value| format!(" [{value}]"))
             .unwrap_or_default();
-        Ok(ExecutionResponse {
+        Ok(ModelExecutionResult {
             content: format!(
                 "Mock assistant response via {}:{}{} -> {}",
                 target.provider_id, target.surface, prompt_prefix, input
@@ -197,7 +197,7 @@ async fn execute_anthropic_messages(
     target: &ResolvedExecutionTarget,
     input: &str,
     system_prompt: Option<&str>,
-) -> Result<ExecutionResponse, AppError> {
+) -> Result<ModelExecutionResult, AppError> {
     let api_key = resolve_api_key(target)?;
     let client = AnthropicClient::from_auth(AuthSource::ApiKey(api_key)).with_base_url(
         target
@@ -210,7 +210,7 @@ async fn execute_anthropic_messages(
         .send_message(&request)
         .await
         .map_err(|error| AppError::runtime(error.to_string()))?;
-    Ok(ExecutionResponse {
+    Ok(ModelExecutionResult {
         content: flatten_output_content(&response.content),
         request_id: response.request_id.clone(),
         total_tokens: Some(response.total_tokens()),
@@ -256,7 +256,7 @@ async fn execute_openai_chat(
     target: &ResolvedExecutionTarget,
     input: &str,
     system_prompt: Option<&str>,
-) -> Result<ExecutionResponse, AppError> {
+) -> Result<ModelExecutionResult, AppError> {
     let api_key = resolve_api_key(target)?;
     let config = compat_config_for_provider(&target.provider_id);
     let client = OpenAiCompatClient::new(api_key, config).with_base_url(
@@ -270,7 +270,7 @@ async fn execute_openai_chat(
         .send_message(&request)
         .await
         .map_err(|error| AppError::runtime(error.to_string()))?;
-    Ok(ExecutionResponse {
+    Ok(ModelExecutionResult {
         content: flatten_output_content(&response.content),
         request_id: response.request_id.clone(),
         total_tokens: Some(response.total_tokens()),
@@ -282,7 +282,7 @@ async fn execute_openai_responses(
     target: &ResolvedExecutionTarget,
     input: &str,
     system_prompt: Option<&str>,
-) -> Result<ExecutionResponse, AppError> {
+) -> Result<ModelExecutionResult, AppError> {
     let api_key = resolve_api_key(target)?;
     let base_url = target
         .base_url
@@ -316,7 +316,7 @@ async fn execute_openai_responses(
         )));
     }
 
-    Ok(ExecutionResponse {
+    Ok(ModelExecutionResult {
         content: extract_responses_output_text(&body),
         request_id,
         total_tokens: body
@@ -332,7 +332,7 @@ async fn execute_gemini_native(
     target: &ResolvedExecutionTarget,
     input: &str,
     system_prompt: Option<&str>,
-) -> Result<ExecutionResponse, AppError> {
+) -> Result<ModelExecutionResult, AppError> {
     let api_key = resolve_api_key(target)?;
     let base_url = target
         .base_url
@@ -381,7 +381,7 @@ async fn execute_gemini_native(
         })
         .unwrap_or_default();
 
-    Ok(ExecutionResponse {
+    Ok(ModelExecutionResult {
         content,
         request_id: None,
         total_tokens: body

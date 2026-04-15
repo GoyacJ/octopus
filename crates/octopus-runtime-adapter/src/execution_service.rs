@@ -17,7 +17,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
         session_id: &str,
         input: SubmitRuntimeTurnInput,
     ) -> Result<RuntimeRunSnapshot, AppError> {
-        turn_submit::submit_turn(self, session_id, input).await
+        agent_runtime_core::AgentRuntimeCore::submit_turn(self, session_id, input).await
     }
 
     async fn resolve_approval(

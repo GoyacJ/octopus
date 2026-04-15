@@ -205,27 +205,29 @@ fn execute_local_tool_with_runtime(
         .map_err(|error| error.to_string())
 }
 
-fn run_skill_discovery_with_runtime(
+fn discover_skills_with_runtime(
     runtime: &CapabilityRuntime,
-    input: super::SkillDiscoveryInput,
+    query: &str,
+    max_results: usize,
 ) -> serde_json::Value {
     let current_dir = std::env::current_dir().ok();
     let discovery = runtime.skill_discovery(
-        &input.query,
-        input.max_results.unwrap_or(5),
+        query,
+        max_results,
         CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
     );
     serde_json::to_value(discovery).expect("skill discovery output should be json")
 }
 
-fn run_skill_tool_with_runtime(
+fn execute_prompt_skill_with_runtime(
     runtime: &CapabilityRuntime,
-    input: super::SkillToolInput,
+    skill: &str,
+    arguments: Option<serde_json::Value>,
 ) -> Result<String, String> {
     let current_dir = std::env::current_dir().ok();
     match runtime.execute_skill(
-        &input.skill,
-        input.arguments,
+        skill,
+        arguments,
         CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
     ) {
         Ok(result) => serde_json::to_string_pretty(&result).map_err(|error| error.to_string()),
@@ -1340,27 +1342,6 @@ fn legacy_mcp_wrappers_are_removed_from_builtin_dispatch() {
 }
 
 #[test]
-fn legacy_skill_compat_wrappers_are_removed_from_builtin_dispatch() {
-    for (tool_name, input) in [
-        (
-            "SkillDiscovery",
-            json!({"query": "workspace guidance", "max_results": 3}),
-        ),
-        (
-            "SkillTool",
-            json!({"skill": "workspace-guide", "arguments": {"topic": "workspace"}}),
-        ),
-    ] {
-        let error = execute_tool(tool_name, &input)
-            .expect_err("legacy skill compat wrappers should no longer be dispatchable");
-        assert!(
-            error.contains(&format!("unsupported tool: {tool_name}")),
-            "unexpected error for {tool_name}: {error}"
-        );
-    }
-}
-
-#[test]
 fn tool_search_supports_keyword_and_select_queries() {
     let keyword = execute_tool(
         "ToolSearch",
@@ -1450,7 +1431,7 @@ Reference notes only.
         5,
         super::CapabilityPlannerInput::default(),
     ))
-    .expect("SkillDiscovery should succeed");
+    .expect("skill discovery should succeed");
 
     let output: serde_json::Value = serde_json::from_str(&discovered).expect("valid json");
     assert_eq!(output["matches"][0], "help");
@@ -1840,7 +1821,7 @@ fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
 }
 
 #[test]
-fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runtime_executors() {
+fn skill_discovery_hides_provider_prompt_skills_without_runtime_executors() {
     let mut capability = provider_prompt_skill_capability(
         "plugin-skill.workspace-guide-compat",
         super::CapabilitySourceKind::PluginSkill,
@@ -1849,13 +1830,7 @@ fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runt
     capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
-    let output = run_skill_discovery_with_runtime(
-        &runtime,
-        super::SkillDiscoveryInput {
-            query: "workspace guidance".to_string(),
-            max_results: Some(10),
-        },
-    );
+    let output = discover_skills_with_runtime(&runtime, "workspace guidance", 10);
 
     assert!(!output["matches"]
         .as_array()
@@ -1865,7 +1840,7 @@ fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runt
 }
 
 #[test]
-fn builtin_skill_tool_compat_shim_surface_gates_provider_prompt_skills_without_runtime_executors() {
+fn prompt_skill_execution_surface_gates_provider_prompt_skills_without_runtime_executors() {
     let mut capability = provider_prompt_skill_capability(
         "plugin-skill.workspace-guide-compat",
         super::CapabilitySourceKind::PluginSkill,
@@ -1874,20 +1849,18 @@ fn builtin_skill_tool_compat_shim_surface_gates_provider_prompt_skills_without_r
     capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
-    let error = run_skill_tool_with_runtime(
+    let error = execute_prompt_skill_with_runtime(
         &runtime,
-        super::SkillToolInput {
-            skill: "workspace-guide-compat".to_string(),
-            arguments: Some(json!({ "topic": "workspace" })),
-        },
+        "workspace-guide-compat",
+        Some(json!({ "topic": "workspace" })),
     )
-    .expect_err("compat shim should report surface gating");
+    .expect_err("prompt skill execution should report surface gating");
 
     assert!(error.contains("is not enabled in the current capability surface"));
 }
 
 #[test]
-fn compat_skill_entrypoints_do_not_bypass_runtime_gating() {
+fn prompt_skill_runtime_does_not_bypass_workspace_gating() {
     let _guard = env_lock()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1924,27 +1897,19 @@ Scoped workspace guidance.
 
     let runtime = CapabilityRuntime::builtin();
 
-    let path_mismatch_discovery = run_skill_discovery_with_runtime(
-        &runtime,
-        super::SkillDiscoveryInput {
-            query: "workspace guidance".to_string(),
-            max_results: Some(10),
-        },
-    );
+    let path_mismatch_discovery = discover_skills_with_runtime(&runtime, "workspace guidance", 10);
     assert!(!path_mismatch_discovery["matches"]
         .as_array()
         .expect("matches")
         .iter()
         .any(|value| value == "workspace-guide-compat-local"));
 
-    let path_mismatch_error = run_skill_tool_with_runtime(
+    let path_mismatch_error = execute_prompt_skill_with_runtime(
         &runtime,
-        super::SkillToolInput {
-            skill: "workspace-guide-compat-local".to_string(),
-            arguments: Some(json!({ "topic": "workspace" })),
-        },
+        "workspace-guide-compat-local",
+        Some(json!({ "topic": "workspace" })),
     )
-    .expect_err("compat skill tool should stay surface-gated when paths do not match");
+    .expect_err("prompt skill execution should stay surface-gated when paths do not match");
     assert!(path_mismatch_error.contains("is not visible for the current workspace"));
 
     fs::write(
@@ -1958,27 +1923,19 @@ Scoped workspace guidance.
     )
     .expect("workspace settings should exist");
 
-    let trust_mismatch_discovery = run_skill_discovery_with_runtime(
-        &runtime,
-        super::SkillDiscoveryInput {
-            query: "workspace guidance".to_string(),
-            max_results: Some(10),
-        },
-    );
+    let trust_mismatch_discovery = discover_skills_with_runtime(&runtime, "workspace guidance", 10);
     assert!(!trust_mismatch_discovery["matches"]
         .as_array()
         .expect("matches")
         .iter()
         .any(|value| value == "workspace-guide-compat-local"));
 
-    let trust_mismatch_error = run_skill_tool_with_runtime(
+    let trust_mismatch_error = execute_prompt_skill_with_runtime(
         &runtime,
-        super::SkillToolInput {
-            skill: "workspace-guide-compat-local".to_string(),
-            arguments: Some(json!({ "topic": "workspace" })),
-        },
+        "workspace-guide-compat-local",
+        Some(json!({ "topic": "workspace" })),
     )
-    .expect_err("compat skill tool should stay surface-gated when workspace is untrusted");
+    .expect_err("prompt skill execution should stay surface-gated when workspace is untrusted");
     assert!(trust_mismatch_error.contains("is not trusted for the current workspace"));
 
     std::env::set_current_dir(original_cwd).expect("cwd should restore");
@@ -2322,7 +2279,7 @@ Guide the model through the workspace.
             })),
             super::CapabilityPlannerInput::default(),
         )
-        .expect("SkillTool should execute through runtime facade");
+        .expect("prompt skill should execute through runtime facade");
     store.apply_skill_execution_result(&output);
     let output_json: serde_json::Value =
         serde_json::to_value(&output).expect("skill tool output should be json");
@@ -3308,7 +3265,7 @@ Guide the model through the workspace.
             Some(json!({"topic":"workspace"})),
             super::CapabilityPlannerInput::default(),
         )
-        .expect("SkillTool should succeed");
+        .expect("prompt skill should succeed");
     {
         let mut locked = shared_state
             .lock()

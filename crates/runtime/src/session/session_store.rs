@@ -29,16 +29,7 @@ impl Session {
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, SessionError> {
         let path = path.as_ref();
         let contents = fs::read_to_string(path)?;
-        let session = match JsonValue::parse(&contents) {
-            Ok(value)
-                if value
-                    .as_object()
-                    .is_some_and(|object| object.contains_key("messages")) =>
-            {
-                Self::from_json(&value)?
-            }
-            Err(_) | Ok(_) => Self::from_jsonl(&contents)?,
-        };
+        let session = Self::from_jsonl(&contents)?;
         Ok(session.with_persistence_path(path.to_path_buf()))
     }
 

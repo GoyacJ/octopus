@@ -83,15 +83,15 @@ impl RuntimeAdapter {
         Ok((resolved_target, configured_model))
     }
 
-    pub(super) async fn execute_resolved_turn(
+    pub(super) async fn execute_resolved_prompt(
         &self,
         target: &ResolvedExecutionTarget,
         content: &str,
         system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError> {
+    ) -> Result<ModelExecutionResult, AppError> {
         self.state
             .executor
-            .execute_turn(target, content, system_prompt)
+            .execute_prompt(target, content, system_prompt)
             .await
     }
 }

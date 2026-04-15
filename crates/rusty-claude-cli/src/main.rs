@@ -75,7 +75,6 @@ const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 const INTERNAL_PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
 const PRIMARY_SESSION_EXTENSION: &str = "jsonl";
-const LEGACY_SESSION_EXTENSION: &str = "json";
 const LATEST_SESSION_REFERENCE: &str = "latest";
 const SESSION_REFERENCE_ALIASES: &[&str] = &[LATEST_SESSION_REFERENCE, "last", "recent"];
 const CLI_OPTION_SUGGESTIONS: &[&str] = &[
@@ -3617,10 +3616,7 @@ fn resolve_session_reference(reference: &str) -> Result<SessionHandle, Box<dyn s
     let id = path
         .file_name()
         .and_then(|value| value.to_str())
-        .and_then(|name| {
-            name.strip_suffix(&format!(".{PRIMARY_SESSION_EXTENSION}"))
-                .or_else(|| name.strip_suffix(&format!(".{LEGACY_SESSION_EXTENSION}")))
-        })
+        .and_then(|name| name.strip_suffix(&format!(".{PRIMARY_SESSION_EXTENSION}")))
         .unwrap_or(reference)
         .to_string();
     Ok(SessionHandle { id, path })
@@ -3628,11 +3624,9 @@ fn resolve_session_reference(reference: &str) -> Result<SessionHandle, Box<dyn s
 
 fn resolve_managed_session_path(session_id: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let directory = sessions_dir()?;
-    for extension in [PRIMARY_SESSION_EXTENSION, LEGACY_SESSION_EXTENSION] {
-        let path = directory.join(format!("{session_id}.{extension}"));
-        if path.exists() {
-            return Ok(path);
-        }
+    let path = directory.join(format!("{session_id}.{PRIMARY_SESSION_EXTENSION}"));
+    if path.exists() {
+        return Ok(path);
     }
     Err(format_missing_session_reference(session_id).into())
 }
@@ -3640,9 +3634,7 @@ fn resolve_managed_session_path(session_id: &str) -> Result<PathBuf, Box<dyn std
 fn is_managed_session_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .is_some_and(|extension| {
-            extension == PRIMARY_SESSION_EXTENSION || extension == LEGACY_SESSION_EXTENSION
-        })
+        .is_some_and(|extension| extension == PRIMARY_SESSION_EXTENSION)
 }
 
 fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
@@ -8130,7 +8122,7 @@ UU conflicted.rs",
     }
 
     #[test]
-    fn managed_sessions_default_to_jsonl_and_resolve_legacy_json() {
+    fn managed_sessions_only_resolve_jsonl_files() {
         let _guard = cwd_lock().lock().expect("cwd lock");
         let workspace = temp_workspace("session-resolution");
         std::fs::create_dir_all(&workspace).expect("workspace should create");
@@ -8139,6 +8131,10 @@ UU conflicted.rs",
 
         let handle = create_managed_session_handle("session-alpha").expect("jsonl handle");
         assert!(handle.path.ends_with("session-alpha.jsonl"));
+        Session::new()
+            .with_persistence_path(handle.path.clone())
+            .save_to_path(&handle.path)
+            .expect("jsonl session should save");
 
         let legacy_path = workspace.join(".claw/sessions/legacy.json");
         std::fs::create_dir_all(
@@ -8152,16 +8148,19 @@ UU conflicted.rs",
             .save_to_path(&legacy_path)
             .expect("legacy session should save");
 
-        let resolved = resolve_session_reference("legacy").expect("legacy session should resolve");
+        let resolved =
+            resolve_session_reference("session-alpha").expect("jsonl session should resolve");
         assert_eq!(
             resolved
                 .path
                 .canonicalize()
                 .expect("resolved path should exist"),
-            legacy_path
+            handle
+                .path
                 .canonicalize()
-                .expect("legacy path should exist")
+                .expect("jsonl path should exist")
         );
+        assert!(resolve_session_reference("legacy").is_err());
 
         std::env::set_current_dir(previous).expect("restore cwd");
         std::fs::remove_dir_all(workspace).expect("workspace should clean up");
@@ -8734,14 +8733,16 @@ UU conflicted.rs",
             serde_json::from_str(&tool_output).expect("tool output should be json");
         assert_eq!(tool_json["structuredContent"]["echoed"], "hello");
 
-        let skill_output = executor
-            .execute(
-                "SkillTool",
-                r#"{"skill":"workspace-guide","arguments":{"topic":"workspace"}}"#,
+        let skill_output = state
+            .capability_runtime
+            .execute_skill(
+                "workspace-guide",
+                Some(json!({"topic":"workspace"})),
+                tools::CapabilityPlannerInput::default().with_current_dir(Some(&workspace)),
             )
             .expect("mcp prompt-backed skill should execute");
         let skill_json: serde_json::Value =
-            serde_json::from_str(&skill_output).expect("skill output should be json");
+            serde_json::to_value(&skill_output).expect("skill output should be json");
         assert_eq!(skill_json["skill"], "workspace-guide");
         assert!(skill_json["messages_to_inject"][0]["content"]
             .as_str()
@@ -8917,23 +8918,22 @@ Guide the model through the workspace.
         let capability_state =
             std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default()));
         let capability_runtime = builtin_capability_runtime();
-        let mut executor = CliToolExecutor::from_capability_runtime(
-            None,
-            false,
-            capability_runtime.clone(),
-            None,
-            capability_state.clone(),
-            test_permission_policy(PermissionMode::DangerFullAccess, &capability_runtime),
-        );
 
-        let output = executor
-            .execute(
-                "SkillTool",
-                r#"{"skill":"help","arguments":{"topic":"workspace"}}"#,
+        let output = capability_runtime
+            .execute_skill(
+                "help",
+                Some(json!({"topic":"workspace"})),
+                tools::CapabilityPlannerInput::default(),
             )
-            .expect("SkillTool should succeed");
+            .expect("prompt skill should succeed");
+        {
+            let mut locked = capability_state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            locked.apply_skill_execution_result(&output);
+        }
         let output_json: serde_json::Value =
-            serde_json::from_str(&output).expect("skill tool output should be json");
+            serde_json::to_value(&output).expect("prompt skill output should be json");
         assert_eq!(output_json["tool_grants"][0], "WebSearch");
         assert_eq!(output_json["model_override"], "claude-sonnet-4-5");
         assert_eq!(output_json["effort_override"], "high");

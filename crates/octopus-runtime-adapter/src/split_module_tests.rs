@@ -6,7 +6,7 @@ use uuid::Uuid;
 use super::{
     actor_context, approval_broker, approval_flow, config_service, execution_events, execution_service,
     execution_target, persistence, registry, runtime_config, session_service,
-    MockRuntimeModelExecutor, RuntimeAdapter,
+    MockRuntimeModelDriver, RuntimeAdapter,
 };
 
 #[test]
@@ -29,7 +29,7 @@ fn split_persistence_module_exposes_runtime_paths_and_jsonl_append() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let events_path = adapter.runtime_events_path("rt-test");

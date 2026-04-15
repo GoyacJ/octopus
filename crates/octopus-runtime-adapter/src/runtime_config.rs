@@ -174,38 +174,6 @@ impl RuntimeAdapter {
         Ok(())
     }
 
-    pub(super) fn migrate_legacy_workspace_config_if_needed(&self) -> Result<(), AppError> {
-        let workspace_path = self.workspace_config_path();
-        if workspace_path.exists() {
-            return Ok(());
-        }
-
-        self.ensure_runtime_config_layout()?;
-
-        let mut merged = BTreeMap::new();
-        let mut found = false;
-        for legacy_path in [
-            self.state
-                .paths
-                .config_dir
-                .join(".claw")
-                .join("settings.json"),
-            self.state.paths.root.join(".claw.json"),
-            self.state.paths.root.join(".claw").join("settings.json"),
-        ] {
-            if let Some(document) = Self::read_optional_runtime_document(&legacy_path)? {
-                apply_config_patch(&mut merged, &document);
-                found = true;
-            }
-        }
-
-        if found {
-            self.write_runtime_document(&workspace_path, &merged)?;
-        }
-
-        Ok(())
-    }
-
     pub(super) fn config_document_record(
         &self,
         scope: RuntimeConfigScopeKind,
@@ -233,7 +201,6 @@ impl RuntimeAdapter {
         user_id: Option<&str>,
     ) -> Result<Vec<RuntimeConfigDocumentRecord>, AppError> {
         self.ensure_runtime_config_layout()?;
-        self.migrate_legacy_workspace_config_if_needed()?;
 
         let mut documents = vec![self.config_document_record(
             RuntimeConfigScopeKind::Workspace,

@@ -175,7 +175,7 @@ pub(super) fn build_configured_models(
     Ok(configured_models)
 }
 
-pub(super) fn build_legacy_configured_models(
+pub(super) fn build_seeded_configured_models(
     models: &BTreeMap<String, ModelRegistryRecord>,
     credential_bindings: &BTreeMap<String, CredentialBinding>,
 ) -> BTreeMap<String, ConfiguredModelRecord> {
@@ -195,7 +195,7 @@ pub(super) fn build_legacy_configured_models(
                 token_quota: None,
                 token_usage: token_usage_summary(None, 0),
                 enabled: model.enabled,
-                source: "legacy".into(),
+                source: "seeded".into(),
                 status: binding
                     .map(|entry| entry.status.clone())
                     .unwrap_or_else(|| "missing".into()),

@@ -26,14 +26,14 @@ The canonical file layout under a workspace root is:
 - `config/runtime/projects/<project-id>.json`
 - `config/runtime/users/<user-id>.json`
 
-Legacy `.claw` files are migration input only. They are not public API and they are not runtime discover sources after migration.
+Legacy `.claw` files are outside this contract and are not read by the Octopus runtime.
 
 ## Page Responsibility
 
 Runtime config editing is split by business ownership:
 
 - `设置 -> Runtime` edits workspace runtime config only
-- `用户中心 -> Profile -> Runtime 配置` edits the current workspace user's runtime config
+- `个人中心 -> Profile -> Runtime 配置` edits the current workspace user's runtime config
 - `项目 -> Runtime 配置` edits the active project's runtime config
 
 The settings page is not a combined multi-scope editor anymore. The old `local` scope is removed.
@@ -50,9 +50,9 @@ These public workspace routes are `workspace`-only. They do not resolve current-
 
 Current-user runtime config routes:
 
-- `GET /api/v1/workspace/user-center/profile/runtime-config`
-- `POST /api/v1/workspace/user-center/profile/runtime-config/validate`
-- `PATCH /api/v1/workspace/user-center/profile/runtime-config`
+- `GET /api/v1/workspace/personal-center/profile/runtime-config`
+- `POST /api/v1/workspace/personal-center/profile/runtime-config/validate`
+- `PATCH /api/v1/workspace/personal-center/profile/runtime-config`
 
 Project runtime config routes:
 

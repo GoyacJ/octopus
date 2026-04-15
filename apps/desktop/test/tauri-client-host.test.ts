@@ -36,7 +36,7 @@ describe('host client transport', () => {
     })
   })
 
-  it('does not expose the removed legacy runtime helper exports', async () => {
+  it('does not expose removed runtime helper exports outside the shell contract', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
 
     const client = await loadClientModule()

@@ -238,7 +238,7 @@ fn infer_outcome_memory_kind(
 
 fn proposal_candidates(
     input: &SubmitRuntimeTurnInput,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     workflow_detail: Option<&RuntimeWorkflowRunDetail>,
 ) -> Vec<MemoryProposalCandidate> {
     let mut candidates = Vec::new();
@@ -282,7 +282,7 @@ pub(crate) fn build_memory_proposal(
     policy: &octopus_core::MemoryPolicy,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     input: &SubmitRuntimeTurnInput,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     workflow_detail: Option<&RuntimeWorkflowRunDetail>,
     candidate_memory: &[RuntimeSelectedMemoryItem],
 ) -> Option<RuntimeMemoryProposal> {
@@ -558,8 +558,8 @@ mod tests {
         }
     }
 
-    fn execution_response(content: &str) -> ExecutionResponse {
-        ExecutionResponse {
+    fn execution_response(content: &str) -> ModelExecutionResult {
+        ModelExecutionResult {
             content: content.into(),
             request_id: None,
             total_tokens: None,

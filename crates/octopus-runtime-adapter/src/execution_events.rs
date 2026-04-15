@@ -624,7 +624,7 @@ pub(super) async fn record_submit_turn_activity(
     resolved_target: &ResolvedExecutionTarget,
     submitted_trace: &RuntimeTraceItem,
     execution_trace: Option<&RuntimeTraceItem>,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter
@@ -1315,7 +1315,7 @@ pub(super) async fn record_approval_resolution_activity(
     approval: &ApprovalRequestRecord,
     decision: &str,
     execution_trace: Option<&RuntimeTraceItem>,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter
@@ -1410,7 +1410,7 @@ pub(super) async fn record_auth_challenge_resolution_activity(
     challenge: &RuntimeAuthChallengeSummary,
     resolution: &str,
     execution_trace: Option<&RuntimeTraceItem>,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter

@@ -165,7 +165,7 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')
     expect(packageJson.scripts?.['check:desktop']).toBe('pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test')
     expect(packageJson.scripts?.['check:desktop-release']).toBe(
-      'pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm check:runtime-phase4 && pnpm version:check',
+      'pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm check:runtime-phase4 && pnpm check:runtime-phase8 && pnpm version:check',
     )
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
@@ -248,6 +248,18 @@ describe('repository governance', () => {
       'node scripts/check-runtime-phase4-governance.mjs',
     )
     expect(packageJson.scripts?.['check:desktop-release']).toContain('pnpm check:runtime-phase4')
+  })
+
+  it('enforces a dedicated Phase 8 legacy deletion governance gate', () => {
+    const packageJson = JSON.parse(readRepoFile('package.json')) as {
+      scripts?: Record<string, string>
+    }
+
+    expect(existsSync(path.join(repoRoot, 'scripts', 'check-runtime-phase8-governance.mjs'))).toBe(true)
+    expect(packageJson.scripts?.['check:runtime-phase8']).toBe(
+      'node scripts/check-runtime-phase8-governance.mjs',
+    )
+    expect(packageJson.scripts?.['check:desktop-release']).toContain('pnpm check:runtime-phase8')
   })
 
   it('documents AI-first API governance through canonical policy docs and local AGENTS files', () => {

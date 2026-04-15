@@ -6,7 +6,7 @@ pub(super) struct RuntimeState {
     pub(super) observation: Arc<dyn ObservationService>,
     pub(super) authorization: Arc<dyn AuthorizationService>,
     pub(super) config_loader: ConfigLoader,
-    pub(super) executor: Arc<dyn RuntimeModelExecutor>,
+    pub(super) executor: Arc<dyn RuntimeModelDriver>,
     pub(super) sessions: Mutex<HashMap<String, RuntimeAggregate>>,
     pub(super) config_snapshots: Mutex<HashMap<String, Value>>,
     pub(super) order: Mutex<Vec<String>>,

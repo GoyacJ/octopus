@@ -76,12 +76,12 @@ impl EffectiveModelRegistry {
             effective_config.get("configuredModels"),
             &mut diagnostics,
         )?;
-        let legacy_configured_models =
-            build_legacy_configured_models(&models, &credential_bindings);
+        let seeded_configured_models =
+            build_seeded_configured_models(&models, &credential_bindings);
         if configured_models.is_empty() {
-            configured_models = legacy_configured_models;
+            configured_models = seeded_configured_models;
         } else {
-            for (configured_model_id, configured_model) in legacy_configured_models {
+            for (configured_model_id, configured_model) in seeded_configured_models {
                 configured_models
                     .entry(configured_model_id)
                     .or_insert(configured_model);

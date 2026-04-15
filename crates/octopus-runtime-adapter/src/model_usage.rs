@@ -98,7 +98,7 @@ impl RuntimeAdapter {
     pub(super) fn resolve_consumed_tokens(
         &self,
         configured_model: &ConfiguredModelRecord,
-        response: &ExecutionResponse,
+        response: &ModelExecutionResult,
     ) -> Result<Option<u32>, AppError> {
         match response.total_tokens {
             Some(total_tokens) => Ok(Some(total_tokens)),

@@ -46,7 +46,7 @@ pub(crate) struct RuntimePendingToolUse {
 
 #[derive(Debug, Clone)]
 struct RuntimeLoopResult {
-    response: ExecutionResponse,
+    response: ModelExecutionResult,
     serialized_session: Value,
     usage_summary: RuntimeUsageSummary,
     consumed_tokens: Option<u32>,
@@ -418,14 +418,14 @@ fn pending_tool_uses_from_serialized_session(
 fn latest_runtime_response(
     session: &runtime::Session,
     total_tokens: Option<u32>,
-) -> Result<ExecutionResponse, AppError> {
+) -> Result<ModelExecutionResult, AppError> {
     let assistant_message = session
         .messages
         .iter()
         .rev()
         .find(|message| message.role == runtime::MessageRole::Assistant)
         .ok_or_else(|| AppError::runtime("runtime session does not have an assistant message"))?;
-    Ok(ExecutionResponse {
+    Ok(ModelExecutionResult {
         content: assistant_message_content(assistant_message),
         request_id: None,
         total_tokens,
@@ -923,7 +923,7 @@ async fn execute_runtime_turn_loop(
                 .saturating_sub(starting_total_tokens),
         );
         let response_content = assistant_message_content(&assistant_message);
-        let response = ExecutionResponse {
+        let response = ModelExecutionResult {
             content: response_content,
             request_id: None,
             total_tokens: segment_total_tokens,
@@ -1567,7 +1567,7 @@ fn build_execution_trace(
     conversation_id: &str,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     resolved_target: &ResolvedExecutionTarget,
-    response: &ExecutionResponse,
+    response: &ModelExecutionResult,
     now: u64,
     related_message_id: Option<String>,
 ) -> RuntimeTraceItem {
@@ -3466,7 +3466,7 @@ fn apply_submit_state(
     input: &SubmitRuntimeTurnInput,
     mediation_request: &approval_broker::MediationRequest,
     broker_decision: approval_broker::BrokerDecision,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,
@@ -3806,7 +3806,7 @@ fn apply_approval_resolution_state(
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
     capability_projection: capability_planner_bridge::CapabilityProjection,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,
@@ -4314,7 +4314,7 @@ fn apply_auth_challenge_resolution_state(
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
     capability_projection: capability_planner_bridge::CapabilityProjection,
-    execution: Option<&ExecutionResponse>,
+    execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,

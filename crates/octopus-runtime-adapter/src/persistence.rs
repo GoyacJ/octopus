@@ -836,6 +836,22 @@ impl RuntimeAdapter {
 
     pub(super) fn load_persisted_sessions(&self) -> Result<(), AppError> {
         let connection = self.open_db()?;
+        connection
+            .execute(
+                "UPDATE runtime_session_projections
+                 SET manifest_snapshot_ref = id || '-manifest'
+                 WHERE manifest_snapshot_ref IS NULL OR TRIM(manifest_snapshot_ref) = ''",
+                [],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        connection
+            .execute(
+                "UPDATE runtime_session_projections
+                 SET session_policy_snapshot_ref = id || '-policy'
+                 WHERE session_policy_snapshot_ref IS NULL OR TRIM(session_policy_snapshot_ref) = ''",
+                [],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
         let mut statement = connection
             .prepare(
                 "SELECT detail_json, manifest_snapshot_ref, session_policy_snapshot_ref
@@ -882,8 +898,22 @@ impl RuntimeAdapter {
             team_runtime::apply_subrun_state_projection(&mut detail, &subrun_states);
             sync_runtime_session_detail(&mut detail);
             let events = self.load_event_log(&detail.summary.id)?;
-            let fallback_manifest_snapshot_ref = format!("{}-manifest", detail.summary.id);
-            let fallback_session_policy_snapshot_ref = format!("{}-policy", detail.summary.id);
+            let manifest_snapshot_ref = manifest_snapshot_ref
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    AppError::runtime(format!(
+                        "runtime session `{}` is missing manifest snapshot ref",
+                        detail.summary.id
+                    ))
+                })?;
+            let session_policy_snapshot_ref = session_policy_snapshot_ref
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    AppError::runtime(format!(
+                        "runtime session `{}` is missing session policy snapshot ref",
+                        detail.summary.id
+                    ))
+                })?;
             order.push(detail.summary.id.clone());
             sessions.insert(
                 detail.summary.id.clone(),
@@ -891,10 +921,8 @@ impl RuntimeAdapter {
                     detail,
                     events,
                     metadata: RuntimeAggregateMetadata {
-                        manifest_snapshot_ref: manifest_snapshot_ref
-                            .unwrap_or(fallback_manifest_snapshot_ref),
-                        session_policy_snapshot_ref: session_policy_snapshot_ref
-                            .unwrap_or(fallback_session_policy_snapshot_ref),
+                        manifest_snapshot_ref,
+                        session_policy_snapshot_ref,
                         primary_run_serialized_session,
                         subrun_states,
                     },

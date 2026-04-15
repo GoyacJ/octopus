@@ -58,7 +58,7 @@ fn persists_and_restores_session_jsonl() {
 }
 
 #[test]
-fn loads_legacy_session_json_object() {
+fn rejects_object_form_session_files() {
     let path = temp_session_path("legacy");
     let legacy = JsonValue::Object(
         [
@@ -73,15 +73,11 @@ fn loads_legacy_session_json_object() {
     );
     fs::write(&path, legacy.render()).expect("legacy file should write");
 
-    let restored = Session::load_from_path(&path).expect("legacy session should load");
+    let error = Session::load_from_path(&path)
+        .expect_err("object-form session files should be rejected");
     fs::remove_file(&path).expect("temp file should be removable");
 
-    assert_eq!(restored.messages.len(), 1);
-    assert_eq!(
-        restored.messages[0],
-        ConversationMessage::user_text("legacy")
-    );
-    assert!(!restored.session_id.is_empty());
+    assert!(error.to_string().contains("missing type"));
 }
 
 #[test]
@@ -216,20 +212,6 @@ fn rejects_jsonl_record_with_unknown_type() {
 
     assert!(error.to_string().contains("unsupported JSONL record type"));
     fs::remove_file(path).expect("temp file should be removable");
-}
-
-#[test]
-fn rejects_legacy_session_json_without_messages() {
-    let session = JsonValue::Object(
-        [("version".to_string(), JsonValue::Number(1))]
-            .into_iter()
-            .collect(),
-    );
-
-    let error =
-        Session::from_json(&session).expect_err("legacy session objects should require messages");
-
-    assert!(error.to_string().contains("missing messages"));
 }
 
 #[test]

@@ -155,46 +155,6 @@ pub(crate) fn run_todo_write(input: TodoWriteInput) -> Result<String, String> {
     to_pretty_json(execute_todo_write(input)?)
 }
 
-#[allow(dead_code)]
-pub(crate) fn run_skill_discovery(input: SkillDiscoveryInput) -> Result<String, String> {
-    let runtime = crate::CapabilityRuntime::builtin();
-    run_skill_discovery_impl(&runtime, input)
-}
-
-#[allow(dead_code)]
-pub(crate) fn run_skill_tool(input: SkillToolInput) -> Result<String, String> {
-    let runtime = crate::CapabilityRuntime::builtin();
-    run_skill_tool_impl(&runtime, input)
-}
-
-#[allow(dead_code)]
-fn run_skill_discovery_impl(
-    runtime: &crate::CapabilityRuntime,
-    input: SkillDiscoveryInput,
-) -> Result<String, String> {
-    let current_dir = std::env::current_dir().ok();
-    let discovery = runtime.skill_discovery(
-        &input.query,
-        input.max_results.unwrap_or(5),
-        crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
-    );
-    to_pretty_json(discovery)
-}
-
-#[allow(dead_code)]
-fn run_skill_tool_impl(
-    runtime: &crate::CapabilityRuntime,
-    input: SkillToolInput,
-) -> Result<String, String> {
-    let current_dir = std::env::current_dir().ok();
-    let result = runtime.execute_skill(
-        &input.skill,
-        input.arguments,
-        crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
-    );
-    result.and_then(to_pretty_json)
-}
-
 pub(crate) fn run_tool_search(input: ToolSearchInput) -> Result<String, String> {
     to_pretty_json(execute_tool_search(input))
 }
@@ -246,19 +206,6 @@ enum TodoStatus {
     Pending,
     InProgress,
     Completed,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct SkillDiscoveryInput {
-    pub(crate) query: String,
-    pub(crate) max_results: Option<usize>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct SkillToolInput {
-    pub(crate) skill: String,
-    #[serde(default)]
-    pub(crate) arguments: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]

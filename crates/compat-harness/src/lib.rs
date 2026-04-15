@@ -3,7 +3,35 @@ use std::path::{Path, PathBuf};
 
 use commands::{CommandManifestEntry, CommandRegistry, CommandSource};
 use runtime::{BootstrapPhase, BootstrapPlan};
-use tools::{ToolManifestEntry, ToolRegistry, ToolSource};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedToolManifestEntry {
+    pub name: String,
+    pub source: ExtractedToolSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExtractedToolSource {
+    Base,
+    Conditional,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExtractedToolManifest {
+    entries: Vec<ExtractedToolManifestEntry>,
+}
+
+impl ExtractedToolManifest {
+    #[must_use]
+    pub fn new(entries: Vec<ExtractedToolManifestEntry>) -> Self {
+        Self { entries }
+    }
+
+    #[must_use]
+    pub fn entries(&self) -> &[ExtractedToolManifestEntry] {
+        &self.entries
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpstreamPaths {
@@ -50,7 +78,7 @@ impl UpstreamPaths {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedManifest {
     pub commands: CommandRegistry,
-    pub tools: ToolRegistry,
+    pub tools: ExtractedToolManifest,
     pub bootstrap: BootstrapPlan,
 }
 
@@ -148,7 +176,7 @@ pub fn extract_commands(source: &str) -> CommandRegistry {
 }
 
 #[must_use]
-pub fn extract_tools(source: &str) -> ToolRegistry {
+pub fn extract_tools(source: &str) -> ExtractedToolManifest {
     let mut entries = Vec::new();
 
     for raw_line in source.lines() {
@@ -156,9 +184,9 @@ pub fn extract_tools(source: &str) -> ToolRegistry {
         if line.starts_with("import ") && line.contains("./tools/") {
             for imported in imported_symbols(line) {
                 if imported.ends_with("Tool") {
-                    entries.push(ToolManifestEntry {
+                    entries.push(ExtractedToolManifestEntry {
                         name: imported,
-                        source: ToolSource::Base,
+                        source: ExtractedToolSource::Base,
                     });
                 }
             }
@@ -167,9 +195,9 @@ pub fn extract_tools(source: &str) -> ToolRegistry {
         if line.contains("feature('") && line.contains("Tool") {
             if let Some(name) = first_assignment_identifier(line) {
                 if name.ends_with("Tool") || name.ends_with("Tools") {
-                    entries.push(ToolManifestEntry {
+                    entries.push(ExtractedToolManifestEntry {
                         name,
-                        source: ToolSource::Conditional,
+                        source: ExtractedToolSource::Conditional,
                     });
                 }
             }
@@ -281,17 +309,17 @@ fn dedupe_commands(entries: Vec<CommandManifestEntry>) -> CommandRegistry {
     CommandRegistry::new(deduped)
 }
 
-fn dedupe_tools(entries: Vec<ToolManifestEntry>) -> ToolRegistry {
+fn dedupe_tools(entries: Vec<ExtractedToolManifestEntry>) -> ExtractedToolManifest {
     let mut deduped = Vec::new();
     for entry in entries {
-        let exists = deduped
-            .iter()
-            .any(|seen: &ToolManifestEntry| seen.name == entry.name && seen.source == entry.source);
+        let exists = deduped.iter().any(|seen: &ExtractedToolManifestEntry| {
+            seen.name == entry.name && seen.source == entry.source
+        });
         if !exists {
             deduped.push(entry);
         }
     }
-    ToolRegistry::new(deduped)
+    ExtractedToolManifest::new(deduped)
 }
 
 #[cfg(test)]

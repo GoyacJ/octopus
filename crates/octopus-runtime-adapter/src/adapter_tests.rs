@@ -236,22 +236,22 @@ fn grant_owner_permissions(infra: &octopus_infra::InfraBundle, user_id: &str) {
 }
 
 #[derive(Debug, Clone)]
-struct FixedTokenRuntimeModelExecutor {
+struct FixedTokenRuntimeModelDriver {
     total_tokens: Option<u32>,
 }
 
 #[async_trait]
-impl RuntimeModelExecutor for FixedTokenRuntimeModelExecutor {
-    async fn execute_turn(
+impl RuntimeModelDriver for FixedTokenRuntimeModelDriver {
+    async fn execute_prompt(
         &self,
         _target: &ResolvedExecutionTarget,
         input: &str,
         system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError> {
+    ) -> Result<ModelExecutionResult, AppError> {
         let prompt_prefix = system_prompt
             .map(|value| format!(" [{value}]"))
             .unwrap_or_default();
-        Ok(ExecutionResponse {
+        Ok(ModelExecutionResult {
             content: format!("fixed token response{prompt_prefix} -> {input}"),
             request_id: Some("fixed-token-request".into()),
             total_tokens: self.total_tokens,
@@ -260,12 +260,12 @@ impl RuntimeModelExecutor for FixedTokenRuntimeModelExecutor {
 }
 
 #[derive(Debug)]
-struct ScriptedConversationRuntimeModelExecutor {
+struct ScriptedConversationRuntimeModelDriver {
     responses: Mutex<Vec<Vec<runtime::AssistantEvent>>>,
     requests: Mutex<Vec<RuntimeConversationRequest>>,
 }
 
-impl ScriptedConversationRuntimeModelExecutor {
+impl ScriptedConversationRuntimeModelDriver {
     fn new(responses: Vec<Vec<runtime::AssistantEvent>>) -> Self {
         Self {
             responses: Mutex::new(responses.into_iter().rev().collect()),
@@ -295,13 +295,13 @@ fn last_user_text(request: &RuntimeConversationRequest) -> Option<&str> {
 }
 
 #[async_trait]
-impl RuntimeModelExecutor for ScriptedConversationRuntimeModelExecutor {
-    async fn execute_turn(
+impl RuntimeModelDriver for ScriptedConversationRuntimeModelDriver {
+    async fn execute_prompt(
         &self,
         _target: &ResolvedExecutionTarget,
         _input: &str,
         _system_prompt: Option<&str>,
-    ) -> Result<ExecutionResponse, AppError> {
+    ) -> Result<ModelExecutionResult, AppError> {
         Err(AppError::runtime(
             "scripted conversation executor should use execute_conversation",
         ))
@@ -333,7 +333,7 @@ async fn runtime_config_resolution_respects_user_workspace_project_precedence() 
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let user_id = "user-owner";
@@ -505,7 +505,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let user_id = "user-owner";
@@ -600,7 +600,7 @@ async fn runtime_config_validation_rejects_non_positive_token_quota() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let validation = adapter
@@ -643,7 +643,7 @@ async fn runtime_config_validation_accepts_backfilled_upstream_fields_across_sco
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let patch = json!({
@@ -712,7 +712,7 @@ async fn runtime_config_validation_warns_for_unknown_and_deprecated_top_level_ke
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let validation = adapter
@@ -749,7 +749,7 @@ async fn runtime_config_validation_reports_wrong_type_for_backfilled_fields() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let validation = adapter
@@ -780,7 +780,7 @@ async fn runtime_effective_config_includes_backfilled_upstream_fields() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     write_json(
@@ -857,7 +857,7 @@ async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot()
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(32),
         }),
     );
@@ -936,7 +936,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(24),
         }),
     );
@@ -965,7 +965,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(24),
         }),
     );
@@ -995,7 +995,7 @@ async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(32),
         }),
     );
@@ -1091,7 +1091,7 @@ async fn session_bound_agent_selection_injects_manifest_prompt_into_execution() 
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -1238,7 +1238,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -1750,7 +1750,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
     let corrupt_handoff_detail = reloaded_from_corrupt_handoff
         .get_session(&session.summary.id)
@@ -1881,7 +1881,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
     let reloaded_detail = reloaded
         .get_session(&session.summary.id)
@@ -2059,7 +2059,7 @@ async fn team_runtime_uses_manifest_mailbox_policy_and_keeps_all_worker_subruns_
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2120,7 +2120,7 @@ async fn runtime_persistence_writes_jsonl_events_without_legacy_debug_session_fi
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2304,7 +2304,7 @@ async fn mixed_domain_team_workers_share_the_same_subrun_runtime_substrate() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2483,7 +2483,7 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2568,7 +2568,7 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
     let reloaded_detail = reloaded
         .get_session(&session.summary.id)
@@ -2617,7 +2617,7 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2754,7 +2754,7 @@ async fn team_session_reload_ignores_legacy_runtime_sessions_subrun_artifacts() 
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -2812,7 +2812,7 @@ async fn team_session_reload_ignores_legacy_runtime_sessions_subrun_artifacts() 
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
     let reloaded_detail = reloaded
         .get_session(&session.summary.id)
@@ -2945,7 +2945,7 @@ async fn team_subrun_policy_snapshots_recompile_worker_target_decisions() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -3105,7 +3105,7 @@ async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
         .expect("upsert team spawn approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
@@ -3312,7 +3312,7 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .expect("upsert workflow approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Workflow plan ready.".into()),
             runtime::AssistantEvent::MessageStop,
@@ -3629,7 +3629,7 @@ async fn workflow_continuation_approval_resume_survives_adapter_restart() {
         .expect("upsert workflow restart approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Workflow plan ready for restart.".into()),
             runtime::AssistantEvent::MessageStop,
@@ -4183,7 +4183,7 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
         .expect("upsert queued approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
@@ -4522,7 +4522,7 @@ async fn team_subrun_metadata_refresh_rehydrates_from_manifest_plan_without_deta
         .expect("upsert workspace core team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Leader finished.".into()),
             runtime::AssistantEvent::MessageStop,
@@ -4805,7 +4805,7 @@ async fn team_worker_subrun_explicit_cancel_releases_scheduler_queue() {
         .expect("upsert queued approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
@@ -5132,7 +5132,7 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
         .expect("upsert queued auth team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
@@ -5604,7 +5604,7 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
         .expect("upsert queued auth team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
@@ -5976,7 +5976,7 @@ async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_req
         .expect("upsert chained approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![vec![
         runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
         runtime::AssistantEvent::MessageStop,
     ]]));
@@ -6173,7 +6173,7 @@ async fn team_spawn_policy_deny_suppresses_subrun_projection_on_main_runtime_pat
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -6246,7 +6246,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(16),
         }),
     );
@@ -6381,7 +6381,7 @@ async fn runtime_events_only_emit_declared_runtime_event_kinds() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(8),
         }),
     );
@@ -6492,7 +6492,7 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -6597,7 +6597,7 @@ async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -6727,7 +6727,7 @@ async fn submit_turn_prefers_project_memory_from_subrun_lineage_over_unrelated_b
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -6891,7 +6891,7 @@ async fn submit_turn_rejects_memory_pollution_candidates() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -6951,7 +6951,7 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -7045,7 +7045,7 @@ async fn revalidating_existing_memory_refreshes_existing_record_in_place() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -7166,7 +7166,7 @@ async fn memory_proposal_mediation_targets_specific_proposal_not_durable_memory_
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor {
+        Arc::new(FixedTokenRuntimeModelDriver {
             total_tokens: Some(12),
         }),
     );
@@ -7315,7 +7315,7 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -7441,7 +7441,7 @@ async fn create_session_includes_selected_plugin_tools_in_capability_plan() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -7521,7 +7521,7 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
         .expect("upsert plugin runtime loop agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Selecting the plugin tool.".into()),
             runtime::AssistantEvent::ToolUse {
@@ -7750,7 +7750,7 @@ async fn non_coding_research_docs_agent_runs_through_same_capability_trunk() {
         .expect("upsert research docs agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Selecting the research helper.".into()),
             runtime::AssistantEvent::ToolUse {
@@ -7944,7 +7944,7 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -8234,7 +8234,7 @@ async fn submit_turn_uses_compiled_model_execution_policy_for_tool_execution_app
         .expect("upsert tool execution approval agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![vec![
         runtime::AssistantEvent::TextDelta("This should never execute.".into()),
         runtime::AssistantEvent::MessageStop,
     ]]));
@@ -8349,7 +8349,7 @@ async fn partial_approval_preference_json_merges_with_defaults_for_policy_compil
         .expect("upsert partial approval policy agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![vec![
         runtime::AssistantEvent::TextDelta("This should never execute.".into()),
         runtime::AssistantEvent::MessageStop,
     ]]));
@@ -8479,7 +8479,7 @@ async fn policy_compiler_uses_runtime_config_enablement_for_model_and_mcp_target
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -8563,7 +8563,7 @@ async fn policy_compiler_uses_workspace_authorization_for_capability_buckets() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -8636,7 +8636,7 @@ async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -8714,7 +8714,7 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let session = adapter
@@ -8809,7 +8809,7 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
         .expect("upsert runtime loop agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Inspecting the note.".into()),
             runtime::AssistantEvent::ToolUse {
@@ -9017,7 +9017,7 @@ async fn approval_resume_uses_runtime_tool_loop_instead_of_one_shot_execution() 
         .expect("upsert runtime approval loop agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Inspecting the approved note.".into()),
             runtime::AssistantEvent::ToolUse {
@@ -9165,7 +9165,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
         .expect("upsert capability-call approval loop agent");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
             runtime::AssistantEvent::TextDelta("Writing the requested file.".into()),
             runtime::AssistantEvent::ToolUse {
@@ -9489,7 +9489,7 @@ async fn loads_legacy_runtime_projection_missing_selected_actor_ref() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(MockRuntimeModelExecutor),
+        Arc::new(MockRuntimeModelDriver),
     );
 
     let sessions = adapter.list_sessions().await.expect("sessions");
@@ -9521,7 +9521,7 @@ async fn quota_enabled_models_require_provider_token_usage_metadata() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelExecutor { total_tokens: None }),
+        Arc::new(FixedTokenRuntimeModelDriver { total_tokens: None }),
     );
 
     let session = adapter
