@@ -28,6 +28,7 @@ import type {
   EnterpriseSessionSummary,
   FeatureDefinition,
   BindPetConversationInput,
+  CancelRuntimeSubrunInput,
   ExportWorkspaceAgentBundleInput,
   ExportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundleInput,
@@ -379,6 +380,12 @@ export interface WorkspaceClient {
       sessionId: string,
       challengeId: string,
       input: ResolveRuntimeAuthChallengeInput,
+      idempotencyKey?: string,
+    ) => Promise<RuntimeRunSnapshot>
+    cancelSubrun: (
+      sessionId: string,
+      subrunId: string,
+      input: CancelRuntimeSubrunInput,
       idempotencyKey?: string,
     ) => Promise<RuntimeRunSnapshot>
     resolveMemoryProposal: (

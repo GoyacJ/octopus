@@ -169,6 +169,22 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         },
       )
     },
+    async cancelSubrun(sessionId, subrunId, input, idempotencyKey) {
+      return await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/sessions/{sessionId}/subruns/{subrunId}/cancel',
+        'post',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+            subrunId,
+          },
+          body: JSON.stringify(input),
+          idempotencyKey,
+        },
+      )
+    },
     async resolveMemoryProposal(sessionId, proposalId, input, idempotencyKey) {
       return await fetchWorkspaceOpenApi(
         context.connection,

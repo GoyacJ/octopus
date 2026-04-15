@@ -19,7 +19,7 @@ fn split_runtime_config_module_exposes_scope_helpers() {
 }
 
 #[test]
-fn split_persistence_module_exposes_runtime_debug_paths() {
+fn split_persistence_module_exposes_runtime_paths_and_jsonl_append() {
     let temp =
         std::env::temp_dir().join(format!("octopus-runtime-adapter-split-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&temp).expect("tempdir");
@@ -32,13 +32,13 @@ fn split_persistence_module_exposes_runtime_debug_paths() {
         Arc::new(MockRuntimeModelExecutor),
     );
 
-    let session_path = adapter.runtime_debug_session_path("rt-test");
-    let events_path = adapter.runtime_debug_events_path("rt-test");
+    let events_path = adapter.runtime_events_path("rt-test");
+    let subrun_path = adapter.runtime_subrun_state_path("run-test-subrun-1");
 
-    assert_eq!(session_path, temp.join("runtime/sessions/rt-test.json"));
+    assert_eq!(events_path, temp.join("runtime/events/rt-test.jsonl"));
     assert_eq!(
-        events_path,
-        temp.join("runtime/sessions/rt-test-events.json")
+        subrun_path,
+        temp.join("runtime/state/subruns/run-test-subrun-1.json")
     );
 
     let append_target = temp.join("runtime/events/append-test.jsonl");

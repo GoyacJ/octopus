@@ -241,7 +241,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             .lock()
             .map_err(|_| AppError::runtime("runtime order mutex poisoned"))?
             .insert(0, session_id.clone());
-        self.persist_session(&session_id, &aggregate)?;
+        self.persist_runtime_projections(&aggregate)?;
 
         let policy_event = RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -373,8 +373,7 @@ impl RuntimeSessionService for RuntimeAdapter {
         sessions.remove(session_id);
         order.retain(|id| id != session_id);
 
-        let _ = fs::remove_file(self.runtime_debug_session_path(session_id));
-        let _ = fs::remove_file(self.runtime_debug_events_path(session_id));
+        let _ = fs::remove_file(self.runtime_events_path(session_id));
 
         let connection = self.open_db()?;
         connection

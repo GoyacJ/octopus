@@ -141,7 +141,7 @@ export const runtimeEventActions = {
     const status = this.activeRun?.status
     if (
       (status === 'waiting_approval' && this.pendingApproval)
-      || (status === 'waiting_input' && (this.pendingMediation || this.authTarget || this.activeRun?.pendingMemoryProposal))
+      || (status === 'waiting_input' && (this.pendingMediation || this.authTarget || this.pendingMemoryProposal))
       || status === 'blocked'
       || status === 'failed'
     ) {

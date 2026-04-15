@@ -28,7 +28,7 @@ impl RuntimeAdapter {
     pub(crate) fn capability_state_snapshot_path(&self, state_ref: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join(format!("{state_ref}.json"))
     }
 

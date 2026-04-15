@@ -51,15 +51,20 @@ function createPendingMediationSummary(): RuntimePendingMediationSummary {
   }
 }
 
-function createWorkflowSummary(workflowRunId: string, updatedAt: number) {
+function createWorkflowSummary(
+  workflowRunId: string,
+  currentStepId: string,
+  currentStepLabel: string,
+  updatedAt: number,
+) {
   return {
     workflowRunId,
     label: 'Runtime workflow',
     status: 'completed',
     totalSteps: 3,
     completedSteps: 3,
-    currentStepId: 'workflow-complete',
-    currentStepLabel: 'Workflow complete',
+    currentStepId,
+    currentStepLabel,
     backgroundCapable: true,
     updatedAt,
   }
@@ -68,7 +73,7 @@ function createWorkflowSummary(workflowRunId: string, updatedAt: number) {
 function createMailboxSummary(mailboxRef: string, updatedAt: number) {
   return {
     mailboxRef,
-    channel: 'team-mailbox',
+    channel: 'leader-hub',
     status: 'completed',
     pendingCount: 0,
     totalMessages: 2,
@@ -308,7 +313,7 @@ export function createSessionDetail(
       sessionPolicy,
       activeRunId: runId,
       subrunCount: 2,
-      workflow: createWorkflowSummary(workflowRunId, 1),
+      workflow: createWorkflowSummary(workflowRunId, `${runId}-subrun-2`, 'agent project delivery', 1),
       pendingMailbox: createMailboxSummary(mailboxRef, 1),
       backgroundRun: createBackgroundRunSummary(runId, workflowRunId, 1),
       capabilityPlanSummary: createCapabilityPlanSummary(),
@@ -341,8 +346,8 @@ export function createSessionDetail(
       workflowRunDetail: {
         workflowRunId,
         status: 'completed',
-        currentStepId: 'workflow-complete',
-        currentStepLabel: 'Workflow complete',
+        currentStepId: `${runId}-subrun-2`,
+        currentStepLabel: 'agent project delivery',
         totalSteps: 3,
         completedSteps: 3,
         backgroundCapable: true,
@@ -460,7 +465,7 @@ export function createSessionDetail(
     pendingApproval: undefined,
     activeRunId: runId,
     subrunCount: 2,
-    workflow: createWorkflowSummary(workflowRunId, 1),
+    workflow: createWorkflowSummary(workflowRunId, `${runId}-subrun-2`, 'agent project delivery', 1),
     pendingMailbox: createMailboxSummary(mailboxRef, 1),
     backgroundRun: createBackgroundRunSummary(runId, workflowRunId, 1),
     selectedActorRef: resolvedSelectedActorRef,

@@ -164,7 +164,9 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')
     expect(packageJson.scripts?.['check:desktop']).toBe('pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test')
-    expect(packageJson.scripts?.['check:desktop-release']).toBe('pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm version:check')
+    expect(packageJson.scripts?.['check:desktop-release']).toBe(
+      'pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm check:runtime-phase4 && pnpm version:check',
+    )
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
@@ -234,6 +236,18 @@ describe('repository governance', () => {
     expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'route-parity-allowlist.json'))).toBe(true)
     expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'adapter-parity-allowlist.json'))).toBe(true)
     expect(existsSync(path.join(repoRoot, 'docs', 'openapi-audit.md'))).toBe(true)
+  })
+
+  it('enforces a dedicated Phase 4 runtime closure governance gate', () => {
+    const packageJson = JSON.parse(readRepoFile('package.json')) as {
+      scripts?: Record<string, string>
+    }
+
+    expect(existsSync(path.join(repoRoot, 'scripts', 'check-runtime-phase4-governance.mjs'))).toBe(true)
+    expect(packageJson.scripts?.['check:runtime-phase4']).toBe(
+      'node scripts/check-runtime-phase4-governance.mjs',
+    )
+    expect(packageJson.scripts?.['check:desktop-release']).toContain('pnpm check:runtime-phase4')
   })
 
   it('documents AI-first API governance through canonical policy docs and local AGENTS files', () => {

@@ -81,33 +81,6 @@ pub(crate) fn allow(request: &MediationRequest) -> BrokerDecision {
     }
 }
 
-pub(crate) fn deny(request: &MediationRequest, detail: Option<String>) -> BrokerDecision {
-    BrokerDecision {
-        state: "deny".into(),
-        pending_mediation: None,
-        approval: None,
-        auth_challenge: None,
-        execution_outcome: execution_outcome(request, "deny", detail.clone()),
-        mediation_outcome: Some(RuntimeMediationOutcome {
-            approval_layer: Some(request.approval_layer.clone()),
-            capability_id: request.capability_id.clone(),
-            checkpoint_ref: request.checkpoint_ref.clone(),
-            detail,
-            mediation_id: None,
-            mediation_kind: request.mediation_kind.clone(),
-            outcome: "deny".into(),
-            provider_key: request.provider_key.clone(),
-            reason: request.escalation_reason.clone(),
-            requires_approval: request.requires_approval,
-            requires_auth: request.requires_auth,
-            resolved_at: Some(request.created_at),
-            target_kind: request.target_kind.clone(),
-            target_ref: request.target_ref.clone(),
-            tool_name: Some(request.tool_name.clone()),
-        }),
-    }
-}
-
 pub(crate) fn require_approval(request: &MediationRequest) -> BrokerDecision {
     let approval_id = format!("approval-{}", Uuid::new_v4());
     let mediation_id = format!("mediation-{}", Uuid::new_v4());

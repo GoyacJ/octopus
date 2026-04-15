@@ -47,6 +47,16 @@ impl RuntimeExecutionService for RuntimeAdapter {
         approval_flow::resolve_memory_proposal(self, session_id, proposal_id, input).await
     }
 
+    async fn cancel_subrun(
+        &self,
+        session_id: &str,
+        subrun_id: &str,
+        input: CancelRuntimeSubrunInput,
+    ) -> Result<RuntimeRunSnapshot, AppError> {
+        agent_runtime_core::AgentRuntimeCore::cancel_subrun(self, session_id, subrun_id, input)
+            .await
+    }
+
     async fn subscribe_events(
         &self,
         session_id: &str,

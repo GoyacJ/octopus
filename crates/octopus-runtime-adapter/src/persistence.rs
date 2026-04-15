@@ -20,11 +20,29 @@ struct PersistedMailboxBody {
     conversation_id: String,
     summary: RuntimeMailboxSummary,
     handoff_refs: Vec<String>,
+    #[serde(default)]
+    handoffs: Vec<PersistedMailboxHandoffRecord>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedMailboxHandoffRecord {
+    handoff_ref: String,
+    parent_run_id: Option<String>,
+    delegated_by_tool_call_id: Option<String>,
+    sender_actor_ref: String,
+    receiver_actor_ref: String,
+    mailbox_ref: String,
+    artifact_refs: Vec<String>,
+    handoff_state: String,
+    updated_at: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PersistedHandoffEnvelope {
+    #[serde(default)]
+    handoff_ref: String,
     session_id: String,
     run_id: String,
     conversation_id: String,
@@ -38,16 +56,45 @@ struct PersistedHandoffEnvelope {
     updated_at: u64,
 }
 
+impl PersistedHandoffEnvelope {
+    fn into_summary(self, fallback_handoff_ref: &str) -> RuntimeHandoffSummary {
+        RuntimeHandoffSummary {
+            handoff_ref: if self.handoff_ref.trim().is_empty() {
+                fallback_handoff_ref.to_string()
+            } else {
+                self.handoff_ref
+            },
+            mailbox_ref: self.mailbox_ref,
+            sender_actor_ref: self.sender_actor_ref,
+            receiver_actor_ref: self.receiver_actor_ref,
+            state: self.handoff_state,
+            artifact_refs: self.artifact_refs,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PersistedWorkflowState {
+    session_id: String,
+    run_id: String,
+    conversation_id: String,
+    parent_run_id: Option<String>,
+    mailbox_ref: Option<String>,
     summary: RuntimeWorkflowSummary,
     detail: RuntimeWorkflowRunDetail,
+    background: RuntimeBackgroundRunSummary,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PersistedBackgroundState {
+    session_id: String,
+    run_id: String,
+    conversation_id: String,
+    parent_run_id: Option<String>,
+    workflow_run_id: Option<String>,
     summary: RuntimeBackgroundRunSummary,
 }
 
@@ -205,24 +252,10 @@ impl RuntimeAdapter {
             .join(format!("{session_id}.jsonl"))
     }
 
-    pub(super) fn runtime_debug_session_path(&self, session_id: &str) -> PathBuf {
-        self.state
-            .paths
-            .runtime_sessions_dir
-            .join(format!("{session_id}.json"))
-    }
-
-    pub(super) fn runtime_debug_events_path(&self, session_id: &str) -> PathBuf {
-        self.state
-            .paths
-            .runtime_sessions_dir
-            .join(format!("{session_id}-events.json"))
-    }
-
     fn runtime_mailbox_body_path(&self, mailbox_ref: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("mailboxes")
             .join(format!("{mailbox_ref}.json"))
     }
@@ -230,7 +263,7 @@ impl RuntimeAdapter {
     fn runtime_handoff_envelope_path(&self, handoff_ref: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("handoffs")
             .join(format!("{handoff_ref}.json"))
     }
@@ -238,7 +271,7 @@ impl RuntimeAdapter {
     pub(super) fn runtime_subrun_state_path(&self, run_id: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("subruns")
             .join(format!("{run_id}.json"))
     }
@@ -246,7 +279,7 @@ impl RuntimeAdapter {
     fn runtime_workflow_state_path(&self, workflow_run_id: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("workflows")
             .join(format!("{workflow_run_id}.json"))
     }
@@ -254,7 +287,7 @@ impl RuntimeAdapter {
     fn runtime_background_state_path(&self, run_id: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("background")
             .join(format!("{run_id}.json"))
     }
@@ -270,7 +303,7 @@ impl RuntimeAdapter {
     fn runtime_memory_proposal_artifact_path(&self, proposal_id: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join("memory-proposals")
             .join(format!("{proposal_id}.json"))
     }
@@ -437,25 +470,26 @@ impl RuntimeAdapter {
             states.insert(subrun.run_id.clone(), state);
         }
 
-        let subrun_dir = self.state.paths.runtime_sessions_dir.join("subruns");
-        if !subrun_dir.exists() {
-            return Ok(states);
-        }
+        for subrun_dir in [self.state.paths.runtime_state_dir.join("subruns")] {
+            if !subrun_dir.exists() {
+                continue;
+            }
 
-        for entry in fs::read_dir(subrun_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
+            for entry in fs::read_dir(subrun_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let raw = fs::read(&path)?;
+                let state = serde_json::from_slice::<team_runtime::PersistedSubrunState>(&raw)?;
+                if state.run.session_id != session_id
+                    || state.run.parent_run_id.as_deref() != Some(parent_run_id)
+                {
+                    continue;
+                }
+                states.insert(state.run.id.clone(), state);
             }
-            let raw = fs::read(&path)?;
-            let state = serde_json::from_slice::<team_runtime::PersistedSubrunState>(&raw)?;
-            if state.run.session_id != session_id
-                || state.run.parent_run_id.as_deref() != Some(parent_run_id)
-            {
-                continue;
-            }
-            states.insert(state.run.id.clone(), state);
         }
 
         Ok(states)
@@ -487,22 +521,65 @@ impl RuntimeAdapter {
 
         let mut handoff_stmt = connection
             .prepare(
-                "SELECT summary_json
+                "SELECT handoff_ref, summary_json, sender_actor_ref, receiver_actor_ref, mailbox_ref,
+                        state, artifact_refs_json, updated_at, envelope_storage_path
                  FROM runtime_handoff_projections
                  WHERE session_id = ?1 AND run_id = ?2
                  ORDER BY updated_at ASC, handoff_ref ASC",
             )
             .map_err(|error| AppError::database(error.to_string()))?;
-        let handoffs = handoff_stmt
+        let handoff_rows = handoff_stmt
             .query_map(params![detail.summary.id, detail.run.id], |row| {
-                row.get::<_, String>(0)
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, i64>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                ))
             })
             .map_err(|error| AppError::database(error.to_string()))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| AppError::database(error.to_string()))?
-            .into_iter()
-            .map(|raw| serde_json::from_str::<RuntimeHandoffSummary>(&raw))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let mut handoffs = Vec::with_capacity(handoff_rows.len());
+        for (
+            handoff_ref,
+            summary_json,
+            sender_actor_ref,
+            receiver_actor_ref,
+            mailbox_ref,
+            state,
+            artifact_refs_json,
+            updated_at,
+            envelope_storage_path,
+        ) in handoff_rows
+        {
+            if let Ok(summary) = serde_json::from_str::<RuntimeHandoffSummary>(&summary_json) {
+                handoffs.push(summary);
+                continue;
+            }
+            if let Some(envelope) = self.load_runtime_artifact::<PersistedHandoffEnvelope>(
+                envelope_storage_path.as_deref(),
+            )? {
+                handoffs.push(envelope.into_summary(&handoff_ref));
+                continue;
+            }
+            let artifact_refs =
+                serde_json::from_str::<Vec<String>>(&artifact_refs_json).unwrap_or_default();
+            handoffs.push(RuntimeHandoffSummary {
+                handoff_ref,
+                mailbox_ref,
+                sender_actor_ref,
+                receiver_actor_ref,
+                state,
+                artifact_refs,
+                updated_at: updated_at.max(0) as u64,
+            });
+        }
 
         let mailbox_projection: Option<(String, Option<String>)> = connection
             .query_row(
@@ -539,22 +616,73 @@ impl RuntimeAdapter {
             )
             .optional()
             .map_err(|error| AppError::database(error.to_string()))?;
-        let (workflow, workflow_detail) =
-            if let Some((summary_json, detail_json, detail_storage_path)) = workflow_projection {
+        let derived_workflow_artifact_path =
+            detail.run.workflow_run.as_deref().map(|workflow_run_id| {
+                self.relative_storage_path(&self.runtime_workflow_state_path(workflow_run_id))
+            });
+        let workflow_state_record = if let Some((_, _, detail_storage_path)) =
+            workflow_projection.as_ref()
+        {
+            self.load_runtime_artifact::<PersistedWorkflowState>(detail_storage_path.as_deref())?
+                .or_else(|| {
+                    derived_workflow_artifact_path
+                        .as_deref()
+                        .and_then(|path| {
+                            self.load_runtime_artifact::<PersistedWorkflowState>(Some(path))
+                                .ok()
+                        })
+                        .flatten()
+                })
+        } else {
+            derived_workflow_artifact_path
+                .as_deref()
+                .map(|path| self.load_runtime_artifact::<PersistedWorkflowState>(Some(path)))
+                .transpose()?
+                .flatten()
+        };
+        let (workflow, workflow_detail, workflow_background) =
+            if let Some((summary_json, detail_json, _detail_storage_path)) = workflow_projection {
                 let summary = serde_json::from_str::<RuntimeWorkflowSummary>(&summary_json).ok();
                 let detail_value =
                     serde_json::from_str::<RuntimeWorkflowRunDetail>(&detail_json).ok();
                 if let (Some(summary), Some(detail_value)) = (summary, detail_value) {
-                    (Some(summary), Some(detail_value))
-                } else if let Some(record) = self.load_runtime_artifact::<PersistedWorkflowState>(
-                    detail_storage_path.as_deref(),
-                )? {
-                    (Some(record.summary), Some(record.detail))
+                    let needs_artifact = detail_value.steps.is_empty();
+                    if needs_artifact {
+                        if let Some(record) = workflow_state_record.clone() {
+                            (
+                                Some(record.summary),
+                                Some(record.detail),
+                                Some(record.background),
+                            )
+                        } else {
+                            (Some(summary), Some(detail_value), None)
+                        }
+                    } else {
+                        (
+                            Some(summary),
+                            Some(detail_value),
+                            workflow_state_record
+                                .clone()
+                                .map(|record| record.background),
+                        )
+                    }
+                } else if let Some(record) = workflow_state_record.clone() {
+                    (
+                        Some(record.summary),
+                        Some(record.detail),
+                        Some(record.background),
+                    )
                 } else {
-                    (None, None)
+                    (None, None, None)
                 }
+            } else if let Some(record) = workflow_state_record.clone() {
+                (
+                    Some(record.summary),
+                    Some(record.detail),
+                    Some(record.background),
+                )
             } else {
-                (None, None)
+                (None, None, None)
             };
 
         let background_projection: Option<(String, Option<String>)> = connection
@@ -569,17 +697,44 @@ impl RuntimeAdapter {
             )
             .optional()
             .map_err(|error| AppError::database(error.to_string()))?;
-        let background = if let Some((summary_json, state_storage_path)) = background_projection {
+        let derived_background_artifact_path = {
+            let run_id = detail
+                .background_run
+                .as_ref()
+                .map(|background| background.run_id.clone())
+                .unwrap_or_else(|| detail.run.id.clone());
+            self.relative_storage_path(&self.runtime_background_state_path(&run_id))
+        };
+        let background_state_record = if let Some((_, state_storage_path)) =
+            background_projection.as_ref()
+        {
+            self.load_runtime_artifact::<PersistedBackgroundState>(state_storage_path.as_deref())?
+                .or_else(|| {
+                    self.load_runtime_artifact::<PersistedBackgroundState>(Some(
+                        &derived_background_artifact_path,
+                    ))
+                    .ok()
+                    .flatten()
+                })
+        } else {
+            self.load_runtime_artifact::<PersistedBackgroundState>(Some(
+                &derived_background_artifact_path,
+            ))?
+        };
+        let background = if let Some((summary_json, _state_storage_path)) = background_projection {
             match serde_json::from_str::<RuntimeBackgroundRunSummary>(&summary_json) {
-                Ok(summary) => Some(summary),
-                Err(_) => self
-                    .load_runtime_artifact::<PersistedBackgroundState>(
-                        state_storage_path.as_deref(),
-                    )?
-                    .map(|record| record.summary),
+                Ok(summary) if !summary.continuation_state.is_empty() => Some(summary),
+                Ok(summary) => background_state_record
+                    .clone()
+                    .map(|record| record.summary)
+                    .or(Some(summary)),
+                Err(_) => background_state_record.clone().map(|record| record.summary),
             }
         } else {
-            None
+            background_state_record
+                .clone()
+                .map(|record| record.summary)
+                .or(workflow_background)
         };
 
         if !subruns.is_empty() {
@@ -706,11 +861,6 @@ impl RuntimeAdapter {
             return Ok(events);
         }
 
-        let legacy_path = self.runtime_debug_events_path(session_id);
-        if legacy_path.exists() {
-            return Ok(serde_json::from_str(&fs::read_to_string(legacy_path)?)?);
-        }
-
         Ok(Vec::new())
     }
 
@@ -834,26 +984,6 @@ impl RuntimeAdapter {
                 ],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
-        Ok(())
-    }
-
-    pub(super) fn persist_session(
-        &self,
-        session_id: &str,
-        aggregate: &RuntimeAggregate,
-    ) -> Result<(), AppError> {
-        if let Some(parent) = self.runtime_debug_session_path(session_id).parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(
-            self.runtime_debug_session_path(session_id),
-            serde_json::to_vec_pretty(&aggregate.detail)?,
-        )?;
-        fs::write(
-            self.runtime_debug_events_path(session_id),
-            serde_json::to_vec_pretty(&aggregate.events)?,
-        )?;
-        self.persist_runtime_projections(aggregate)?;
         Ok(())
     }
 
@@ -1329,6 +1459,17 @@ impl RuntimeAdapter {
                 params![summary.id, run.id],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
+        let subruns_by_handoff_ref = aggregate
+            .detail
+            .subruns
+            .iter()
+            .filter_map(|subrun| {
+                subrun
+                    .handoff_ref
+                    .as_ref()
+                    .map(|handoff_ref| (handoff_ref.as_str(), subrun))
+            })
+            .collect::<BTreeMap<_, _>>();
         if let Some(mailbox) = aggregate.detail.pending_mailbox.as_ref() {
             let mailbox_body = PersistedMailboxBody {
                 session_id: summary.id.clone(),
@@ -1340,6 +1481,31 @@ impl RuntimeAdapter {
                     .handoffs
                     .iter()
                     .map(|handoff| handoff.handoff_ref.clone())
+                    .collect(),
+                handoffs: aggregate
+                    .detail
+                    .handoffs
+                    .iter()
+                    .map(|handoff| {
+                        let subrun_lineage = subruns_by_handoff_ref
+                            .get(handoff.handoff_ref.as_str())
+                            .copied();
+                        PersistedMailboxHandoffRecord {
+                            handoff_ref: handoff.handoff_ref.clone(),
+                            parent_run_id: subrun_lineage
+                                .and_then(|subrun| subrun.parent_run_id.clone())
+                                .or_else(|| Some(run.id.clone())),
+                            delegated_by_tool_call_id: subrun_lineage
+                                .and_then(|subrun| subrun.delegated_by_tool_call_id.clone())
+                                .or_else(|| run.delegated_by_tool_call_id.clone()),
+                            sender_actor_ref: handoff.sender_actor_ref.clone(),
+                            receiver_actor_ref: handoff.receiver_actor_ref.clone(),
+                            mailbox_ref: handoff.mailbox_ref.clone(),
+                            artifact_refs: handoff.artifact_refs.clone(),
+                            handoff_state: handoff.state.clone(),
+                            updated_at: handoff.updated_at,
+                        }
+                    })
                     .collect(),
             };
             let (body_storage_path, body_content_hash) = self.persist_runtime_artifact(
@@ -1379,12 +1545,20 @@ impl RuntimeAdapter {
             )
             .map_err(|error| AppError::database(error.to_string()))?;
         for handoff in &aggregate.detail.handoffs {
+            let subrun_lineage = subruns_by_handoff_ref
+                .get(handoff.handoff_ref.as_str())
+                .copied();
             let envelope = PersistedHandoffEnvelope {
+                handoff_ref: handoff.handoff_ref.clone(),
                 session_id: summary.id.clone(),
                 run_id: run.id.clone(),
                 conversation_id: summary.conversation_id.clone(),
-                parent_run_id: run.parent_run_id.clone(),
-                delegated_by_tool_call_id: run.delegated_by_tool_call_id.clone(),
+                parent_run_id: subrun_lineage
+                    .and_then(|subrun| subrun.parent_run_id.clone())
+                    .or_else(|| Some(run.id.clone())),
+                delegated_by_tool_call_id: subrun_lineage
+                    .and_then(|subrun| subrun.delegated_by_tool_call_id.clone())
+                    .or_else(|| run.delegated_by_tool_call_id.clone()),
                 sender_actor_ref: handoff.sender_actor_ref.clone(),
                 receiver_actor_ref: handoff.receiver_actor_ref.clone(),
                 mailbox_ref: handoff.mailbox_ref.clone(),
@@ -1409,8 +1583,8 @@ impl RuntimeAdapter {
                         summary.id,
                         run.id,
                         summary.conversation_id,
-                        run.parent_run_id,
-                        run.delegated_by_tool_call_id,
+                        envelope.parent_run_id,
+                        envelope.delegated_by_tool_call_id,
                         handoff.sender_actor_ref,
                         handoff.receiver_actor_ref,
                         handoff.mailbox_ref,
@@ -1436,8 +1610,28 @@ impl RuntimeAdapter {
             run.workflow_run_detail.as_ref(),
         ) {
             let workflow_state = PersistedWorkflowState {
+                session_id: summary.id.clone(),
+                run_id: run.id.clone(),
+                conversation_id: summary.conversation_id.clone(),
+                parent_run_id: run.parent_run_id.clone(),
+                mailbox_ref: run.mailbox_ref.clone(),
                 summary: workflow.clone(),
                 detail: workflow_detail.clone(),
+                background: aggregate.detail.background_run.clone().unwrap_or(
+                    RuntimeBackgroundRunSummary {
+                        run_id: run.id.clone(),
+                        workflow_run_id: Some(workflow.workflow_run_id.clone()),
+                        status: workflow.status.clone(),
+                        background_capable: workflow.background_capable,
+                        continuation_state: if workflow.background_capable {
+                            "running".into()
+                        } else {
+                            "disabled".into()
+                        },
+                        blocking: workflow_detail.blocking.clone(),
+                        updated_at: workflow.updated_at,
+                    },
+                ),
             };
             let (detail_storage_path, detail_content_hash) = self.persist_runtime_artifact(
                 self.runtime_workflow_state_path(&workflow.workflow_run_id),
@@ -1481,6 +1675,11 @@ impl RuntimeAdapter {
             .map_err(|error| AppError::database(error.to_string()))?;
         if let Some(background) = aggregate.detail.background_run.as_ref() {
             let background_state = PersistedBackgroundState {
+                session_id: summary.id.clone(),
+                run_id: background.run_id.clone(),
+                conversation_id: summary.conversation_id.clone(),
+                parent_run_id: run.parent_run_id.clone(),
+                workflow_run_id: background.workflow_run_id.clone(),
                 summary: background.clone(),
             };
             let (state_storage_path, state_content_hash) = self.persist_runtime_artifact(

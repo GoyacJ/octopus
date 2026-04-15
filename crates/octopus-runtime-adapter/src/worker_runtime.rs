@@ -18,14 +18,27 @@ pub(crate) fn worker_actor_refs(team: &actor_manifest::CompiledTeamManifest) -> 
     if delegation_policy.mode == "disabled" || delegation_policy.max_worker_count == 0 {
         return Vec::new();
     }
-    let record_limit = if team.record.worker_concurrency_limit == 0 {
-        refs.len()
+    let policy_limit = usize::try_from(delegation_policy.max_worker_count).unwrap_or(usize::MAX);
+    refs.into_iter().take(policy_limit).collect()
+}
+
+pub(crate) fn worker_concurrency_limit(team: &actor_manifest::CompiledTeamManifest) -> usize {
+    let delegation_policy = &team.record.delegation_policy;
+    if delegation_policy.mode == "disabled" || delegation_policy.max_worker_count == 0 {
+        return 0;
+    }
+
+    let policy_limit = usize::try_from(delegation_policy.max_worker_count).unwrap_or(usize::MAX);
+    let manifest_limit = if team.record.worker_concurrency_limit == 0 {
+        policy_limit
     } else {
         usize::try_from(team.record.worker_concurrency_limit).unwrap_or(usize::MAX)
     };
-    let policy_limit = usize::try_from(delegation_policy.max_worker_count).unwrap_or(usize::MAX);
-    let limit = record_limit.min(policy_limit);
-    refs.into_iter().take(limit).collect()
+    manifest_limit.min(policy_limit)
+}
+
+pub(crate) fn subrun_occupies_worker_slot(status: &str) -> bool {
+    matches!(status, "running" | "waiting_approval" | "auth-required")
 }
 
 pub(crate) fn worker_label(actor_ref: &str) -> String {

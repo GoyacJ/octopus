@@ -66,7 +66,7 @@ pub(super) fn build_memory_summary(
 ) {
     let fresh_count = selected_memory
         .iter()
-        .filter(|item| item.freshness_state == "fresh")
+        .filter(|item| matches!(item.freshness_state.as_str(), "fresh" | "revalidated"))
         .count() as u64;
     let stale_count = selected_memory.len() as u64 - fresh_count;
     let selected_memory_ids = selected_memory

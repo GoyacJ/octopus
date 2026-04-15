@@ -1,4 +1,5 @@
 import type {
+  CancelRuntimeSubrunInput as OpenApiCancelRuntimeSubrunInput,
   CreateRuntimeSessionInput as OpenApiCreateRuntimeSessionInput,
   ProviderConfig as OpenApiProviderConfig,
   ResolvedExecutionTarget as OpenApiResolvedExecutionTarget,
@@ -59,3 +60,4 @@ export type CreateRuntimeSessionInput = OpenApiCreateRuntimeSessionInput
 export type SubmitRuntimeTurnInput = OpenApiSubmitRuntimeTurnInput
 export type ResolveRuntimeApprovalInput = OpenApiResolveRuntimeApprovalInput
 export type ResolveRuntimeAuthChallengeInput = OpenApiResolveRuntimeAuthChallengeInput
+export type CancelRuntimeSubrunInput = OpenApiCancelRuntimeSubrunInput

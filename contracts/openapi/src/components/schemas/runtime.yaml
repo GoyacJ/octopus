@@ -131,6 +131,12 @@ ResolveRuntimeAuthChallengeInput:
   required:
     - resolution
   type: object
+CancelRuntimeSubrunInput:
+  additionalProperties: false
+  properties:
+    note:
+      type: string
+  type: object
 ResolvedExecutionTarget:
   additionalProperties: false
   properties:
@@ -718,13 +724,19 @@ RuntimeMemoryKind:
 RuntimeMemoryScope:
   enum:
     - user
+    - user-private
+    - agent-private
     - project
+    - project-shared
     - workspace
+    - workspace-shared
     - team
+    - team-shared
   type: string
 RuntimeMemoryFreshnessState:
   enum:
     - fresh
+    - revalidated
     - stale
     - unknown
   type: string
@@ -1065,17 +1077,79 @@ RuntimeWorkflowSummary:
     - backgroundCapable
     - updatedAt
   type: object
+RuntimeWorkflowStepSummary:
+  additionalProperties: false
+  properties:
+    actorRef:
+      type: string
+    delegatedByToolCallId:
+      type: string
+    handoffRef:
+      type: string
+    label:
+      type: string
+    mailboxRef:
+      type: string
+    nodeKind:
+      type: string
+    parentRunId:
+      type: string
+    runId:
+      type: string
+    startedAt:
+      type: integer
+    status:
+      type: string
+    stepId:
+      type: string
+    updatedAt:
+      type: integer
+  required:
+    - stepId
+    - nodeKind
+    - label
+    - actorRef
+    - status
+    - startedAt
+    - updatedAt
+  type: object
+RuntimeWorkflowBlockingSummary:
+  additionalProperties: false
+  properties:
+    actorRef:
+      type: string
+    mediationKind:
+      type: string
+    runId:
+      type: string
+    state:
+      type: string
+    targetKind:
+      type: string
+  required:
+    - runId
+    - actorRef
+    - mediationKind
+    - state
+    - targetKind
+  type: object
 RuntimeWorkflowRunDetail:
   additionalProperties: false
   properties:
     backgroundCapable:
       type: boolean
+    blocking:
+      $ref: "#/components/schemas/RuntimeWorkflowBlockingSummary"
     completedSteps:
       type: integer
     currentStepId:
       type: string
     currentStepLabel:
       type: string
+    steps:
+      items:
+        $ref: "#/components/schemas/RuntimeWorkflowStepSummary"
+      type: array
     status:
       type: string
     totalSteps:
@@ -1088,12 +1162,17 @@ RuntimeWorkflowRunDetail:
     - totalSteps
     - completedSteps
     - backgroundCapable
+    - steps
   type: object
 RuntimeBackgroundRunSummary:
   additionalProperties: false
   properties:
     backgroundCapable:
       type: boolean
+    blocking:
+      $ref: "#/components/schemas/RuntimeWorkflowBlockingSummary"
+    continuationState:
+      type: string
     runId:
       type: string
     status:
@@ -1106,6 +1185,7 @@ RuntimeBackgroundRunSummary:
     - runId
     - status
     - backgroundCapable
+    - continuationState
     - updatedAt
   type: object
 RuntimeWorkerDispatchSummary:
@@ -1427,6 +1507,7 @@ RuntimeEventKind:
     - policy.session_compiled
     - trace.emitted
     - subrun.spawned
+    - subrun.cancelled
     - subrun.completed
     - subrun.failed
     - workflow.started
@@ -1434,6 +1515,10 @@ RuntimeEventKind:
     - workflow.step.completed
     - workflow.completed
     - workflow.failed
+    - background.started
+    - background.paused
+    - background.completed
+    - background.failed
     - runtime.run.updated
     - runtime.message.created
     - runtime.trace.emitted

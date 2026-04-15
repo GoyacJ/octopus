@@ -52,8 +52,9 @@ use std::{
 use async_trait::async_trait;
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
-    ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
-    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
+    CancelRuntimeSubrunInput, ConfiguredModelRecord, CostLedgerEntry,
+    CreateRuntimeSessionInput, ModelCatalogSnapshot, ProjectWorkspaceAssignments,
+    ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget, RuntimeAuthChallengeSummary,
     RuntimeAuthStateSummary, RuntimeBackgroundRunSummary, RuntimeBootstrap,
     RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
@@ -68,9 +69,10 @@ use octopus_core::{
     RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSelectedMemoryItem,
     RuntimeSessionDetail, RuntimeSessionPolicySnapshot, RuntimeSessionSummary,
     RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
-    RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail, RuntimeWorkflowSummary,
-    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
-    RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    RuntimeWorkerDispatchSummary, RuntimeWorkflowBlockingSummary, RuntimeWorkflowRunDetail,
+    RuntimeWorkflowStepSummary, RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord,
+    TraceEventRecord, RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
+    RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{

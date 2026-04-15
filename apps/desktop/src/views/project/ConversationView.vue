@@ -178,7 +178,7 @@ const canResolveAuth = computed(() =>
     (grant.resourceType === 'runtime.auth' && grant.actions.includes('resolve'))
     || (grant.resourceType === 'runtime' && grant.actions.includes('auth.resolve'))),
 )
-const pendingMemoryProposal = computed(() => runtime.activeRun?.pendingMemoryProposal ?? null)
+const pendingMemoryProposal = computed(() => runtime.pendingMemoryProposal)
 const activeMediationKind = computed(() => {
   const mediationKind = runtime.pendingMediation?.mediationKind
   if (mediationKind && mediationKind !== 'none') {

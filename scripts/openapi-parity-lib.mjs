@@ -8,10 +8,12 @@ import { openApiSpecPath, repoRoot } from './governance-lib.mjs'
 export const routeParityAllowlistPath = path.join(repoRoot, 'contracts', 'openapi', 'route-parity-allowlist.json')
 export const adapterParityAllowlistPath = path.join(repoRoot, 'contracts', 'openapi', 'adapter-parity-allowlist.json')
 
-const serverRoutesSourcePath = path.join(repoRoot, 'crates', 'octopus-server', 'src', 'lib.rs')
+const serverRoutesSourcePath = path.join(repoRoot, 'crates', 'octopus-server', 'src', 'routes.rs')
 const adapterSourcePaths = [
-  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'shell.ts'),
-  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'workspace-client.ts'),
+  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'workspace_api.ts'),
+  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'runtime_api.ts'),
+  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'runtime_events.ts'),
+  path.join(repoRoot, 'apps', 'desktop', 'src', 'tauri', 'shell_browser.ts'),
 ]
 
 function unique(values) {
@@ -49,32 +51,41 @@ export async function readOpenApiPaths() {
   return unique(Object.keys(document.paths ?? {}).map(normalizeComparableApiPath)).sort()
 }
 
-function sliceBetween(source, startMarker, endMarker) {
-  const startIndex = source.indexOf(startMarker)
-  const endIndex = source.indexOf(endMarker)
-  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
+function extractFunctionBlock(source, signature) {
+  const signatureIndex = source.indexOf(signature)
+  if (signatureIndex < 0) {
     return ''
   }
 
-  return source.slice(startIndex, endIndex)
+  const blockStart = source.indexOf('{', signatureIndex)
+  if (blockStart < 0) {
+    return ''
+  }
+
+  let depth = 0
+  for (let index = blockStart; index < source.length; index += 1) {
+    const character = source[index]
+    if (character === '{') {
+      depth += 1
+    } else if (character === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return source.slice(signatureIndex, index + 1)
+      }
+    }
+  }
+
+  return ''
 }
 
 function extractRouteLiterals(source) {
-  return Array.from(source.matchAll(/\.route\("([^"]+)"/g)).map((match) => match[1])
+  return Array.from(source.matchAll(/\.route\(\s*"([^"]+)"/g)).map((match) => match[1])
 }
 
 export async function collectServerRoutes() {
   const source = await readFile(serverRoutesSourcePath, 'utf8')
-  const buildSection = sliceBetween(
-    source,
-    'pub fn build_router(state: ServerState) -> Router {',
-    'fn runtime_routes() -> Router<ServerState> {',
-  )
-  const runtimeSection = sliceBetween(
-    source,
-    'fn runtime_routes() -> Router<ServerState> {',
-    'async fn runtime_bootstrap(',
-  )
+  const buildSection = extractFunctionBlock(source, 'pub fn build_router(state: ServerState) -> Router {')
+  const runtimeSection = extractFunctionBlock(source, 'pub(crate) fn runtime_routes() -> Router<ServerState> {')
 
   const rootRoutes = extractRouteLiterals(buildSection).filter((route) => route.startsWith('/api/v1/'))
   const runtimeRoutes = extractRouteLiterals(runtimeSection).map((route) => `/api/v1/runtime${route}`)

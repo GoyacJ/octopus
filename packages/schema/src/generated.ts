@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 74a480c7193a96dd35e7f716bbf4ab1e25fae58a461b51f5674fc0f6f9102765
+// Source hash: 602058b74ea20e152bde1f4c95e87a71368e2272cb6775cced04e26ca1d2af88
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "74a480c7193a96dd35e7f716bbf4ab1e25fae58a461b51f5674fc0f6f9102765"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "602058b74ea20e152bde1f4c95e87a71368e2272cb6775cced04e26ca1d2af88"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -293,6 +293,10 @@ export interface BindPetConversationInput {
   conversationId: string
   petId: string
   sessionId?: string
+}
+
+export interface CancelRuntimeSubrunInput {
+  note?: string
 }
 
 export interface CapabilityAssetDisablePatch {
@@ -1519,6 +1523,8 @@ export interface RuntimeAuthStateSummary {
 
 export interface RuntimeBackgroundRunSummary {
   backgroundCapable: boolean
+  blocking?: RuntimeWorkflowBlockingSummary
+  continuationState: string
   runId: string
   status: string
   updatedAt: number
@@ -1689,7 +1695,7 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
 export interface RuntimeHandoffSummary {
   artifactRefs: string[]
@@ -1728,7 +1734,7 @@ export interface RuntimeMediationOutcome {
   toolName?: string
 }
 
-export type RuntimeMemoryFreshnessState = "fresh" | "stale" | "unknown"
+export type RuntimeMemoryFreshnessState = "fresh" | "revalidated" | "stale" | "unknown"
 
 export interface RuntimeMemoryFreshnessSummary {
   freshCount: number
@@ -1767,7 +1773,7 @@ export type RuntimeMemoryProposalState = "pending" | "approved" | "rejected" | "
 
 export type RuntimeMemoryRecallMode = "default" | "skip"
 
-export type RuntimeMemoryScope = "user" | "project" | "workspace" | "team"
+export type RuntimeMemoryScope = "user" | "user-private" | "agent-private" | "project" | "project-shared" | "workspace" | "workspace-shared" | "team" | "team-shared"
 
 export interface RuntimeMemorySelectionSummary {
   ignoredCount: number
@@ -2074,14 +2080,39 @@ export interface RuntimeWorkerDispatchSummary {
   totalSubruns: number
 }
 
+export interface RuntimeWorkflowBlockingSummary {
+  actorRef: string
+  mediationKind: string
+  runId: string
+  state: string
+  targetKind: string
+}
+
 export interface RuntimeWorkflowRunDetail {
   backgroundCapable: boolean
+  blocking?: RuntimeWorkflowBlockingSummary
   completedSteps: number
   currentStepId?: string
   currentStepLabel?: string
   status: string
+  steps: RuntimeWorkflowStepSummary[]
   totalSteps: number
   workflowRunId: string
+}
+
+export interface RuntimeWorkflowStepSummary {
+  actorRef: string
+  delegatedByToolCallId?: string
+  handoffRef?: string
+  label: string
+  mailboxRef?: string
+  nodeKind: string
+  parentRunId?: string
+  runId?: string
+  startedAt: number
+  status: string
+  stepId: string
+  updatedAt: number
 }
 
 export interface RuntimeWorkflowSummary {
@@ -3005,6 +3036,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}": {
     post: { operationId: "resolveRuntimeMemoryProposal"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/runtime/sessions/{sessionId}/subruns/{subrunId}/cancel": {
+    post: { operationId: "cancelRuntimeSubrun"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/sessions/{sessionId}/turns": {
     post: { operationId: "submitRuntimeTurn"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }

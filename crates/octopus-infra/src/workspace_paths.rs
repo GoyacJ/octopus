@@ -27,7 +27,7 @@ pub struct WorkspacePaths {
     pub inbox_dir: PathBuf,
     pub managed_skills_dir: PathBuf,
     pub project_data_dir: PathBuf,
-    pub runtime_sessions_dir: PathBuf,
+    pub runtime_state_dir: PathBuf,
     pub runtime_events_dir: PathBuf,
     pub runtime_traces_dir: PathBuf,
     pub runtime_approvals_dir: PathBuf,
@@ -59,7 +59,7 @@ impl WorkspacePaths {
         let inbox_dir = data_dir.join("inbox");
         let managed_skills_dir = data_dir.join("skills");
         let project_data_dir = data_dir.join("projects");
-        let runtime_sessions_dir = runtime_dir.join("sessions");
+        let runtime_state_dir = runtime_dir.join("state");
         let runtime_events_dir = runtime_dir.join("events");
         let runtime_traces_dir = runtime_dir.join("traces");
         let runtime_approvals_dir = runtime_dir.join("approvals");
@@ -93,7 +93,7 @@ impl WorkspacePaths {
             inbox_dir,
             managed_skills_dir,
             project_data_dir,
-            runtime_sessions_dir,
+            runtime_state_dir,
             runtime_events_dir,
             runtime_traces_dir,
             runtime_approvals_dir,
@@ -126,7 +126,7 @@ impl WorkspacePaths {
             &self.inbox_dir,
             &self.managed_skills_dir,
             &self.project_data_dir,
-            &self.runtime_sessions_dir,
+            &self.runtime_state_dir,
             &self.runtime_events_dir,
             &self.runtime_traces_dir,
             &self.runtime_approvals_dir,

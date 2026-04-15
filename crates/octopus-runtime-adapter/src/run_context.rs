@@ -19,7 +19,6 @@ pub(crate) struct RunContext {
     pub(crate) provider_auth_policy_decision: Option<RuntimeTargetPolicyDecision>,
     pub(crate) capability_state_ref: String,
     pub(crate) memory_selection: memory_selector::RuntimeMemorySelection,
-    pub(crate) pending_memory_proposal: Option<RuntimeMemoryProposal>,
     pub(crate) trace_context: RuntimeTraceContext,
     pub(crate) now: u64,
 }
@@ -54,6 +53,8 @@ impl RuntimeAdapter {
             session_policy_snapshot_ref,
             run_id,
             capability_state_ref,
+            current_run,
+            current_subruns,
         ) = {
             let sessions = self
                 .state
@@ -74,6 +75,8 @@ impl RuntimeAdapter {
                     .capability_state_ref
                     .clone()
                     .or_else(|| aggregate.detail.capability_state_ref.clone()),
+                aggregate.detail.run.clone(),
+                aggregate.detail.subruns.clone(),
             )
         };
         let session_policy = self.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
@@ -96,16 +99,17 @@ impl RuntimeAdapter {
                 &capability_store,
             )
             .await?;
-        let memory_selection =
-            self.select_runtime_memory(&session_policy, &project_id, &run_id, now, input)?;
-        let pending_memory_proposal = memory_writer::build_memory_proposal(
-            session_id,
-            &run_id,
+        let memory_lineage =
+            memory_selector::RuntimeMemoryLineageContext::from_run_state(&current_run, &current_subruns);
+        let memory_selection = self.select_runtime_memory(
+            &actor_manifest,
+            &session_policy,
             &project_id,
-            &memory_runtime::parse_memory_policy(&session_policy.memory_policy),
+            &run_id,
+            &memory_lineage,
+            now,
             input,
-            &memory_selection.candidate_memory,
-        );
+        )?;
         let provider_auth_policy_decision = Self::provider_auth_target_ref(&capability_projection)
             .and_then(|provider_key| {
                 session_policy
@@ -138,7 +142,6 @@ impl RuntimeAdapter {
             provider_auth_policy_decision,
             capability_state_ref: capability_projection.capability_state_ref,
             memory_selection,
-            pending_memory_proposal,
             trace_context: trace_context::runtime_trace_context(session_id, None),
             now,
         })

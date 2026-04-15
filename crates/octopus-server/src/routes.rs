@@ -482,6 +482,10 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             post(resolve_runtime_auth_challenge),
         )
         .route(
+            "/sessions/:session_id/subruns/:subrun_id/cancel",
+            post(cancel_runtime_subrun),
+        )
+        .route(
             "/sessions/:session_id/memory-proposals/:proposal_id",
             post(resolve_runtime_memory_proposal),
         )

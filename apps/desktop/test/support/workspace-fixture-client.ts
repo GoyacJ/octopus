@@ -3470,20 +3470,21 @@ export function createWorkspaceClientFixture(
             : input.decision === 'ignore'
               ? 'ignored'
               : 'rejected'
+        const resolvedProposal = {
+          ...pendingProposal,
+          proposalState,
+          review: {
+            decision: input.decision,
+            note: input.note,
+            reviewedAt,
+          },
+        }
 
         state.detail.run = {
           ...state.detail.run,
-          pendingMemoryProposal: {
-            ...pendingProposal,
-            proposalState,
-            review: {
-              decision: input.decision,
-              note: input.note,
-              reviewedAt,
-            },
-          },
+          pendingMemoryProposal: undefined,
         }
-        state.detail.summary.pendingMemoryProposalCount = proposalState === 'pending' ? 1 : 0
+        state.detail.summary.pendingMemoryProposalCount = 0
         state.events.push(createEvent(
           state,
           workspaceState.workspace.id,
@@ -3493,7 +3494,7 @@ export function createWorkspaceClientFixture(
               ? 'memory.revalidated'
               : 'memory.rejected',
           {
-            memoryProposal: clone(state.detail.run.pendingMemoryProposal),
+            memoryProposal: clone(resolvedProposal),
             run: clone(state.detail.run),
           },
         ))

@@ -119,7 +119,7 @@ const summaryCards = computed(() => [
 const memorySelectionSummary = computed(() => runtime.activeSession?.memorySelectionSummary ?? runtime.activeSession?.summary.memorySelectionSummary ?? null)
 const selectedMemory = computed(() => runtime.activeRun?.selectedMemory ?? [])
 const freshnessSummary = computed(() => runtime.activeRun?.freshnessSummary ?? null)
-const pendingMemoryProposal = computed(() => runtime.activeRun?.pendingMemoryProposal ?? null)
+const pendingMemoryProposal = computed(() => runtime.pendingMemoryProposal)
 const toolEntries = computed(() => {
   const entries = new Map<string, { toolId: string, label: string, kind: string, count: number }>()
 

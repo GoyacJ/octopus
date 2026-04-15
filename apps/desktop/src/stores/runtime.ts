@@ -91,6 +91,10 @@ export const useRuntimeStore = defineStore('runtime', {
         ?? this.activeRun?.checkpoint.pendingAuthChallenge
         ?? null
     },
+    pendingMemoryProposal(): RuntimeRunSnapshot['pendingMemoryProposal'] | null {
+      const proposal = this.activeRun?.pendingMemoryProposal ?? null
+      return proposal?.proposalState === 'pending' ? proposal : null
+    },
     lastMediationOutcome(): RuntimeMediationOutcome | null {
       return this.activeRun?.lastMediationOutcome
         ?? this.activeSession?.lastMediationOutcome

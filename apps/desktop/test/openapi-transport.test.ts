@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
@@ -81,6 +84,18 @@ describe('OpenAPI transport helpers', () => {
       .toBe('/api/v1/host/notifications/{param}/read')
     expect(normalizeComparableApiPath('/api/v1/workspace/catalog/skills/${skillId}/files/${relativePath}'))
       .toBe('/api/v1/workspace/catalog/skills/{param}/files/{param}')
+  })
+
+  it('keeps background runtime event kinds in the generated transport contract', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('"background.started"')
+    expect(generated).toContain('"background.paused"')
+    expect(generated).toContain('"background.completed"')
+    expect(generated).toContain('"background.failed"')
   })
 
   it('uses generated OpenAPI paths for host requests', async () => {
@@ -553,14 +568,14 @@ describe('OpenAPI transport helpers', () => {
               status: 'running',
               totalSteps: 3,
               completedSteps: 1,
-              currentStepId: 'leader-plan',
+              currentStepId: 'run-1',
               currentStepLabel: 'Leader plan',
               backgroundCapable: true,
               updatedAt: 2,
             },
             pendingMailbox: {
               mailboxRef: 'mailbox-1',
-              channel: 'team-mailbox',
+              channel: 'leader-hub',
               status: 'pending',
               pendingCount: 1,
               totalMessages: 1,
@@ -638,14 +653,14 @@ describe('OpenAPI transport helpers', () => {
               status: 'running',
               totalSteps: 3,
               completedSteps: 1,
-              currentStepId: 'leader-plan',
+              currentStepId: 'run-1',
               currentStepLabel: 'Leader plan',
               backgroundCapable: true,
               updatedAt: 2,
             },
             pendingMailbox: {
               mailboxRef: 'mailbox-1',
-              channel: 'team-mailbox',
+              channel: 'leader-hub',
               status: 'pending',
               pendingCount: 1,
               totalMessages: 1,
@@ -802,14 +817,14 @@ describe('OpenAPI transport helpers', () => {
             status: 'running',
             totalSteps: 3,
             completedSteps: 1,
-            currentStepId: 'leader-plan',
+            currentStepId: 'run-1',
             currentStepLabel: 'Leader plan',
             backgroundCapable: true,
             updatedAt: 2,
           },
           pendingMailbox: {
             mailboxRef: 'mailbox-1',
-            channel: 'team-mailbox',
+            channel: 'leader-hub',
             status: 'pending',
             pendingCount: 1,
             totalMessages: 1,

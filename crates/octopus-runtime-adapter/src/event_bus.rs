@@ -97,7 +97,7 @@ impl RuntimeAdapter {
             event.target_ref = target_ref;
         }
         aggregate.events.push(event.clone());
-        self.persist_session(session_id, aggregate)?;
+        self.persist_runtime_projections(aggregate)?;
         persistence::append_json_line(&self.runtime_events_path(session_id), &event)?;
         drop(sessions);
 

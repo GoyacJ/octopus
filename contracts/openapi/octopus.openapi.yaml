@@ -2672,6 +2672,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/subruns/{subrunId}/cancel:
+    post:
+      operationId: cancelRuntimeSubrun
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: subrunId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelRuntimeSubrunInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeRunSnapshot"
+          description: Runtime run snapshot payload after subrun cancellation.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/sessions/{sessionId}/turns:
     post:
       operationId: submitRuntimeTurn
@@ -4916,6 +4949,12 @@ components:
       required:
         - petId
         - conversationId
+      type: object
+    CancelRuntimeSubrunInput:
+      additionalProperties: false
+      properties:
+        note:
+          type: string
       type: object
     CapabilityAssetDisablePatch:
       additionalProperties: false
@@ -8390,6 +8429,10 @@ components:
       properties:
         backgroundCapable:
           type: boolean
+        blocking:
+          $ref: "#/components/schemas/RuntimeWorkflowBlockingSummary"
+        continuationState:
+          type: string
         runId:
           type: string
         status:
@@ -8402,6 +8445,7 @@ components:
         - runId
         - status
         - backgroundCapable
+        - continuationState
         - updatedAt
       type: object
     RuntimeBootstrap:
@@ -8913,6 +8957,7 @@ components:
         - policy.session_compiled
         - trace.emitted
         - subrun.spawned
+        - subrun.cancelled
         - subrun.completed
         - subrun.failed
         - workflow.started
@@ -8920,6 +8965,10 @@ components:
         - workflow.step.completed
         - workflow.completed
         - workflow.failed
+        - background.started
+        - background.paused
+        - background.completed
+        - background.failed
         - runtime.run.updated
         - runtime.message.created
         - runtime.trace.emitted
@@ -9028,6 +9077,7 @@ components:
     RuntimeMemoryFreshnessState:
       enum:
         - fresh
+        - revalidated
         - stale
         - unknown
       type: string
@@ -9133,9 +9183,14 @@ components:
     RuntimeMemoryScope:
       enum:
         - user
+        - user-private
+        - agent-private
         - project
+        - project-shared
         - workspace
+        - workspace-shared
         - team
+        - team-shared
       type: string
     RuntimeMemorySelectionSummary:
       additionalProperties: false
@@ -9903,11 +9958,33 @@ components:
         - completedSubruns
         - failedSubruns
       type: object
+    RuntimeWorkflowBlockingSummary:
+      additionalProperties: false
+      properties:
+        actorRef:
+          type: string
+        mediationKind:
+          type: string
+        runId:
+          type: string
+        state:
+          type: string
+        targetKind:
+          type: string
+      required:
+        - runId
+        - actorRef
+        - mediationKind
+        - state
+        - targetKind
+      type: object
     RuntimeWorkflowRunDetail:
       additionalProperties: false
       properties:
         backgroundCapable:
           type: boolean
+        blocking:
+          $ref: "#/components/schemas/RuntimeWorkflowBlockingSummary"
         completedSteps:
           type: integer
         currentStepId:
@@ -9916,6 +9993,10 @@ components:
           type: string
         status:
           type: string
+        steps:
+          items:
+            $ref: "#/components/schemas/RuntimeWorkflowStepSummary"
+          type: array
         totalSteps:
           type: integer
         workflowRunId:
@@ -9926,6 +10007,43 @@ components:
         - totalSteps
         - completedSteps
         - backgroundCapable
+        - steps
+      type: object
+    RuntimeWorkflowStepSummary:
+      additionalProperties: false
+      properties:
+        actorRef:
+          type: string
+        delegatedByToolCallId:
+          type: string
+        handoffRef:
+          type: string
+        label:
+          type: string
+        mailboxRef:
+          type: string
+        nodeKind:
+          type: string
+        parentRunId:
+          type: string
+        runId:
+          type: string
+        startedAt:
+          type: integer
+        status:
+          type: string
+        stepId:
+          type: string
+        updatedAt:
+          type: integer
+      required:
+        - stepId
+        - nodeKind
+        - label
+        - actorRef
+        - status
+        - startedAt
+        - updatedAt
       type: object
     RuntimeWorkflowSummary:
       additionalProperties: false

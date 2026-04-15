@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AppError, CreateRuntimeSessionInput, ModelCatalogSnapshot, ResolveRuntimeApprovalInput,
-    ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput, RuntimeBootstrap,
-    RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    AppError, CancelRuntimeSubrunInput, CreateRuntimeSessionInput, ModelCatalogSnapshot,
+    ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
+    ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
     RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, SubmitRuntimeTurnInput,
 };
@@ -49,6 +50,12 @@ pub trait RuntimeExecutionService: Send + Sync {
         session_id: &str,
         proposal_id: &str,
         input: ResolveRuntimeMemoryProposalInput,
+    ) -> Result<RuntimeRunSnapshot, AppError>;
+    async fn cancel_subrun(
+        &self,
+        session_id: &str,
+        subrun_id: &str,
+        input: CancelRuntimeSubrunInput,
     ) -> Result<RuntimeRunSnapshot, AppError>;
     async fn subscribe_events(
         &self,
@@ -170,6 +177,21 @@ mod tests {
                 total_steps: 3,
                 completed_steps: 1,
                 background_capable: true,
+                steps: vec![octopus_core::RuntimeWorkflowStepSummary {
+                    step_id: "step-1".into(),
+                    node_kind: "worker".into(),
+                    label: "Worker review".into(),
+                    actor_ref: "agent:workspace-worker".into(),
+                    run_id: Some("subrun-1".into()),
+                    parent_run_id: Some("run-1".into()),
+                    delegated_by_tool_call_id: Some("tool-call-1".into()),
+                    mailbox_ref: Some("mailbox-1".into()),
+                    handoff_ref: Some("handoff-1".into()),
+                    status: "running".into(),
+                    started_at: 12,
+                    updated_at: 20,
+                }],
+                blocking: None,
             }),
             mailbox_ref: Some("mailbox-1".into()),
             handoff_ref: Some("handoff-1".into()),
@@ -225,7 +247,7 @@ mod tests {
                 workflow: Some(sample_workflow_summary()),
                 pending_mailbox: Some(octopus_core::RuntimeMailboxSummary {
                     mailbox_ref: "mailbox-1".into(),
-                    channel: "team-mailbox".into(),
+                    channel: "leader-hub".into(),
                     status: "pending".into(),
                     pending_count: 1,
                     total_messages: 1,
@@ -236,6 +258,8 @@ mod tests {
                     workflow_run_id: Some("workflow-1".into()),
                     status: "background_running".into(),
                     background_capable: true,
+                    continuation_state: "running".into(),
+                    blocking: None,
                     updated_at: 20,
                 }),
                 memory_summary: octopus_core::RuntimeMemorySummary::default(),
@@ -258,7 +282,7 @@ mod tests {
             workflow: Some(sample_workflow_summary()),
             pending_mailbox: Some(octopus_core::RuntimeMailboxSummary {
                 mailbox_ref: "mailbox-1".into(),
-                channel: "team-mailbox".into(),
+                channel: "leader-hub".into(),
                 status: "pending".into(),
                 pending_count: 1,
                 total_messages: 1,
@@ -269,6 +293,8 @@ mod tests {
                 workflow_run_id: Some("workflow-1".into()),
                 status: "background_running".into(),
                 background_capable: true,
+                continuation_state: "running".into(),
+                blocking: None,
                 updated_at: 20,
             }),
             memory_summary: octopus_core::RuntimeMemorySummary::default(),
@@ -411,6 +437,15 @@ mod tests {
             Ok(self.run.clone())
         }
 
+        async fn cancel_subrun(
+            &self,
+            _session_id: &str,
+            _subrun_id: &str,
+            _input: CancelRuntimeSubrunInput,
+        ) -> Result<RuntimeRunSnapshot, AppError> {
+            Ok(self.run.clone())
+        }
+
         async fn subscribe_events(
             &self,
             _session_id: &str,
@@ -505,5 +540,15 @@ mod tests {
                 .map(|dispatch| dispatch.total_subruns),
             Some(1)
         );
+
+        let cancelled = execution_service
+            .cancel_subrun(
+                "session-1",
+                "subrun-1",
+                CancelRuntimeSubrunInput { note: None },
+            )
+            .await
+            .expect("cancel subrun");
+        assert_eq!(cancelled.workflow_run.as_deref(), Some("workflow-1"));
     }
 }

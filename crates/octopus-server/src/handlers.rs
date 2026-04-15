@@ -1547,6 +1547,14 @@ fn default_permission_definitions() -> Vec<PermissionDefinition> {
             actions: vec!["resolve".into()],
         },
         PermissionDefinition {
+            code: "runtime.subrun.cancel".into(),
+            name: "Runtime Subrun Cancel".into(),
+            description: "Cancel runtime subruns by subrun id.".into(),
+            category: "runtime".into(),
+            resource_type: "runtime.subrun".into(),
+            actions: vec!["cancel".into()],
+        },
+        PermissionDefinition {
             code: "audit.read".into(),
             name: "Audit Read".into(),
             description: "Read workspace audit events.".into(),

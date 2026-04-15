@@ -70,7 +70,7 @@ describe('useRuntimeStore', () => {
     expect(runtime.activeMessages.some((message) => (message.artifacts ?? []).length > 0)).toBe(true)
     expect(runtime.activeTrace[0]?.title.length).toBeGreaterThan(0)
     expect(runtime.activeSession?.workflow?.status).toBe('completed')
-    expect(runtime.activeSession?.pendingMailbox?.channel).toBe('team-mailbox')
+    expect(runtime.activeSession?.pendingMailbox?.channel).toBe('leader-hub')
     expect(runtime.activeSession?.backgroundRun?.status).toBe('completed')
     expect(runtime.activeSession?.subruns.length).toBeGreaterThan(0)
     expect(runtime.activeSession?.handoffs.length).toBeGreaterThan(0)
@@ -586,13 +586,12 @@ describe('useRuntimeStore', () => {
     }
     ;(detail.run as any).pendingMemoryProposal = {
       proposalId: 'memory-proposal-1',
-      status: 'pending-review',
-      reason: 'Validated explicit user preference from latest turn.',
-      targetScope: 'user-private',
-      review: {
-        status: 'pending-review',
-        requiresApproval: false,
-      },
+      title: 'User memory proposal',
+      summary: 'User prefers concise implementation summaries.',
+      proposalState: 'pending',
+      proposalReason: 'Validated explicit user preference from latest turn.',
+      kind: 'user',
+      scope: 'user-private',
     }
     ;(detail.run as any).memoryStateRef = 'memory-state-conv-memory-proposal'
 
@@ -630,6 +629,31 @@ describe('useRuntimeStore', () => {
     )
     expect((runtime.activeSession?.run as any).pendingMemoryProposal).toBeUndefined()
     expect((runtime.activeSession?.summary as any).pendingMemoryProposalCount).toBe(0)
+
+    runtime.dispose()
+  })
+
+  it('does not expose resolved memory proposals as pending store state', async () => {
+    const { runtime } = await prepareRuntimeStore()
+    const detail = createSessionDetail(
+      'conv-memory-resolved-state',
+      'proj-redesign',
+      'Resolved Memory Proposal Session',
+    )
+
+    ;(detail.run as any).pendingMemoryProposal = {
+      proposalId: 'memory-proposal-resolved',
+      title: 'Resolved proposal',
+      summary: 'This proposal was already reviewed.',
+      proposalState: 'approved',
+      proposalReason: 'validated',
+      kind: 'feedback',
+      scope: 'user-private',
+    }
+    ;(detail.summary as any).pendingMemoryProposalCount = 0
+    runtime.setActiveSession(detail)
+
+    expect((runtime as any).pendingMemoryProposal).toBeNull()
 
     runtime.dispose()
   })

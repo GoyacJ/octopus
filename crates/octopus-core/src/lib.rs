@@ -2534,6 +2534,38 @@ pub struct RuntimeWorkflowSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeWorkflowStepSummary {
+    pub step_id: String,
+    pub node_kind: String,
+    pub label: String,
+    pub actor_ref: String,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub parent_run_id: Option<String>,
+    #[serde(default)]
+    pub delegated_by_tool_call_id: Option<String>,
+    #[serde(default)]
+    pub mailbox_ref: Option<String>,
+    #[serde(default)]
+    pub handoff_ref: Option<String>,
+    pub status: String,
+    pub started_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeWorkflowBlockingSummary {
+    pub run_id: String,
+    pub actor_ref: String,
+    pub mediation_kind: String,
+    pub state: String,
+    pub target_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeWorkflowRunDetail {
     pub workflow_run_id: String,
     pub status: String,
@@ -2542,6 +2574,10 @@ pub struct RuntimeWorkflowRunDetail {
     pub total_steps: u64,
     pub completed_steps: u64,
     pub background_capable: bool,
+    #[serde(default)]
+    pub steps: Vec<RuntimeWorkflowStepSummary>,
+    #[serde(default)]
+    pub blocking: Option<RuntimeWorkflowBlockingSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2551,6 +2587,10 @@ pub struct RuntimeBackgroundRunSummary {
     pub workflow_run_id: Option<String>,
     pub status: String,
     pub background_capable: bool,
+    #[serde(default)]
+    pub continuation_state: String,
+    #[serde(default)]
+    pub blocking: Option<RuntimeWorkflowBlockingSummary>,
     pub updated_at: u64,
 }
 
@@ -2965,6 +3005,13 @@ pub struct ResolveRuntimeApprovalInput {
 #[serde(rename_all = "camelCase")]
 pub struct ResolveRuntimeAuthChallengeInput {
     pub resolution: String,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelRuntimeSubrunInput {
     #[serde(default)]
     pub note: Option<String>,
 }

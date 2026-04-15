@@ -2,11 +2,12 @@ use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CapabilityManagementProjection, CostLedgerEntry,
-    CreateProjectPromotionRequestInput, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ProjectDashboardBreakdownItem,
-    ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSummary,
-    ProjectDashboardTrendPoint, ProjectDashboardUserStat, ProjectPromotionRequest,
-    ProjectTokenUsageRecord, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
+    CancelRuntimeSubrunInput, CreateProjectPromotionRequestInput,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
+    ProjectDashboardBreakdownItem, ProjectDashboardConversationInsight,
+    ProjectDashboardRankingItem, ProjectDashboardSummary, ProjectDashboardTrendPoint,
+    ProjectDashboardUserStat, ProjectPromotionRequest, ProjectTokenUsageRecord,
+    ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -3841,6 +3842,49 @@ pub(crate) async fn resolve_runtime_auth_challenge(
     Ok(response)
 }
 
+pub(crate) async fn cancel_runtime_subrun(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((session_id, subrun_id)): Path<(String, String)>,
+    Json(mut input): Json<CancelRuntimeSubrunInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    input.note = input
+        .note
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.subrun.cancel",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
+    let idempotency_scope =
+        idempotency_key(&headers).map(|key| idempotency_scope(&session, "runtime.cancel_subrun", &subrun_id, &key));
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let run = state
+        .services
+        .runtime_execution
+        .cancel_subrun(&session_id, &subrun_id, input)
+        .await?;
+    if let Some(scope) = idempotency_scope.as_deref() {
+        store_idempotent_response(&state, scope, &run, &request_id)?;
+    }
+
+    let mut response = Json(run).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
 pub(crate) async fn resolve_runtime_memory_proposal(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -4046,6 +4090,21 @@ mod tests {
                 total_steps: 3,
                 completed_steps: 1,
                 background_capable: true,
+                steps: vec![octopus_core::RuntimeWorkflowStepSummary {
+                    step_id: "step-1".into(),
+                    node_kind: "worker".into(),
+                    label: "Worker review".into(),
+                    actor_ref: "agent:workspace-worker".into(),
+                    run_id: Some("subrun-1".into()),
+                    parent_run_id: Some("run-1".into()),
+                    delegated_by_tool_call_id: Some("tool-call-1".into()),
+                    mailbox_ref: Some("mailbox-1".into()),
+                    handoff_ref: Some("handoff-1".into()),
+                    status: "running".into(),
+                    started_at: 12,
+                    updated_at: 20,
+                }],
+                blocking: None,
             }),
             mailbox_ref: Some("mailbox-1".into()),
             handoff_ref: Some("handoff-1".into()),
@@ -4093,7 +4152,7 @@ mod tests {
         };
         let mailbox = octopus_core::RuntimeMailboxSummary {
             mailbox_ref: "mailbox-1".into(),
-            channel: "team-mailbox".into(),
+            channel: "leader-hub".into(),
             status: "pending".into(),
             pending_count: 1,
             total_messages: 1,
@@ -4104,6 +4163,8 @@ mod tests {
             workflow_run_id: Some("workflow-1".into()),
             status: "background_running".into(),
             background_capable: true,
+            continuation_state: "running".into(),
+            blocking: None,
             updated_at: 20,
         };
 
@@ -4288,7 +4349,7 @@ mod tests {
         assert_eq!(
             json.pointer("/pendingMailbox/channel")
                 .and_then(Value::as_str),
-            Some("team-mailbox")
+            Some("leader-hub")
         );
         assert_eq!(
             json.pointer("/backgroundRun/status")

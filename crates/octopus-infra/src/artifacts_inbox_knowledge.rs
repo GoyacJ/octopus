@@ -269,7 +269,7 @@ mod tests {
             &paths.artifacts_dir,
             &paths.knowledge_dir,
             &paths.inbox_dir,
-            &paths.runtime_sessions_dir,
+            &paths.runtime_state_dir,
             &paths.runtime_events_dir,
             &paths.runtime_traces_dir,
             &paths.runtime_approvals_dir,
@@ -311,10 +311,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
 
-        assert_eq!(
-            paths.runtime_sessions_dir,
-            temp.path().join("runtime/sessions")
-        );
+        assert_eq!(paths.runtime_state_dir, temp.path().join("runtime/state"));
         assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
         assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
         assert_eq!(paths.db_path, temp.path().join("data/main.db"));

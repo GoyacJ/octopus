@@ -402,7 +402,7 @@ impl RuntimeAdapter {
     pub(crate) fn manifest_snapshot_path(&self, manifest_snapshot_ref: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join(format!("{manifest_snapshot_ref}.json"))
     }
 
@@ -425,7 +425,7 @@ impl RuntimeAdapter {
         manifest_snapshot_ref: &str,
     ) -> Result<CompiledActorManifest, AppError> {
         let path = self.manifest_snapshot_path(manifest_snapshot_ref);
-        let raw = fs::read(path)?;
+        let raw = fs::read(&path)?;
         Ok(serde_json::from_slice(&raw)?)
     }
 

@@ -587,7 +587,7 @@ export const runtimeStoreActions = {
     }
   },
   async resolveMemoryProposal(this: any, decision: string, note?: string) {
-    const proposalId = this.activeRun?.pendingMemoryProposal?.proposalId
+    const proposalId = this.pendingMemoryProposal?.proposalId
     if (!this.activeSessionId || !proposalId) {
       return
     }

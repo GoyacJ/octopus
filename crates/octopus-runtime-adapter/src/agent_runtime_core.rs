@@ -1251,9 +1251,9 @@ fn finalize_mediation_checkpoint_ref(
 
 fn memory_proposal_pending_mediation(
     run_context: &run_context::RunContext,
-) -> Option<RuntimePendingMediationSummary> {
-    let proposal = run_context.pending_memory_proposal.as_ref()?;
-    Some(RuntimePendingMediationSummary {
+    proposal: &RuntimeMemoryProposal,
+) -> RuntimePendingMediationSummary {
+    RuntimePendingMediationSummary {
         approval_id: None,
         approval_layer: Some("memory-review".into()),
         auth_challenge_id: None,
@@ -1281,7 +1281,7 @@ fn memory_proposal_pending_mediation(
         target_kind: "memory-write".into(),
         target_ref: proposal.proposal_id.clone(),
         tool_name: Some(run_context.actor_manifest.label().to_string()),
-    })
+    }
 }
 
 fn memory_proposal_mediation_outcome(
@@ -1596,19 +1596,78 @@ fn build_execution_trace(
     }
 }
 
-fn subrun_fallback_content(checkpoint: &RuntimeRunCheckpoint, fallback_content: &str) -> String {
+fn subrun_checkpoint_content(checkpoint: &RuntimeRunCheckpoint) -> Option<String> {
     checkpoint
-        .serialized_session
-        .get("content")
-        .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+        .input
+        .as_ref()
+        .and_then(|input| input.get("content"))
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or(fallback_content)
-        .to_string()
+        .map(ToString::to_string)
+        .or_else(|| {
+            checkpoint
+                .serialized_session
+                .get("content")
+                .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(ToString::to_string)
+        })
+        .or_else(|| {
+            checkpoint
+                .serialized_session
+                .get("session")
+                .and_then(|session| session.get("messages"))
+                .and_then(Value::as_array)
+                .and_then(|messages| messages.first())
+                .and_then(|message| message.get("blocks"))
+                .and_then(Value::as_array)
+                .and_then(|blocks| blocks.first())
+                .and_then(|block| block.get("text"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(ToString::to_string)
+        })
+}
+
+fn durable_subrun_content(state: &team_runtime::PersistedSubrunState) -> Result<String, AppError> {
+    if !state.dispatch.worker_input.content.trim().is_empty() {
+        return Ok(state.dispatch.worker_input.content.clone());
+    }
+
+    subrun_checkpoint_content(&state.run.checkpoint)
+        .ok_or_else(|| AppError::runtime("subrun checkpoint content is unavailable"))
 }
 
 fn resumable_subrun_status(status: &str) -> bool {
-    matches!(status, "queued" | "running")
+    matches!(
+        status,
+        "queued" | "running" | "waiting_approval" | "auth-required"
+    )
+}
+
+fn primary_run_is_blocking_team_subruns(detail: &RuntimeSessionDetail) -> bool {
+    detail
+        .run
+        .checkpoint
+        .pending_approval
+        .as_ref()
+        .is_some_and(|approval| approval.run_id == detail.run.id && approval.status == "pending")
+        || detail
+            .run
+            .checkpoint
+            .pending_auth_challenge
+            .as_ref()
+            .is_some_and(|challenge| {
+                challenge.run_id == detail.run.id && challenge.status == "pending"
+            })
+        || detail.pending_approval.as_ref().is_some_and(|approval| {
+            approval.run_id == detail.run.id && approval.status == "pending"
+        })
+        || detail.run.auth_target.as_ref().is_some_and(|challenge| {
+            challenge.run_id == detail.run.id && challenge.status == "pending"
+        })
+        || matches!(detail.run.status.as_str(), "waiting_input" | "blocked")
 }
 
 async fn execute_team_subrun(
@@ -1617,7 +1676,6 @@ async fn execute_team_subrun(
     conversation_id: &str,
     parent_run_id: &str,
     state: &team_runtime::PersistedSubrunState,
-    fallback_content: &str,
 ) -> Result<team_runtime::PersistedSubrunState, AppError> {
     if !resumable_subrun_status(&state.run.status) {
         return Ok(state.clone());
@@ -1640,7 +1698,7 @@ async fn execute_team_subrun(
         .capability_state_ref
         .clone()
         .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
-    let content = subrun_fallback_content(&state.run.checkpoint, fallback_content);
+    let content = durable_subrun_content(state)?;
     let trace_context = if state.run.trace_context.session_id.is_empty() {
         let restored =
             trace_context_from_serialized_session(&state.run.checkpoint.serialized_session);
@@ -1676,13 +1734,42 @@ async fn execute_team_subrun(
 
     let mut updated = state.clone();
     let updated_at = timestamp_now();
-    let checkpoint = build_runtime_checkpoint(
+    let mut approval = loop_result
+        .broker_decision
+        .as_ref()
+        .and_then(|decision| decision.approval.clone());
+    let mut auth_target = loop_result
+        .broker_decision
+        .as_ref()
+        .and_then(|decision| decision.auth_challenge.clone());
+    let mut pending_mediation = loop_result
+        .broker_decision
+        .as_ref()
+        .and_then(|decision| decision.pending_mediation.clone());
+    let last_execution_outcome = loop_result
+        .broker_decision
+        .as_ref()
+        .map(|decision| decision.execution_outcome.clone());
+    let mut last_mediation_outcome = loop_result
+        .broker_decision
+        .as_ref()
+        .and_then(|decision| decision.mediation_outcome.clone());
+    let checkpoint_artifact_ref = finalize_mediation_checkpoint_ref(
+        adapter,
+        session_id,
+        &state.run.id,
+        &mut approval,
+        &mut auth_target,
+        &mut pending_mediation,
+        &mut last_mediation_outcome,
+    );
+    let mut checkpoint = build_runtime_checkpoint(
         loop_result.serialized_session,
         loop_result.current_iteration_index,
         loop_result.usage_summary.clone(),
-        None,
-        None,
-        None,
+        approval.clone(),
+        auth_target.clone(),
+        pending_mediation.clone(),
         Some(
             loop_result
                 .capability_projection
@@ -1690,18 +1777,54 @@ async fn execute_team_subrun(
                 .clone(),
         ),
         loop_result.capability_projection.plan_summary.clone(),
-        None,
-        None,
-        None,
-        None,
-        None,
+        last_execution_outcome.clone(),
+        last_mediation_outcome.clone(),
+        loop_result.mediation_request.as_ref(),
+        loop_result.broker_decision.as_ref(),
+        checkpoint_artifact_ref.clone(),
     );
+    if let Some(mediation_id) = pending_mediation
+        .as_ref()
+        .and_then(|mediation| mediation.mediation_id.as_deref())
+    {
+        let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
+            session_id,
+            &state.run.id,
+            mediation_id,
+            &checkpoint,
+        )?;
+        checkpoint.checkpoint_artifact_ref = Some(storage_path.clone());
+        apply_checkpoint_ref(
+            &mut approval,
+            &mut auth_target,
+            &mut pending_mediation,
+            &mut last_mediation_outcome,
+            &storage_path,
+        );
+        checkpoint.pending_approval = approval.clone();
+        checkpoint.pending_auth_challenge = auth_target.clone();
+        checkpoint.pending_mediation = pending_mediation.clone();
+        checkpoint.last_mediation_outcome = last_mediation_outcome.clone();
+    }
 
-    updated.run.status = "completed".into();
-    updated.run.current_step = "completed".into();
+    let (status, current_step, next_action, approval_state) = if approval.is_some() {
+        (
+            "waiting_approval",
+            "awaiting_approval",
+            "approval",
+            "pending",
+        )
+    } else if auth_target.is_some() {
+        ("auth-required", "awaiting_auth", "auth", "auth-required")
+    } else {
+        ("completed", "completed", "idle", "not-required")
+    };
+
+    updated.run.status = status.into();
+    updated.run.current_step = current_step.into();
     updated.run.updated_at = updated_at;
     updated.run.consumed_tokens = loop_result.consumed_tokens;
-    updated.run.next_action = Some("idle".into());
+    updated.run.next_action = Some(next_action.into());
     updated.run.configured_model_id = Some(resolved_target.configured_model_id.clone());
     updated.run.configured_model_name = Some(resolved_target.configured_model_name.clone());
     updated.run.model_id = Some(resolved_target.registry_model_id.clone());
@@ -1713,19 +1836,19 @@ async fn execute_team_subrun(
     updated.run.handoff_ref = state.run.handoff_ref.clone();
     updated.run.background_state = None;
     updated.run.worker_dispatch = None;
-    updated.run.approval_state = "not-required".into();
-    updated.run.approval_target = None;
-    updated.run.auth_target = None;
+    updated.run.approval_state = approval_state.into();
+    updated.run.approval_target = approval;
+    updated.run.auth_target = auth_target;
     updated.run.usage_summary = loop_result.usage_summary.clone();
     updated.run.artifact_refs = vec![persistence::runtime_output_artifact_ref(&state.run.id)];
     updated.run.trace_context = trace_context;
     updated.run.checkpoint = checkpoint;
     updated.run.capability_plan_summary = loop_result.capability_projection.plan_summary;
     updated.run.provider_state_summary = loop_result.capability_projection.provider_state_summary;
-    updated.run.pending_mediation = None;
+    updated.run.pending_mediation = pending_mediation;
     updated.run.capability_state_ref = Some(loop_result.capability_projection.capability_state_ref);
-    updated.run.last_execution_outcome = None;
-    updated.run.last_mediation_outcome = None;
+    updated.run.last_execution_outcome = last_execution_outcome;
+    updated.run.last_mediation_outcome = last_mediation_outcome;
     updated.run.resolved_target = Some(resolved_target);
     updated.run.requested_actor_kind = Some(actor_manifest.actor_kind_label().into());
     updated.run.requested_actor_id = Some(actor_manifest.actor_ref().to_string());
@@ -1740,9 +1863,8 @@ async fn continue_team_runtime_subruns(
     adapter: &RuntimeAdapter,
     session_id: &str,
     team_manifest: &actor_manifest::CompiledTeamManifest,
-    fallback_content: &str,
 ) -> Result<Option<(RuntimeRunSnapshot, String, String)>, AppError> {
-    let (conversation_id, project_id, parent_run_id, blocked, subrun_states) = {
+    let (conversation_id, project_id, parent_run_id, blocked) = {
         let sessions = adapter
             .state
             .sessions
@@ -1755,56 +1877,98 @@ async fn continue_team_runtime_subruns(
             aggregate.detail.summary.conversation_id.clone(),
             aggregate.detail.summary.project_id.clone(),
             aggregate.detail.run.id.clone(),
-            aggregate.detail.pending_approval.is_some()
-                || aggregate.detail.run.status != "completed",
-            aggregate
-                .metadata
-                .subrun_states
-                .iter()
-                .filter(|(_, state)| resumable_subrun_status(&state.run.status))
-                .map(|(run_id, state)| (run_id.clone(), state.clone()))
-                .collect::<Vec<_>>(),
+            primary_run_is_blocking_team_subruns(&aggregate.detail),
         )
     };
 
-    if blocked || subrun_states.is_empty() {
+    if blocked {
         return Ok(None);
     }
 
-    for (run_id, state) in subrun_states {
-        let updated_state = execute_team_subrun(
-            adapter,
-            session_id,
-            &conversation_id,
-            &parent_run_id,
-            &state,
-            fallback_content,
-        )
-        .await?;
-        let updated_at = updated_state.run.updated_at;
+    loop {
+        let scheduled_run_ids = {
+            let mut sessions = adapter
+                .state
+                .sessions
+                .lock()
+                .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+            let aggregate = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| AppError::not_found("runtime session"))?;
+            let concurrency_limit = worker_runtime::worker_concurrency_limit(team_manifest);
+            let tick_now = timestamp_now();
+            let scheduler_tick = subrun_orchestrator::schedule_subrun_tick(
+                &mut aggregate.metadata.subrun_states,
+                concurrency_limit,
+                tick_now,
+            );
+            if scheduler_tick.runnable_run_ids.is_empty() {
+                break;
+            }
+            team_runtime::apply_team_runtime_state(
+                &mut aggregate.detail,
+                team_manifest,
+                &aggregate.metadata.subrun_states,
+                tick_now,
+            );
+            aggregate.detail.run.updated_at = tick_now;
+            aggregate.detail.summary.updated_at = tick_now;
+            sync_runtime_session_detail(&mut aggregate.detail);
+            adapter.persist_runtime_projections(aggregate)?;
+            scheduler_tick.runnable_run_ids
+        };
 
-        let mut sessions = adapter
-            .state
-            .sessions
-            .lock()
-            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
-        let aggregate = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| AppError::not_found("runtime session"))?;
-        aggregate
-            .metadata
-            .subrun_states
-            .insert(run_id, updated_state);
-        team_runtime::apply_team_runtime_state(
-            &mut aggregate.detail,
-            team_manifest,
-            &aggregate.metadata.subrun_states,
-            updated_at,
-        );
-        aggregate.detail.run.updated_at = updated_at;
-        aggregate.detail.summary.updated_at = updated_at;
-        sync_runtime_session_detail(&mut aggregate.detail);
-        adapter.persist_session(session_id, aggregate)?;
+        for run_id in scheduled_run_ids {
+            let next_state = {
+                let sessions = adapter
+                    .state
+                    .sessions
+                    .lock()
+                    .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+                let aggregate = sessions
+                    .get(session_id)
+                    .ok_or_else(|| AppError::not_found("runtime session"))?;
+                aggregate
+                    .metadata
+                    .subrun_states
+                    .get(&run_id)
+                    .cloned()
+                    .ok_or_else(|| AppError::not_found("runtime subrun state"))?
+            };
+
+            let updated_state = execute_team_subrun(
+                adapter,
+                session_id,
+                &conversation_id,
+                &parent_run_id,
+                &next_state,
+            )
+            .await?;
+            let updated_at = updated_state.run.updated_at;
+
+            let mut sessions = adapter
+                .state
+                .sessions
+                .lock()
+                .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+            let aggregate = sessions
+                .get_mut(session_id)
+                .ok_or_else(|| AppError::not_found("runtime session"))?;
+            aggregate
+                .metadata
+                .subrun_states
+                .insert(updated_state.run.id.clone(), updated_state);
+            team_runtime::apply_team_runtime_state(
+                &mut aggregate.detail,
+                team_manifest,
+                &aggregate.metadata.subrun_states,
+                updated_at,
+            );
+            aggregate.detail.run.updated_at = updated_at;
+            aggregate.detail.summary.updated_at = updated_at;
+            sync_runtime_session_detail(&mut aggregate.detail);
+            adapter.persist_runtime_projections(aggregate)?;
+        }
     }
 
     let sessions = adapter
@@ -1820,6 +1984,546 @@ async fn continue_team_runtime_subruns(
         conversation_id,
         project_id,
     )))
+}
+
+fn load_session_team_manifest(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+) -> Result<actor_manifest::CompiledTeamManifest, AppError> {
+    let session_policy_snapshot_ref = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        aggregate.metadata.session_policy_snapshot_ref.clone()
+    };
+    let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
+    match adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)? {
+        actor_manifest::CompiledActorManifest::Team(team_manifest) => Ok(team_manifest),
+        _ => Err(AppError::runtime("runtime session is not a team session")),
+    }
+}
+
+fn persist_team_subrun_state(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    team_manifest: &actor_manifest::CompiledTeamManifest,
+    updated_state: team_runtime::PersistedSubrunState,
+    now: u64,
+) -> Result<(RuntimeRunSnapshot, String, String), AppError> {
+    let mut sessions = adapter
+        .state
+        .sessions
+        .lock()
+        .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+    let aggregate = sessions
+        .get_mut(session_id)
+        .ok_or_else(|| AppError::not_found("runtime session"))?;
+    aggregate
+        .metadata
+        .subrun_states
+        .insert(updated_state.run.id.clone(), updated_state);
+    team_runtime::apply_team_runtime_state(
+        &mut aggregate.detail,
+        team_manifest,
+        &aggregate.metadata.subrun_states,
+        now,
+    );
+    aggregate.detail.run.updated_at = now;
+    aggregate.detail.summary.updated_at = now;
+    sync_runtime_session_detail(&mut aggregate.detail);
+    let run = aggregate.detail.run.clone();
+    let conversation_id = aggregate.detail.summary.conversation_id.clone();
+    let project_id = aggregate.detail.summary.project_id.clone();
+    adapter.persist_runtime_projections(aggregate)?;
+    Ok((run, conversation_id, project_id))
+}
+
+fn load_pending_team_subrun_approval(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    approval_id: &str,
+) -> Result<Option<(ApprovalRequestRecord, team_runtime::PersistedSubrunState)>, AppError> {
+    let (approval, state) = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        let approval = aggregate
+            .detail
+            .pending_approval
+            .clone()
+            .ok_or_else(|| AppError::not_found("runtime approval"))?;
+        if approval.id != approval_id {
+            return Err(AppError::not_found("runtime approval"));
+        }
+        if approval.run_id == aggregate.detail.run.id {
+            return Ok(None);
+        }
+        let state = aggregate
+            .metadata
+            .subrun_states
+            .get(&approval.run_id)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("runtime subrun state"))?;
+        (approval, state)
+    };
+    let subrun_approval = state
+        .run
+        .approval_target
+        .clone()
+        .or_else(|| state.run.checkpoint.pending_approval.clone())
+        .ok_or_else(|| AppError::not_found("runtime approval"))?;
+    if subrun_approval.id != approval_id {
+        return Err(AppError::not_found("runtime approval"));
+    }
+    if approval.status != "pending" {
+        return Err(AppError::invalid_input(format!(
+            "runtime approval `{approval_id}` is already {}",
+            approval.status
+        )));
+    }
+    if !resumable_approval_target(approval.target_kind.as_deref()) {
+        return Err(AppError::invalid_input(format!(
+            "runtime approval `{approval_id}` does not target a resumable checkpoint"
+        )));
+    }
+    Ok(Some((approval, state)))
+}
+
+fn load_pending_team_subrun_auth_challenge(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    challenge_id: &str,
+) -> Result<
+    Option<(
+        RuntimeAuthChallengeSummary,
+        team_runtime::PersistedSubrunState,
+    )>,
+    AppError,
+> {
+    let (challenge, state) = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        let challenge = aggregate
+            .detail
+            .run
+            .auth_target
+            .clone()
+            .or_else(|| {
+                aggregate
+                    .detail
+                    .run
+                    .checkpoint
+                    .pending_auth_challenge
+                    .clone()
+            })
+            .ok_or_else(|| AppError::not_found("runtime auth challenge"))?;
+        if challenge.id != challenge_id {
+            return Err(AppError::not_found("runtime auth challenge"));
+        }
+        if challenge.run_id == aggregate.detail.run.id {
+            return Ok(None);
+        }
+        let state = aggregate
+            .metadata
+            .subrun_states
+            .get(&challenge.run_id)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("runtime subrun state"))?;
+        (challenge, state)
+    };
+    let subrun_challenge = state
+        .run
+        .auth_target
+        .clone()
+        .or_else(|| state.run.checkpoint.pending_auth_challenge.clone())
+        .ok_or_else(|| AppError::not_found("runtime auth challenge"))?;
+    if subrun_challenge.id != challenge_id {
+        return Err(AppError::not_found("runtime auth challenge"));
+    }
+    if challenge.status != "pending" {
+        return Err(AppError::invalid_input(format!(
+            "runtime auth challenge `{challenge_id}` is already {}",
+            challenge.status
+        )));
+    }
+    if !resumable_auth_target(&challenge.target_kind) {
+        return Err(AppError::invalid_input(format!(
+            "runtime auth challenge `{challenge_id}` does not target a resumable auth checkpoint"
+        )));
+    }
+    Ok(Some((challenge, state)))
+}
+
+fn load_cancelable_team_subrun_state(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    subrun_id: &str,
+) -> Result<team_runtime::PersistedSubrunState, AppError> {
+    let state = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        if aggregate.detail.run.id == subrun_id {
+            return Err(AppError::invalid_input(
+                "primary run cannot be cancelled through the subrun API",
+            ));
+        }
+        aggregate
+            .metadata
+            .subrun_states
+            .get(subrun_id)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("runtime subrun"))?
+    };
+
+    if !resumable_subrun_status(&state.run.status) {
+        return Err(AppError::invalid_input(format!(
+            "runtime subrun `{subrun_id}` is already {}",
+            state.run.status
+        )));
+    }
+
+    Ok(state)
+}
+
+fn cancelled_subrun_state(
+    state: &team_runtime::PersistedSubrunState,
+    note: Option<&str>,
+    now: u64,
+) -> team_runtime::PersistedSubrunState {
+    let mut updated = state.clone();
+    let note = note
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    let detail = note
+        .clone()
+        .map(|value| format!("subrun cancelled: {value}"))
+        .or_else(|| Some("subrun cancelled explicitly".into()));
+    let requires_approval = state.run.approval_target.is_some()
+        || state.run.checkpoint.pending_approval.is_some();
+    let requires_auth =
+        state.run.auth_target.is_some() || state.run.checkpoint.pending_auth_challenge.is_some();
+    let last_execution_outcome = Some(capability_execution_outcome(
+        "cancelled",
+        detail.clone(),
+        requires_approval,
+        requires_auth,
+    ));
+    let last_mediation_outcome = state
+        .run
+        .pending_mediation
+        .clone()
+        .or_else(|| state.run.checkpoint.pending_mediation.clone())
+        .map(|mediation| RuntimeMediationOutcome {
+            approval_layer: mediation.approval_layer.clone(),
+            capability_id: mediation.capability_id.clone(),
+            checkpoint_ref: mediation.checkpoint_ref.clone(),
+            detail: detail.clone().or_else(|| mediation.detail.clone()),
+            mediation_id: mediation.mediation_id.clone(),
+            mediation_kind: mediation.mediation_kind.clone(),
+            outcome: "cancelled".into(),
+            provider_key: mediation.provider_key.clone(),
+            reason: note
+                .clone()
+                .or_else(|| mediation.reason.clone())
+                .or_else(|| mediation.escalation_reason.clone()),
+            requires_approval: mediation.requires_approval,
+            requires_auth: mediation.requires_auth,
+            resolved_at: Some(now),
+            target_kind: mediation.target_kind.clone(),
+            target_ref: mediation.target_ref.clone(),
+            tool_name: mediation.tool_name.clone(),
+        });
+
+    updated.run.status = "cancelled".into();
+    updated.run.current_step = "cancelled".into();
+    updated.run.updated_at = now;
+    updated.run.next_action = Some("idle".into());
+    updated.run.approval_state = "cancelled".into();
+    updated.run.approval_target = None;
+    updated.run.auth_target = None;
+    updated.run.pending_mediation = None;
+    updated.run.last_execution_outcome = last_execution_outcome.clone();
+    updated.run.last_mediation_outcome = last_mediation_outcome.clone();
+    updated.run.checkpoint.pending_approval = None;
+    updated.run.checkpoint.pending_auth_challenge = None;
+    updated.run.checkpoint.pending_mediation = None;
+    updated.run.checkpoint.last_execution_outcome = last_execution_outcome;
+    updated.run.checkpoint.last_mediation_outcome = last_mediation_outcome;
+
+    updated
+}
+
+fn rejected_subrun_approval_state(
+    state: &team_runtime::PersistedSubrunState,
+    approval: &ApprovalRequestRecord,
+    decision_status: &str,
+    now: u64,
+) -> team_runtime::PersistedSubrunState {
+    let mut updated = state.clone();
+    let last_execution_outcome = Some(RuntimeCapabilityExecutionOutcome {
+        capability_id: approval.capability_id.clone(),
+        tool_name: Some(approval.tool_name.clone()),
+        provider_key: approval.provider_key.clone(),
+        dispatch_kind: approval.target_kind.clone(),
+        outcome: "deny".into(),
+        detail: Some("approval request was rejected".into()),
+        requires_approval: approval.requires_approval,
+        requires_auth: approval.requires_auth,
+        concurrency_policy: Some("serialized".into()),
+    });
+    let last_mediation_outcome = Some(RuntimeMediationOutcome {
+        approval_layer: approval.approval_layer.clone(),
+        capability_id: approval.capability_id.clone(),
+        checkpoint_ref: approval.checkpoint_ref.clone(),
+        detail: Some(approval.detail.clone()),
+        mediation_id: Some(approval.id.clone()),
+        mediation_kind: "approval".into(),
+        outcome: decision_status.into(),
+        provider_key: approval.provider_key.clone(),
+        reason: approval.escalation_reason.clone(),
+        requires_approval: approval.requires_approval,
+        requires_auth: approval.requires_auth,
+        resolved_at: Some(now),
+        target_kind: approval.target_kind.clone().unwrap_or_default(),
+        target_ref: approval.target_ref.clone().unwrap_or_default(),
+        tool_name: Some(approval.tool_name.clone()),
+    });
+
+    updated.run.status = "failed".into();
+    updated.run.current_step = "failed".into();
+    updated.run.updated_at = now;
+    updated.run.next_action = Some("idle".into());
+    updated.run.approval_state = decision_status.into();
+    updated.run.approval_target = None;
+    updated.run.pending_mediation = None;
+    updated.run.last_execution_outcome = last_execution_outcome.clone();
+    updated.run.last_mediation_outcome = last_mediation_outcome.clone();
+    updated.run.checkpoint.pending_approval = None;
+    updated.run.checkpoint.pending_mediation = None;
+    updated.run.checkpoint.last_execution_outcome = last_execution_outcome;
+    updated.run.checkpoint.last_mediation_outcome = last_mediation_outcome;
+
+    updated
+}
+
+fn resolved_subrun_auth_state(
+    state: &team_runtime::PersistedSubrunState,
+    challenge: &RuntimeAuthChallengeSummary,
+    resolution: &str,
+    now: u64,
+) -> team_runtime::PersistedSubrunState {
+    let mut updated = state.clone();
+    let last_execution_outcome = Some(capability_execution_outcome(
+        if resolution == "cancelled" {
+            "cancelled"
+        } else {
+            "deny"
+        },
+        Some(format!("auth challenge ended with status `{resolution}`")),
+        false,
+        true,
+    ));
+    let last_mediation_outcome = Some(RuntimeMediationOutcome {
+        approval_layer: Some(challenge.approval_layer.clone()),
+        capability_id: challenge.capability_id.clone(),
+        checkpoint_ref: challenge.checkpoint_ref.clone(),
+        detail: Some(challenge.detail.clone()),
+        mediation_id: Some(challenge.id.clone()),
+        mediation_kind: "auth".into(),
+        outcome: resolution.into(),
+        provider_key: challenge.provider_key.clone(),
+        reason: Some(challenge.escalation_reason.clone()),
+        requires_approval: challenge.requires_approval,
+        requires_auth: challenge.requires_auth,
+        resolved_at: Some(now),
+        target_kind: challenge.target_kind.clone(),
+        target_ref: challenge.target_ref.clone(),
+        tool_name: challenge.tool_name.clone(),
+    });
+
+    updated.run.status = if resolution == "cancelled" {
+        "cancelled".into()
+    } else {
+        "failed".into()
+    };
+    updated.run.current_step = if resolution == "cancelled" {
+        "cancelled".into()
+    } else {
+        "failed".into()
+    };
+    updated.run.updated_at = now;
+    updated.run.next_action = Some("idle".into());
+    updated.run.approval_state = resolution.into();
+    updated.run.auth_target = None;
+    updated.run.pending_mediation = None;
+    updated.run.last_execution_outcome = last_execution_outcome.clone();
+    updated.run.last_mediation_outcome = last_mediation_outcome.clone();
+    updated.run.checkpoint.pending_auth_challenge = None;
+    updated.run.checkpoint.pending_mediation = None;
+    updated.run.checkpoint.last_execution_outcome = last_execution_outcome;
+    updated.run.checkpoint.last_mediation_outcome = last_mediation_outcome;
+
+    updated
+}
+
+async fn resolve_team_subrun_approval(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    approval_id: &str,
+    decision_status: &str,
+) -> Result<ApprovalResolutionState, AppError> {
+    let now = timestamp_now();
+    let team_manifest = load_session_team_manifest(adapter, session_id)?;
+    let (approval, state) = load_pending_team_subrun_approval(adapter, session_id, approval_id)?
+        .ok_or_else(|| AppError::not_found("runtime approval"))?;
+    let mut resolved_approval = approval.clone();
+    resolved_approval.status = decision_status.into();
+
+    let updated_state = if decision_status == "approved" {
+        if approval.target_kind.as_deref() == Some("capability-call") {
+            let capability_state_ref = state
+                .run
+                .capability_state_ref
+                .clone()
+                .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
+            let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
+            capability_store.approve_tool(approval.tool_name.clone());
+            adapter.persist_capability_store(&capability_state_ref, &capability_store)?;
+        }
+        if approval_replays_runtime_loop(approval.target_kind.as_deref()) {
+            let parent_run_id = state.run.parent_run_id.clone().ok_or_else(|| {
+                AppError::runtime("team subrun parent run id is unavailable for approval resume")
+            })?;
+            execute_team_subrun(
+                adapter,
+                session_id,
+                &state.run.conversation_id,
+                &parent_run_id,
+                &state,
+            )
+            .await?
+        } else {
+            let mut updated = state.clone();
+            updated.run.status = "completed".into();
+            updated.run.current_step = "completed".into();
+            updated.run.updated_at = now;
+            updated.run.next_action = Some("idle".into());
+            updated.run.approval_state = "not-required".into();
+            updated.run.approval_target = None;
+            updated.run.pending_mediation = None;
+            updated.run.checkpoint.pending_approval = None;
+            updated.run.checkpoint.pending_mediation = None;
+            updated
+        }
+    } else {
+        rejected_subrun_approval_state(&state, &approval, decision_status, now)
+    };
+
+    let (mut run, mut conversation_id, mut project_id) =
+        persist_team_subrun_state(adapter, session_id, &team_manifest, updated_state, now)?;
+    if let Some((updated_run, updated_conversation_id, updated_project_id)) =
+        continue_team_runtime_subruns(adapter, session_id, &team_manifest).await?
+    {
+        run = updated_run;
+        conversation_id = updated_conversation_id;
+        project_id = updated_project_id;
+    }
+
+    Ok((
+        resolved_approval,
+        None,
+        None,
+        run,
+        conversation_id,
+        project_id,
+    ))
+}
+
+async fn resolve_team_subrun_auth_challenge(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    challenge_id: &str,
+    resolution: &str,
+) -> Result<AuthChallengeResolutionState, AppError> {
+    let now = timestamp_now();
+    let team_manifest = load_session_team_manifest(adapter, session_id)?;
+    let (challenge, state) =
+        load_pending_team_subrun_auth_challenge(adapter, session_id, challenge_id)?
+            .ok_or_else(|| AppError::not_found("runtime auth challenge"))?;
+    let mut resolved_challenge = challenge.clone();
+    resolved_challenge.status = resolution.into();
+    resolved_challenge.resolution = Some(resolution.into());
+
+    let updated_state = if resolution == "resolved" {
+        let capability_state_ref = state
+            .run
+            .capability_state_ref
+            .clone()
+            .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
+        let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
+        capability_store.resolve_tool_auth(
+            challenge
+                .tool_name
+                .clone()
+                .unwrap_or_else(|| worker_runtime::worker_label(&state.run.actor_ref)),
+        );
+        adapter.persist_capability_store(&capability_state_ref, &capability_store)?;
+        let parent_run_id = state.run.parent_run_id.clone().ok_or_else(|| {
+            AppError::runtime("team subrun parent run id is unavailable for auth resume")
+        })?;
+        execute_team_subrun(
+            adapter,
+            session_id,
+            &state.run.conversation_id,
+            &parent_run_id,
+            &state,
+        )
+        .await?
+    } else {
+        resolved_subrun_auth_state(&state, &challenge, resolution, now)
+    };
+
+    let (mut run, mut conversation_id, mut project_id) =
+        persist_team_subrun_state(adapter, session_id, &team_manifest, updated_state, now)?;
+    if let Some((updated_run, updated_conversation_id, updated_project_id)) =
+        continue_team_runtime_subruns(adapter, session_id, &team_manifest).await?
+    {
+        run = updated_run;
+        conversation_id = updated_conversation_id;
+        project_id = updated_project_id;
+    }
+
+    Ok((
+        resolved_challenge,
+        None,
+        None,
+        run,
+        conversation_id,
+        project_id,
+    ))
 }
 
 impl AgentRuntimeCore {
@@ -2017,8 +2721,7 @@ impl AgentRuntimeCore {
             &run_context.actor_manifest
         {
             if let Some((updated_run, updated_conversation_id, updated_project_id)) =
-                continue_team_runtime_subruns(adapter, session_id, team_manifest, &input.content)
-                    .await?
+                continue_team_runtime_subruns(adapter, session_id, team_manifest).await?
             {
                 run = updated_run;
                 conversation_id = updated_conversation_id;
@@ -2046,6 +2749,7 @@ impl AgentRuntimeCore {
             conversation_id,
             project_id,
             run.clone(),
+            run_context.memory_selection.selection_summary.clone(),
             user_message,
             submitted_trace,
             assistant_message,
@@ -2068,6 +2772,44 @@ impl AgentRuntimeCore {
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
         let decision_status = approval_flow::approval_decision_status(&input.decision)?;
+        if load_pending_team_subrun_approval(adapter, session_id, approval_id)?.is_some() {
+            let (approval, execution_trace, assistant_message, run, conversation_id, project_id) =
+                resolve_team_subrun_approval(adapter, session_id, approval_id, decision_status)
+                    .await?;
+            let empty_planner_events = Vec::new();
+            let empty_model_iterations = Vec::new();
+            let empty_capability_events = Vec::new();
+            execution_events::record_approval_resolution_activity(
+                adapter,
+                session_id,
+                now,
+                &project_id,
+                &run,
+                &approval,
+                &input.decision,
+                execution_trace.as_ref(),
+                None,
+                None,
+            )
+            .await?;
+            execution_events::emit_approval_resolution_events(
+                adapter,
+                session_id,
+                now,
+                conversation_id,
+                project_id,
+                run.clone(),
+                approval,
+                input.decision,
+                assistant_message,
+                execution_trace,
+                empty_planner_events.as_slice(),
+                empty_model_iterations.as_slice(),
+                empty_capability_events.as_slice(),
+            )
+            .await?;
+            return Ok(run);
+        }
         let (
             approval,
             actor_manifest,
@@ -2186,10 +2928,8 @@ impl AgentRuntimeCore {
         )?;
         if decision_status == "approved" {
             if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &actor_manifest {
-                let content = subrun_fallback_content(&checkpoint, "");
                 if let Some((updated_run, updated_conversation_id, updated_project_id)) =
-                    continue_team_runtime_subruns(adapter, session_id, team_manifest, &content)
-                        .await?
+                    continue_team_runtime_subruns(adapter, session_id, team_manifest).await?
                 {
                     run = updated_run;
                     conversation_id = updated_conversation_id;
@@ -2239,6 +2979,44 @@ impl AgentRuntimeCore {
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
         let resolution = approval_flow::auth_challenge_resolution_status(&input.resolution)?;
+        if load_pending_team_subrun_auth_challenge(adapter, session_id, challenge_id)?.is_some() {
+            let (challenge, execution_trace, assistant_message, run, conversation_id, project_id) =
+                resolve_team_subrun_auth_challenge(adapter, session_id, challenge_id, resolution)
+                    .await?;
+            let empty_planner_events = Vec::new();
+            let empty_model_iterations = Vec::new();
+            let empty_capability_events = Vec::new();
+            execution_events::record_auth_challenge_resolution_activity(
+                adapter,
+                session_id,
+                now,
+                &project_id,
+                &run,
+                &challenge,
+                &input.resolution,
+                execution_trace.as_ref(),
+                None,
+                None,
+            )
+            .await?;
+            execution_events::emit_auth_resolution_events(
+                adapter,
+                session_id,
+                now,
+                conversation_id,
+                project_id,
+                run.clone(),
+                challenge,
+                input.resolution,
+                assistant_message,
+                execution_trace,
+                empty_planner_events.as_slice(),
+                empty_model_iterations.as_slice(),
+                empty_capability_events.as_slice(),
+            )
+            .await?;
+            return Ok(run);
+        }
         let (
             challenge,
             actor_manifest,
@@ -2378,6 +3156,56 @@ impl AgentRuntimeCore {
             planner_events,
             model_iterations,
             capability_events,
+        )
+        .await?;
+
+        Ok(run)
+    }
+
+    pub(crate) async fn cancel_subrun(
+        adapter: &RuntimeAdapter,
+        session_id: &str,
+        subrun_id: &str,
+        input: CancelRuntimeSubrunInput,
+    ) -> Result<RuntimeRunSnapshot, AppError> {
+        let now = timestamp_now();
+        let note = input
+            .note
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let team_manifest = load_session_team_manifest(adapter, session_id)?;
+        let state = load_cancelable_team_subrun_state(adapter, session_id, subrun_id)?;
+        let updated_state = cancelled_subrun_state(&state, note.as_deref(), now);
+
+        let (mut run, mut conversation_id, mut project_id) =
+            persist_team_subrun_state(adapter, session_id, &team_manifest, updated_state, now)?;
+        if let Some((updated_run, updated_conversation_id, updated_project_id)) =
+            continue_team_runtime_subruns(adapter, session_id, &team_manifest).await?
+        {
+            run = updated_run;
+            conversation_id = updated_conversation_id;
+            project_id = updated_project_id;
+        }
+
+        execution_events::record_subrun_cancellation_activity(
+            adapter,
+            session_id,
+            now,
+            &project_id,
+            &run,
+            subrun_id,
+            note.as_deref(),
+        )
+        .await?;
+        execution_events::emit_subrun_cancellation_events(
+            adapter,
+            session_id,
+            now,
+            conversation_id,
+            project_id,
+            run.clone(),
+            subrun_id,
+            note,
         )
         .await?;
 
@@ -2637,8 +3465,21 @@ fn apply_submit_state(
     let mut approval = broker_decision.approval.clone();
     let mut auth_target = broker_decision.auth_challenge.clone();
     let blocking_pending_mediation = broker_decision.pending_mediation.clone();
+    let pending_memory_proposal = memory_writer::build_memory_proposal(
+        &run_context.session_id,
+        &run_context.run_id,
+        &aggregate.detail.summary.project_id,
+        &memory_runtime::parse_memory_policy(&run_context.session_policy.memory_policy),
+        &run_context.actor_manifest,
+        input,
+        execution,
+        aggregate.detail.run.workflow_run_detail.as_ref(),
+        &run_context.memory_selection.candidate_memory,
+    );
     let memory_pending_mediation = if blocking_pending_mediation.is_none() {
-        memory_proposal_pending_mediation(run_context)
+        pending_memory_proposal
+            .as_ref()
+            .map(|proposal| memory_proposal_pending_mediation(run_context, proposal))
     } else {
         None
     };
@@ -2817,7 +3658,7 @@ fn apply_submit_state(
     aggregate.detail.summary.memory_selection_summary =
         run_context.memory_selection.selection_summary.clone();
     aggregate.detail.summary.pending_memory_proposal_count =
-        u64::from(run_context.pending_memory_proposal.is_some());
+        u64::from(pending_memory_proposal.is_some());
     aggregate.detail.summary.memory_state_ref =
         run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.summary.provider_state_summary = run_context.provider_state_summary.clone();
@@ -2840,7 +3681,7 @@ fn apply_submit_state(
     aggregate.detail.run.selected_memory = run_context.memory_selection.selected_memory.clone();
     aggregate.detail.run.freshness_summary =
         Some(run_context.memory_selection.freshness_summary.clone());
-    aggregate.detail.run.pending_memory_proposal = run_context.pending_memory_proposal.clone();
+    aggregate.detail.run.pending_memory_proposal = pending_memory_proposal.clone();
     aggregate.detail.run.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.run.actor_ref = actor_ref.clone();
     aggregate.detail.run.approval_state = if approval.is_some() {
@@ -2878,7 +3719,7 @@ fn apply_submit_state(
     aggregate.detail.memory_selection_summary =
         run_context.memory_selection.selection_summary.clone();
     aggregate.detail.pending_memory_proposal_count =
-        u64::from(run_context.pending_memory_proposal.is_some());
+        u64::from(pending_memory_proposal.is_some());
     aggregate.detail.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.capability_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.provider_state_summary = run_context.provider_state_summary.clone();
@@ -2887,7 +3728,7 @@ fn apply_submit_state(
     aggregate.detail.policy_decision_summary = run_context.policy_decision_summary.clone();
     aggregate.detail.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.last_execution_outcome = last_execution_outcome;
-    if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest
+    if let actor_manifest::CompiledActorManifest::Team(_team_manifest) = &run_context.actor_manifest
     {
         if approval_blocks_team_projection(approval.as_ref()) {
             aggregate.detail.subruns.clear();
@@ -2904,11 +3745,6 @@ fn apply_submit_state(
             aggregate.detail.run.background_state = None;
             team_runtime::sync_subrun_state_metadata(aggregate, run_context.now);
         } else {
-            team_runtime::apply_team_runtime_projection(
-                &mut aggregate.detail,
-                team_manifest,
-                run_context.now,
-            );
             team_runtime::ensure_subrun_state_metadata(adapter, aggregate, run_context)?;
         }
     }
@@ -2917,7 +3753,7 @@ fn apply_submit_state(
     let run = aggregate.detail.run.clone();
     let conversation_id = aggregate.detail.summary.conversation_id.clone();
     let project_id = aggregate.detail.summary.project_id.clone();
-    adapter.persist_session(&run_context.session_id, aggregate)?;
+    adapter.persist_runtime_projections(aggregate)?;
 
     Ok((
         user_message,
@@ -3407,6 +4243,7 @@ fn apply_approval_resolution_state(
             team_runtime::ensure_subrun_state_metadata_for_session(
                 adapter,
                 aggregate,
+                team_manifest,
                 session_policy,
                 now,
             )?;
@@ -3416,7 +4253,7 @@ fn apply_approval_resolution_state(
     let run = aggregate.detail.run.clone();
     let conversation_id = aggregate.detail.summary.conversation_id.clone();
     let project_id = aggregate.detail.summary.project_id.clone();
-    adapter.persist_session(session_id, aggregate)?;
+    adapter.persist_runtime_projections(aggregate)?;
 
     Ok((
         approval,
@@ -3684,14 +4521,18 @@ fn apply_auth_challenge_resolution_state(
     aggregate.detail.capability_state_ref = aggregate.detail.run.capability_state_ref.clone();
     aggregate.detail.last_execution_outcome = last_execution_outcome;
     if let actor_manifest::CompiledActorManifest::Team(team_manifest) = actor_manifest {
-        team_runtime::apply_team_runtime_projection(&mut aggregate.detail, team_manifest, now);
-        team_runtime::sync_subrun_state_metadata(aggregate, now);
+        team_runtime::apply_team_runtime_state(
+            &mut aggregate.detail,
+            team_manifest,
+            &aggregate.metadata.subrun_states,
+            now,
+        );
     }
     sync_runtime_session_detail(&mut aggregate.detail);
     let run = aggregate.detail.run.clone();
     let conversation_id = aggregate.detail.summary.conversation_id.clone();
     let project_id = aggregate.detail.summary.project_id.clone();
-    adapter.persist_session(session_id, aggregate)?;
+    adapter.persist_runtime_projections(aggregate)?;
 
     Ok((
         challenge,
@@ -3767,9 +4608,14 @@ fn apply_memory_proposal_resolution_state(
     ));
 
     if matches!(effective_decision_status, "approved" | "revalidated") {
+        let session_policy = adapter
+            .load_session_policy_snapshot(&aggregate.metadata.session_policy_snapshot_ref)?;
         let record = memory_writer::build_persisted_memory_record(
             &resolved_proposal,
             &aggregate.detail.summary.project_id,
+            &adapter.state.workspace_id,
+            &aggregate.detail.selected_actor_ref,
+            Some(session_policy.user_id.as_str()),
             now,
         );
         let body = memory_writer::build_persisted_memory_body(
@@ -3828,6 +4674,7 @@ fn apply_memory_proposal_resolution_state(
         }
     }
 
+    aggregate.detail.run.pending_memory_proposal = None;
     aggregate.detail.run.pending_mediation = None;
     aggregate.detail.run.last_mediation_outcome = last_mediation_outcome.clone();
     aggregate.detail.run.checkpoint.pending_mediation = None;
@@ -3837,7 +4684,7 @@ fn apply_memory_proposal_resolution_state(
     let run = aggregate.detail.run.clone();
     let conversation_id = aggregate.detail.summary.conversation_id.clone();
     let project_id = aggregate.detail.summary.project_id.clone();
-    adapter.persist_session(session_id, aggregate)?;
+    adapter.persist_runtime_projections(aggregate)?;
 
     Ok((resolved_proposal, run, conversation_id, project_id))
 }

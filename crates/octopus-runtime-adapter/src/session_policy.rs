@@ -58,7 +58,7 @@ impl RuntimeAdapter {
     pub(crate) fn session_policy_snapshot_path(&self, policy_snapshot_ref: &str) -> PathBuf {
         self.state
             .paths
-            .runtime_sessions_dir
+            .runtime_state_dir
             .join(format!("{policy_snapshot_ref}.json"))
     }
 
@@ -81,7 +81,7 @@ impl RuntimeAdapter {
         policy_snapshot_ref: &str,
     ) -> Result<CompiledSessionPolicy, AppError> {
         let path = self.session_policy_snapshot_path(policy_snapshot_ref);
-        let raw = fs::read(path)?;
+        let raw = fs::read(&path)?;
         Ok(serde_json::from_slice(&raw)?)
     }
 
