@@ -106,6 +106,12 @@
       "body": "有一条新的更新。"
     }
   },
+  "petHost": {
+    "status": {
+      "noProject": "进入项目后即可和小章聊天。",
+      "loading": "小章正在准备中…"
+    }
+  },
   "messageCenter": {
     "tabs": {
       "notifications": "通知",

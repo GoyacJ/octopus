@@ -106,6 +106,12 @@
       "body": "A new update is available."
     }
   },
+  "petHost": {
+    "status": {
+      "noProject": "Enter a project to chat with Xiao Zhang.",
+      "loading": "Xiao Zhang is getting ready…"
+    }
+  },
   "messageCenter": {
     "tabs": {
       "notifications": "Notifications",

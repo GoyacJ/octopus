@@ -1,19 +1,26 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
-import type { PetMotionState } from '@octopus/schema'
+import type { NotificationRecord, PetMotionState } from '@octopus/schema'
 
-import { UiStatusCallout, UiSurface } from '@octopus/ui'
+import { UiStatusCallout } from '@octopus/ui'
 
 import DesktopPetAvatar from '@/components/pet/DesktopPetAvatar.vue'
+import DesktopPetBubble from '@/components/pet/DesktopPetBubble.vue'
 import DesktopPetChat from '@/components/pet/DesktopPetChat.vue'
+import { useNotificationStore } from '@/stores/notifications'
 import { usePetStore } from '@/stores/pet'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const pet = usePetStore()
+const notifications = useNotificationStore()
 const shell = useShellStore()
 const workspace = useWorkspaceStore()
+const router = useRouter()
+const { t } = useI18n()
 
 const host = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
@@ -33,17 +40,56 @@ const open = computed({
 
 const canRender = computed(() => !!shell.activeWorkspaceConnectionId)
 const hasProjectScope = computed(() => !!workspace.currentProjectId)
+const currentWorkspaceId = computed(() => shell.activeWorkspaceConnection?.workspaceId ?? '')
+const currentUserId = computed(() => shell.activeWorkspaceSession?.session.userId ?? '')
+const notificationScopeLabels = computed(() => ({
+  app: t('notifications.scopes.app'),
+  workspace: t('notifications.scopes.workspace'),
+  user: t('notifications.scopes.user'),
+}))
 const helperText = computed(() => {
   if (!hasProjectScope.value) {
-    return '进入项目后即可和小章聊天。'
+    return t('petHost.status.noProject')
   }
   if (pet.loading) {
-    return '小章正在准备中…'
+    return t('petHost.status.loading')
   }
   return ''
 })
 
 const runtimeError = computed(() => pet.error)
+const reminderNotification = computed<NotificationRecord | null>(() => {
+  if (!canRender.value || open.value) {
+    return null
+  }
+
+  return notifications.notifications.find((notification) => {
+    if (!notification.routeTo) {
+      return false
+    }
+    if (
+      typeof notification.toastVisibleUntil !== 'number'
+      || notification.toastVisibleUntil <= notifications.toastNow
+    ) {
+      return false
+    }
+    if (notification.scopeKind === 'workspace') {
+      return !!currentWorkspaceId.value && notification.scopeOwnerId === currentWorkspaceId.value
+    }
+    if (notification.scopeKind === 'user') {
+      return !!currentUserId.value && notification.scopeOwnerId === currentUserId.value
+    }
+    return notification.scopeKind === 'app'
+  }) ?? null
+})
+const reminderScopeLabel = computed(() => (
+  reminderNotification.value
+    ? notificationScopeLabels.value[reminderNotification.value.scopeKind]
+    : ''
+))
+const reminderActionLabel = computed(() => (
+  reminderNotification.value?.actionLabel?.trim() || t('common.open')
+))
 
 watch(
   () => [shell.activeWorkspaceConnectionId, workspace.currentProjectId],
@@ -53,6 +99,14 @@ watch(
     }
   },
   { immediate: true },
+)
+
+watch(
+  () => reminderNotification.value?.id ?? null,
+  (notificationId) => {
+    notifications.setPetBubbleNotification(notificationId)
+  },
+  { immediate: true, flush: 'sync' },
 )
 
 watch(open, async (value) => {
@@ -77,6 +131,15 @@ async function handleSend(content: string) {
 
 function toggleChat() {
   open.value = !open.value
+}
+
+async function handleReminderSelect(notification: NotificationRecord) {
+  if (!notification.routeTo) {
+    return
+  }
+
+  await router.push(notification.routeTo)
+  await notifications.dismissToast(notification.id)
 }
 
 function updatePanelPosition() {
@@ -129,6 +192,7 @@ window.addEventListener('scroll', handleViewportChange, true)
 document.addEventListener('pointerdown', handleDocumentPointerDown)
 
 onBeforeUnmount(() => {
+  notifications.setPetBubbleNotification(null)
   window.removeEventListener('resize', handleViewportChange)
   window.removeEventListener('scroll', handleViewportChange, true)
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
@@ -137,6 +201,18 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="canRender" ref="host" class="relative flex justify-end" data-testid="desktop-pet-host">
+    <div
+      v-if="reminderNotification"
+      class="absolute bottom-full right-0 z-40 mb-3"
+    >
+      <DesktopPetBubble
+        :notification="reminderNotification"
+        :scope-label="reminderScopeLabel"
+        :action-label="reminderActionLabel"
+        @select="handleReminderSelect"
+      />
+    </div>
+
     <DesktopPetAvatar
       :pet="pet.profile"
       :motion-state="pet.motionState"

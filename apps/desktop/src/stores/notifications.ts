@@ -65,6 +65,7 @@ export const useNotificationStore = defineStore('notifications', {
     toastNow: Date.now(),
     toastExpiryTimer: null as ReturnType<typeof setTimeout> | null,
     unsubscribe: null as null | (() => void),
+    petBubbleNotificationId: null as string | null,
   }),
   getters: {
     notifications(state): NotificationRecord[] {
@@ -84,9 +85,12 @@ export const useNotificationStore = defineStore('notifications', {
     },
     activeToasts(state): NotificationRecord[] {
       const now = state.toastNow
-      return state.notificationsState.filter(notification =>
-        typeof notification.toastVisibleUntil === 'number' && notification.toastVisibleUntil > now,
-      )
+      return state.notificationsState.filter((notification) => {
+        if (notification.id === state.petBubbleNotificationId) {
+          return false
+        }
+        return typeof notification.toastVisibleUntil === 'number' && notification.toastVisibleUntil > now
+      })
     },
   },
   actions: {
@@ -167,6 +171,9 @@ export const useNotificationStore = defineStore('notifications', {
       const notification = await tauriClient.dismissNotificationToast(id)
       this.ingest(notification)
       return notification
+    },
+    setPetBubbleNotification(id: string | null) {
+      this.petBubbleNotificationId = id
     },
     setFilter(scope: NotificationFilterScope) {
       this.filterScope = scope
