@@ -1,8 +1,10 @@
 import type {
   ConversationMemorySource,
   KnowledgeKind,
+  KnowledgePlaneScope,
   KnowledgeSourceType,
   KnowledgeStatus,
+  KnowledgeVisibilityMode,
   RiskLevel,
 } from './shared'
 
@@ -13,11 +15,13 @@ export interface KnowledgeEntry {
   conversationId?: string
   title: string
   kind: KnowledgeKind
+  scope: KnowledgePlaneScope
   status: KnowledgeStatus
+  visibility: KnowledgeVisibilityMode
   sourceType: KnowledgeSourceType
   sourceId: string
   summary: string
-  ownerId?: string
+  ownerUserId?: string
   lastUsedAt: number
   trustLevel: RiskLevel
   lineage: string[]

@@ -357,13 +357,16 @@ describe('workspace client transport', () => {
     )
   })
 
-  it('calls workspace pet endpoints through the workspace client adapter', async () => {
+  it('calls personal pet home, project-context, and dashboard endpoints through the workspace client adapter', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ 'Content-Type': 'application/json' }),
         json: async () => ({
+          workspaceId: 'ws-local',
+          ownerUserId: 'user-owner',
+          contextScope: 'home',
           profile: {
             id: 'pet-octopus',
             displayName: '小章',
@@ -394,6 +397,23 @@ describe('workspace client transport', () => {
         headers: new Headers({ 'Content-Type': 'application/json' }),
         json: async () => ({
           petId: 'pet-octopus',
+          workspaceId: 'ws-local',
+          ownerUserId: 'user-owner',
+          species: 'octopus',
+          mood: 'happy',
+          memoryCount: 4,
+          knowledgeCount: 7,
+          resourceCount: 3,
+          reminderCount: 2,
+          activeConversationCount: 1,
+          lastInteractionAt: 12,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          petId: 'pet-octopus',
           isVisible: true,
           chatOpen: true,
           motionState: 'chat',
@@ -408,10 +428,54 @@ describe('workspace client transport', () => {
         json: async () => ({
           petId: 'pet-octopus',
           workspaceId: 'ws-local',
-          projectId: 'proj-redesign',
           conversationId: 'conversation-1',
           sessionId: 'rt-conversation-1',
+          ownerUserId: 'user-owner',
+          contextScope: 'home',
           updatedAt: 12,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          workspaceId: 'ws-local',
+          ownerUserId: 'user-owner',
+          contextScope: 'project',
+          projectId: 'proj-redesign',
+          profile: {
+            id: 'pet-octopus',
+            displayName: '小章',
+            species: 'octopus',
+            ownerUserId: 'user-owner',
+            avatarLabel: 'Octopus mascot',
+            summary: 'Octopus 首席吉祥物，负责卖萌和加油。',
+            greeting: '嗨！我是小章，今天也要加油哦！',
+            mood: 'focused',
+            favoriteSnack: '新鲜小虾',
+            promptHints: ['最近有什么好消息？'],
+            fallbackAsset: 'octopus',
+          },
+          presence: {
+            petId: 'pet-octopus',
+            isVisible: true,
+            chatOpen: true,
+            motionState: 'chat',
+            unreadCount: 1,
+            lastInteractionAt: 14,
+            position: { x: 10, y: 18 },
+          },
+          messages: [],
+          binding: {
+            petId: 'pet-octopus',
+            workspaceId: 'ws-local',
+            projectId: 'proj-redesign',
+            conversationId: 'conversation-2',
+            sessionId: 'rt-conversation-2',
+            ownerUserId: 'user-owner',
+            contextScope: 'project',
+            updatedAt: 14,
+          },
         }),
       })
 
@@ -421,32 +485,54 @@ describe('workspace client transport', () => {
     const session = createWorkspaceSession(connection!)
     const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
 
-    await workspaceClient.pet.getSnapshot('proj-redesign')
-    await workspaceClient.pet.savePresence({
+    const homeSnapshot = await workspaceClient.pet.getSnapshot()
+    const dashboard = await workspaceClient.pet.getDashboard()
+    const homePresence = await workspaceClient.pet.savePresence({
       petId: 'pet-octopus',
       chatOpen: true,
       motionState: 'chat',
-    } satisfies SavePetPresenceInput, 'proj-redesign')
-    await workspaceClient.pet.bindConversation({
+    } satisfies SavePetPresenceInput)
+    const homeBinding = await workspaceClient.pet.bindConversation({
       petId: 'pet-octopus',
       conversationId: 'conversation-1',
       sessionId: 'rt-conversation-1',
-    } satisfies BindPetConversationInput, 'proj-redesign')
+    } satisfies BindPetConversationInput)
+    const projectSnapshot = await workspaceClient.pet.getSnapshot('proj-redesign')
+
+    expect(homeSnapshot.contextScope).toBe('home')
+    expect(homeSnapshot.ownerUserId).toBe('user-owner')
+    expect(dashboard.knowledgeCount).toBe(7)
+    expect(homePresence.motionState).toBe('chat')
+    expect(homeBinding.contextScope).toBe('home')
+    expect(homeBinding.projectId).toBeUndefined()
+    expect(projectSnapshot.contextScope).toBe('project')
+    expect(projectSnapshot.projectId).toBe('proj-redesign')
+    expect(projectSnapshot.binding?.contextScope).toBe('project')
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet',
+      'http://127.0.0.1:43127/api/v1/workspace/pet',
       expect.objectContaining({ method: 'GET' }),
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet/presence',
-      expect.objectContaining({ method: 'PATCH' }),
+      'http://127.0.0.1:43127/api/v1/workspace/pet/dashboard',
+      expect.objectContaining({ method: 'GET' }),
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
       3,
-      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet/conversation',
+      'http://127.0.0.1:43127/api/v1/workspace/pet/presence',
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/workspace/pet/conversation',
       expect.objectContaining({ method: 'PUT' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet',
+      expect.objectContaining({ method: 'GET' }),
     )
   })
 

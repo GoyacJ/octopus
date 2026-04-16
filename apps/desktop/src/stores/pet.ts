@@ -57,8 +57,12 @@ function defaultPresence(): PetPresenceState {
 }
 
 function defaultSnapshot(): PetWorkspaceSnapshot {
+  const profile = defaultProfile()
   return {
-    profile: defaultProfile(),
+    workspaceId: '',
+    ownerUserId: profile.ownerUserId,
+    contextScope: 'home',
+    profile,
     presence: defaultPresence(),
     messages: [],
   }

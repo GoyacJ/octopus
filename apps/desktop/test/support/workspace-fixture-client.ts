@@ -1931,6 +1931,21 @@ export function createWorkspaceClientFixture(
       },
     },
     pet: {
+      async getDashboard() {
+        return clone({
+          petId: workspaceState.petProfile.id,
+          workspaceId: workspaceState.workspace.id,
+          ownerUserId: workspaceState.petProfile.ownerUserId,
+          species: workspaceState.petProfile.species,
+          mood: workspaceState.petProfile.mood,
+          memoryCount: workspaceState.runtimeSessions.size,
+          knowledgeCount: workspaceState.workspaceKnowledge.length,
+          resourceCount: workspaceState.workspaceResources.length,
+          reminderCount: workspaceState.inboxItems.length,
+          activeConversationCount: workspaceState.workspacePetBinding ? 1 : 0,
+          lastInteractionAt: workspaceState.workspacePetPresence.lastInteractionAt,
+        })
+      },
       async getSnapshot(projectId) {
         return clone(createPetSnapshot(workspaceState, projectId))
       },
@@ -1959,9 +1974,11 @@ export function createWorkspaceClientFixture(
         const binding: PetConversationBinding = {
           petId: input.petId,
           workspaceId: workspaceState.workspace.id,
-          projectId: projectId ?? '',
           conversationId: input.conversationId,
           sessionId: input.sessionId,
+          ownerUserId: workspaceState.petProfile.ownerUserId,
+          contextScope: projectId ? 'project' : 'home',
+          projectId,
           updatedAt: Date.now(),
         }
         if (projectId) {

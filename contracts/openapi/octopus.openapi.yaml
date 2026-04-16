@@ -1794,7 +1794,7 @@ paths:
           description: API error envelope.
   /api/v1/projects/{projectId}/pet:
     get:
-      operationId: getProjectPetSnapshot
+      operationId: getCurrentUserProjectPetSnapshot
       parameters:
         - in: path
           name: projectId
@@ -1807,7 +1807,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PetWorkspaceSnapshot"
-          description: Project pet snapshot payload.
+          description: Current-user personal pet project-context snapshot payload.
         default:
           content:
             application/json:
@@ -3781,14 +3781,14 @@ paths:
           description: API error envelope.
   /api/v1/workspace/pet:
     get:
-      operationId: getWorkspacePetSnapshot
+      operationId: getCurrentUserPetHomeSnapshot
       responses:
         "200":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PetWorkspaceSnapshot"
-          description: Workspace pet snapshot payload.
+          description: Current-user personal pet home snapshot payload.
         default:
           content:
             application/json:
@@ -3811,6 +3811,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/PetConversationBinding"
           description: Updated workspace pet conversation binding payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/pet/dashboard:
+    get:
+      operationId: getCurrentUserPetDashboardSummary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetDashboardSummary"
+          description: Current-user personal pet dashboard payload.
         default:
           content:
             application/json:
@@ -6598,6 +6614,12 @@ components:
         - shared
         - candidate
       type: string
+    KnowledgePlaneScope:
+      enum:
+        - personal
+        - project
+        - workspace
+      type: string
     KnowledgeRecord:
       additionalProperties: false
       properties:
@@ -6605,8 +6627,12 @@ components:
           type: string
         kind:
           $ref: "#/components/schemas/KnowledgeKind"
+        ownerUserId:
+          type: string
         projectId:
           type: string
+        scope:
+          $ref: "#/components/schemas/KnowledgePlaneScope"
         sourceRef:
           type: string
         sourceType:
@@ -6619,6 +6645,8 @@ components:
           type: string
         updatedAt:
           type: integer
+        visibility:
+          $ref: "#/components/schemas/KnowledgeVisibilityMode"
         workspaceId:
           type: string
       required:
@@ -6644,6 +6672,11 @@ components:
         - reviewed
         - shared
         - archived
+      type: string
+    KnowledgeVisibilityMode:
+      enum:
+        - private
+        - public
       type: string
     Locale:
       enum:
@@ -7145,10 +7178,19 @@ components:
         - user
         - pet
       type: string
+    PetContextScope:
+      enum:
+        - home
+        - project
+      type: string
     PetConversationBinding:
       additionalProperties: false
       properties:
+        contextScope:
+          $ref: "#/components/schemas/PetContextScope"
         conversationId:
+          type: string
+        ownerUserId:
           type: string
         petId:
           type: string
@@ -7163,9 +7205,47 @@ components:
       required:
         - petId
         - workspaceId
-        - projectId
+        - ownerUserId
+        - contextScope
         - conversationId
         - updatedAt
+      type: object
+    PetDashboardSummary:
+      additionalProperties: false
+      properties:
+        activeConversationCount:
+          type: integer
+        knowledgeCount:
+          type: integer
+        lastInteractionAt:
+          type: integer
+        memoryCount:
+          type: integer
+        mood:
+          $ref: "#/components/schemas/PetMood"
+        ownerUserId:
+          type: string
+        petId:
+          type: string
+        reminderCount:
+          type: integer
+        resourceCount:
+          type: integer
+        species:
+          $ref: "#/components/schemas/PetSpecies"
+        workspaceId:
+          type: string
+      required:
+        - petId
+        - workspaceId
+        - ownerUserId
+        - species
+        - mood
+        - memoryCount
+        - knowledgeCount
+        - resourceCount
+        - reminderCount
+        - activeConversationCount
       type: object
     PetMessage:
       additionalProperties: false
@@ -7310,18 +7390,29 @@ components:
       properties:
         binding:
           $ref: "#/components/schemas/PetConversationBinding"
+        contextScope:
+          $ref: "#/components/schemas/PetContextScope"
         messages:
           items:
             $ref: "#/components/schemas/PetMessage"
           type: array
+        ownerUserId:
+          type: string
         presence:
           $ref: "#/components/schemas/PetPresenceState"
         profile:
           $ref: "#/components/schemas/PetProfile"
+        projectId:
+          type: string
+        workspaceId:
+          type: string
       required:
         - profile
         - presence
         - messages
+        - contextScope
+        - ownerUserId
+        - workspaceId
       type: object
     PositionRecord:
       additionalProperties: false

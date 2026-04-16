@@ -96,14 +96,30 @@
         description: API error envelope.
 /api/v1/workspace/pet:
   get:
-    operationId: getWorkspacePetSnapshot
+    operationId: getCurrentUserPetHomeSnapshot
     responses:
       "200":
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/PetWorkspaceSnapshot"
-        description: Workspace pet snapshot payload.
+        description: Current-user personal pet home snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/pet/dashboard:
+  get:
+    operationId: getCurrentUserPetDashboardSummary
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetDashboardSummary"
+        description: Current-user personal pet dashboard payload.
       default:
         content:
           application/json:

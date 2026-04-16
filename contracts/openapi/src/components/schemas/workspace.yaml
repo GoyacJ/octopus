@@ -151,6 +151,12 @@ KnowledgeKind:
     - shared
     - candidate
   type: string
+KnowledgePlaneScope:
+  enum:
+    - personal
+    - project
+    - workspace
+  type: string
 KnowledgeRecord:
   additionalProperties: false
   properties:
@@ -158,8 +164,12 @@ KnowledgeRecord:
       type: string
     kind:
       $ref: "#/components/schemas/KnowledgeKind"
+    ownerUserId:
+      type: string
     projectId:
       type: string
+    scope:
+      $ref: "#/components/schemas/KnowledgePlaneScope"
     sourceRef:
       type: string
     sourceType:
@@ -172,6 +182,8 @@ KnowledgeRecord:
       type: string
     updatedAt:
       type: integer
+    visibility:
+      $ref: "#/components/schemas/KnowledgeVisibilityMode"
     workspaceId:
       type: string
   required:
@@ -198,6 +210,11 @@ KnowledgeStatus:
     - shared
     - archived
   type: string
+KnowledgeVisibilityMode:
+  enum:
+    - private
+    - public
+  type: string
 MenuSource:
   enum:
     - main-sidebar
@@ -220,10 +237,19 @@ PetChatSender:
     - user
     - pet
   type: string
+PetContextScope:
+  enum:
+    - home
+    - project
+  type: string
 PetConversationBinding:
   additionalProperties: false
   properties:
     conversationId:
+      type: string
+    contextScope:
+      $ref: "#/components/schemas/PetContextScope"
+    ownerUserId:
       type: string
     petId:
       type: string
@@ -238,7 +264,8 @@ PetConversationBinding:
   required:
     - petId
     - workspaceId
-    - projectId
+    - ownerUserId
+    - contextScope
     - conversationId
     - updatedAt
   type: object
@@ -385,18 +412,66 @@ PetWorkspaceSnapshot:
   properties:
     binding:
       $ref: "#/components/schemas/PetConversationBinding"
+    contextScope:
+      $ref: "#/components/schemas/PetContextScope"
     messages:
       items:
         $ref: "#/components/schemas/PetMessage"
       type: array
+    ownerUserId:
+      type: string
     presence:
       $ref: "#/components/schemas/PetPresenceState"
+    projectId:
+      type: string
     profile:
       $ref: "#/components/schemas/PetProfile"
+    workspaceId:
+      type: string
   required:
     - profile
     - presence
     - messages
+    - contextScope
+    - ownerUserId
+    - workspaceId
+  type: object
+PetDashboardSummary:
+  additionalProperties: false
+  properties:
+    activeConversationCount:
+      type: integer
+    knowledgeCount:
+      type: integer
+    lastInteractionAt:
+      type: integer
+    memoryCount:
+      type: integer
+    mood:
+      $ref: "#/components/schemas/PetMood"
+    ownerUserId:
+      type: string
+    petId:
+      type: string
+    reminderCount:
+      type: integer
+    resourceCount:
+      type: integer
+    species:
+      $ref: "#/components/schemas/PetSpecies"
+    workspaceId:
+      type: string
+  required:
+    - petId
+    - workspaceId
+    - ownerUserId
+    - species
+    - mood
+    - memoryCount
+    - knowledgeCount
+    - resourceCount
+    - reminderCount
+    - activeConversationCount
   type: object
 SavePetPresenceInput:
   additionalProperties: false

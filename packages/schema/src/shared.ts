@@ -7,9 +7,12 @@ import type {
   HostExecutionMode as OpenApiHostExecutionMode,
   HostPlatform as OpenApiHostPlatform,
   KnowledgeKind as OpenApiKnowledgeKind,
+  KnowledgePlaneScope as OpenApiKnowledgePlaneScope,
   KnowledgeSourceType as OpenApiKnowledgeSourceType,
   KnowledgeStatus as OpenApiKnowledgeStatus,
+  KnowledgeVisibilityMode as OpenApiKnowledgeVisibilityMode,
   Locale as OpenApiLocale,
+  PetContextScope as OpenApiPetContextScope,
   ProjectResourceKind as OpenApiProjectResourceKind,
   ProjectResourceOrigin as OpenApiProjectResourceOrigin,
   ThemeMode as OpenApiThemeMode,
@@ -91,8 +94,11 @@ export type RunStatus =
 export type TraceKind = 'step' | 'tool' | 'approval' | 'pause' | 'resume' | 'artifact' | 'knowledge'
 export type TraceTone = 'info' | 'success' | 'warning' | 'error'
 export type KnowledgeKind = OpenApiKnowledgeKind
+export type KnowledgePlaneScope = OpenApiKnowledgePlaneScope
 export type KnowledgeStatus = OpenApiKnowledgeStatus
 export type KnowledgeSourceType = OpenApiKnowledgeSourceType
+export type KnowledgeVisibilityMode = OpenApiKnowledgeVisibilityMode
+export type PetContextScope = OpenApiPetContextScope
 export type ConnectionMode = OpenApiConnectionMode
 export type ConnectionState = OpenApiConnectionState
 export type HostPlatform = OpenApiHostPlatform

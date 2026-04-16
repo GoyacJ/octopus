@@ -203,6 +203,7 @@ function mapRuntimeMessageToPetMessage(message: RuntimeMessage, petId: string): 
 
 export function createPetSnapshot(
   workspaceState: {
+    workspace: { id: string }
     petProfile: PetProfile
     workspacePetPresence: PetPresenceState
     projectPetPresences: Record<string, PetPresenceState>
@@ -225,6 +226,10 @@ export function createPetSnapshot(
       .map(message => mapRuntimeMessageToPetMessage(message, workspaceState.petProfile.id)) ?? []
     : []
   return {
+    workspaceId: workspaceState.workspace.id,
+    ownerUserId: workspaceState.petProfile.ownerUserId,
+    contextScope: projectId ? 'project' : 'home',
+    projectId,
     profile: clone(workspaceState.petProfile),
     presence: clone(presence),
     binding: binding ? clone(binding) : undefined,

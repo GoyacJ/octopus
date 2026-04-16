@@ -427,6 +427,36 @@ describe('repository governance', () => {
     expect(adapterAllowlist.paths ?? []).toEqual([])
   })
 
+  it('defines personal pet and knowledge transport contracts with explicit owner semantics', () => {
+    const openApiSpec = readRepoFile('contracts', 'openapi', 'octopus.openapi.yaml')
+    const generatedSchema = readRepoFile('packages', 'schema', 'src', 'generated.ts')
+
+    expect(openApiSpec).toContain('/api/v1/workspace/pet/dashboard:')
+    expect(openApiSpec).toContain('operationId: getCurrentUserPetHomeSnapshot')
+    expect(openApiSpec).toContain('operationId: getCurrentUserProjectPetSnapshot')
+    expect(openApiSpec).toContain('operationId: getCurrentUserPetDashboardSummary')
+    expect(openApiSpec).toContain('PetDashboardSummary:')
+    expect(openApiSpec).toContain('PetContextScope:')
+    expect(openApiSpec).toContain('KnowledgePlaneScope:')
+    expect(openApiSpec).toContain('KnowledgeVisibilityMode:')
+    expect(openApiSpec).toMatch(/KnowledgeRecord:\n[\s\S]*?ownerUserId:\n\s+type: string/)
+    expect(openApiSpec).toMatch(/KnowledgeRecord:\n[\s\S]*?scope:\n\s+\$ref: "#\/components\/schemas\/KnowledgePlaneScope"/)
+    expect(openApiSpec).toMatch(/KnowledgeRecord:\n[\s\S]*?visibility:\n\s+\$ref: "#\/components\/schemas\/KnowledgeVisibilityMode"/)
+    expect(openApiSpec).toMatch(/PetConversationBinding:\n[\s\S]*?contextScope:\n\s+\$ref: "#\/components\/schemas\/PetContextScope"/)
+    expect(openApiSpec).toMatch(/PetConversationBinding:\n[\s\S]*?ownerUserId:\n\s+type: string/)
+
+    expect(generatedSchema).toContain('"/api/v1/workspace/pet/dashboard": {')
+    expect(generatedSchema).toContain('get: { operationId: "getCurrentUserPetHomeSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }')
+    expect(generatedSchema).toContain('get: { operationId: "getCurrentUserProjectPetSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }')
+    expect(generatedSchema).toContain('get: { operationId: "getCurrentUserPetDashboardSummary"; response: PetDashboardSummary; error: ApiErrorEnvelope }')
+    expect(generatedSchema).toContain('export type PetContextScope = "home" | "project"')
+    expect(generatedSchema).toContain('export type KnowledgePlaneScope = "personal" | "project" | "workspace"')
+    expect(generatedSchema).toContain('export type KnowledgeVisibilityMode = "private" | "public"')
+    expect(generatedSchema).toMatch(/export interface KnowledgeRecord \{[\s\S]*?ownerUserId\?: string[\s\S]*?scope\?: KnowledgePlaneScope[\s\S]*?visibility\?: KnowledgeVisibilityMode[\s\S]*?\}/)
+    expect(generatedSchema).toMatch(/export interface PetConversationBinding \{[\s\S]*?contextScope: PetContextScope[\s\S]*?ownerUserId: string[\s\S]*?\}/)
+    expect(generatedSchema).toContain('export interface PetDashboardSummary {')
+  })
+
   it('ships the enterprise access-control hard cut without migration tooling or migrate-before-startup guidance', () => {
     const infraIndex = readRepoFile('crates', 'octopus-infra', 'src', 'lib.rs')
     const infraState = readRepoFile('crates', 'octopus-infra', 'src', 'infra_state.rs')

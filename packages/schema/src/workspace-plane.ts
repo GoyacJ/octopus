@@ -6,6 +6,7 @@ import type {
   CreateWorkspaceResourceInput as OpenApiCreateWorkspaceResourceInput,
   ConversationRecord as OpenApiConversationRecord,
   KnowledgeRecord as OpenApiKnowledgeRecord,
+  PetDashboardSummary as OpenApiPetDashboardSummary,
   PromoteWorkspaceResourceInput as OpenApiPromoteWorkspaceResourceInput,
   ProjectTeamLinkInput as OpenApiProjectTeamLinkInput,
   ProjectTeamLinkRecord as OpenApiProjectTeamLinkRecord,
@@ -71,6 +72,7 @@ export interface WorkspaceResourceUploadPayload {
 export type WorkspaceResourceFolderUploadEntry = OpenApiWorkspaceResourceFolderUploadEntry
 export type CreateWorkspaceResourceFolderInput = OpenApiCreateWorkspaceResourceFolderInput
 export type KnowledgeRecord = OpenApiKnowledgeRecord
+export type PetDashboardSummary = OpenApiPetDashboardSummary
 
 export type AgentRecord = OpenApiAgentRecord
 export type TeamRecord = OpenApiTeamRecord

@@ -394,7 +394,7 @@
         description: API error envelope.
 /api/v1/projects/{projectId}/pet:
   get:
-    operationId: getProjectPetSnapshot
+    operationId: getCurrentUserProjectPetSnapshot
     parameters:
       - in: path
         name: projectId
@@ -407,7 +407,7 @@
           application/json:
             schema:
               $ref: "#/components/schemas/PetWorkspaceSnapshot"
-        description: Project pet snapshot payload.
+        description: Current-user personal pet project-context snapshot payload.
       default:
         content:
           application/json:

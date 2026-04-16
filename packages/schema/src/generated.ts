@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: aeac21ba5dac0e57ced837e8a01ebba0629f540126caaa3c100ec86c57bbae31
+// Source hash: ea10e0393ca3752fed60175cc3c602f478874043f642a90ef43df7cae349d11a
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "aeac21ba5dac0e57ced837e8a01ebba0629f540126caaa3c100ec86c57bbae31"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "ea10e0393ca3752fed60175cc3c602f478874043f642a90ef43df7cae349d11a"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -877,22 +877,29 @@ export interface KnowledgeEntryRecord {
 
 export type KnowledgeKind = "private" | "shared" | "candidate"
 
+export type KnowledgePlaneScope = "personal" | "project" | "workspace"
+
 export interface KnowledgeRecord {
   id: string
   kind: KnowledgeKind
+  ownerUserId?: string
   projectId?: string
+  scope?: KnowledgePlaneScope
   sourceRef: string
   sourceType: KnowledgeSourceType
   status: KnowledgeStatus
   summary: string
   title: string
   updatedAt: number
+  visibility?: KnowledgeVisibilityMode
   workspaceId: string
 }
 
 export type KnowledgeSourceType = "conversation" | "artifact" | "run"
 
 export type KnowledgeStatus = "candidate" | "reviewed" | "shared" | "archived"
+
+export type KnowledgeVisibilityMode = "private" | "public"
 
 export type Locale = "zh-CN" | "en-US"
 
@@ -1065,12 +1072,30 @@ export type PermissionMode = "auto" | "readonly" | "danger-full-access"
 
 export type PetChatSender = "user" | "pet"
 
+export type PetContextScope = "home" | "project"
+
 export interface PetConversationBinding {
+  contextScope: PetContextScope
   conversationId: string
+  ownerUserId: string
   petId: string
-  projectId: string
+  projectId?: string
   sessionId?: string
   updatedAt: number
+  workspaceId: string
+}
+
+export interface PetDashboardSummary {
+  activeConversationCount: number
+  knowledgeCount: number
+  lastInteractionAt?: number
+  memoryCount: number
+  mood: PetMood
+  ownerUserId: string
+  petId: string
+  reminderCount: number
+  resourceCount: number
+  species: PetSpecies
   workspaceId: string
 }
 
@@ -1121,9 +1146,13 @@ export type PetSpecies = "duck" | "goose" | "blob" | "cat" | "dragon" | "octopus
 
 export interface PetWorkspaceSnapshot {
   binding?: PetConversationBinding
+  contextScope: PetContextScope
   messages: PetMessage[]
+  ownerUserId: string
   presence: PetPresenceState
   profile: PetProfile
+  projectId?: string
+  workspaceId: string
 }
 
 export interface PositionRecord {
@@ -2942,7 +2971,7 @@ export interface OctopusApiPaths {
     get: { operationId: "listProjectKnowledge"; response: KnowledgeRecord[]; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/pet": {
-    get: { operationId: "getProjectPetSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }
+    get: { operationId: "getCurrentUserProjectPetSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/pet/conversation": {
     put: { operationId: "bindProjectPetConversation"; response: PetConversationBinding; error: ApiErrorEnvelope }
@@ -3165,10 +3194,13 @@ export interface OctopusApiPaths {
     post: { operationId: "validateUserRuntimeConfig"; response: RuntimeConfigValidationResult; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/pet": {
-    get: { operationId: "getWorkspacePetSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }
+    get: { operationId: "getCurrentUserPetHomeSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/pet/conversation": {
     put: { operationId: "bindWorkspacePetConversation"; response: PetConversationBinding; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/pet/dashboard": {
+    get: { operationId: "getCurrentUserPetDashboardSummary"; response: PetDashboardSummary; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/pet/presence": {
     patch: { operationId: "saveWorkspacePetPresence"; response: PetPresenceState; error: ApiErrorEnvelope }

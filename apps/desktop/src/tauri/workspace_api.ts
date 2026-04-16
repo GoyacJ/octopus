@@ -444,6 +444,11 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
       },
     },
     pet: {
+      async getDashboard() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/pet/dashboard', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        })
+      },
       async getSnapshot(projectId) {
         const session = assertWorkspaceRequestReady(context)
         if (projectId) {

@@ -48,6 +48,7 @@ import type {
   OrgUnitUpsertRequest,
   PermissionDefinition,
   PetConversationBinding,
+  PetDashboardSummary,
   PetPresenceState,
   PetWorkspaceSnapshot,
   PositionRecord,
@@ -200,6 +201,7 @@ export interface WorkspaceClient {
     listProject: (projectId: string) => Promise<KnowledgeRecord[]>
   }
   pet: {
+    getDashboard: () => Promise<PetDashboardSummary>
     getSnapshot: (projectId?: string) => Promise<PetWorkspaceSnapshot>
     savePresence: (input: SavePetPresenceInput, projectId?: string) => Promise<PetPresenceState>
     bindConversation: (input: BindPetConversationInput, projectId?: string) => Promise<PetConversationBinding>
