@@ -1,8 +1,20 @@
 import type {
   AccessAuditListResponse as OpenApiAccessAuditListResponse,
+  AccessCapabilityBundle as OpenApiAccessCapabilityBundle,
+  AccessExperienceCounts as OpenApiAccessExperienceCounts,
+  AccessExperienceLevel as OpenApiAccessExperienceLevel,
+  AccessExperienceResponse as OpenApiAccessExperienceResponse,
+  AccessExperienceSummary as OpenApiAccessExperienceSummary,
+  AccessMemberSummary as OpenApiAccessMemberSummary,
   AccessSessionRecord as OpenApiAccessSessionRecord,
+  AccessSectionCode as OpenApiAccessSectionCode,
+  AccessSectionGrant as OpenApiAccessSectionGrant,
+  AccessRolePreset as OpenApiAccessRolePreset,
   AccessRoleRecord as OpenApiAccessRoleRecord,
+  AccessRoleSource as OpenApiAccessRoleSource,
+  AccessRoleTemplate as OpenApiAccessRoleTemplate,
   AccessUserRecord as OpenApiAccessUserRecord,
+  AccessUserPresetUpdateRequest as OpenApiAccessUserPresetUpdateRequest,
   AccessUserUpsertRequest as OpenApiAccessUserUpsertRequest,
   AuthorizationSnapshot as OpenApiAuthorizationSnapshot,
   DataPolicyRecord as OpenApiDataPolicyRecord,
@@ -43,8 +55,18 @@ export interface AccessAuditQuery extends Record<string, string | number | boole
 }
 
 export type AccessAuditListResponse = OpenApiAccessAuditListResponse
+export type AccessCapabilityBundle = OpenApiAccessCapabilityBundle
+export type AccessExperienceCounts = OpenApiAccessExperienceCounts
+export type AccessExperienceLevel = OpenApiAccessExperienceLevel
+export type AccessExperienceResponse = OpenApiAccessExperienceResponse
+export type AccessExperienceSummary = OpenApiAccessExperienceSummary
+export type AccessMemberSummary = OpenApiAccessMemberSummary
 export type AccessSessionRecord = OpenApiAccessSessionRecord
+export type AccessSectionCode = OpenApiAccessSectionCode
+export type AccessSectionGrant = OpenApiAccessSectionGrant
+export type AccessRolePreset = OpenApiAccessRolePreset
 export type AccessUserRecord = OpenApiAccessUserRecord
+export type AccessUserPresetUpdateRequest = OpenApiAccessUserPresetUpdateRequest
 export type AccessUserUpsertRequest = OpenApiAccessUserUpsertRequest
 export type AuthorizationSnapshot = OpenApiAuthorizationSnapshot
 export type OrgUnitRecord = OpenApiOrgUnitRecord
@@ -57,6 +79,8 @@ export type UserOrgAssignmentRecord = OpenApiUserOrgAssignmentRecord
 export type UserOrgAssignmentUpsertRequest = OpenApiUserOrgAssignmentUpsertRequest
 export type PermissionDefinition = OpenApiPermissionDefinition
 export type AccessRoleRecord = OpenApiAccessRoleRecord
+export type AccessRoleSource = OpenApiAccessRoleSource
+export type AccessRoleTemplate = OpenApiAccessRoleTemplate
 export type RoleUpsertRequest = OpenApiRoleUpsertRequest
 export type RoleBindingRecord = OpenApiRoleBindingRecord
 export type RoleBindingUpsertRequest = OpenApiRoleBindingUpsertRequest

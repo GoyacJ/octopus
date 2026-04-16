@@ -12,48 +12,71 @@ function quote(value) {
   return JSON.stringify(value)
 }
 
+function joinUnionMembers(members) {
+  return [...new Set(
+    members
+      .flatMap(member => member.split('|'))
+      .map(member => member.trim())
+      .filter(Boolean),
+  )].join(' | ')
+}
+
+function withNullable(type, schema) {
+  if (!schema?.nullable) {
+    return type
+  }
+
+  return joinUnionMembers([type, 'null'])
+}
+
 function renderType(schema) {
   if (!schema) {
     return 'unknown'
   }
 
   if (schema.$ref) {
-    return toTypeName(schema.$ref)
+    return withNullable(toTypeName(schema.$ref), schema)
   }
 
   if (schema.enum) {
-    return schema.enum.map((entry) => quote(entry)).join(' | ')
+    return withNullable(schema.enum.map((entry) => quote(entry)).join(' | '), schema)
   }
 
   if (schema.oneOf) {
-    return schema.oneOf.map((entry) => renderType(entry)).join(' | ')
+    return withNullable(joinUnionMembers(schema.oneOf.map((entry) => renderType(entry))), schema)
   }
 
   if (schema.anyOf) {
-    return schema.anyOf.map((entry) => renderType(entry)).join(' | ')
+    return withNullable(joinUnionMembers(schema.anyOf.map((entry) => renderType(entry))), schema)
   }
 
   if (schema.allOf) {
-    return schema.allOf.map((entry) => renderType(entry)).join(' & ')
+    return withNullable(schema.allOf.map((entry) => renderType(entry)).join(' & '), schema)
   }
 
   if (Array.isArray(schema.type)) {
-    const members = schema.type.map((entry) => renderType({ ...schema, type: entry }))
-    return [...new Set(members)].join(' | ')
+    const members = schema.type.map((entry) => renderType({ ...schema, nullable: false, type: entry }))
+    return withNullable(joinUnionMembers(members), schema)
   }
 
+  let type
   switch (schema.type) {
     case 'string':
-      return 'string'
+      type = 'string'
+      break
     case 'integer':
     case 'number':
-      return 'number'
+      type = 'number'
+      break
     case 'boolean':
-      return 'boolean'
+      type = 'boolean'
+      break
     case 'null':
-      return 'null'
+      type = 'null'
+      break
     case 'array':
-      return `${renderType(schema.items)}[]`
+      type = `${renderType(schema.items)}[]`
+      break
     case 'object':
       if (schema.properties) {
         const required = new Set(schema.required ?? [])
@@ -65,19 +88,33 @@ function renderType(schema) {
         if (schema.additionalProperties) {
           lines.push(`  [key: string]: ${schema.additionalProperties === true ? 'unknown' : renderType(schema.additionalProperties)}`)
         }
-        return `{\n${lines.join('\n')}\n}`
+        type = `{\n${lines.join('\n')}\n}`
+        break
       }
       if (schema.additionalProperties) {
-        return `Record<string, ${schema.additionalProperties === true ? 'unknown' : renderType(schema.additionalProperties)}>`
+        type = `Record<string, ${schema.additionalProperties === true ? 'unknown' : renderType(schema.additionalProperties)}>`
+        break
       }
-      return 'Record<string, unknown>'
+      type = 'Record<string, unknown>'
+      break
     default:
-      return 'unknown'
+      type = 'unknown'
+      break
   }
+
+  return withNullable(type, schema)
 }
 
 function renderDeclaration(name, schema) {
-  if (schema.enum || schema.oneOf || schema.anyOf || schema.allOf || schema.type !== 'object' || schema.additionalProperties === true) {
+  if (
+    schema.enum
+    || schema.oneOf
+    || schema.anyOf
+    || schema.allOf
+    || schema.nullable
+    || schema.type !== 'object'
+    || schema.additionalProperties === true
+  ) {
     return `export type ${name} = ${renderType(schema)}\n`
   }
 

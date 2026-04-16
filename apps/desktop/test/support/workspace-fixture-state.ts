@@ -143,13 +143,6 @@ const RBAC_MENU_IDS = [
   'menu-workspace-console-tools',
   'menu-workspace-automations',
   'menu-workspace-access-control',
-  'menu-workspace-access-control-users',
-  'menu-workspace-access-control-org',
-  'menu-workspace-access-control-roles',
-  'menu-workspace-access-control-policies',
-  'menu-workspace-access-control-menus',
-  'menu-workspace-access-control-resources',
-  'menu-workspace-access-control-sessions',
 ] as const
 
 const OPERATOR_MENU_IDS = [
@@ -157,7 +150,6 @@ const OPERATOR_MENU_IDS = [
   'menu-workspace-console',
   'menu-workspace-console-projects',
   'menu-workspace-access-control',
-  'menu-workspace-access-control-users',
 ] as const
 
 function capabilityToResourceType(code: string): string {
@@ -542,7 +534,7 @@ export function createWorkspaceFixtureState(
             },
             {
               userId: 'user-operator',
-              displayName: 'Lin Zhou',
+              displayName: 'Workspace Operator',
               activityCount: 10,
               conversationCount: 2,
               messageCount: 40,
@@ -2019,7 +2011,7 @@ export function createWorkspaceFixtureState(
     {
       id: 'user-operator',
       username: 'operator',
-      displayName: 'Lin Zhou',
+      displayName: 'Workspace Operator',
       avatar: 'data:image/png;base64,iVBORw0KGgo=',
       status: 'active',
       passwordState: 'set',
@@ -2184,16 +2176,20 @@ export function createWorkspaceFixtureState(
     {
       id: 'role-owner',
       name: 'Owner',
-      code: 'owner',
+      code: 'system.owner',
       description: 'Full workspace access.',
+      source: 'system',
+      editable: false,
       status: 'active',
       permissionCodes: [...ownerPermissionCodes],
     },
     {
       id: 'role-operator',
-      name: 'Operator',
-      code: 'operator',
+      name: 'Admin',
+      code: 'system.admin',
       description: 'Daily operations access.',
+      source: 'system',
+      editable: false,
       status: 'active',
       permissionCodes: [...operatorPermissionCodes],
     },

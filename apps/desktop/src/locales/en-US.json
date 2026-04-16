@@ -1897,7 +1897,10 @@
     "header": {
       "eyebrow": "Access Control",
       "title": "Access Control",
-      "description": "Review workspace identities, access bindings, policies, and audit posture from one workbench."
+      "description": "Review workspace identities, access bindings, policies, and audit posture from one workbench.",
+      "personalDescription": "Handle members and everyday access first, then open governance when it is actually needed.",
+      "teamDescription": "Manage members and access first, then expand into governance only where the workspace has grown into it.",
+      "enterpriseDescription": "This workspace is operating with full governance depth, including organization, policy, and audit controls."
     },
     "nav": {
       "users": "Users",
@@ -1907,6 +1910,17 @@
       "menus": "Menus",
       "resources": "Resources & Authorization",
       "sessions": "Sessions & Audit"
+    },
+    "sections": {
+      "members": {
+        "label": "Members"
+      },
+      "access": {
+        "label": "Access"
+      },
+      "governance": {
+        "label": "Governance"
+      }
     },
     "common": {
       "pagination": {
@@ -2612,6 +2626,141 @@
         "loadMoreFailed": "Failed to load more audit records.",
         "toastSessionRevoked": "Session revoked",
         "toastUserSessionsRevoked": "User sessions revoked"
+      }
+    },
+    "members": {
+      "title": "Members workbench",
+      "description": "Start with who belongs to this workspace and what level of access responsibility they carry.",
+      "metrics": {
+        "members": "Members",
+        "membersHelper": "People currently participating in this workspace",
+        "structure": "Org structure",
+        "structureHelper": "Whether the workspace has moved into structured governance",
+        "structureEnabled": "Enabled",
+        "structureDisabled": "Not in use",
+        "landing": "Recommended entry",
+        "landingHelper": "The access layer the system suggests handling first"
+      },
+      "empty": {
+        "title": "This workspace is still just you",
+        "description": "The workspace is still in a personal stage. Add people and assign access presets when collaboration starts.",
+        "primaryAction": "Create member",
+        "secondaryAction": "Assign preset"
+      },
+      "actions": {
+        "createUser": "Create user",
+        "assignPreset": "Assign access preset",
+        "openAdvanced": "Open advanced details",
+        "openGovernance": "Open governance"
+      },
+      "directory": {
+        "title": "Member directory",
+        "description": "Handle everyday member work here and leave deeper governance for when it is actually needed."
+      },
+      "list": {
+        "memberEyebrow": "Member",
+        "currentAccount": "Current account",
+        "currentAccess": "Current access: {preset}",
+        "orgAssigned": "Participates in org structure",
+        "orgNotAssigned": "No org assignments",
+        "noEffectiveRoles": "No effective roles"
+      },
+      "detail": {
+        "subtitle": "Review this member's effective roles, org participation, and preset assignment from one place.",
+        "emptyTitle": "Select a member",
+        "emptyDescription": "Choose a member from the left to inspect the current access shape.",
+        "usernameLabel": "Username",
+        "primaryPresetLabel": "Primary preset",
+        "orgParticipationLabel": "Org participation",
+        "effectiveRolesLabel": "Effective roles",
+        "orgAssigned": "Participates in org structure"
+      },
+      "createDialog": {
+        "title": "Create member",
+        "description": "Add the person first, then assign an access preset from the everyday surfaces.",
+        "usernameLabel": "Username",
+        "usernamePlaceholder": "For example qa.lead",
+        "displayNameLabel": "Display name",
+        "displayNamePlaceholder": "For example QA Lead",
+        "submit": "Create member"
+      },
+      "validation": {
+        "usernameRequired": "Enter a username",
+        "displayNameRequired": "Enter a display name"
+      },
+      "feedback": {
+        "created": "Created {member}",
+        "createFailed": "Failed to create member"
+      }
+    },
+    "access": {
+      "title": "Access",
+      "description": "Use presets and capability bundles for everyday access assignment before dropping into raw capability detail.",
+      "metrics": {
+        "presets": "Presets",
+        "presetsHelper": "Primary path for day-to-day access assignment",
+        "bundles": "Bundles",
+        "bundlesHelper": "Business-level authorization grouped by outcome",
+        "customRoles": "Custom roles",
+        "customRolesHelper": "Whether the workspace has moved into advanced role governance",
+        "customRolesEnabled": "Present",
+        "customRolesDisabled": "Not used"
+      },
+      "empty": {
+        "title": "No presets available",
+        "description": "The workspace did not return any access presets to present."
+      },
+      "presetEyebrow": "Preset",
+      "includedBundles": "Included bundles",
+      "managedTemplates": "Managed templates",
+      "templateCount": "{count} templates",
+      "memberCount": "{count} members",
+      "assignment": {
+        "emptyTitle": "Select an access preset",
+        "emptyDescription": "Choose a preset on the left to review its audience, managed templates, and assigned members.",
+        "audienceLabel": "Audience",
+        "appliedMembersLabel": "Members currently using this preset",
+        "noAppliedMembers": "No members currently use this preset.",
+        "memberPlaceholder": "Select a member",
+        "openRoles": "Open roles in governance"
+      }
+    },
+    "assignment": {
+      "dialogTitle": "Assign access preset",
+      "dialogDescription": "Replace {member}'s direct system.* binding with a new preset while preserving inherited and custom access.",
+      "memberLabel": "Member",
+      "presetLabel": "Access preset",
+      "submit": "Apply preset",
+      "validation": {
+        "memberRequired": "Select a member",
+        "presetRequired": "Select an access preset"
+      },
+      "feedback": {
+        "applied": "Applied {preset} to {member}",
+        "failedTitle": "Failed to assign access preset"
+      }
+    },
+    "governance": {
+      "title": "Governance hub",
+      "description": "Handle organization, roles, policies, menu controls, protected resources, and session audit from one place.",
+      "sections": {
+        "organization": "Organization",
+        "roles": "Custom roles",
+        "policies": "Policies",
+        "menus": "Menu governance",
+        "resources": "Protected resources",
+        "sessions": "Sessions"
+      },
+      "metrics": {
+        "orgUnits": "Org units",
+        "policies": "Policies",
+        "sessions": "Sessions"
+      },
+      "empty": {
+        "title": "No governance objects need expansion yet",
+        "description": "This workspace does not need deep governance today. Return to access or members until the workspace actually grows into it.",
+        "primaryAction": "Back to access",
+        "secondaryAction": "Back to members"
       }
     }
   },

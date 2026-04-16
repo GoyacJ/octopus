@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { router } from '@/router'
+import { getRouteMenuId } from '@/navigation/menuRegistry'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
@@ -43,13 +47,16 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/personal-center/profile')
     expect(routePaths).toContain('/workspaces/:workspaceId/personal-center/pet')
     expect(routePaths).toContain('/workspaces/:workspaceId/access-control')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/users')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/org')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/roles')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/policies')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/menus')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/resources')
-    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/sessions')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/members')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/access')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/governance')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/users')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/org')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/roles')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/policies')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/menus')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/resources')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/access-control/sessions')
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center')
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/users')
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/roles')
@@ -78,7 +85,7 @@ describe('desktop router contract', () => {
     const shell = useShellStore()
     const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessControlStore.load()
+    await workspaceAccessControlStore.loadGovernanceData()
 
     await router.push('/workspaces/ws-local/console')
 
@@ -89,7 +96,7 @@ describe('desktop router contract', () => {
     const shell = useShellStore()
     const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessControlStore.load()
+    await workspaceAccessControlStore.loadGovernanceData()
 
     if (!workspaceAccessControlStore.authorization) {
       throw new Error('Expected access-control authorization in fixture')
@@ -209,11 +216,148 @@ describe('desktop router contract', () => {
     const shell = useShellStore()
     const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessControlStore.load()
+    await workspaceAccessControlStore.loadExperience()
 
     await router.push('/workspaces/ws-local/access-control')
 
-    expect(router.currentRoute.value.name).toBe('workspace-access-control-users')
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-members')
+  })
+
+  it('redirects denied governance routes back to the recommended access section', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/access-control/governance')
+
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-members')
+  })
+
+  it('redirects personal workspaces to the access section instead of governance or legacy members scaffolding', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-owner'
+        state.users = state.users.filter(user => user.id === 'user-owner')
+        state.userOrgAssignments = state.userOrgAssignments.filter(assignment => assignment.userId === 'user-owner')
+        state.roleBindings = state.roleBindings.filter(binding => binding.subjectId === 'user-owner')
+        state.dataPolicies = []
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/access-control')
+
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-access')
+  })
+
+  it('redirects denied access routes to governance instead of stalling on the members preload', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+        state.roles = state.roles.map((role) => {
+          if (role.id !== 'role-operator') {
+            return role
+          }
+
+          return {
+            ...role,
+            permissionCodes: ['access.org.read', 'audit.read'],
+          }
+        })
+        state.dataPolicies = [{
+          id: 'policy-owner-confidential',
+          name: 'Owner confidential access',
+          subjectType: 'user',
+          subjectId: 'user-owner',
+          resourceType: 'resource',
+          scopeType: 'tag-match',
+          projectIds: [],
+          tags: ['confidential'],
+          classifications: [],
+          effect: 'allow',
+        }]
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/access-control/access')
+
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-governance')
+  })
+
+  it('allows access-center routes even when the access menu is hidden by menu policy', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.menuPolicies = [{
+          menuId: 'menu-workspace-access-control',
+          enabled: true,
+          order: 100,
+          group: 'Security',
+          visibility: 'hidden',
+        }]
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/access-control/members')
+
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-members')
+  })
+
+  it('maps the progressive access routes to the root access-control menu only', () => {
+    expect(getRouteMenuId('workspace-access-control')).toBe('menu-workspace-access-control')
+    expect(getRouteMenuId('workspace-access-control-members')).toBe('menu-workspace-access-control')
+    expect(getRouteMenuId('workspace-access-control-access')).toBe('menu-workspace-access-control')
+    expect(getRouteMenuId('workspace-access-control-governance')).toBe('menu-workspace-access-control')
+    expect(getRouteMenuId('workspace-access-control-users')).toBeUndefined()
+    expect(getRouteMenuId('workspace-access-control-org')).toBeUndefined()
+    expect(getRouteMenuId('workspace-access-control-roles')).toBeUndefined()
+  })
+
+  it('removes legacy access child menu permission mappings from the desktop fixture layer', () => {
+    const fixtureClient = readFileSync(
+      resolve(import.meta.dirname, './support/workspace-fixture-client.ts'),
+      'utf8',
+    )
+
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-users')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-org')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-roles')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-policies')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-menus')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-resources')
+    expect(fixtureClient).not.toContain('menu-workspace-access-control-sessions')
   })
 
   it('rejects legacy permission center deep links because the routes are removed', async () => {

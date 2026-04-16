@@ -23,13 +23,9 @@ import WorkspaceConsoleView from '@/views/workspace/WorkspaceConsoleView.vue'
 import WorkspaceKnowledgeView from '@/views/workspace/WorkspaceKnowledgeView.vue'
 import WorkspaceOverviewView from '@/views/workspace/WorkspaceOverviewView.vue'
 import WorkspaceResourcesView from '@/views/workspace/WorkspaceResourcesView.vue'
-import AccessControlMenusView from '@/views/workspace/access-control/AccessControlMenusView.vue'
-import AccessControlOrgView from '@/views/workspace/access-control/AccessControlOrgView.vue'
-import AccessControlPoliciesView from '@/views/workspace/access-control/AccessControlPoliciesView.vue'
-import AccessControlResourcesView from '@/views/workspace/access-control/AccessControlResourcesView.vue'
-import AccessControlRolesView from '@/views/workspace/access-control/AccessControlRolesView.vue'
-import AccessControlSessionsView from '@/views/workspace/access-control/AccessControlSessionsView.vue'
-import AccessControlUsersView from '@/views/workspace/access-control/AccessControlUsersView.vue'
+import AccessGovernanceView from '@/views/workspace/access-control/AccessGovernanceView.vue'
+import AccessMembersView from '@/views/workspace/access-control/AccessMembersView.vue'
+import AccessPermissionsView from '@/views/workspace/access-control/AccessPermissionsView.vue'
 import PersonalCenterPetView from '@/views/workspace/personal-center/PersonalCenterPetView.vue'
 import PersonalCenterProfileView from '@/views/workspace/personal-center/PersonalCenterProfileView.vue'
 import {
@@ -40,7 +36,7 @@ import {
   projectModuleForRouteName,
   resolveProjectActorUserId,
 } from '@/composables/project-governance'
-import { ACCESS_CONTROL_MENU_IDS, CONSOLE_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
+import { CONSOLE_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
@@ -78,9 +74,11 @@ function resolveWorkspaceId(): string {
 }
 
 function resolveProjectId(): string {
+  const shell = resolveShellStore()
   const workspaceStore = resolveWorkspaceStore()
   return workspaceStore?.currentProjectId
     || workspaceStore?.projects[0]?.id
+    || shell?.defaultProjectId
     || ''
 }
 
@@ -141,7 +139,13 @@ function resolveConsoleFallback(workspaceId: string) {
   } as const
 }
 
-async function ensureProjectGuardContext(workspaceId: string, projectId: string) {
+const ACCESS_CONTROL_SECTION_BY_ROUTE_NAME = {
+  'workspace-access-control-members': 'members',
+  'workspace-access-control-access': 'access',
+  'workspace-access-control-governance': 'governance',
+} as const
+
+async function ensureWorkspaceGuardContext(workspaceId: string) {
   const shell = resolveShellStore()
   const workspaceStore = resolveWorkspaceStore()
   const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
@@ -151,7 +155,7 @@ async function ensureProjectGuardContext(workspaceId: string, projectId: string)
   }
 
   if (!shell.workspaceConnections.length || !shell.workspaceConnections.some(item => item.workspaceId === workspaceId)) {
-    await shell.bootstrap(workspaceId, projectId)
+    await shell.bootstrap(workspaceId, resolveProjectId() || 'proj-redesign')
   } else {
     await shell.activateWorkspaceByWorkspaceId(workspaceId)
   }
@@ -160,20 +164,30 @@ async function ensureProjectGuardContext(workspaceId: string, projectId: string)
     return null
   }
 
-  const startedAt = performance.now()
   await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId)
-  await workspaceAccessControlStore.ensureAuthorizationContext(shell.activeWorkspaceConnectionId)
-  if (import.meta.env.DEV) {
-    console.debug(
-      `[router] ensureProjectGuardContext ${shell.activeWorkspaceConnectionId} ${Math.round(performance.now() - startedAt)}ms`,
-    )
-  }
 
   return {
     shell,
     workspaceStore,
     workspaceAccessControlStore,
   }
+}
+
+async function ensureProjectGuardContext(workspaceId: string, projectId: string) {
+  const context = await ensureWorkspaceGuardContext(workspaceId)
+  if (!context || !context.shell.activeWorkspaceConnectionId) {
+    return null
+  }
+
+  const startedAt = performance.now()
+  await context.workspaceAccessControlStore.ensureAuthorizationContext(context.shell.activeWorkspaceConnectionId)
+  if (import.meta.env.DEV) {
+    console.debug(
+      `[router] ensureProjectGuardContext ${context.shell.activeWorkspaceConnectionId} ${Math.round(performance.now() - startedAt)}ms`,
+    )
+  }
+
+  return context
 }
 
 function resolveBrowserLoginTarget(redirect?: string | null) {
@@ -381,46 +395,21 @@ function createRoutes(): RouteRecordRaw[] {
       path: '/workspaces/:workspaceId/access-control',
       name: 'workspace-access-control',
       component: AccessControlView,
-      redirect: (to) => resolveAccessControlEntry(
-        typeof to.params.workspaceId === 'string' && to.params.workspaceId
-          ? to.params.workspaceId
-          : resolveWorkspaceId(),
-      ),
       children: [
         {
-          path: 'users',
-          name: 'workspace-access-control-users',
-          component: AccessControlUsersView,
+          path: 'members',
+          name: 'workspace-access-control-members',
+          component: AccessMembersView,
         },
         {
-          path: 'org',
-          name: 'workspace-access-control-org',
-          component: AccessControlOrgView,
+          path: 'access',
+          name: 'workspace-access-control-access',
+          component: AccessPermissionsView,
         },
         {
-          path: 'roles',
-          name: 'workspace-access-control-roles',
-          component: AccessControlRolesView,
-        },
-        {
-          path: 'policies',
-          name: 'workspace-access-control-policies',
-          component: AccessControlPoliciesView,
-        },
-        {
-          path: 'menus',
-          name: 'workspace-access-control-menus',
-          component: AccessControlMenusView,
-        },
-        {
-          path: 'resources',
-          name: 'workspace-access-control-resources',
-          component: AccessControlResourcesView,
-        },
-        {
-          path: 'sessions',
-          name: 'workspace-access-control-sessions',
-          component: AccessControlSessionsView,
+          path: 'governance',
+          name: 'workspace-access-control-governance',
+          component: AccessGovernanceView,
         },
       ],
     },
@@ -448,16 +437,6 @@ function createRoutes(): RouteRecordRaw[] {
       ],
     },
     {
-      path: '/workspaces/:workspaceId/user-center',
-      redirect: (to) => ({
-        name: 'workspace-access-control',
-        params: {
-          workspaceId: to.params.workspaceId,
-        },
-        query: to.query,
-      }),
-    },
-    {
       path: '/workspaces/:workspaceId/user-center/profile',
       redirect: (to) => ({
         name: 'workspace-personal-center-profile',
@@ -471,46 +450,6 @@ function createRoutes(): RouteRecordRaw[] {
       path: '/workspaces/:workspaceId/user-center/pet',
       redirect: (to) => ({
         name: 'workspace-personal-center-pet',
-        params: {
-          workspaceId: to.params.workspaceId,
-        },
-        query: to.query,
-      }),
-    },
-    {
-      path: '/workspaces/:workspaceId/user-center/users',
-      redirect: (to) => ({
-        name: 'workspace-access-control-users',
-        params: {
-          workspaceId: to.params.workspaceId,
-        },
-        query: to.query,
-      }),
-    },
-    {
-      path: '/workspaces/:workspaceId/user-center/roles',
-      redirect: (to) => ({
-        name: 'workspace-access-control-roles',
-        params: {
-          workspaceId: to.params.workspaceId,
-        },
-        query: to.query,
-      }),
-    },
-    {
-      path: '/workspaces/:workspaceId/user-center/permissions',
-      redirect: (to) => ({
-        name: 'workspace-access-control-policies',
-        params: {
-          workspaceId: to.params.workspaceId,
-        },
-        query: to.query,
-      }),
-    },
-    {
-      path: '/workspaces/:workspaceId/user-center/menus',
-      redirect: (to) => ({
-        name: 'workspace-access-control-menus',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -564,7 +503,8 @@ function installRouterGuards(router: Router) {
 
     const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
     const projectId = typeof to.params.projectId === 'string' ? to.params.projectId : undefined
-    const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
+    const routeName = typeof to.name === 'string' ? to.name : undefined
+    const routeMenuId = getRouteMenuId(routeName)
 
     if (workspaceId && projectId) {
       const context = await ensureProjectGuardContext(workspaceId, projectId)
@@ -580,8 +520,7 @@ function installRouterGuards(router: Router) {
           return resolveWorkspaceOverviewTarget(workspaceId)
         }
 
-        const routeName = typeof to.name === 'string' ? to.name : null
-        if (isProjectOwnerOnlyRoute(routeName) && !isProjectOwner(project, actorUserId)) {
+        if (isProjectOwnerOnlyRoute(routeName ?? null) && !isProjectOwner(project, actorUserId)) {
           return resolveProjectDashboardTarget(workspaceId, projectId)
         }
 
@@ -590,6 +529,35 @@ function installRouterGuards(router: Router) {
           return resolveProjectDashboardTarget(workspaceId, projectId)
         }
       }
+    }
+
+    const accessSection = routeName
+      ? ACCESS_CONTROL_SECTION_BY_ROUTE_NAME[routeName as keyof typeof ACCESS_CONTROL_SECTION_BY_ROUTE_NAME]
+      : undefined
+
+    if (workspaceId && (routeName === 'workspace-access-control' || accessSection)) {
+      const context = await ensureWorkspaceGuardContext(workspaceId)
+      if (!context || !context.shell.activeWorkspaceConnectionId) {
+        return true
+      }
+
+      if (routeName === 'workspace-access-control-governance') {
+        await context.workspaceAccessControlStore.loadGovernanceData(context.shell.activeWorkspaceConnectionId)
+      } else if (accessSection) {
+        await context.workspaceAccessControlStore.loadMembersData(context.shell.activeWorkspaceConnectionId)
+      } else {
+        await context.workspaceAccessControlStore.loadExperience(context.shell.activeWorkspaceConnectionId)
+      }
+
+      if (routeName === 'workspace-access-control') {
+        return resolveAccessControlEntry(workspaceId)
+      }
+
+      if (accessSection && !context.workspaceAccessControlStore.accessSectionGrants[accessSection]) {
+        return resolveAccessControlEntry(workspaceId)
+      }
+
+      return true
     }
 
     if (!workspaceId || !routeMenuId) {
@@ -603,14 +571,6 @@ function installRouterGuards(router: Router) {
 
     if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.currentUser) {
       return true
-    }
-
-    if (ACCESS_CONTROL_MENU_IDS.includes(routeMenuId)) {
-      if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
-        return true
-      }
-
-      return resolveAccessControlEntry(workspaceId)
     }
 
     if (CONSOLE_MENU_IDS.includes(routeMenuId)) {

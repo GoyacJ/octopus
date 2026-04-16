@@ -1,4 +1,7 @@
 import type {
+  AccessExperienceResponse,
+  AccessMemberSummary,
+  AccessUserPresetUpdateRequest,
   AuditRecord,
   BindPetConversationInput,
   CapabilityAssetDisablePatch,
@@ -259,6 +262,12 @@ export function createWorkspaceClientFixture(
 
   const getFeatureCode = (menuId: string, routeName?: string) => `feature:${routeName ?? menuId}`
   const protectedResourceKey = (resourceType: string, resourceId: string) => `${resourceType}:${resourceId}`
+  const ROOT_ORG_UNIT_ID = 'org-root'
+  const CUSTOM_ACCESS_CODE = 'custom'
+  const CUSTOM_ACCESS_NAME = 'Custom access'
+  const MIXED_ACCESS_CODE = 'mixed'
+  const MIXED_ACCESS_NAME = 'Mixed access'
+  const NO_PRESET_ASSIGNED_NAME = 'No preset assigned'
   const preciseToolResourceType = (kind: string) => {
     switch (kind) {
       case 'builtin':
@@ -672,19 +681,7 @@ export function createWorkspaceClientFixture(
   const getMenuRequiredPermissionCodes = (menuId: string) => {
     switch (menuId) {
       case 'menu-workspace-access-control':
-      case 'menu-workspace-access-control-users':
         return ['access.users.read']
-      case 'menu-workspace-access-control-org':
-        return ['access.org.read']
-      case 'menu-workspace-access-control-roles':
-        return ['access.roles.read']
-      case 'menu-workspace-access-control-policies':
-      case 'menu-workspace-access-control-resources':
-        return ['access.policies.read']
-      case 'menu-workspace-access-control-menus':
-        return ['access.menus.read']
-      case 'menu-workspace-access-control-sessions':
-        return ['access.sessions.read']
       default:
         return ['workspace.overview.read']
     }
@@ -801,8 +798,7 @@ export function createWorkspaceClientFixture(
     })
   }
 
-  const buildProtectedResources = () => {
-    const descriptors: ProtectedResourceDescriptor[] = [
+  const buildProtectedResourceCatalog = (): ProtectedResourceDescriptor[] => [
       ...workspaceState.agents.map(agent => ({
         id: agent.id,
         resourceType: 'agent',
@@ -849,12 +845,14 @@ export function createWorkspaceClientFixture(
       })),
     ]
 
-    return descriptors.map((descriptor) => {
+  const buildProtectedResources = () =>
+    buildProtectedResourceCatalog().flatMap((descriptor) => {
       const metadata = protectedResourceMetadata.get(protectedResourceKey(descriptor.resourceType, descriptor.id))
       if (!metadata) {
-        return descriptor
+        return []
       }
-      return {
+
+      return [{
         ...descriptor,
         resourceSubtype: metadata.resourceSubtype ?? descriptor.resourceSubtype,
         projectId: metadata.projectId ?? descriptor.projectId,
@@ -862,8 +860,31 @@ export function createWorkspaceClientFixture(
         ownerSubjectId: metadata.ownerSubjectId ?? descriptor.ownerSubjectId,
         tags: metadata.tags.length ? clone(metadata.tags) : descriptor.tags,
         classification: metadata.classification || descriptor.classification,
-      }
+      }]
     })
+
+  const resolveProtectedResourceDescriptor = (resourceType: string, resourceId: string) => {
+    const descriptor = buildProtectedResourceCatalog().find(record =>
+      record.resourceType === resourceType && record.id === resourceId,
+    )
+    if (!descriptor) {
+      return null
+    }
+
+    const metadata = protectedResourceMetadata.get(protectedResourceKey(descriptor.resourceType, descriptor.id))
+    if (!metadata) {
+      return descriptor
+    }
+
+    return {
+      ...descriptor,
+      resourceSubtype: metadata.resourceSubtype ?? descriptor.resourceSubtype,
+      projectId: metadata.projectId ?? descriptor.projectId,
+      ownerSubjectType: metadata.ownerSubjectType ?? descriptor.ownerSubjectType,
+      ownerSubjectId: metadata.ownerSubjectId ?? descriptor.ownerSubjectId,
+      tags: metadata.tags.length ? clone(metadata.tags) : descriptor.tags,
+      classification: metadata.classification || descriptor.classification,
+    }
   }
 
   const buildResourceActionGrants = (permissionCodes: string[]) => {
@@ -953,6 +974,8 @@ export function createWorkspaceClientFixture(
         code: role.code,
         name: role.name,
         description: role.description,
+        source: role.source,
+        editable: role.editable,
         status: role.status,
         permissionCodes: clone(role.permissionCodes),
       })),
@@ -961,6 +984,236 @@ export function createWorkspaceClientFixture(
       visibleMenuIds,
       menuGates,
       resourceActionGrants: buildResourceActionGrants(effectivePermissionCodes),
+    }
+  }
+
+  const hasAnyPermission = (permissionCodes: Set<string>, candidates: string[]) =>
+    candidates.some(code => permissionCodes.has(code))
+
+  const accessRoleTemplates = [
+    {
+      code: 'owner',
+      name: 'Owner',
+      description: 'Manage the workspace and govern its policies.',
+      managedRoleCodes: ['system.owner'],
+      editable: false,
+    },
+    {
+      code: 'admin',
+      name: 'Admin',
+      description: 'Manage members, roles, and day-to-day workspace operations.',
+      managedRoleCodes: ['system.admin'],
+      editable: false,
+    },
+  ] as const
+
+  const accessRolePresets = [
+    {
+      code: 'owner',
+      name: 'Owner',
+      description: 'Full workspace control for the accountable owner.',
+      recommendedFor: 'Workspace owners',
+      templateCodes: ['owner'],
+      capabilityBundleCodes: ['workspace_governance', 'member_management', 'security_and_audit'],
+    },
+    {
+      code: 'admin',
+      name: 'Admin',
+      description: 'Operate the workspace without exposing low-level policy detail by default.',
+      recommendedFor: 'Workspace operators',
+      templateCodes: ['admin'],
+      capabilityBundleCodes: ['member_management', 'project_and_resource_access', 'automation_and_tools'],
+    },
+  ] as const
+
+  const accessCapabilityBundles = [
+    {
+      code: 'workspace_governance',
+      name: 'Workspace governance',
+      description: 'Manage organization structure, roles, and governance settings.',
+      permissionCodes: ['access.roles.manage', 'access.org.read', 'access.policies.read', 'access.menus.read'],
+    },
+    {
+      code: 'member_management',
+      name: 'Member management',
+      description: 'Invite, update, and organize workspace members.',
+      permissionCodes: ['access.users.read', 'access.users.manage'],
+    },
+    {
+      code: 'project_and_resource_access',
+      name: 'Project and resource access',
+      description: 'Grant access to projects, resources, and protected content.',
+      permissionCodes: ['access.roles.read', 'access.policies.read'],
+    },
+    {
+      code: 'automation_and_tools',
+      name: 'Automation and tools',
+      description: 'Operate tools and automation capabilities for the workspace.',
+      permissionCodes: ['automation.view', 'tool.catalog.view'],
+    },
+    {
+      code: 'security_and_audit',
+      name: 'Security and audit',
+      description: 'Inspect sessions and audit activity when tighter control is needed.',
+      permissionCodes: ['access.sessions.read'],
+    },
+  ] as const
+
+  const presetNameByCode = new Map(accessRolePresets.map(preset => [preset.code, preset.name]))
+  const presetCodeByRoleCode = new Map(accessRoleTemplates.flatMap(template =>
+    template.managedRoleCodes.map(roleCode => [roleCode, template.code] as const),
+  ))
+  const isAdvancedDataPolicy = (policy: typeof accessDataPolicies[number]) =>
+    policy.resourceType !== 'project'
+    || policy.scopeType !== 'selected-projects'
+    || policy.effect !== 'allow'
+
+  const buildAccessMemberSummary = (userId: string): AccessMemberSummary => {
+    const user = accessUsers.find(record => record.id === userId)
+    if (!user) {
+      throw new Error(`Unknown access user ${userId}`)
+    }
+
+    const directUserRoles = accessRoleBindings
+      .filter(binding => binding.subjectType === 'user' && binding.subjectId === userId && binding.effect !== 'deny')
+      .map(binding => accessRoles.find(role => role.id === binding.roleId))
+      .filter((role): role is NonNullable<typeof accessRoles[number]> => Boolean(role))
+    const directPresetCodes = Array.from(new Set(
+      directUserRoles
+        .map(role => presetCodeByRoleCode.get(role.code))
+        .filter((code): code is string => Boolean(code)),
+    ))
+    const effectiveRoles = getEffectiveRoleRecords(userId)
+    const effectiveRoleCodes = new Set(effectiveRoles.map(role => role.code))
+    const hasExtraEffectiveRoles = directPresetCodes.length > 0
+      && (
+        effectiveRoleCodes.size > 1
+        || (directPresetCodes[0] && !effectiveRoleCodes.has(`system.${directPresetCodes[0]}`))
+      )
+
+    let primaryPresetCode: AccessMemberSummary['primaryPresetCode'] = null
+    let primaryPresetName = NO_PRESET_ASSIGNED_NAME
+
+    if (directPresetCodes.length === 1 && !hasExtraEffectiveRoles && effectiveRoles.length > 0) {
+      primaryPresetCode = directPresetCodes[0]
+      primaryPresetName = presetNameByCode.get(primaryPresetCode) ?? directPresetCodes[0]
+    } else if (directPresetCodes.length > 0 || effectiveRoles.length > 0) {
+      primaryPresetCode = hasExtraEffectiveRoles || directPresetCodes.length > 1
+        ? MIXED_ACCESS_CODE
+        : CUSTOM_ACCESS_CODE
+      primaryPresetName = primaryPresetCode === MIXED_ACCESS_CODE ? MIXED_ACCESS_NAME : CUSTOM_ACCESS_NAME
+    }
+
+    const hasOrgAssignments = accessUserOrgAssignments.some(assignment =>
+      assignment.userId === userId
+      && (
+        assignment.orgUnitId !== ROOT_ORG_UNIT_ID
+        || assignment.positionIds.length > 0
+        || assignment.userGroupIds.length > 0
+      ),
+    )
+
+    return {
+      user: clone(user),
+      primaryPresetCode,
+      primaryPresetName,
+      effectiveRoleNames: effectiveRoles.map(role => role.name),
+      hasOrgAssignments,
+    }
+  }
+
+  const buildAccessMembers = () => accessUsers.map(user => buildAccessMemberSummary(user.id))
+
+  const buildAccessExperience = (): AccessExperienceResponse => {
+    const user = getCurrentUser()
+    if (!user) {
+      throw new Error('Expected current user in workspace fixture')
+    }
+
+    const permissionCodes = new Set(getEffectivePermissionCodes(user.id))
+    const memberCount = accessUsers.length
+    const hasOrgStructure = accessOrgUnits.some(unit => unit.id !== ROOT_ORG_UNIT_ID)
+      || accessPositions.length > 0
+      || accessUserGroups.length > 0
+      || accessUserOrgAssignments.some(assignment =>
+        assignment.orgUnitId !== ROOT_ORG_UNIT_ID
+        || assignment.positionIds.length > 0
+        || assignment.userGroupIds.length > 0,
+      )
+    const hasCustomRoles = accessRoles.some(role => role.source === 'custom')
+    const hasAdvancedPolicies = accessDataPolicies.some(policy => isAdvancedDataPolicy(policy))
+    const hasMenuGovernance = accessMenuPolicies.length > 0
+    const hasResourceGovernance = accessResourcePolicies.length > 0 || protectedResourceMetadata.size > 0
+    const enterpriseLike = hasOrgStructure || hasCustomRoles || hasAdvancedPolicies || hasMenuGovernance || hasResourceGovernance
+    const membersAllowed = hasAnyPermission(permissionCodes, ['access.users.read', 'access.users.manage'])
+    const sectionGrants = [
+      {
+        section: 'members' as const,
+        allowed: membersAllowed,
+      },
+      {
+        section: 'access' as const,
+        allowed: membersAllowed,
+      },
+      {
+        section: 'governance' as const,
+        allowed: hasAnyPermission(permissionCodes, [
+          'access.org.read',
+          'access.org.manage',
+          'access.policies.read',
+          'access.policies.manage',
+          'access.menus.read',
+          'access.menus.manage',
+          'access.sessions.read',
+          'access.sessions.manage',
+          'audit.read',
+        ]),
+      },
+    ]
+    const firstAllowedSection = sectionGrants.find(grant => grant.allowed)?.section ?? 'members'
+    const recommendedLandingSection = sectionGrants[0].allowed && memberCount > 1
+      ? 'members'
+      : sectionGrants[1].allowed
+        ? 'access'
+        : enterpriseLike && sectionGrants[2].allowed
+          ? 'governance'
+          : firstAllowedSection
+
+    return {
+      summary: {
+        experienceLevel: enterpriseLike ? 'enterprise' : (memberCount > 1 ? 'team' : 'personal'),
+        memberCount,
+        hasOrgStructure,
+        hasCustomRoles,
+        hasAdvancedPolicies,
+        hasMenuGovernance,
+        hasResourceGovernance,
+        recommendedLandingSection,
+      },
+      sectionGrants,
+      roleTemplates: accessRoleTemplates.map(template => ({
+        ...template,
+        managedRoleCodes: [...template.managedRoleCodes],
+      })),
+      rolePresets: accessRolePresets.map(preset => ({
+        ...preset,
+        templateCodes: [...preset.templateCodes],
+        capabilityBundleCodes: [...preset.capabilityBundleCodes],
+      })),
+      capabilityBundles: accessCapabilityBundles.map(bundle => ({
+        ...bundle,
+        permissionCodes: [...bundle.permissionCodes],
+      })),
+      counts: {
+        auditEventCount: auditRecords.length,
+        customRoleCount: accessRoles.filter(role => role.source === 'custom').length,
+        dataPolicyCount: accessDataPolicies.length,
+        menuPolicyCount: accessMenuPolicies.length,
+        orgUnitCount: accessOrgUnits.length,
+        protectedResourceCount: protectedResourceMetadata.size,
+        resourcePolicyCount: accessResourcePolicies.length,
+        sessionCount: fixtureSessions.length,
+      },
     }
   }
 
@@ -982,6 +1235,20 @@ export function createWorkspaceClientFixture(
         current: session.sessionId === defaultSession.session.id,
       }
     })
+
+  const assertCustomRoleCode = (code: string) => {
+    if (!code.startsWith('system.')) {
+      return
+    }
+
+    throw new WorkspaceApiError({
+      message: 'reserved managed role namespace',
+      status: 400,
+      requestId: 'req-access-role-reserved-code',
+      retryable: false,
+      code: 'INVALID_INPUT',
+    })
+  }
 
   const registerBootstrapAdmin = (request: {
     username: string
@@ -2672,6 +2939,12 @@ export function createWorkspaceClientFixture(
       async getCurrentAuthorization() {
         return buildAuthorizationSnapshot()
       },
+      async getAccessExperience() {
+        return buildAccessExperience()
+      },
+      async listMembers() {
+        return buildAccessMembers()
+      },
       async listAudit(query = {}) {
         const filtered = auditRecords.filter((record) => {
           if (query.actorId && record.actorId !== query.actorId) {
@@ -2755,6 +3028,53 @@ export function createWorkspaceClientFixture(
       async listUsers() {
         return clone(accessUsers)
       },
+      async updateUserPreset(userId, record) {
+        const preset = accessRolePresets.find(candidate => candidate.code === record.presetCode)
+        if (!preset) {
+          throw new WorkspaceApiError({
+            message: 'access preset not found',
+            status: 404,
+            requestId: 'req-access-preset-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        const managedRoleCodes = new Set(
+          preset.templateCodes.flatMap(templateCode =>
+            accessRoleTemplates
+              .filter(template => template.code === templateCode)
+              .flatMap(template => template.managedRoleCodes),
+          ),
+        )
+        const managedRoleIds = new Set(
+          accessRoles
+            .filter(role => managedRoleCodes.has(role.code))
+            .map(role => role.id),
+        )
+
+        accessRoleBindings = accessRoleBindings.filter((binding) => {
+          if (binding.subjectType !== 'user' || binding.subjectId !== userId) {
+            return true
+          }
+
+          const role = accessRoles.find(candidate => candidate.id === binding.roleId)
+          return !(role && role.code.startsWith('system.'))
+        })
+
+        managedRoleIds.forEach((roleId) => {
+          accessRoleBindings.push({
+            id: `binding-${userId}-${roleId}-${Date.now()}`,
+            roleId,
+            subjectType: 'user',
+            subjectId: userId,
+            effect: 'allow',
+          })
+        })
+
+        appendAudit('access.users.preset.update', 'success', `access.user-preset:${userId}`)
+        return buildAccessMemberSummary(userId)
+      },
       async createUser(record) {
         const created = {
           id: `access-user-${Date.now()}`,
@@ -2764,6 +3084,10 @@ export function createWorkspaceClientFixture(
           passwordState: record.password ? 'set' : 'reset-required',
         }
         accessUsers = [...accessUsers, created]
+        workspaceState.users = workspaceState.users.concat({
+          ...created,
+        })
+        appendAudit('access.users.create', 'success', `access.user:${created.id}`)
         return clone(created)
       },
       async updateUser(userId, record) {
@@ -2785,13 +3109,17 @@ export function createWorkspaceClientFixture(
           passwordState: record.resetPassword ? 'reset-required' : (record.password ? 'set' : current.passwordState),
         }
         accessUsers = accessUsers.map(user => user.id === userId ? updated : user)
+        workspaceState.users = workspaceState.users.map(user => user.id === userId ? { ...user, ...updated } : user)
+        appendAudit('access.users.update', 'success', `access.user:${userId}`)
         return clone(updated)
       },
       async deleteUser(userId) {
         accessUsers = accessUsers.filter(user => user.id !== userId)
+        workspaceState.users = workspaceState.users.filter(user => user.id !== userId)
         accessUserOrgAssignments = accessUserOrgAssignments.filter(assignment => assignment.userId !== userId)
         accessRoleBindings = accessRoleBindings.filter(binding => !(binding.subjectType === 'user' && binding.subjectId === userId))
         accessDataPolicies = accessDataPolicies.filter(policy => !(policy.subjectType === 'user' && policy.subjectId === userId))
+        appendAudit('access.users.delete', 'success', `access.user:${userId}`)
       },
       async listOrgUnits() {
         return clone(accessOrgUnits)
@@ -2905,11 +3233,14 @@ export function createWorkspaceClientFixture(
         return clone(accessRoles)
       },
       async createRole(record) {
+        assertCustomRoleCode(record.code)
         const created = {
           id: `role-${Date.now()}`,
           code: record.code,
           name: record.name,
           description: record.description,
+          source: 'custom' as const,
+          editable: true,
           status: record.status,
           permissionCodes: clone(record.permissionCodes),
         }
@@ -2917,11 +3248,26 @@ export function createWorkspaceClientFixture(
         return clone(created)
       },
       async updateRole(roleId, record) {
+        const current = accessRoles.find(role => role.id === roleId)
+        if (!current) {
+          throw new WorkspaceApiError({
+            message: 'access role not found',
+            status: 404,
+            requestId: 'req-access-role-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        if (current.source === 'custom') {
+          assertCustomRoleCode(record.code)
+        }
         const updated = {
           id: roleId,
           code: record.code,
           name: record.name,
           description: record.description,
+          source: current.source,
+          editable: current.editable,
           status: record.status,
           permissionCodes: clone(record.permissionCodes),
         }
@@ -3105,7 +3451,7 @@ export function createWorkspaceClientFixture(
         appendAudit('access.menu-policies.delete', 'success', `access.menu-policy:${menuId}`)
       },
       async upsertProtectedResource(resourceType, resourceId, input) {
-        const current = buildProtectedResources().find(record => record.resourceType === resourceType && record.id === resourceId)
+        const current = resolveProtectedResourceDescriptor(resourceType, resourceId)
         if (!current) {
           throw new WorkspaceApiError({
             message: 'protected resource not found',

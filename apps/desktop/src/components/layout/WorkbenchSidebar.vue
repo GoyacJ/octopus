@@ -141,6 +141,7 @@ const activeProjects = computed(() =>
 const deleteTargetProject = computed(() =>
   activeProjects.value.find(project => project.id === deleteTargetProjectId.value) ?? null,
 )
+const hasAccessControlAuthorization = computed(() => Boolean(workspaceAccessControlStore.authorization))
 
 const workspaceNavigation = computed<NavigationItem[]>(() => {
   const workspaceId = currentWorkspaceId.value
@@ -187,13 +188,9 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       label: t('sidebar.navigation.accessControl'),
       routeNames: [
         'workspace-access-control',
-        'workspace-access-control-users',
-        'workspace-access-control-org',
-        'workspace-access-control-roles',
-        'workspace-access-control-policies',
-        'workspace-access-control-menus',
-        'workspace-access-control-resources',
-        'workspace-access-control-sessions',
+        'workspace-access-control-members',
+        'workspace-access-control-access',
+        'workspace-access-control-governance',
       ],
       icon: iconMap['access-control'],
       to: {
@@ -203,11 +200,17 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
     },
   ]
 
-  if (!workspaceAccessControlStore.currentEffectiveMenuIds.length) {
-    return items
-  }
+  return items.filter((item) => {
+    if (item.id === 'workspace-access-control') {
+      return !hasAccessControlAuthorization.value || workspaceAccessControlStore.canShowAccessControlNavigation
+    }
 
-  return items.filter(item => !item.menuId || workspaceAccessControlStore.currentEffectiveMenuIds.includes(item.menuId))
+    if (!hasAccessControlAuthorization.value) {
+      return true
+    }
+
+    return !item.menuId || workspaceAccessControlStore.currentEffectiveMenuIds.includes(item.menuId)
+  })
 })
 
 function projectConversationId(projectId: string) {

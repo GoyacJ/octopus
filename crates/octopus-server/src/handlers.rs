@@ -652,6 +652,306 @@ async fn build_current_authorization_snapshot(
     })
 }
 
+fn access_string_vec(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_string()).collect()
+}
+
+fn has_any_permission_codes(
+    effective_permission_codes: &BTreeSet<String>,
+    required_codes: &[&str],
+) -> bool {
+    required_codes
+        .iter()
+        .any(|code| effective_permission_codes.contains(*code))
+}
+
+fn build_access_section_grants(
+    effective_permission_codes: &BTreeSet<String>,
+) -> Vec<AccessSectionGrant> {
+    let members_allowed =
+        has_any_permission_codes(effective_permission_codes, &["access.users.read", "access.users.manage"]);
+    let access_allowed = members_allowed;
+    let governance_allowed = has_any_permission_codes(
+        effective_permission_codes,
+        &[
+            "access.org.read",
+            "access.org.manage",
+            "access.policies.read",
+            "access.policies.manage",
+            "access.menus.read",
+            "access.menus.manage",
+            "access.sessions.read",
+            "access.sessions.manage",
+            "audit.read",
+        ],
+    );
+
+    vec![
+        AccessSectionGrant {
+            section: "members".into(),
+            allowed: members_allowed,
+        },
+        AccessSectionGrant {
+            section: "access".into(),
+            allowed: access_allowed,
+        },
+        AccessSectionGrant {
+            section: "governance".into(),
+            allowed: governance_allowed,
+        },
+    ]
+}
+
+fn recommended_access_section(section_grants: &[AccessSectionGrant]) -> String {
+    section_grants
+        .iter()
+        .find(|grant| grant.allowed)
+        .map(|grant| grant.section.clone())
+        .unwrap_or_else(|| "members".into())
+}
+
+fn has_allowed_access_section(section_grants: &[AccessSectionGrant], section: &str) -> bool {
+    section_grants
+        .iter()
+        .any(|grant| grant.section == section && grant.allowed)
+}
+
+fn recommended_access_section_for_snapshot(
+    snapshot: &AccessExperienceSnapshot,
+    section_grants: &[AccessSectionGrant],
+) -> String {
+    if has_allowed_access_section(section_grants, "members") && snapshot.member_count > 1 {
+        return "members".into();
+    }
+    if has_allowed_access_section(section_grants, "access") {
+        return "access".into();
+    }
+    if snapshot.experience_level == "enterprise"
+        && has_allowed_access_section(section_grants, "governance")
+    {
+        return "governance".into();
+    }
+    recommended_access_section(section_grants)
+}
+
+fn build_access_role_templates() -> Vec<AccessRoleTemplate> {
+    vec![
+        AccessRoleTemplate {
+            code: "owner".into(),
+            name: "Owner".into(),
+            description: "Full workspace ownership across members, presets, and governance."
+                .into(),
+            managed_role_codes: vec!["system.owner".into()],
+            editable: false,
+        },
+        AccessRoleTemplate {
+            code: "admin".into(),
+            name: "Admin".into(),
+            description: "Manage members, presets, and governance workflows for the workspace."
+                .into(),
+            managed_role_codes: vec!["system.admin".into()],
+            editable: false,
+        },
+        AccessRoleTemplate {
+            code: "member".into(),
+            name: "Member".into(),
+            description: "Collaborate in projects, resources, and day-to-day workspace work."
+                .into(),
+            managed_role_codes: vec!["system.member".into()],
+            editable: false,
+        },
+        AccessRoleTemplate {
+            code: "viewer".into(),
+            name: "Viewer".into(),
+            description: "Read workspace context and published work without making changes."
+                .into(),
+            managed_role_codes: vec!["system.viewer".into()],
+            editable: false,
+        },
+        AccessRoleTemplate {
+            code: "auditor".into(),
+            name: "Auditor".into(),
+            description: "Review members, policy state, sessions, and audit activity."
+                .into(),
+            managed_role_codes: vec!["system.auditor".into()],
+            editable: false,
+        },
+    ]
+}
+
+fn build_access_capability_bundles() -> Vec<AccessCapabilityBundle> {
+    vec![
+        AccessCapabilityBundle {
+            code: "workspace_governance".into(),
+            name: "Workspace Governance".into(),
+            description: "Organization structure, custom roles, and policy management.".into(),
+            permission_codes: access_string_vec(&[
+                "access.org.read",
+                "access.org.manage",
+                "access.roles.read",
+                "access.roles.manage",
+                "access.policies.read",
+                "access.policies.manage",
+                "access.menus.read",
+                "access.menus.manage",
+            ]),
+        },
+        AccessCapabilityBundle {
+            code: "member_management".into(),
+            name: "Member Management".into(),
+            description: "Invite people, review membership, and adjust practical workspace access."
+                .into(),
+            permission_codes: access_string_vec(&["access.users.read", "access.users.manage"]),
+        },
+        AccessCapabilityBundle {
+            code: "project_and_resource_access".into(),
+            name: "Project And Resource Access".into(),
+            description: "Project delivery, resource operations, and knowledge access.".into(),
+            permission_codes: access_string_vec(&[
+                "project.view",
+                "project.manage",
+                "team.view",
+                "team.manage",
+                "resource.view",
+                "resource.upload",
+                "resource.update",
+                "resource.publish",
+                "knowledge.view",
+                "knowledge.create",
+                "knowledge.edit",
+                "knowledge.publish",
+                "knowledge.retrieve",
+            ]),
+        },
+        AccessCapabilityBundle {
+            code: "automation_and_tools".into(),
+            name: "Automation And Tools".into(),
+            description: "Runtime work, agents, and tool enablement for everyday execution."
+                .into(),
+            permission_codes: access_string_vec(&[
+                "agent.view",
+                "agent.run",
+                "agent.edit",
+                "tool.builtin.enable",
+                "tool.skill.enable",
+                "tool.mcp.enable",
+                "runtime.session.read",
+                "runtime.submit_turn",
+            ]),
+        },
+        AccessCapabilityBundle {
+            code: "security_and_audit".into(),
+            name: "Security And Audit".into(),
+            description: "Session review, revocation, and audit visibility.".into(),
+            permission_codes: access_string_vec(&[
+                "access.sessions.read",
+                "access.sessions.manage",
+                "audit.read",
+            ]),
+        },
+    ]
+}
+
+fn build_access_role_presets() -> Vec<AccessRolePreset> {
+    vec![
+        AccessRolePreset {
+            code: "owner".into(),
+            name: "Owner".into(),
+            description: "Run the workspace, manage members, and control governance.".into(),
+            recommended_for: "Workspace founders and final decision makers.".into(),
+            template_codes: vec!["owner".into()],
+            capability_bundle_codes: access_string_vec(&[
+                "workspace_governance",
+                "member_management",
+                "project_and_resource_access",
+                "automation_and_tools",
+                "security_and_audit",
+            ]),
+        },
+        AccessRolePreset {
+            code: "admin".into(),
+            name: "Admin".into(),
+            description: "Operate the workspace, members, and governance day to day.".into(),
+            recommended_for: "People who run collaboration and workspace operations.".into(),
+            template_codes: vec!["admin".into()],
+            capability_bundle_codes: access_string_vec(&[
+                "workspace_governance",
+                "member_management",
+                "project_and_resource_access",
+                "automation_and_tools",
+                "security_and_audit",
+            ]),
+        },
+        AccessRolePreset {
+            code: "member".into(),
+            name: "Member".into(),
+            description: "Contribute to active work without full governance control.".into(),
+            recommended_for: "Core contributors working on projects and resources.".into(),
+            template_codes: vec!["member".into()],
+            capability_bundle_codes: access_string_vec(&[
+                "project_and_resource_access",
+                "automation_and_tools",
+            ]),
+        },
+        AccessRolePreset {
+            code: "viewer".into(),
+            name: "Viewer".into(),
+            description: "Read project context and published results without editing.".into(),
+            recommended_for: "Stakeholders who need visibility but not day-to-day control.".into(),
+            template_codes: vec!["viewer".into()],
+            capability_bundle_codes: vec!["project_and_resource_access".into()],
+        },
+        AccessRolePreset {
+            code: "auditor".into(),
+            name: "Auditor".into(),
+            description: "Review governance, sessions, and audit activity without editing."
+                .into(),
+            recommended_for: "Risk, compliance, and review-oriented collaborators.".into(),
+            template_codes: vec!["auditor".into()],
+            capability_bundle_codes: access_string_vec(&[
+                "workspace_governance",
+                "security_and_audit",
+            ]),
+        },
+    ]
+}
+
+async fn build_access_experience_response(
+    state: &ServerState,
+    session: &SessionRecord,
+) -> Result<AccessExperienceResponse, ApiError> {
+    let authorization = build_current_authorization_snapshot(state, session).await?;
+    let effective_permission_codes = authorization
+        .effective_permission_codes
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let section_grants = build_access_section_grants(&effective_permission_codes);
+    let snapshot = state.services.access_control.get_experience_snapshot().await?;
+    let summary = AccessExperienceSummary {
+        experience_level: snapshot.experience_level.clone(),
+        member_count: snapshot.member_count,
+        has_org_structure: snapshot.has_org_structure,
+        has_custom_roles: snapshot.has_custom_roles,
+        has_advanced_policies: snapshot.has_advanced_policies,
+        has_menu_governance: snapshot.has_menu_governance,
+        has_resource_governance: snapshot.has_resource_governance,
+        recommended_landing_section: recommended_access_section_for_snapshot(
+            &snapshot,
+            &section_grants,
+        ),
+    };
+
+    Ok(AccessExperienceResponse {
+        summary,
+        section_grants,
+        role_templates: build_access_role_templates(),
+        role_presets: build_access_role_presets(),
+        capability_bundles: build_access_capability_bundles(),
+        counts: snapshot.counts,
+    })
+}
+
 async fn build_access_session_payloads(
     state: &ServerState,
     current_session_id: &str,
@@ -2504,6 +2804,16 @@ pub(crate) async fn current_authorization(
     ))
 }
 
+pub(crate) async fn get_access_experience(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<AccessExperienceResponse>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    Ok(Json(
+        build_access_experience_response(&state, &session).await?,
+    ))
+}
+
 pub(crate) async fn list_access_sessions(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -2585,6 +2895,14 @@ pub(crate) async fn list_access_users(
     Ok(Json(state.services.access_control.list_users().await?))
 }
 
+pub(crate) async fn list_access_members(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<AccessMemberSummary>>, ApiError> {
+    ensure_authorized_session(&state, &headers, "access.users.read", None).await?;
+    Ok(Json(state.services.access_control.list_member_summaries().await?))
+}
+
 pub(crate) async fn create_access_user(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -2620,6 +2938,31 @@ pub(crate) async fn delete_access_user(
     ensure_authorized_session(&state, &headers, "access.users.manage", None).await?;
     state.services.access_control.delete_user(&user_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn update_access_user_preset(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(user_id): Path<String>,
+    Json(request): Json<AccessUserPresetUpdateRequest>,
+) -> Result<Json<AccessMemberSummary>, ApiError> {
+    let session =
+        ensure_authorized_session(&state, &headers, "access.users.manage", None).await?;
+    let summary = state
+        .services
+        .access_control
+        .assign_user_preset(&user_id, request)
+        .await?;
+    append_session_audit(
+        &state,
+        &session,
+        "access.users.update-preset",
+        &audit_resource_label("access.user", Some(&user_id)),
+        "success",
+        None,
+    )
+    .await?;
+    Ok(Json(summary))
 }
 
 pub(crate) async fn list_access_org_units(
@@ -3356,4 +3699,583 @@ pub(crate) async fn register_app(
 ) -> Result<Json<ClientAppRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "app_registry.write", None).await?;
     Ok(Json(state.services.app_registry.register_app(app).await?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::header::AUTHORIZATION;
+    use octopus_core::{
+        default_connection_stubs, default_host_state, default_preferences,
+        AccessUserPresetUpdateRequest, AccessUserUpsertRequest, AvatarUploadPayload,
+        DataPolicyUpsertRequest, DesktopBackendConnection, LoginRequest,
+        RegisterBootstrapAdminRequest, RoleBindingUpsertRequest, RoleUpsertRequest,
+        DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    };
+    use octopus_infra::build_infra_bundle;
+    use octopus_platform::PlatformServices;
+    use octopus_runtime_adapter::RuntimeAdapter;
+    use std::{
+        collections::HashMap,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
+
+    fn avatar_payload() -> AvatarUploadPayload {
+        AvatarUploadPayload {
+            content_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            file_name: "avatar.png".into(),
+            byte_size: 8,
+        }
+    }
+
+    fn auth_headers(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            format!("Bearer {token}")
+                .parse()
+                .expect("authorization header"),
+        );
+        headers
+    }
+
+    fn test_server_state(root: &Path) -> ServerState {
+        let infra = build_infra_bundle(root).expect("infra bundle");
+        let runtime = Arc::new(RuntimeAdapter::new(
+            DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+        ));
+        let services = PlatformServices {
+            workspace: infra.workspace.clone(),
+            access_control: infra.access_control.clone(),
+            auth: infra.auth.clone(),
+            app_registry: infra.app_registry.clone(),
+            authorization: infra.authorization.clone(),
+            runtime_session: runtime.clone(),
+            runtime_execution: runtime.clone(),
+            runtime_config: runtime.clone(),
+            runtime_registry: runtime,
+            artifact: infra.artifact.clone(),
+            inbox: infra.inbox.clone(),
+            knowledge: infra.knowledge.clone(),
+            observation: infra.observation.clone(),
+        };
+
+        ServerState {
+            services,
+            host_auth_token: "host-test-token".into(),
+            transport_security: "loopback".into(),
+            idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
+            auth_rate_limits: Arc::new(Mutex::new(HashMap::new())),
+            host_state: default_host_state("0.1.0-test".into(), true),
+            host_connections: default_connection_stubs(),
+            host_preferences_path: root.join("config").join("shell-preferences.json"),
+            host_workspace_connections_path: root
+                .join("config")
+                .join("shell-workspace-connections.json"),
+            host_default_preferences: default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
+            backend_connection: DesktopBackendConnection {
+                base_url: Some("http://127.0.0.1:43127".into()),
+                auth_token: Some("desktop-test-token".into()),
+                state: "ready".into(),
+                transport: "http".into(),
+            },
+        }
+    }
+
+    async fn bootstrap_owner(state: &ServerState) -> SessionRecord {
+        state
+            .services
+            .auth
+            .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                display_name: "Owner".into(),
+                password: "password123".into(),
+                confirm_password: "password123".into(),
+                avatar: avatar_payload(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+            })
+            .await
+            .expect("bootstrap admin")
+            .session
+    }
+
+    #[tokio::test]
+    async fn access_experience_reports_progressive_summary_and_section_grants() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.member-operator".into(),
+                name: "Member Operator".into(),
+                description: "Custom access role".into(),
+                status: "active".into(),
+                permission_codes: vec!["access.users.read".into()],
+            })
+            .await
+            .expect("create custom role");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "confidential".into(),
+                subject_type: "user".into(),
+                subject_id: session.user_id.clone(),
+                resource_type: "resource".into(),
+                scope_type: "tag-match".into(),
+                project_ids: Vec::new(),
+                tags: vec!["confidential".into()],
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create data policy");
+        state
+            .services
+            .access_control
+            .upsert_menu_policy(
+                "menu-workspace-access-control-users",
+                MenuPolicyUpsertRequest {
+                    enabled: true,
+                    order: 210,
+                    group: None,
+                    visibility: "hidden".into(),
+                },
+            )
+            .await
+            .expect("hide access users menu");
+
+        let Json(payload) = get_access_experience(
+            State(state.clone()),
+            auth_headers(&session.token),
+        )
+        .await
+        .expect("access experience");
+
+        assert_eq!(payload.summary.experience_level, "enterprise");
+        assert_eq!(payload.summary.member_count, 1);
+        assert!(payload.summary.has_custom_roles);
+        assert!(payload.summary.has_advanced_policies);
+        assert!(payload.summary.has_menu_governance);
+        assert_eq!(payload.summary.recommended_landing_section, "access");
+        assert_eq!(payload.counts.custom_role_count, 1);
+        assert_eq!(payload.counts.data_policy_count, 1);
+        assert_eq!(payload.counts.menu_policy_count, 1);
+        assert_eq!(payload.role_templates.len(), 5);
+        assert_eq!(payload.role_presets.len(), 5);
+        assert_eq!(payload.capability_bundles.len(), 5);
+        assert!(
+            payload
+                .section_grants
+                .iter()
+                .any(|grant| grant.section == "members" && grant.allowed),
+            "section grants should not be removed by hidden menu policy"
+        );
+        assert!(
+            payload
+                .section_grants
+                .iter()
+                .any(|grant| grant.section == "governance" && grant.allowed),
+            "owner should retain governance access"
+        );
+    }
+
+    #[tokio::test]
+    async fn access_experience_recommends_access_for_personal_workspaces() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        let Json(payload) = get_access_experience(
+            State(state.clone()),
+            auth_headers(&session.token),
+        )
+        .await
+        .expect("access experience");
+
+        assert_eq!(payload.summary.experience_level, "personal");
+        assert_eq!(payload.summary.member_count, 1);
+        assert_eq!(payload.summary.recommended_landing_section, "access");
+    }
+
+    #[tokio::test]
+    async fn access_experience_recommends_members_for_team_workspaces() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "member".into(),
+                display_name: "Member".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create member");
+
+        let Json(payload) = get_access_experience(
+            State(state.clone()),
+            auth_headers(&session.token),
+        )
+        .await
+        .expect("access experience");
+
+        assert_eq!(payload.summary.experience_level, "team");
+        assert_eq!(payload.summary.member_count, 2);
+        assert_eq!(payload.summary.recommended_landing_section, "members");
+    }
+
+    #[tokio::test]
+    async fn access_experience_recommends_governance_for_governance_only_enterprise_workspaces() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let owner = bootstrap_owner(&state).await;
+
+        let governance_user = state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "auditor".into(),
+                display_name: "Auditor".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create governance user");
+
+        let governance_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.governance-reader".into(),
+                name: "Governance Reader".into(),
+                description: "Read governance only".into(),
+                status: "active".into(),
+                permission_codes: vec!["access.org.read".into(), "audit.read".into()],
+            })
+            .await
+            .expect("create governance role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: governance_role.id,
+                subject_type: "user".into(),
+                subject_id: governance_user.id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind governance role");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "owner-confidential".into(),
+                subject_type: "user".into(),
+                subject_id: owner.user_id.clone(),
+                resource_type: "resource".into(),
+                scope_type: "tag-match".into(),
+                project_ids: Vec::new(),
+                tags: vec!["confidential".into()],
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create enterprise signal");
+
+        let governance_session = state
+            .services
+            .auth
+            .login(LoginRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "auditor".into(),
+                password: "password123".into(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+            })
+            .await
+            .expect("login governance user")
+            .session;
+
+        let Json(payload) = get_access_experience(
+            State(state.clone()),
+            auth_headers(&governance_session.token),
+        )
+        .await
+        .expect("access experience");
+
+        assert_eq!(payload.summary.experience_level, "enterprise");
+        assert_eq!(payload.summary.recommended_landing_section, "governance");
+        assert!(
+            payload
+                .section_grants
+                .iter()
+                .any(|grant| grant.section == "governance" && grant.allowed)
+        );
+        assert!(
+            payload
+                .section_grants
+                .iter()
+                .all(|grant| grant.section == "governance" || !grant.allowed)
+        );
+    }
+
+    #[tokio::test]
+    async fn access_experience_does_not_grant_access_without_member_directory_read() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let owner = bootstrap_owner(&state).await;
+
+        let access_user = state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "role-reader".into(),
+                display_name: "Role Reader".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create role reader");
+
+        let access_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.role-reader".into(),
+                name: "Role Reader".into(),
+                description: "Read access roles only".into(),
+                status: "active".into(),
+                permission_codes: vec!["access.roles.read".into()],
+            })
+            .await
+            .expect("create role reader role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: access_role.id,
+                subject_type: "user".into(),
+                subject_id: access_user.id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind role reader role");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "owner confidential".into(),
+                subject_type: "user".into(),
+                subject_id: owner.user_id,
+                resource_type: "resource".into(),
+                scope_type: "tag-match".into(),
+                project_ids: Vec::new(),
+                tags: vec!["confidential".into()],
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create governance signal");
+
+        let access_session = state
+            .services
+            .auth
+            .login(LoginRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "role-reader".into(),
+                password: "password123".into(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+            })
+            .await
+            .expect("login role reader")
+            .session;
+
+        let Json(payload) = get_access_experience(
+            State(state.clone()),
+            auth_headers(&access_session.token),
+        )
+        .await
+        .expect("access experience");
+
+        assert!(
+            payload
+                .section_grants
+                .iter()
+                .any(|grant| grant.section == "access" && !grant.allowed)
+        );
+    }
+
+    #[tokio::test]
+    async fn access_members_lists_progressive_member_summaries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        let member = state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "member".into(),
+                display_name: "Member".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create member");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: "system.member".into(),
+                subject_type: "user".into(),
+                subject_id: member.id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind member role");
+
+        let Json(payload) = list_access_members(
+            State(state.clone()),
+            auth_headers(&session.token),
+        )
+        .await
+        .expect("list access members");
+
+        let member_summary = payload
+            .iter()
+            .find(|record| record.user.id == member.id)
+            .expect("member summary");
+        assert_eq!(member_summary.primary_preset_code, Some("member".into()));
+        assert_eq!(member_summary.primary_preset_name, "Member");
+        assert!(
+            member_summary
+                .effective_role_names
+                .iter()
+                .any(|name| name == "Member")
+        );
+
+        let unassigned_member = state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "unassigned".into(),
+                display_name: "Unassigned".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create unassigned member");
+
+        let Json(unassigned_payload) = list_access_members(
+            State(state.clone()),
+            auth_headers(&session.token),
+        )
+        .await
+        .expect("list access members");
+
+        let unassigned_summary = unassigned_payload
+            .iter()
+            .find(|record| record.user.id == unassigned_member.id)
+            .expect("unassigned summary");
+        assert_eq!(unassigned_summary.primary_preset_code, None);
+        assert_eq!(unassigned_summary.primary_preset_name, "No preset assigned");
+    }
+
+    #[tokio::test]
+    async fn update_access_user_preset_replaces_direct_system_bindings_and_preserves_other_access() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        let member = state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: "operator".into(),
+                display_name: "Operator".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create operator");
+        let custom_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.member-helper".into(),
+                name: "Member Helper".into(),
+                description: "custom role".into(),
+                status: "active".into(),
+                permission_codes: vec!["access.users.read".into()],
+            })
+            .await
+            .expect("create custom role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: "system.viewer".into(),
+                subject_type: "user".into(),
+                subject_id: member.id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind viewer");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: custom_role.id.clone(),
+                subject_type: "user".into(),
+                subject_id: member.id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind custom role");
+
+        let Json(summary) = update_access_user_preset(
+            State(state.clone()),
+            auth_headers(&session.token),
+            Path(member.id.clone()),
+            Json(AccessUserPresetUpdateRequest {
+                preset_code: "admin".into(),
+            }),
+        )
+        .await
+        .expect("update preset");
+
+        assert_eq!(summary.user.id, member.id);
+        assert_eq!(summary.primary_preset_name, "Mixed access");
+        assert!(summary.effective_role_names.iter().any(|name| name == "Admin"));
+        assert!(
+            summary
+                .effective_role_names
+                .iter()
+                .any(|name| name == "Member Helper")
+        );
+    }
 }

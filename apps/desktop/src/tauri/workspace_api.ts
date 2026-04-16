@@ -1,9 +1,12 @@
 import type {
+  AccessExperienceResponse,
+  AccessMemberSummary,
   AccessAuditListResponse,
   AccessAuditQuery,
   AccessSessionRecord,
   AccessRoleRecord,
   AccessUserRecord,
+  AccessUserPresetUpdateRequest,
   AgentRecord,
   AutomationRecord,
   AuthorizationSnapshot,
@@ -1033,6 +1036,26 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           },
         ) as AuthorizationSnapshot
       },
+      async getAccessExperience() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/experience',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as AccessExperienceResponse
+      },
+      async listMembers() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/members',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as AccessMemberSummary[]
+      },
       async listAudit(query: AccessAuditQuery = {}) {
         return await fetchWorkspaceOpenApi(
           context.connection,
@@ -1094,6 +1117,20 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users', 'get', {
           session: assertWorkspaceRequestReady(context),
         }) as AccessUserRecord[]
+      },
+      async updateUserPreset(userId, record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/users/{userId}/preset',
+          'put',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              userId,
+            },
+            body: JSON.stringify(record satisfies AccessUserPresetUpdateRequest),
+          },
+        ) as AccessMemberSummary
       },
       async createUser(record) {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users', 'post', {

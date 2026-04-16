@@ -110,6 +110,41 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).not.toContain('compactionMetadata?:')
   })
 
+  it('keeps the progressive access experience transport contract in generated and exported schema surfaces', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+    const accessControlSchema = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/access-control.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('export interface AccessExperienceResponse')
+    expect(generated).toContain('export interface AccessExperienceSummary')
+    expect(generated).toContain('export interface AccessSectionGrant')
+    expect(generated).toContain('export interface AccessRoleTemplate')
+    expect(generated).toContain('export interface AccessRolePreset')
+    expect(generated).toContain('export interface AccessCapabilityBundle')
+    expect(generated).toContain('source: AccessRoleSource')
+    expect(generated).toContain('export type AccessRoleSource = "system" | "custom"')
+    expect(generated).toContain('editable: boolean')
+    expect(generated).toContain('"/api/v1/access/experience": {')
+    expect(generated).toContain('operationId: "getAccessExperience"')
+    expect(generated).toContain('export interface AccessMemberSummary')
+    expect(generated).toContain('primaryPresetCode: string | null')
+    expect(generated).toContain('export interface AccessUserPresetUpdateRequest')
+    expect(generated).toContain('"/api/v1/access/members": {')
+    expect(generated).toContain('operationId: "listAccessMembers"')
+    expect(generated).toContain('"/api/v1/access/users/{userId}/preset": {')
+    expect(generated).toContain('operationId: "updateAccessUserPreset"')
+
+    expect(accessControlSchema).toContain('AccessExperienceResponse as OpenApiAccessExperienceResponse')
+    expect(accessControlSchema).toContain('export type AccessExperienceResponse = OpenApiAccessExperienceResponse')
+    expect(accessControlSchema).toContain('AccessMemberSummary as OpenApiAccessMemberSummary')
+    expect(accessControlSchema).toContain('AccessUserPresetUpdateRequest as OpenApiAccessUserPresetUpdateRequest')
+  })
+
   it('uses generated OpenAPI paths for host requests', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,

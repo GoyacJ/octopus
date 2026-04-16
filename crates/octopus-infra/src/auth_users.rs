@@ -901,8 +901,12 @@ impl AuthService for InfraAuthService {
         .map_err(|error| AppError::database(error.to_string()))?;
         db.execute(
             "INSERT OR REPLACE INTO role_bindings (id, role_id, subject_type, subject_id, effect)
-             VALUES (?1, 'owner', 'user', ?2, 'allow')",
-            params![format!("binding-user-{user_id}-owner"), user_id],
+             VALUES (?1, ?2, 'user', ?3, 'allow')",
+            params![
+                format!("binding-user-{user_id}-system-owner"),
+                SYSTEM_OWNER_ROLE_ID,
+                user_id
+            ],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
         self.adopt_bootstrap_projects(&db, &user_id)?;
@@ -1684,10 +1688,11 @@ mod tests {
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let db = bundle.auth.state.open_db().expect("db");
         db.execute(
-            "UPDATE access_roles SET permission_codes = ?1 WHERE id = 'owner'",
+            "UPDATE access_roles SET permission_codes = ?1 WHERE id = ?2",
             params![
                 serde_json::to_string(&vec!["runtime.session.read", "custom.permission",])
-                    .expect("owner permissions json")
+                    .expect("owner permissions json"),
+                SYSTEM_OWNER_ROLE_ID,
             ],
         )
         .expect("downgrade owner role");
@@ -1696,8 +1701,8 @@ mod tests {
 
         let permission_codes_raw: String = db
             .query_row(
-                "SELECT permission_codes FROM access_roles WHERE id = 'owner'",
-                [],
+                "SELECT permission_codes FROM access_roles WHERE id = ?1",
+                params![SYSTEM_OWNER_ROLE_ID],
                 |row| row.get::<_, String>(0),
             )
             .expect("load owner role permissions");
@@ -1725,9 +1730,12 @@ mod tests {
         let _owner_session = bootstrap_admin(&bundle);
         let db = bundle.auth.state.open_db().expect("db");
         db.execute(
-            "UPDATE access_roles SET permission_codes = ?1 WHERE id = 'owner'",
-            params![serde_json::to_string(&vec!["runtime.session.read"])
-                .expect("legacy owner permissions json")],
+            "UPDATE access_roles SET permission_codes = ?1 WHERE id = ?2",
+            params![
+                serde_json::to_string(&vec!["runtime.session.read"])
+                    .expect("legacy owner permissions json"),
+                SYSTEM_OWNER_ROLE_ID
+            ],
         )
         .expect("downgrade owner role");
         drop(db);
@@ -1737,8 +1745,8 @@ mod tests {
         let reloaded_db = reloaded_bundle.auth.state.open_db().expect("reloaded db");
         let permission_codes_raw: String = reloaded_db
             .query_row(
-                "SELECT permission_codes FROM access_roles WHERE id = 'owner'",
-                [],
+                "SELECT permission_codes FROM access_roles WHERE id = ?1",
+                params![SYSTEM_OWNER_ROLE_ID],
                 |row| row.get::<_, String>(0),
             )
             .expect("load reloaded owner role permissions");

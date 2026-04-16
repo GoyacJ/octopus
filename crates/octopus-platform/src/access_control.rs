@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AccessRoleRecord, AccessUserRecord, AccessUserUpsertRequest, AppError, DataPolicyRecord,
+    AccessExperienceSnapshot, AccessMemberSummary, AccessRoleRecord, AccessUserRecord,
+    AccessUserPresetUpdateRequest, AccessUserUpsertRequest, AppError, DataPolicyRecord,
     DataPolicyUpsertRequest, MenuPolicyRecord, MenuPolicyUpsertRequest, OrgUnitRecord,
     OrgUnitUpsertRequest, PositionRecord, PositionUpsertRequest, ProtectedResourceDescriptor,
     ProtectedResourceMetadataUpsertRequest, ResourcePolicyRecord, ResourcePolicyUpsertRequest,
@@ -11,6 +12,13 @@ use octopus_core::{
 #[async_trait]
 pub trait AccessControlService: Send + Sync {
     async fn list_users(&self) -> Result<Vec<AccessUserRecord>, AppError>;
+    async fn get_experience_snapshot(&self) -> Result<AccessExperienceSnapshot, AppError>;
+    async fn list_member_summaries(&self) -> Result<Vec<AccessMemberSummary>, AppError>;
+    async fn assign_user_preset(
+        &self,
+        user_id: &str,
+        request: AccessUserPresetUpdateRequest,
+    ) -> Result<AccessMemberSummary, AppError>;
     async fn create_user(
         &self,
         request: AccessUserUpsertRequest,

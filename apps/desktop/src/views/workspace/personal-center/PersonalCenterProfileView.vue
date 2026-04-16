@@ -245,7 +245,7 @@ function clearAvatar() {
   profileSuccessMessage.value = ''
 }
 
-function navigateToAccessTab(name: 'workspace-access-control-roles' | 'workspace-access-control-policies' | 'workspace-access-control-menus') {
+function navigateToAccessTab(name: 'workspace-access-control-access' | 'workspace-access-control-governance') {
   const workspaceId = typeof route.params.workspaceId === 'string'
     ? route.params.workspaceId
     : (userProfileStore.workspaceId || workspaceStore.currentWorkspaceId)
@@ -323,7 +323,7 @@ function navigateToAccessTab(name: 'workspace-access-control-roles' | 'workspace
               variant="ghost"
               size="sm"
               data-testid="profile-access-roles-link"
-              @click="navigateToAccessTab('workspace-access-control-roles')"
+              @click="navigateToAccessTab('workspace-access-control-access')"
             >
               {{ t('personalCenter.profile.access.openRoles') }}
             </UiButton>
@@ -353,7 +353,7 @@ function navigateToAccessTab(name: 'workspace-access-control-roles' | 'workspace
               variant="ghost"
               size="sm"
               data-testid="profile-access-permissions-link"
-              @click="navigateToAccessTab('workspace-access-control-policies')"
+              @click="navigateToAccessTab('workspace-access-control-governance')"
             >
               {{ t('personalCenter.profile.access.openPermissions') }}
             </UiButton>
@@ -383,7 +383,7 @@ function navigateToAccessTab(name: 'workspace-access-control-roles' | 'workspace
               variant="ghost"
               size="sm"
               data-testid="profile-access-menus-link"
-              @click="navigateToAccessTab('workspace-access-control-menus')"
+              @click="navigateToAccessTab('workspace-access-control-governance')"
             >
               {{ t('personalCenter.profile.access.openMenus') }}
             </UiButton>

@@ -202,13 +202,9 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     routeName: 'workspace-access-control',
     routeNames: [
       'workspace-access-control',
-      'workspace-access-control-users',
-      'workspace-access-control-org',
-      'workspace-access-control-roles',
-      'workspace-access-control-policies',
-      'workspace-access-control-menus',
-      'workspace-access-control-resources',
-      'workspace-access-control-sessions',
+      'workspace-access-control-members',
+      'workspace-access-control-access',
+      'workspace-access-control-governance',
     ],
     defaultLabel: '访问控制',
     labelKey: 'sidebar.navigation.accessControl',
@@ -287,90 +283,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     icon: 'tools',
     order: 160,
   },
-  {
-    id: 'menu-workspace-access-control-users',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-users',
-    routeNames: ['workspace-access-control-users'],
-    defaultLabel: '用户管理',
-    labelKey: 'accessControl.nav.users',
-    icon: 'users',
-    order: 170,
-  },
-  {
-    id: 'menu-workspace-access-control-org',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-org',
-    routeNames: ['workspace-access-control-org'],
-    defaultLabel: '组织管理',
-    labelKey: 'accessControl.nav.org',
-    icon: 'organization',
-    order: 180,
-  },
-  {
-    id: 'menu-workspace-access-control-roles',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-roles',
-    routeNames: ['workspace-access-control-roles'],
-    defaultLabel: '角色管理',
-    labelKey: 'accessControl.nav.roles',
-    icon: 'roles',
-    order: 190,
-  },
-  {
-    id: 'menu-workspace-access-control-policies',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-policies',
-    routeNames: ['workspace-access-control-policies'],
-    defaultLabel: '权限与策略',
-    labelKey: 'accessControl.nav.policies',
-    icon: 'policy',
-    order: 200,
-  },
-  {
-    id: 'menu-workspace-access-control-menus',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-menus',
-    routeNames: ['workspace-access-control-menus'],
-    defaultLabel: '菜单管理',
-    labelKey: 'accessControl.nav.menus',
-    icon: 'menus',
-    order: 210,
-  },
-  {
-    id: 'menu-workspace-access-control-resources',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-resources',
-    routeNames: ['workspace-access-control-resources'],
-    defaultLabel: '资源授权',
-    labelKey: 'accessControl.nav.resources',
-    icon: 'resource-policy',
-    order: 220,
-  },
-  {
-    id: 'menu-workspace-access-control-sessions',
-    parentId: 'menu-workspace-access-control',
-    source: 'access-control',
-    section: 'access-control',
-    routeName: 'workspace-access-control-sessions',
-    routeNames: ['workspace-access-control-sessions'],
-    defaultLabel: '会话与审计',
-    labelKey: 'accessControl.nav.sessions',
-    icon: 'sessions',
-    order: 230,
-  },
 ]
 
 const MENU_DEFINITION_MAP = new Map(MENU_DEFINITIONS.map((item) => [item.id, item]))
@@ -381,10 +293,6 @@ export const MAIN_MENU_IDS = MENU_DEFINITIONS
 
 export const CONSOLE_MENU_IDS = MENU_DEFINITIONS
   .filter((item) => item.section === 'console')
-  .map((item) => item.id)
-
-export const ACCESS_CONTROL_MENU_IDS = MENU_DEFINITIONS
-  .filter((item) => item.section === 'access-control')
   .map((item) => item.id)
 
 export function getMenuDefinition(menuId: string): MenuDefinition | undefined {

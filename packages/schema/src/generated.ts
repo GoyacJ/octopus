@@ -1,23 +1,99 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 81870f2a5a0a3651322e9114cd4e8f05d74726af7ea7fbe47b3d159de88e48c6
+// Source hash: 8f9de092f6fe4b5591692370fda6a88076acd286b908fca5c17f9066e908d7ab
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "81870f2a5a0a3651322e9114cd4e8f05d74726af7ea7fbe47b3d159de88e48c6"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "8f9de092f6fe4b5591692370fda6a88076acd286b908fca5c17f9066e908d7ab"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
   nextCursor?: string
 }
 
+export interface AccessCapabilityBundle {
+  code: string
+  description: string
+  name: string
+  permissionCodes: string[]
+}
+
+export interface AccessExperienceCounts {
+  auditEventCount: number
+  customRoleCount: number
+  dataPolicyCount: number
+  menuPolicyCount: number
+  orgUnitCount: number
+  protectedResourceCount: number
+  resourcePolicyCount: number
+  sessionCount: number
+}
+
+export type AccessExperienceLevel = "personal" | "team" | "enterprise"
+
+export interface AccessExperienceResponse {
+  capabilityBundles: AccessCapabilityBundle[]
+  counts: AccessExperienceCounts
+  rolePresets: AccessRolePreset[]
+  roleTemplates: AccessRoleTemplate[]
+  sectionGrants: AccessSectionGrant[]
+  summary: AccessExperienceSummary
+}
+
+export interface AccessExperienceSummary {
+  experienceLevel: AccessExperienceLevel
+  hasAdvancedPolicies: boolean
+  hasCustomRoles: boolean
+  hasMenuGovernance: boolean
+  hasOrgStructure: boolean
+  hasResourceGovernance: boolean
+  memberCount: number
+  recommendedLandingSection: AccessSectionCode
+}
+
+export interface AccessMemberSummary {
+  effectiveRoleNames: string[]
+  hasOrgAssignments: boolean
+  primaryPresetCode: string | null
+  primaryPresetName: string
+  user: AccessUserRecord
+}
+
+export interface AccessRolePreset {
+  capabilityBundleCodes: string[]
+  code: string
+  description: string
+  name: string
+  recommendedFor: string
+  templateCodes: string[]
+}
+
 export interface AccessRoleRecord {
   code: string
   description: string
+  editable: boolean
   id: string
   name: string
   permissionCodes: string[]
+  source: AccessRoleSource
   status: string
+}
+
+export type AccessRoleSource = "system" | "custom"
+
+export interface AccessRoleTemplate {
+  code: string
+  description: string
+  editable: boolean
+  managedRoleCodes: string[]
+  name: string
+}
+
+export type AccessSectionCode = "members" | "access" | "governance"
+
+export interface AccessSectionGrant {
+  allowed: boolean
+  section: AccessSectionCode
 }
 
 export interface AccessSessionRecord {
@@ -30,6 +106,10 @@ export interface AccessSessionRecord {
   status: string
   userId: string
   username: string
+}
+
+export interface AccessUserPresetUpdateRequest {
+  presetCode: string
 }
 
 export interface AccessUserRecord {
@@ -324,7 +404,7 @@ export interface CapabilityAssetManifest {
   ownerId?: string
   ownerLabel?: string
   ownerScope?: string
-  requiredPermission: string
+  requiredPermission: string | null
   sourceKey: string
   sourceKinds: CapabilitySourceKind[]
   state: CapabilityAssetState
@@ -365,7 +445,7 @@ export interface CapabilityManagementEntry {
   ownerLabel?: string
   ownerScope?: string
   relativePath?: string
-  requiredPermission: string
+  requiredPermission: string | null
   resourceUri?: string
   scope?: string
   serverName?: string
@@ -2771,6 +2851,12 @@ export interface OctopusApiPaths {
   "/api/v1/access/authorization/current": {
     get: { operationId: "getCurrentAuthorization"; response: AuthorizationSnapshot; error: ApiErrorEnvelope }
   }
+  "/api/v1/access/experience": {
+    get: { operationId: "getAccessExperience"; response: AccessExperienceResponse; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/members": {
+    get: { operationId: "listAccessMembers"; response: AccessMemberSummary[]; error: ApiErrorEnvelope }
+  }
   "/api/v1/access/menus/definitions": {
     get: { operationId: "listAccessMenuDefinitions"; response: MenuDefinition[]; error: ApiErrorEnvelope }
   }
@@ -2876,6 +2962,9 @@ export interface OctopusApiPaths {
   "/api/v1/access/users/{userId}": {
     put: { operationId: "updateAccessUser"; response: AccessUserRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteAccessUser"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/users/{userId}/preset": {
+    put: { operationId: "updateAccessUserPreset"; response: AccessMemberSummary; error: ApiErrorEnvelope }
   }
   "/api/v1/access/users/{userId}/sessions/revoke": {
     post: { operationId: "revokeAccessUserSessions"; response: void; error: ApiErrorEnvelope }

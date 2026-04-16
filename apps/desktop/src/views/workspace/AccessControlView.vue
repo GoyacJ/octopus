@@ -5,10 +5,17 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
-import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
+
+type AccessSectionTab = 'members' | 'access' | 'governance'
+
+const SECTION_ROUTE_NAME: Record<AccessSectionTab, string> = {
+  members: 'workspace-access-control-members',
+  access: 'workspace-access-control-access',
+  governance: 'workspace-access-control-governance',
+}
 
 const { t } = useI18n()
 const route = useRoute()
@@ -17,28 +24,48 @@ const shellStore = useShellStore()
 const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
 
-const activeTab = ref('')
-const currentMenuId = computed(() => getRouteMenuId(typeof route.name === 'string' ? route.name : undefined))
+const activeSection = ref<AccessSectionTab>('members')
+
+const tabs = computed(() => ([
+  {
+    value: 'members',
+    label: t('accessControl.sections.members.label'),
+  },
+  {
+    value: 'access',
+    label: t('accessControl.sections.access.label'),
+  },
+  {
+    value: 'governance',
+    label: t('accessControl.sections.governance.label'),
+  },
+]))
+
+const headerDescription = computed(() => {
+  switch (workspaceAccessControlStore.experienceSummary?.experienceLevel) {
+    case 'personal':
+      return t('accessControl.header.personalDescription')
+    case 'enterprise':
+      return t('accessControl.header.enterpriseDescription')
+    default:
+      return t('accessControl.header.teamDescription')
+  }
+})
 
 watch(
-  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessControlStore.availableAccessControlMenus.map(menu => menu.id).join('|')],
+  () => route.name,
   () => {
-    if (route.name === 'workspace-access-control') {
-      const firstRouteName = workspaceAccessControlStore.firstAccessibleAccessControlRouteName
-      if (firstRouteName) {
-        const menuId = getRouteMenuId(firstRouteName)
-        if (menuId) {
-          activeTab.value = menuId
-          void router.replace({
-            name: firstRouteName,
-            params: { workspaceId: workspaceStore.currentWorkspaceId },
-          })
-        }
-      }
-      return
+    switch (route.name) {
+      case 'workspace-access-control-access':
+        activeSection.value = 'access'
+        break
+      case 'workspace-access-control-governance':
+        activeSection.value = 'governance'
+        break
+      default:
+        activeSection.value = 'members'
+        break
     }
-
-    activeTab.value = currentMenuId.value ?? ''
   },
   { immediate: true },
 )
@@ -50,35 +77,28 @@ watch(
       return
     }
 
-    await workspaceAccessControlStore.loadAdminData(workspaceConnectionId)
+    if (routeName === 'workspace-access-control-governance') {
+      await workspaceAccessControlStore.loadGovernanceData(workspaceConnectionId)
+      return
+    }
+
+    if (routeName === 'workspace-access-control-members' || routeName === 'workspace-access-control-access') {
+      await workspaceAccessControlStore.loadMembersData(workspaceConnectionId)
+      return
+    }
+
+    await workspaceAccessControlStore.loadExperience(workspaceConnectionId)
   },
   { immediate: true },
 )
 
-const tabs = computed(() =>
-  workspaceAccessControlStore.availableAccessControlMenus
-    .flatMap((menu) => {
-      const definition = getMenuDefinition(menu.id)
-      if (!definition?.routeName) {
-        return []
-      }
-
-      return [{
-        value: menu.id,
-        label: t(definition.labelKey),
-      }]
-    }),
-)
-
-function handleTabChange(menuId: string) {
-  const entry = workspaceAccessControlStore.availableAccessControlMenus.find(menu => menu.id === menuId)
-  const definition = entry ? getMenuDefinition(entry.id) : undefined
-  if (!definition?.routeName) {
+function handleTabChange(section: string) {
+  if (!(section in SECTION_ROUTE_NAME)) {
     return
   }
 
   void router.push({
-    name: definition.routeName,
+    name: SECTION_ROUTE_NAME[section as AccessSectionTab],
     params: { workspaceId: workspaceStore.currentWorkspaceId },
   })
 }
@@ -89,14 +109,14 @@ function handleTabChange(menuId: string) {
     <UiPageHeader
       :eyebrow="t('accessControl.header.eyebrow')"
       :title="t('accessControl.header.title')"
-      :description="t('accessControl.header.description')"
+      :description="headerDescription"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">
       <UiTabs
-        v-model="activeTab"
+        v-model="activeSection"
         :tabs="tabs"
-        data-testid="access-control-tabs"
+        test-id="access-control-sections"
         @update:model-value="handleTabChange"
       />
     </UiPanelFrame>
