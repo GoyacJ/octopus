@@ -1,15 +1,177 @@
-/api/v1/artifacts:
+/api/v1/projects/{projectId}/deliverables:
   get:
-    operationId: listArtifacts
+    operationId: listProjectDeliverables
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
     responses:
       "200":
         content:
           application/json:
             schema:
               items:
-                $ref: "#/components/schemas/ArtifactRecord"
+                $ref: "#/components/schemas/DeliverableSummary"
               type: array
-        description: Artifact list payload.
+        description: Project deliverable list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/deliverables/{deliverableId}:
+  get:
+    operationId: getDeliverableDetail
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliverableDetail"
+        description: Deliverable detail payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/deliverables/{deliverableId}/versions:
+  get:
+    operationId: listDeliverableVersions
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/DeliverableVersionSummary"
+              type: array
+        description: Deliverable version list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createDeliverableVersion
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateDeliverableVersionInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliverableDetail"
+        description: Saved deliverable version payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/deliverables/{deliverableId}/versions/{version}:
+  get:
+    operationId: getDeliverableVersionContent
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: version
+        required: true
+        schema:
+          type: integer
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliverableVersionContent"
+        description: Deliverable version content payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/deliverables/{deliverableId}/promote:
+  post:
+    operationId: promoteDeliverable
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PromoteDeliverableInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeEntryRecord"
+        description: Deliverable promotion payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/deliverables/{deliverableId}/fork:
+  post:
+    operationId: forkDeliverableToConversation
+    parameters:
+      - in: path
+        name: deliverableId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ForkDeliverableInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationRecord"
+        description: Deliverable fork payload.
       default:
         content:
           application/json:

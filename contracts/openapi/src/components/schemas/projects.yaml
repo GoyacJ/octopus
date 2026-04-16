@@ -1,4 +1,72 @@
-ArtifactRecord:
+ArtifactVersionReference:
+  additionalProperties: false
+  properties:
+    artifactId:
+      type: string
+    contentType:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    version:
+      type: integer
+  required:
+    - artifactId
+    - version
+    - title
+    - previewKind
+    - updatedAt
+  type: object
+DeliverablePromotionState:
+  enum:
+    - not-promoted
+    - candidate
+    - promoted
+  type: string
+DeliverableSummary:
+  additionalProperties: false
+  properties:
+    contentType:
+      type: string
+    conversationId:
+      type: string
+    id:
+      type: string
+    latestVersion:
+      type: integer
+    latestVersionRef:
+      $ref: "#/components/schemas/ArtifactVersionReference"
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    projectId:
+      type: string
+    promotionState:
+      $ref: "#/components/schemas/DeliverablePromotionState"
+    status:
+      $ref: "#/components/schemas/ArtifactStatus"
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - projectId
+    - conversationId
+    - title
+    - status
+    - previewKind
+    - latestVersion
+    - latestVersionRef
+    - promotionState
+    - updatedAt
+  type: object
+DeliverableDetail:
   additionalProperties: false
   properties:
     byteSize:
@@ -7,15 +75,33 @@ ArtifactRecord:
       type: string
     contentType:
       type: string
+    conversationId:
+      type: string
     id:
       type: string
     latestVersion:
       type: integer
+    latestVersionRef:
+      $ref: "#/components/schemas/ArtifactVersionReference"
+    parentArtifactId:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
     projectId:
+      type: string
+    promotionKnowledgeId:
+      type: string
+    promotionState:
+      $ref: "#/components/schemas/DeliverablePromotionState"
+    runId:
+      type: string
+    sessionId:
       type: string
     status:
       $ref: "#/components/schemas/ArtifactStatus"
     storagePath:
+      type: string
+    sourceMessageId:
       type: string
     title:
       type: string
@@ -26,10 +112,116 @@ ArtifactRecord:
   required:
     - id
     - workspaceId
+    - projectId
+    - conversationId
+    - sessionId
+    - runId
     - title
     - status
+    - previewKind
     - latestVersion
+    - latestVersionRef
+    - promotionState
     - updatedAt
+  type: object
+DeliverableVersionSummary:
+  additionalProperties: false
+  properties:
+    artifactId:
+      type: string
+    byteSize:
+      type: integer
+    contentHash:
+      type: string
+    contentType:
+      type: string
+    parentVersion:
+      type: integer
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    runId:
+      type: string
+    sessionId:
+      type: string
+    sourceMessageId:
+      type: string
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    version:
+      type: integer
+  required:
+    - artifactId
+    - version
+    - title
+    - previewKind
+    - updatedAt
+  type: object
+DeliverableVersionContent:
+  additionalProperties: false
+  properties:
+    artifactId:
+      type: string
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    editable:
+      type: boolean
+    fileName:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    textContent:
+      type: string
+    version:
+      type: integer
+  required:
+    - artifactId
+    - version
+    - previewKind
+    - editable
+  type: object
+CreateDeliverableVersionInput:
+  additionalProperties: false
+  properties:
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    parentVersion:
+      type: integer
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    sourceMessageId:
+      type: string
+    textContent:
+      type: string
+    title:
+      type: string
+  required:
+    - previewKind
+  type: object
+PromoteDeliverableInput:
+  additionalProperties: false
+  properties:
+    kind:
+      $ref: "#/components/schemas/KnowledgeKind"
+    summary:
+      type: string
+    title:
+      type: string
+  type: object
+ForkDeliverableInput:
+  additionalProperties: false
+  properties:
+    projectId:
+      type: string
+    title:
+      type: string
   type: object
 CreateProjectRequest:
   additionalProperties: false

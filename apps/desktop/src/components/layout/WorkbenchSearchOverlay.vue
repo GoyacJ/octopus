@@ -2,10 +2,10 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Blocks, FolderKanban, MessageSquare, Search, Waypoints } from 'lucide-vue-next'
+import { Blocks, FileText, FolderKanban, MessageSquare, Search, Waypoints } from 'lucide-vue-next'
 import type { RouteLocationRaw } from 'vue-router'
 
-import type { ConversationRecord } from '@octopus/schema'
+import type { ConversationRecord, DeliverableSummary } from '@octopus/schema'
 import { UiButton, UiDialog, UiInput, UiPanelFrame } from '@octopus/ui'
 
 import {
@@ -14,11 +14,13 @@ import {
   createWorkspaceConsoleSurfaceTarget,
   createWorkspaceOverviewTarget,
 } from '@/i18n/navigation'
+import { enumLabel } from '@/i18n/copy'
+import { useArtifactStore } from '@/stores/artifact'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
 
-type SearchResultKind = 'conversation' | 'project' | 'workspace' | 'navigation'
+type SearchResultKind = 'conversation' | 'deliverable' | 'project' | 'workspace' | 'navigation'
 
 interface SearchResult {
   id: string
@@ -27,6 +29,7 @@ interface SearchResult {
   section: string
   kind: SearchResultKind
   to: RouteLocationRaw
+  keywords?: string[]
 }
 
 const { t } = useI18n()
@@ -34,6 +37,7 @@ const router = useRouter()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
 const runtime = useRuntimeStore()
+const artifactStore = useArtifactStore()
 
 const query = ref('')
 const searchInput = ref<{ focus: () => void } | null>(null)
@@ -52,6 +56,29 @@ function buildConversationResult(
       conversation.projectId,
       conversation.id,
     ),
+    keywords: ['conversation', 'session'],
+  }
+}
+
+function buildDeliverableResult(
+  deliverable: Pick<DeliverableSummary, 'id' | 'title' | 'latestVersion' | 'promotionState' | 'workspaceId' | 'projectId'>,
+): SearchResult {
+  return {
+    id: `deliverable:${deliverable.id}`,
+    title: deliverable.title,
+    subtitle: t('projectDashboard.sections.deliverables.meta', {
+      version: deliverable.latestVersion,
+      state: enumLabel('deliverablePromotionState', deliverable.promotionState),
+    }),
+    section: t('searchOverlay.sections.deliverables'),
+    kind: 'deliverable',
+    to: {
+      ...createProjectSurfaceTarget('project-deliverables', deliverable.workspaceId, deliverable.projectId),
+      query: {
+        deliverable: deliverable.id,
+      },
+    },
+    keywords: ['deliverable', 'deliverables', 'artifact', 'artifacts', deliverable.id],
   }
 }
 
@@ -74,13 +101,17 @@ const results = computed<SearchResult[]>(() => {
       id: `conversation:${session.id}`,
       title: session.title,
       subtitle: session.lastMessagePreview ?? session.status,
-      section: t('searchOverlay.sections.conversations'),
-      kind: 'conversation',
-      to: createProjectConversationTarget(workspaceId, session.projectId, session.conversationId),
-    })
+        section: t('searchOverlay.sections.conversations'),
+        kind: 'conversation',
+        to: createProjectConversationTarget(workspaceId, session.projectId, session.conversationId),
+        keywords: ['conversation', 'session'],
+      })
   }
 
   const conversations = [...conversationResults.values()]
+  const deliverables = projectId
+    ? artifactStore.activeProjectDeliverables.map(buildDeliverableResult)
+    : []
 
   const projects: SearchResult[] = workspaceStore.projects.map((project) => ({
     id: `project:${project.id}`,
@@ -89,6 +120,7 @@ const results = computed<SearchResult[]>(() => {
     section: t('searchOverlay.sections.projects'),
     kind: 'project',
     to: createWorkspaceOverviewTarget(project.workspaceId, project.id),
+    keywords: ['project'],
   }))
 
   const workspaces: SearchResult[] = shell.workspaceConnections.map((connection) => ({
@@ -98,6 +130,7 @@ const results = computed<SearchResult[]>(() => {
     section: t('searchOverlay.sections.workspaces'),
     kind: 'workspace',
     to: createWorkspaceOverviewTarget(connection.workspaceId),
+    keywords: ['workspace'],
   }))
 
   const navigation: SearchResult[] = [
@@ -108,6 +141,18 @@ const results = computed<SearchResult[]>(() => {
       section: t('searchOverlay.sections.navigation'),
       kind: 'navigation',
       to: createWorkspaceOverviewTarget(workspaceId, projectId || undefined),
+      keywords: ['overview', 'dashboard', 'workspace'],
+    },
+    {
+      id: 'nav-deliverables',
+      title: t('sidebar.navigation.deliverables'),
+      subtitle: t('searchOverlay.navigation.deliverables'),
+      section: t('searchOverlay.sections.navigation'),
+      kind: 'navigation',
+      to: projectId
+        ? createProjectSurfaceTarget('project-deliverables', workspaceId, projectId)
+        : createWorkspaceOverviewTarget(workspaceId),
+      keywords: ['deliverable', 'deliverables', 'artifact', 'artifacts'],
     },
     {
       id: 'nav-resources',
@@ -118,6 +163,7 @@ const results = computed<SearchResult[]>(() => {
       to: projectId
         ? createProjectSurfaceTarget('project-resources', workspaceId, projectId)
         : createWorkspaceConsoleSurfaceTarget('workspace-console-resources', workspaceId),
+      keywords: ['resource', 'resources'],
     },
     {
       id: 'nav-knowledge',
@@ -128,19 +174,31 @@ const results = computed<SearchResult[]>(() => {
       to: projectId
         ? createProjectSurfaceTarget('project-knowledge', workspaceId, projectId)
         : createWorkspaceConsoleSurfaceTarget('workspace-console-knowledge', workspaceId),
+      keywords: ['knowledge'],
     },
   ]
 
-  const combined = [...conversations, ...projects, ...workspaces, ...navigation]
+  const combined = [...conversations, ...deliverables, ...projects, ...workspaces, ...navigation]
   const normalizedQuery = query.value.trim().toLowerCase()
   if (!normalizedQuery) {
     return combined.slice(0, 10)
   }
 
   return combined.filter(item =>
-    `${item.title} ${item.subtitle} ${item.section}`.toLowerCase().includes(normalizedQuery),
+    `${item.id} ${item.title} ${item.subtitle} ${item.section} ${(item.keywords ?? []).join(' ')}`.toLowerCase().includes(normalizedQuery),
   )
 })
+
+watch(
+  () => [shell.activeWorkspaceConnectionId, workspaceStore.currentProjectId] as const,
+  ([connectionId, projectId]) => {
+    if (!connectionId || !projectId) {
+      return
+    }
+    void artifactStore.loadProjectDeliverables(projectId)
+  },
+  { immediate: true },
+)
 
 watch(
   () => shell.searchOpen,
@@ -154,7 +212,10 @@ watch(
       await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId)
     }
     if (workspaceStore.currentProjectId) {
-      await workspaceStore.loadProjectDashboard(workspaceStore.currentProjectId)
+      await Promise.all([
+        workspaceStore.loadProjectDashboard(workspaceStore.currentProjectId),
+        artifactStore.loadProjectDeliverables(workspaceStore.currentProjectId),
+      ])
     }
     await runtime.bootstrap()
     await nextTick()
@@ -164,6 +225,7 @@ watch(
 
 function resultIcon(kind: SearchResultKind) {
   if (kind === 'conversation') return MessageSquare
+  if (kind === 'deliverable') return FileText
   if (kind === 'project') return FolderKanban
   if (kind === 'workspace') return Blocks
   return Waypoints

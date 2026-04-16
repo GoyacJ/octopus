@@ -1,4 +1,5 @@
 use super::*;
+use octopus_core::ArtifactVersionReference;
 use octopus_core::{
     default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments,
 };
@@ -325,6 +326,50 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               source_ref TEXT NOT NULL,
               updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS artifact_records (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              source_message_id TEXT,
+              parent_artifact_id TEXT,
+              title TEXT NOT NULL,
+              status TEXT NOT NULL,
+              preview_kind TEXT NOT NULL,
+              latest_version INTEGER NOT NULL,
+              promotion_state TEXT NOT NULL DEFAULT 'not-promoted',
+              promotion_knowledge_id TEXT,
+              updated_at INTEGER NOT NULL,
+              storage_path TEXT,
+              content_hash TEXT,
+              byte_size INTEGER,
+              content_type TEXT
+            );
+            CREATE TABLE IF NOT EXISTS artifact_versions (
+              artifact_id TEXT NOT NULL,
+              version INTEGER NOT NULL,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              session_id TEXT,
+              run_id TEXT,
+              source_message_id TEXT,
+              parent_version INTEGER,
+              title TEXT NOT NULL,
+              preview_kind TEXT NOT NULL,
+              updated_at INTEGER NOT NULL,
+              storage_path TEXT NOT NULL,
+              content_hash TEXT NOT NULL,
+              byte_size INTEGER NOT NULL DEFAULT 0,
+              content_type TEXT,
+              PRIMARY KEY (artifact_id, version)
+            );
+            CREATE INDEX IF NOT EXISTS artifact_records_project_updated_idx
+              ON artifact_records (project_id, updated_at DESC, id ASC);
+            CREATE INDEX IF NOT EXISTS artifact_versions_artifact_updated_idx
+              ON artifact_versions (artifact_id, version DESC);
             CREATE TABLE IF NOT EXISTS agents (
               id TEXT PRIMARY KEY,
               workspace_id TEXT NOT NULL,
@@ -3024,6 +3069,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let sessions = load_sessions(&connection)?;
     let resources = load_resources(&connection)?;
     let knowledge_records = load_knowledge_records(&connection)?;
+    let artifacts = load_artifact_records(&connection)?;
     let agents = load_agents(&connection)?;
     let project_agent_links = load_project_agent_links(&connection)?;
     let teams = load_teams(&connection)?;
@@ -3057,7 +3103,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         provider_credentials: Mutex::new(provider_credentials),
         tools: Mutex::new(tools),
         automations: Mutex::new(automations),
-        artifacts: Mutex::new(Vec::new()),
+        artifacts: Mutex::new(artifacts),
         inbox: Mutex::new(Vec::new()),
         trace_events: Mutex::new(trace_events),
         audit_records: Mutex::new(audit_records),
@@ -3711,6 +3757,52 @@ pub(super) fn load_knowledge_records(
                 source_type: row.get(10)?,
                 source_ref: row.get(11)?,
                 updated_at: row.get::<_, i64>(12)? as u64,
+            })
+        })
+        .map_err(|error| AppError::database(error.to_string()))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+pub(super) fn load_artifact_records(
+    connection: &Connection,
+) -> Result<Vec<ArtifactRecord>, AppError> {
+    let mut stmt = connection
+        .prepare(
+            "SELECT id, workspace_id, project_id, conversation_id, title, status, preview_kind,
+                    latest_version, promotion_state, updated_at, content_type
+             FROM artifact_records
+             ORDER BY updated_at DESC, id ASC",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let id = row.get::<_, String>(0)?;
+            let title = row.get::<_, String>(4)?;
+            let preview_kind = row.get::<_, String>(6)?;
+            let latest_version = row.get::<_, i64>(7)?.max(0) as u32;
+            let updated_at = row.get::<_, i64>(9)?.max(0) as u64;
+            let content_type = row.get::<_, Option<String>>(10)?;
+            Ok(ArtifactRecord {
+                id: id.clone(),
+                workspace_id: row.get(1)?,
+                project_id: row.get(2)?,
+                conversation_id: row.get(3)?,
+                title: title.clone(),
+                status: row.get(5)?,
+                preview_kind: preview_kind.clone(),
+                latest_version,
+                latest_version_ref: ArtifactVersionReference {
+                    artifact_id: id,
+                    version: latest_version,
+                    title,
+                    preview_kind,
+                    updated_at,
+                    content_type: content_type.clone(),
+                },
+                promotion_state: row.get(8)?,
+                updated_at,
+                content_type,
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;

@@ -22,9 +22,9 @@ export function useWorkbenchRouteSync(): void {
       typeof route.params.projectId === 'string' ? route.params.projectId : '',
       typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
       route.name === 'workspace-overview' && typeof route.query.project === 'string' ? route.query.project : '',
-      typeof route.query.detail === 'string' ? route.query.detail : '',
-      typeof route.query.pane === 'string' ? route.query.pane : '',
-      typeof route.query.artifact === 'string' ? route.query.artifact : '',
+      typeof route.query.mode === 'string' ? route.query.mode : '',
+      typeof route.query.deliverable === 'string' ? route.query.deliverable : '',
+      typeof route.query.version === 'string' ? route.query.version : '',
       shell.activeWorkspaceConnectionId,
       shell.activeWorkspaceSession?.token ?? '',
       auth.isReady,
@@ -49,9 +49,10 @@ export function useWorkbenchRouteSync(): void {
       workspaceStore.syncRouteScope(workspaceId, projectId ?? overviewProjectId, conversationId)
 
       shell.syncFromRoute({
-        detail: typeof route.query.detail === 'string' ? route.query.detail : undefined,
-        pane: typeof route.query.pane === 'string' ? route.query.pane : undefined,
-        artifact: typeof route.query.artifact === 'string' ? route.query.artifact : undefined,
+        conversationId,
+        mode: typeof route.query.mode === 'string' ? route.query.mode : undefined,
+        deliverable: typeof route.query.deliverable === 'string' ? route.query.deliverable : undefined,
+        version: typeof route.query.version === 'string' ? route.query.version : undefined,
       })
 
       if (shell.activeWorkspaceConnectionId) {

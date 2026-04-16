@@ -7,13 +7,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   AccessAuditListResponse,
+  ArtifactVersionReference,
   AuditRecord,
   ClientAppRecord,
+  CreateDeliverableVersionInput,
+  DeliverableDetail,
+  DeliverableSummary,
+  DeliverableVersionContent,
+  DeliverableVersionSummary,
+  ForkDeliverableInput,
   HealthcheckStatus,
   InboxItemRecord,
   KnowledgeEntryRecord,
   NotificationRecord,
   ProjectRecord,
+  PromoteDeliverableInput,
   RuntimeConfiguredModelProbeResult,
   RuntimeEffectiveConfig,
   RuntimeRunSnapshot,
@@ -143,6 +151,93 @@ describe('OpenAPI transport helpers', () => {
     expect(accessControlSchema).toContain('export type AccessExperienceResponse = OpenApiAccessExperienceResponse')
     expect(accessControlSchema).toContain('AccessMemberSummary as OpenApiAccessMemberSummary')
     expect(accessControlSchema).toContain('AccessUserPresetUpdateRequest as OpenApiAccessUserPresetUpdateRequest')
+  })
+
+  it('keeps deliverable-first schemas and paths in the generated transport contract', () => {
+    const legacySummaryAliasInterface = ['export interface ', 'Artifact', 'Record'].join('')
+    const legacyWorkspaceArtifactsPath = ['"/api/v1', 'artifacts"'].join('/')
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('export interface DeliverableSummary')
+    expect(generated).toContain('export interface DeliverableDetail')
+    expect(generated).toContain('export interface DeliverableVersionSummary')
+    expect(generated).toContain('export interface DeliverableVersionContent')
+    expect(generated).toContain('export interface ArtifactVersionReference')
+    expect(generated).toContain('export interface CreateDeliverableVersionInput')
+    expect(generated).toContain('export interface PromoteDeliverableInput')
+    expect(generated).toContain('export interface ForkDeliverableInput')
+    expect(generated).toContain('"/api/v1/workspace/deliverables"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/deliverables"')
+    expect(generated).toContain('"/api/v1/deliverables/{deliverableId}"')
+    expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/versions"')
+    expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/versions/{version}"')
+    expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/promote"')
+    expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/fork"')
+    expect(generated).toContain('artifacts?: ArtifactVersionReference[]')
+    expect(generated).toContain('artifactRefs: ArtifactVersionReference[]')
+    expect(generated).not.toContain(legacySummaryAliasInterface)
+    expect(generated).not.toContain(legacyWorkspaceArtifactsPath)
+  })
+
+  it('models deliverable detail, versions, content, and actions as typed transport records', () => {
+    const latestVersionRef: ArtifactVersionReference = {
+      artifactId: 'artifact-1',
+      version: 2,
+      title: 'Runtime Delivery Summary',
+      previewKind: 'markdown',
+      updatedAt: 10,
+    }
+    const summary: DeliverableSummary = {
+      id: 'artifact-1',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      conversationId: 'conv-1',
+      title: 'Runtime Delivery Summary',
+      status: 'review',
+      previewKind: 'markdown',
+      latestVersion: 2,
+      updatedAt: 10,
+      promotionState: 'not-promoted',
+      latestVersionRef,
+    }
+    const detail: DeliverableDetail = {
+      ...summary,
+      sessionId: 'rt-1',
+      runId: 'run-1',
+    }
+    const versionSummary: DeliverableVersionSummary = {
+      artifactId: 'artifact-1',
+      version: 2,
+      title: 'Runtime Delivery Summary',
+      previewKind: 'markdown',
+      updatedAt: 10,
+    }
+    const versionContent: DeliverableVersionContent = {
+      artifactId: 'artifact-1',
+      version: 2,
+      previewKind: 'markdown',
+      editable: true,
+      textContent: '# Runtime Delivery Summary',
+    }
+    const createVersionInput: CreateDeliverableVersionInput = {
+      previewKind: 'markdown',
+      textContent: '# Runtime Delivery Summary v2',
+    }
+    const promoteInput: PromoteDeliverableInput = {
+      summary: 'Promote this deliverable into project knowledge.',
+    }
+    const forkInput: ForkDeliverableInput = {
+      title: 'Follow-up conversation',
+    }
+
+    expect(detail.latestVersionRef.version).toBe(versionSummary.version)
+    expect(versionContent.artifactId).toBe(summary.id)
+    expect(createVersionInput.previewKind).toBe('markdown')
+    expect(promoteInput.summary).toContain('project knowledge')
+    expect(forkInput.title).toContain('Follow-up')
   })
 
   it('uses generated OpenAPI paths for host requests', async () => {

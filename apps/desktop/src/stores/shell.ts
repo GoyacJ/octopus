@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 
 import type {
+  ArtifactVersionReference,
   ConnectionProfile,
-  ConversationDetailFocus,
+  ConversationWorkbenchMode,
   CreateHostWorkspaceConnectionInput,
   HostBackendConnection,
   HostState,
@@ -15,7 +16,8 @@ import type {
 } from '@octopus/schema'
 import {
   createDefaultShellPreferences,
-  normalizeConversationDetailFocus,
+  normalizeConversationWorkbenchMode,
+  normalizeWorkbenchVersion,
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
@@ -155,12 +157,32 @@ function touchWorkspaceConnection(
   }
 }
 
+interface ConversationWorkbenchSelection {
+  mode: ConversationWorkbenchMode
+  modeLocked: boolean
+  selectedDeliverableId: string
+  selectedDeliverableVersion: number | null
+}
+
+function createConversationWorkbenchSelection(): ConversationWorkbenchSelection {
+  return {
+    mode: 'context',
+    modeLocked: false,
+    selectedDeliverableId: '',
+    selectedDeliverableVersion: null,
+  }
+}
+
 export const useShellStore = defineStore('shell', {
   state: () => ({
     defaultWorkspaceId: 'ws-local',
     defaultProjectId: 'proj-redesign',
-    detailFocus: 'summary' as ConversationDetailFocus,
-    selectedArtifactId: '',
+    activeConversationId: '',
+    workbenchMode: 'context' as ConversationWorkbenchMode,
+    workbenchModeLocked: false,
+    selectedDeliverableId: '',
+    selectedDeliverableVersion: null as number | null,
+    conversationWorkbenchSelections: {} as Record<string, ConversationWorkbenchSelection>,
     leftSidebarCollapsed: false,
     rightSidebarCollapsed: false,
     searchOpen: false,
@@ -204,6 +226,50 @@ export const useShellStore = defineStore('shell', {
     },
   },
   actions: {
+    currentConversationWorkbenchKey(): string {
+      if (!this.activeWorkspaceConnectionId || !this.activeConversationId) {
+        return ''
+      }
+
+      return `${this.activeWorkspaceConnectionId}:${this.activeConversationId}`
+    },
+    applyConversationWorkbenchSelection(selection?: Partial<ConversationWorkbenchSelection> | null) {
+      const next = selection ? {
+        ...createConversationWorkbenchSelection(),
+        ...selection,
+      } : createConversationWorkbenchSelection()
+      this.workbenchMode = next.mode
+      this.workbenchModeLocked = next.modeLocked
+      this.selectedDeliverableId = next.selectedDeliverableId
+      this.selectedDeliverableVersion = next.selectedDeliverableVersion
+    },
+    persistConversationWorkbenchSelection() {
+      const key = this.currentConversationWorkbenchKey()
+      if (!key) {
+        return
+      }
+
+      this.conversationWorkbenchSelections = {
+        ...this.conversationWorkbenchSelections,
+        [key]: {
+          mode: this.workbenchMode,
+          modeLocked: this.workbenchModeLocked,
+          selectedDeliverableId: this.selectedDeliverableId,
+          selectedDeliverableVersion: this.selectedDeliverableVersion,
+        },
+      }
+    },
+    syncConversationScope(conversationId?: string | null) {
+      if (conversationId === this.activeConversationId) {
+        return
+      }
+
+      this.persistConversationWorkbenchSelection()
+      this.activeConversationId = conversationId ?? ''
+      this.applyConversationWorkbenchSelection(
+        this.conversationWorkbenchSelections[this.currentConversationWorkbenchKey()] ?? null,
+      )
+    },
     applyShellPreferences(preferences: ShellPreferences) {
       const preserveLeftSidebar = this.preferencesState === null && this.leftSidebarCollapsed !== false
       const preserveRightSidebar = this.preferencesState === null && this.rightSidebarCollapsed !== false
@@ -237,27 +303,73 @@ export const useShellStore = defineStore('shell', {
         this.loading = false
       }
     },
-    setDetailFocus(detail: ConversationDetailFocus) {
-      this.detailFocus = detail
+    setWorkbenchMode(mode: ConversationWorkbenchMode) {
+      this.workbenchMode = mode
+      this.workbenchModeLocked = true
+      this.persistConversationWorkbenchSelection()
     },
-    selectArtifact(artifactId?: string) {
-      this.selectedArtifactId = artifactId ?? ''
+    selectDeliverable(deliverableId?: string, version?: number | null) {
+      const nextDeliverableId = deliverableId ?? ''
+      const sameDeliverable = Boolean(nextDeliverableId) && nextDeliverableId === this.selectedDeliverableId
+
+      this.selectedDeliverableId = nextDeliverableId
+      this.selectedDeliverableVersion = nextDeliverableId
+        ? (version ?? (sameDeliverable ? this.selectedDeliverableVersion : null))
+        : null
+      this.workbenchModeLocked = true
+      if (this.selectedDeliverableId) {
+        this.workbenchMode = 'deliverable'
+      } else if (this.workbenchMode === 'deliverable') {
+        this.workbenchMode = 'context'
+      }
+      this.persistConversationWorkbenchSelection()
     },
-    hydrateArtifactSelection(artifactIds: string[]) {
-      if (!artifactIds.length) {
-        this.selectedArtifactId = ''
+    setSelectedDeliverableVersion(version?: number | null) {
+      this.selectedDeliverableVersion = version ?? null
+      this.workbenchModeLocked = true
+      this.persistConversationWorkbenchSelection()
+    },
+    hydrateDeliverableSelection(deliverableRefs: ArtifactVersionReference[]) {
+      if (!deliverableRefs.length) {
+        this.selectedDeliverableId = ''
+        this.selectedDeliverableVersion = null
+        if (this.workbenchMode === 'deliverable') {
+          this.workbenchMode = 'context'
+        }
+        this.persistConversationWorkbenchSelection()
         return
       }
 
-      if (!this.selectedArtifactId || !artifactIds.includes(this.selectedArtifactId)) {
-        this.selectedArtifactId = artifactIds[0]
+      const selectedRef = deliverableRefs.find(ref => ref.artifactId === this.selectedDeliverableId)
+      if (!selectedRef) {
+        this.selectedDeliverableId = deliverableRefs[0].artifactId
+        this.selectedDeliverableVersion = deliverableRefs[0].version
+        if (this.workbenchMode === 'context' && !this.workbenchModeLocked) {
+          this.workbenchMode = 'deliverable'
+        }
+      } else if (!this.selectedDeliverableVersion) {
+        this.selectedDeliverableVersion = selectedRef.version
       }
+      this.persistConversationWorkbenchSelection()
     },
     syncFromRoute(routeState: ShellRouteState) {
-      this.detailFocus = normalizeConversationDetailFocus(routeState.detail, routeState.pane)
-      if (routeState.artifact) {
-        this.selectedArtifactId = routeState.artifact
+      this.syncConversationScope(routeState.conversationId)
+      if (routeState.mode !== undefined) {
+        this.workbenchMode = normalizeConversationWorkbenchMode(routeState.mode)
+        this.workbenchModeLocked = true
       }
+      if (routeState.deliverable !== undefined) {
+        this.selectedDeliverableId = routeState.deliverable ?? ''
+        if (!routeState.deliverable) {
+          this.selectedDeliverableVersion = null
+        }
+        this.workbenchModeLocked = true
+      }
+      if (routeState.version !== undefined) {
+        this.selectedDeliverableVersion = normalizeWorkbenchVersion(routeState.version)
+        this.workbenchModeLocked = true
+      }
+      this.persistConversationWorkbenchSelection()
     },
     persistPreferencesLater(patch: Partial<ShellPreferences>) {
       void this.updatePreferences(patch).catch((error) => {

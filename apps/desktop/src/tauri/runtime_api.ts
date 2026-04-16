@@ -99,6 +99,66 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         },
       })
     },
+    async getDeliverableDetail(deliverableId) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}', 'get', {
+        session: assertWorkspaceRequestReady(context),
+        pathParams: {
+          deliverableId,
+        },
+      })
+    },
+    async listDeliverableVersions(deliverableId) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}/versions', 'get', {
+        session: assertWorkspaceRequestReady(context),
+        pathParams: {
+          deliverableId,
+        },
+      })
+    },
+    async getDeliverableVersionContent(deliverableId, version) {
+      return await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/deliverables/{deliverableId}/versions/{version}',
+        'get',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            deliverableId,
+            version,
+          },
+        },
+      )
+    },
+    async createDeliverableVersion(deliverableId, input, idempotencyKey) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}/versions', 'post', {
+        session: assertWorkspaceRequestReady(context),
+        pathParams: {
+          deliverableId,
+        },
+        body: JSON.stringify(input),
+        idempotencyKey,
+      })
+    },
+    async promoteDeliverable(deliverableId, input, idempotencyKey) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}/promote', 'post', {
+        session: assertWorkspaceRequestReady(context),
+        pathParams: {
+          deliverableId,
+        },
+        body: JSON.stringify(input),
+        idempotencyKey,
+      })
+    },
+    async forkDeliverable(deliverableId, input, idempotencyKey) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}/fork', 'post', {
+        session: assertWorkspaceRequestReady(context),
+        pathParams: {
+          deliverableId,
+        },
+        body: JSON.stringify(input),
+        idempotencyKey,
+      })
+    },
     async deleteSession(sessionId) {
       await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}', 'delete', {
         session: assertWorkspaceRequestReady(context),

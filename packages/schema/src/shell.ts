@@ -26,12 +26,13 @@ export type HealthcheckStatus = OpenApiHealthcheckStatus
 export type ShellPreferences = OpenApiShellPreferences
 export type ShellBootstrap = OpenApiShellBootstrap
 
-export type ConversationDetailFocus = 'summary' | 'memories' | 'artifacts' | 'knowledge' | 'resources' | 'tools' | 'timeline'
+export type ConversationWorkbenchMode = 'deliverable' | 'context' | 'ops'
 
 export interface ShellRouteState {
-  detail?: string | null
-  pane?: string | null
-  artifact?: string | null
+  conversationId?: string | null
+  mode?: string | null
+  deliverable?: string | null
+  version?: string | number | null
 }
 
 export function createDefaultShellPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
@@ -124,21 +125,32 @@ export function extractProjectIdFromShellRoute(route?: string | null): string {
   return 'proj-redesign'
 }
 
-export function normalizeConversationDetailFocus(
-  detail?: string | null,
-  pane?: string | null,
-): ConversationDetailFocus {
-  const value = detail ?? pane
-  switch (value) {
-    case 'summary':
-    case 'memories':
-    case 'artifacts':
-    case 'knowledge':
-    case 'resources':
-    case 'tools':
-    case 'timeline':
-      return value
+export function normalizeConversationWorkbenchMode(
+  mode?: string | null,
+): ConversationWorkbenchMode {
+  switch (mode) {
+    case 'deliverable':
+    case 'context':
+    case 'ops':
+      return mode
     default:
-      return 'summary'
+      return 'context'
   }
+}
+
+export function normalizeWorkbenchVersion(
+  version?: string | number | null,
+): number | null {
+  if (typeof version === 'number' && Number.isFinite(version) && version > 0) {
+    return version
+  }
+
+  if (typeof version === 'string' && version.trim()) {
+    const parsed = Number.parseInt(version, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
+    }
+  }
+
+  return null
 }

@@ -37,6 +37,33 @@ function bundleFixture(rootPath: string, outputPath: string) {
 }
 
 describe('OpenAPI bundler', () => {
+  it('keeps the repo bundled contract aligned with deliverable-first transport schemas', () => {
+    const legacySummaryAliasSchema = ['Artifact', 'Record:'].join('')
+    const legacyWorkspaceArtifactsPath = ['/api/v1', 'artifacts:'].join('/')
+    const bundledContract = readFileSync(
+      path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'),
+      'utf8',
+    )
+
+    expect(bundledContract).toContain('DeliverableSummary:')
+    expect(bundledContract).toContain('DeliverableDetail:')
+    expect(bundledContract).toContain('DeliverableVersionSummary:')
+    expect(bundledContract).toContain('DeliverableVersionContent:')
+    expect(bundledContract).toContain('ArtifactVersionReference:')
+    expect(bundledContract).toContain('CreateDeliverableVersionInput:')
+    expect(bundledContract).toContain('PromoteDeliverableInput:')
+    expect(bundledContract).toContain('ForkDeliverableInput:')
+    expect(bundledContract).toContain('/api/v1/workspace/deliverables:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/deliverables:')
+    expect(bundledContract).toContain('/api/v1/deliverables/{deliverableId}:')
+    expect(bundledContract).toContain('/api/v1/deliverables/{deliverableId}/versions:')
+    expect(bundledContract).toContain('/api/v1/deliverables/{deliverableId}/versions/{version}:')
+    expect(bundledContract).toContain('/api/v1/deliverables/{deliverableId}/promote:')
+    expect(bundledContract).toContain('/api/v1/deliverables/{deliverableId}/fork:')
+    expect(bundledContract).not.toContain(legacySummaryAliasSchema)
+    expect(bundledContract).not.toContain(legacyWorkspaceArtifactsPath)
+  })
+
   it('bundles multi-file contract sources into a stable single OpenAPI artifact', () => {
     const tempDir = createTempDir('octopus-openapi-bundle-')
     const sourceDir = path.join(tempDir, 'contracts', 'openapi', 'src')

@@ -3152,6 +3152,7 @@ version = "0.2.4"
 dependencies = [
  "api",
  "async-trait",
+ "base64 0.22.1",
  "octopus-core",
  "octopus-infra",
  "octopus-platform",

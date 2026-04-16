@@ -8,6 +8,7 @@ import SettingsView from '@/views/app/SettingsView.vue'
 import ConversationView from '@/views/project/ConversationView.vue'
 import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
 import ProjectDashboardView from '@/views/project/ProjectDashboardView.vue'
+import ProjectDeliverablesView from '@/views/project/ProjectDeliverablesView.vue'
 import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
 import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
@@ -346,6 +347,11 @@ function createRoutes(): RouteRecordRaw[] {
       path: '/workspaces/:workspaceId/projects/:projectId/conversations/:conversationId',
       name: 'project-conversation',
       component: ConversationView,
+    },
+    {
+      path: '/workspaces/:workspaceId/projects/:projectId/deliverables',
+      name: 'project-deliverables',
+      component: ProjectDeliverablesView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/agents',

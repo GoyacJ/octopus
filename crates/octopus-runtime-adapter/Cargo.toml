@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 api = { path = "../api" }
 async-trait.workspace = true
+base64 = "0.22"
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
 octopus-platform = { path = "../octopus-platform" }

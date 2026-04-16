@@ -323,6 +323,47 @@ impl RuntimeSessionService for RuntimeAdapter {
             .ok_or_else(|| AppError::not_found("runtime session"))
     }
 
+    async fn get_deliverable_detail(
+        &self,
+        deliverable_id: &str,
+    ) -> Result<DeliverableDetail, AppError> {
+        RuntimeAdapter::get_deliverable_detail(self, deliverable_id)?
+            .ok_or_else(|| AppError::not_found(format!("deliverable `{deliverable_id}`")))
+    }
+
+    async fn list_deliverable_versions(
+        &self,
+        deliverable_id: &str,
+    ) -> Result<Vec<DeliverableVersionSummary>, AppError> {
+        RuntimeAdapter::list_deliverable_versions(self, deliverable_id)
+    }
+
+    async fn get_deliverable_version_content(
+        &self,
+        deliverable_id: &str,
+        version: u32,
+    ) -> Result<DeliverableVersionContent, AppError> {
+        RuntimeAdapter::get_deliverable_version_content(self, deliverable_id, version)?.ok_or_else(
+            || AppError::not_found(format!("deliverable version `{deliverable_id}`:{version}")),
+        )
+    }
+
+    async fn create_deliverable_version(
+        &self,
+        deliverable_id: &str,
+        input: CreateDeliverableVersionInput,
+    ) -> Result<DeliverableDetail, AppError> {
+        RuntimeAdapter::create_deliverable_version(self, deliverable_id, input).await
+    }
+
+    async fn promote_deliverable(
+        &self,
+        deliverable_id: &str,
+        input: PromoteDeliverableInput,
+    ) -> Result<DeliverableDetail, AppError> {
+        RuntimeAdapter::promote_deliverable(self, deliverable_id, input).await
+    }
+
     async fn list_events(
         &self,
         session_id: &str,

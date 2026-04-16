@@ -138,7 +138,7 @@ const actorAvatarMap = computed<Map<string, string>>(() => new Map([
 const currentUserAvatar = computed(() => userProfileStore.currentUser?.avatar ?? '')
 const currentUserLabel = computed(() => userProfileStore.currentUser?.displayName || 'You')
 const resourceMap = computed(() => new Map(resourceStore.activeProjectResources.map(resource => [resource.id, resource])))
-const artifactMap = computed(() => new Map(artifactStore.activeProjectArtifacts.map(artifact => [artifact.id, artifact])))
+const artifactMap = computed(() => new Map(artifactStore.activeProjectDeliverables.map(artifact => [artifact.id, artifact])))
 const permissionOptions = computed(() => [
   { value: 'auto', label: t('conversation.composer.autoPermission') },
   { value: 'readonly', label: t('conversation.composer.readonlyPermission') },
@@ -281,7 +281,7 @@ async function ensureConversationProjectContext(connectionId: string, nextProjec
     agentStore.load(connectionId),
     teamStore.load(connectionId),
     resourceStore.loadProjectResources(nextProjectId, connectionId),
-    artifactStore.loadWorkspaceArtifacts(connectionId),
+    artifactStore.loadProjectDeliverables(nextProjectId, connectionId),
   ])
   if (lastPermissionSeedKey !== projectContextKey) {
     const configuredDefaultMode = resolveProjectDefaultPermissionMode()
@@ -351,8 +351,6 @@ async function ensureRuntimeSession() {
 }
 
 watch(renderedMessages, (messages) => {
-  const artifactIds = messages.flatMap(message => message.artifacts ?? [])
-  shell.hydrateArtifactSelection(artifactIds)
   nextTick(() => {
     if (scrollContainer.value) {
       scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
@@ -481,9 +479,18 @@ function resolveMessageArtifacts(message: Message): MessageArtifactOption[] {
 }
 
 function openArtifact(artifactId: string) {
-  shell.selectArtifact(artifactId)
-  shell.setDetailFocus('artifacts')
+  shell.selectDeliverable(artifactId)
   shell.setRightSidebarCollapsed(false)
+  void router.replace({
+    name: 'project-conversation',
+    params: route.params,
+    query: {
+      ...route.query,
+      mode: 'deliverable',
+      deliverable: artifactId,
+      version: shell.selectedDeliverableVersion ? String(shell.selectedDeliverableVersion) : undefined,
+    },
+  })
 }
 
 async function approveMessageApproval(approvalId: string) {

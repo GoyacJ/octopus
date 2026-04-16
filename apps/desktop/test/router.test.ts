@@ -35,6 +35,7 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/dashboard')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/conversations')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/conversations/:conversationId')
+    expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/deliverables')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/agents')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/resources')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/knowledge')
@@ -118,6 +119,14 @@ describe('desktop router contract', () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
 
     expect(router.currentRoute.value.name).toBe('project-settings')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
+  })
+
+  it('keeps project deliverables on the dedicated project route', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/deliverables')
+
+    expect(router.currentRoute.value.name).toBe('project-deliverables')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
     expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })

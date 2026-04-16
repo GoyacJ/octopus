@@ -13,10 +13,17 @@ import type {
   AuthorizationSnapshot,
   CapabilityManagementProjection,
   CapabilityAssetDisablePatch,
+  ConversationRecord,
   CreateMenuPolicyRequest,
+  CreateDeliverableVersionInput,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
+  DeliverableDetail,
+  DeliverableSummary,
+  DeliverableVersionContent,
+  DeliverableVersionSummary,
+  ForkDeliverableInput,
   CreateProjectRequest,
   CreateProjectPromotionRequestInput,
   CreateRuntimeSessionInput,
@@ -56,6 +63,7 @@ import type {
   PetWorkspaceSnapshot,
   PositionRecord,
   PositionUpsertRequest,
+  PromoteDeliverableInput,
   PromoteWorkspaceResourceInput,
   ProtectedResourceDescriptor,
   ProtectedResourceMetadataUpsertRequest,
@@ -76,6 +84,7 @@ import type {
   RoleBindingRecord,
   RoleBindingUpsertRequest,
   RoleUpsertRequest,
+  KnowledgeEntryRecord,
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
@@ -117,7 +126,6 @@ import type {
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
-  ArtifactRecord,
 } from '@octopus/schema'
 
 import { createRuntimeApi } from './runtime_api'
@@ -167,6 +175,7 @@ export interface WorkspaceClient {
     create: (input: CreateProjectRequest) => Promise<ProjectRecord>
     update: (projectId: string, input: UpdateProjectRequest) => Promise<ProjectRecord>
     getDashboard: (projectId: string) => Promise<ProjectDashboardSnapshot>
+    listDeliverables: (projectId: string) => Promise<DeliverableSummary[]>
     listPromotionRequests: (projectId: string) => Promise<ProjectPromotionRequest[]>
     createPromotionRequest: (
       projectId: string,
@@ -193,8 +202,8 @@ export interface WorkspaceClient {
   filesystem: {
     listDirectories: (path?: string) => Promise<WorkspaceDirectoryBrowserResponse>
   }
-  artifacts: {
-    listWorkspace: () => Promise<ArtifactRecord[]>
+  deliverables: {
+    listWorkspace: () => Promise<DeliverableSummary[]>
   }
   inbox: {
     list: () => Promise<InboxItemRecord[]>
@@ -373,6 +382,27 @@ export interface WorkspaceClient {
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>
+    getDeliverableDetail: (deliverableId: string) => Promise<DeliverableDetail>
+    listDeliverableVersions: (deliverableId: string) => Promise<DeliverableVersionSummary[]>
+    getDeliverableVersionContent: (
+      deliverableId: string,
+      version: number,
+    ) => Promise<DeliverableVersionContent>
+    createDeliverableVersion: (
+      deliverableId: string,
+      input: CreateDeliverableVersionInput,
+      idempotencyKey?: string,
+    ) => Promise<DeliverableDetail>
+    promoteDeliverable: (
+      deliverableId: string,
+      input: PromoteDeliverableInput,
+      idempotencyKey?: string,
+    ) => Promise<KnowledgeEntryRecord>
+    forkDeliverable: (
+      deliverableId: string,
+      input: ForkDeliverableInput,
+      idempotencyKey?: string,
+    ) => Promise<ConversationRecord>
     deleteSession: (sessionId: string) => Promise<void>
     pollEvents: (sessionId: string, options?: RuntimeEventsPollOptions) => Promise<RuntimeEventEnvelope[]>
     subscribeEvents: (sessionId: string, options: RuntimeEventSubscriptionOptions) => Promise<RuntimeEventSubscription>

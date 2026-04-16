@@ -90,6 +90,15 @@ describe('Dashboard and overview surfaces', () => {
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.textContent).toContain('Conversation Redesign')
     expect(mounted.container.textContent).toContain('Workspace synced')
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
+
+    const deliverablesEntry = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="project-dashboard-open-deliverables"]')
+    expect(deliverablesEntry).not.toBeNull()
+
+    deliverablesEntry?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-deliverables')
+    expect(router.currentRoute.value.query.deliverable).toBe('artifact-run-conv-redesign')
 
     mounted.destroy()
   })

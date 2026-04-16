@@ -7,11 +7,11 @@ import type {
   PetWorkspaceSnapshot as OpenApiPetWorkspaceSnapshot,
   SavePetPresenceInput as OpenApiSavePetPresenceInput,
 } from './generated'
+import type { DeliverableDetail } from './artifact'
 import type {
   AgentAssetKind,
   AgentScope,
   AgentStatus,
-  ArtifactStatus,
   ConversationActorKind,
   ConversationIntent,
   PermissionMode,
@@ -314,21 +314,7 @@ export interface ProjectResource {
   tags: string[]
 }
 
-export interface Artifact {
-  id: string
-  projectId: string
-  conversationId: string
-  type: string
-  title: string
-  content: string
-  excerpt: string
-  tags: string[]
-  version: number
-  status: ArtifactStatus
-  authorId: string
-  updatedAt: number
-  createdByMessageId?: string
-}
+export type Artifact = DeliverableDetail
 
 export interface TraceRecord {
   id: string

@@ -1015,7 +1015,7 @@ RuntimeHandoffSummary:
   properties:
     artifactRefs:
       items:
-        type: string
+        $ref: "#/components/schemas/ArtifactVersionReference"
       type: array
     handoffRef:
       type: string
@@ -1525,7 +1525,7 @@ RuntimeMessage:
   properties:
     artifacts:
       items:
-        type: string
+        $ref: "#/components/schemas/ArtifactVersionReference"
       type: array
     attachments:
       items:
@@ -1608,7 +1608,7 @@ RuntimeRunSnapshot:
       $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
     artifactRefs:
       items:
-        type: string
+        $ref: "#/components/schemas/ArtifactVersionReference"
       type: array
     capabilityPlanSummary:
       $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"

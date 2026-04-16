@@ -2,11 +2,14 @@ use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
-    CostLedgerEntry, CreateProjectPromotionRequestInput, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, PetDashboardSummary, ProjectDashboardBreakdownItem,
-    ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSummary,
-    ProjectDashboardTrendPoint, ProjectDashboardUserStat, ProjectPromotionRequest,
-    ProjectTokenUsageRecord, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
+    ConversationRecord, CostLedgerEntry, CreateDeliverableVersionInput,
+    CreateProjectPromotionRequestInput, CreateRuntimeSessionInput, DeliverableDetail,
+    DeliverableVersionContent, DeliverableVersionSummary, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ForkDeliverableInput, KnowledgeEntryRecord,
+    PetDashboardSummary, ProjectDashboardBreakdownItem, ProjectDashboardConversationInsight,
+    ProjectDashboardRankingItem, ProjectDashboardSummary, ProjectDashboardTrendPoint,
+    ProjectDashboardUserStat, ProjectPromotionRequest, ProjectTokenUsageRecord,
+    PromoteDeliverableInput, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -71,6 +74,31 @@ fn capability_authorization_request(
         classification: classification.map(str::to_string),
         owner_subject_type: owner_subject_type.map(str::to_string),
         owner_subject_id: owner_subject_id.map(str::to_string),
+    }
+}
+
+fn optional_transport_project_id(project_id: &str) -> Option<String> {
+    let project_id = project_id.trim();
+    if project_id.is_empty() {
+        None
+    } else {
+        Some(project_id.to_string())
+    }
+}
+
+fn deliverable_conversation_record(
+    workspace_id: &str,
+    detail: &octopus_core::RuntimeSessionDetail,
+) -> ConversationRecord {
+    ConversationRecord {
+        id: detail.summary.conversation_id.clone(),
+        workspace_id: workspace_id.to_string(),
+        project_id: detail.summary.project_id.clone(),
+        session_id: detail.summary.id.clone(),
+        title: detail.summary.title.clone(),
+        status: detail.summary.status.clone(),
+        updated_at: detail.summary.updated_at,
+        last_message_preview: detail.summary.last_message_preview.clone(),
     }
 }
 
@@ -989,6 +1017,31 @@ pub(crate) async fn project_resources(
         }
     }
     Ok(Json(visible))
+}
+
+pub(crate) async fn project_deliverables(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            Some(&project_id),
+            Some("artifact"),
+            None,
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    Ok(Json(state.services.workspace.list_project_deliverables(&project_id).await?))
 }
 
 pub(crate) async fn create_workspace_resource(
@@ -2845,10 +2898,10 @@ pub(crate) async fn inbox(
     Ok(Json(state.services.inbox.list_inbox().await?))
 }
 
-pub(crate) async fn artifacts(
+pub(crate) async fn workspace_deliverables(
     State(state): State<ServerState>,
     headers: HeaderMap,
-) -> Result<Json<Vec<octopus_core::ArtifactRecord>>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
     ensure_capability_session(
         &state,
         &headers,
@@ -2859,6 +2912,383 @@ pub(crate) async fn artifacts(
     )
     .await?;
     Ok(Json(state.services.artifact.list_artifacts().await?))
+}
+
+pub(crate) async fn get_deliverable_detail(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(deliverable_id): Path<String>,
+) -> Result<Json<DeliverableDetail>, ApiError> {
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    Ok(Json(detail))
+}
+
+pub(crate) async fn list_deliverable_versions(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(deliverable_id): Path<String>,
+) -> Result<Json<Vec<DeliverableVersionSummary>>, ApiError> {
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .runtime_session
+            .list_deliverable_versions(&deliverable_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn get_deliverable_version_content(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((deliverable_id, version)): Path<(String, u32)>,
+) -> Result<Json<DeliverableVersionContent>, ApiError> {
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .runtime_session
+            .get_deliverable_version_content(&deliverable_id, version)
+            .await?,
+    ))
+}
+
+pub(crate) async fn create_deliverable_version(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(deliverable_id): Path<String>,
+    Json(input): Json<CreateDeliverableVersionInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    let session = ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    let idempotency_scope = idempotency_key(&headers).map(|key| {
+        idempotency_scope(
+            &session,
+            "deliverable.create_version",
+            &deliverable_id,
+            &key,
+        )
+    });
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let updated = state
+        .services
+        .runtime_session
+        .create_deliverable_version(&deliverable_id, input)
+        .await?;
+    if let Some(scope) = idempotency_scope.as_deref() {
+        let payload = runtime_transport_payload(&updated, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
+    }
+
+    let payload = runtime_transport_payload(&updated, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn promote_deliverable(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(deliverable_id): Path<String>,
+    Json(input): Json<PromoteDeliverableInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    let session = ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    authorize_request(
+        &state,
+        &session,
+        &capability_authorization_request(
+            &session.user_id,
+            "knowledge.create",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("knowledge"),
+            None,
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+        &request_id,
+    )
+    .await?;
+    let knowledge_title = input
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| detail.title.clone());
+    let idempotency_scope = idempotency_key(&headers)
+        .map(|key| idempotency_scope(&session, "deliverable.promote", &deliverable_id, &key));
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let promoted = state
+        .services
+        .runtime_session
+        .promote_deliverable(&deliverable_id, input)
+        .await?;
+    let payload = KnowledgeEntryRecord {
+        id: promoted.promotion_knowledge_id.clone().ok_or_else(|| {
+            ApiError::from(AppError::runtime(
+                "deliverable promotion did not create knowledge",
+            ))
+        })?,
+        workspace_id: promoted.workspace_id.clone(),
+        project_id: optional_transport_project_id(&promoted.project_id),
+        title: knowledge_title,
+        scope: if promoted.project_id.trim().is_empty() {
+            "workspace".into()
+        } else {
+            "project".into()
+        },
+        status: "active".into(),
+        source_type: "artifact".into(),
+        source_ref: promoted.id.clone(),
+        updated_at: promoted.updated_at,
+    };
+    if let Some(scope) = idempotency_scope.as_deref() {
+        let cached = runtime_transport_payload(&payload, &request_id)?;
+        store_idempotent_response(&state, scope, &cached, &request_id)?;
+    }
+
+    let response_payload = runtime_transport_payload(&payload, &request_id)?;
+    let mut response = Json(response_payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn fork_deliverable(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(deliverable_id): Path<String>,
+    Json(input): Json<ForkDeliverableInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let detail = state
+        .services
+        .runtime_session
+        .get_deliverable_detail(&deliverable_id)
+        .await?;
+    let session = ensure_authorized_request(
+        &state,
+        &headers,
+        &capability_authorization_request(
+            "",
+            "artifact.view",
+            optional_transport_project_id(&detail.project_id).as_deref(),
+            Some("artifact"),
+            Some(&detail.id),
+            None,
+            &[],
+            Some("internal"),
+            None,
+            None,
+        ),
+    )
+    .await?;
+    let target_project_id = input
+        .project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(detail.project_id.as_str())
+        .to_string();
+    if target_project_id != detail.project_id {
+        authorize_request(
+            &state,
+            &session,
+            &capability_authorization_request(
+                &session.user_id,
+                "project.view",
+                Some(&target_project_id),
+                Some("project"),
+                Some(&target_project_id),
+                None,
+                &[],
+                Some("internal"),
+                None,
+                None,
+            ),
+            &request_id,
+        )
+        .await?;
+    }
+    let source_session = state
+        .services
+        .runtime_session
+        .get_session(&detail.session_id)
+        .await?;
+    let selected_actor_ref = source_session.selected_actor_ref.trim().to_string();
+    if selected_actor_ref.is_empty() {
+        return Err(ApiError::from(AppError::invalid_input(
+            "source deliverable session has no selected actor",
+        )));
+    }
+    let idempotency_scope = idempotency_key(&headers)
+        .map(|key| idempotency_scope(&session, "deliverable.fork", &deliverable_id, &key));
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let configured_model_id = source_session
+        .session_policy
+        .selected_configured_model_id
+        .trim()
+        .to_string();
+    let forked = state
+        .services
+        .runtime_session
+        .create_session(
+            CreateRuntimeSessionInput {
+                conversation_id: String::new(),
+                project_id: target_project_id,
+                title: input
+                    .title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or(detail.title.as_str())
+                    .to_string(),
+                session_kind: Some(source_session.summary.session_kind.clone()),
+                selected_actor_ref,
+                selected_configured_model_id: if configured_model_id.is_empty() {
+                    None
+                } else {
+                    Some(configured_model_id)
+                },
+                execution_permission_mode: octopus_core::RUNTIME_PERMISSION_READ_ONLY.into(),
+            },
+            &session.user_id,
+        )
+        .await?;
+    let workspace_id = state.services.workspace.workspace_summary().await?.id;
+    let payload = deliverable_conversation_record(&workspace_id, &forked);
+    if let Some(scope) = idempotency_scope.as_deref() {
+        let cached = runtime_transport_payload(&payload, &request_id)?;
+        store_idempotent_response(&state, scope, &cached, &request_id)?;
+    }
+
+    let response_payload = runtime_transport_payload(&payload, &request_id)?;
+    let mut response = Json(response_payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
 }
 
 pub(crate) async fn knowledge(

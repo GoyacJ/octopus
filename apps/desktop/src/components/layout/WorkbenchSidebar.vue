@@ -7,6 +7,7 @@ import {
   Bot,
   ChevronsUpDown,
   Cpu,
+  FileText,
   FolderKanban,
   FolderOpen,
   LayoutDashboard,
@@ -93,6 +94,7 @@ type NavigationItem = {
 const iconMap: Record<MenuIconKey, unknown> = {
   dashboard: LayoutDashboard,
   conversations: MessageSquareText,
+  deliverables: FileText,
   agents: Bot,
   resources: FolderOpen,
   knowledge: LibraryBig,
@@ -240,6 +242,14 @@ function projectModules(projectId: string): NavigationItem[] {
       icon: iconMap.conversations,
       to: createProjectConversationTarget(workspaceId, projectId, projectConversationId(projectId)),
       testId: `sidebar-project-module-${projectId}-conversation`,
+    },
+    {
+      id: `${projectId}:deliverables`,
+      label: t('sidebar.navigation.deliverables'),
+      routeNames: ['project-deliverables'],
+      icon: iconMap.deliverables,
+      to: createProjectSurfaceTarget('project-deliverables', workspaceId, projectId),
+      testId: `sidebar-project-module-${projectId}-deliverables`,
     },
     {
       id: `${projectId}:agents`,

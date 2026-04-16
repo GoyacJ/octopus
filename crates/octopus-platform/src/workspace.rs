@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AgentRecord, AppError, AutomationRecord, BindPetConversationInput, CapabilityAssetDisablePatch,
-    CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
+    AgentRecord, AppError, ArtifactRecord, AutomationRecord, BindPetConversationInput,
+    CapabilityAssetDisablePatch, CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
     ChangeCurrentUserPasswordResponse, CopyWorkspaceSkillToManagedInput,
     CreateProjectPromotionRequestInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
     CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
@@ -42,6 +42,10 @@ pub trait WorkspaceService: Send + Sync {
     async fn list_workspace_promotion_requests(
         &self,
     ) -> Result<Vec<ProjectPromotionRequest>, AppError>;
+    async fn list_project_deliverables(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ArtifactRecord>, AppError>;
     async fn create_project_promotion_request(
         &self,
         project_id: &str,

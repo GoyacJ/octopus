@@ -4,7 +4,15 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   ApiErrorEnvelope,
+  ArtifactVersionReference,
   BindPetConversationInput,
+  CreateDeliverableVersionInput,
+  DeliverableDetail,
+  DeliverableSummary,
+  DeliverableVersionContent,
+  DeliverableVersionSummary,
+  ForkDeliverableInput,
+  PromoteDeliverableInput,
   RegisterBootstrapAdminRequest,
   SavePetPresenceInput,
 } from '@octopus/schema'
@@ -21,6 +29,64 @@ import {
 
 describe('workspace client transport', () => {
   installTauriClientTestHooks()
+
+  it('re-exports canonical deliverable transport records from @octopus/schema', () => {
+    const latestVersionRef: ArtifactVersionReference = {
+      artifactId: 'artifact-1',
+      version: 2,
+      title: 'Runtime Delivery Summary',
+      previewKind: 'markdown',
+      updatedAt: 10,
+    }
+    const summary: DeliverableSummary = {
+      id: 'artifact-1',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      conversationId: 'conv-1',
+      title: 'Runtime Delivery Summary',
+      status: 'review',
+      previewKind: 'markdown',
+      latestVersion: 2,
+      updatedAt: 10,
+      promotionState: 'not-promoted',
+      latestVersionRef,
+    }
+    const detail: DeliverableDetail = {
+      ...summary,
+      sessionId: 'rt-1',
+      runId: 'run-1',
+    }
+    const versionSummary: DeliverableVersionSummary = {
+      artifactId: summary.id,
+      version: summary.latestVersion,
+      title: summary.title,
+      previewKind: summary.previewKind,
+      updatedAt: summary.updatedAt,
+    }
+    const versionContent: DeliverableVersionContent = {
+      artifactId: summary.id,
+      version: summary.latestVersion,
+      previewKind: 'markdown',
+      editable: true,
+      textContent: '# Runtime Delivery Summary',
+    }
+    const createVersionInput: CreateDeliverableVersionInput = {
+      previewKind: 'markdown',
+      textContent: '# Runtime Delivery Summary v2',
+    }
+    const promoteInput: PromoteDeliverableInput = {
+      summary: 'Promote this deliverable into project knowledge.',
+    }
+    const forkInput: ForkDeliverableInput = {
+      title: 'Deliverable follow-up',
+    }
+
+    expect(detail.latestVersionRef.artifactId).toBe(versionSummary.artifactId)
+    expect(versionContent.version).toBe(summary.latestVersion)
+    expect(createVersionInput.previewKind).toBe('markdown')
+    expect(promoteInput.summary).toContain('project knowledge')
+    expect(forkInput.title).toContain('follow-up')
+  })
 
   it('requires a workspace session token before workspace-plane calls can be made', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
@@ -886,7 +952,7 @@ describe('workspace client transport', () => {
     })
   })
 
-  it('lists workspace artifacts through the workspace API with the session token', async () => {
+  it('lists workspace deliverables through the workspace API with the session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -912,11 +978,62 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    const artifacts = await workspaceClient.artifacts.listWorkspace()
+    const deliverables = await workspaceClient.deliverables.listWorkspace()
 
-    expect(artifacts[0]?.title).toBe('Runtime Delivery Summary')
+    expect((workspaceClient as Record<string, unknown>).artifacts).toBeUndefined()
+    expect(deliverables[0]?.title).toBe('Runtime Delivery Summary')
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/artifacts',
+      'http://127.0.0.1:43127/api/v1/workspace/deliverables',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+    const request = firstRequest()
+    expect((request.headers as Headers).get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('lists project deliverables through the workspace adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ([
+        {
+          id: 'artifact-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          conversationId: 'conv-1',
+          title: 'Runtime Delivery Summary',
+          status: 'review',
+          previewKind: 'markdown',
+          latestVersion: 2,
+          updatedAt: 10,
+          promotionState: 'not-promoted',
+          latestVersionRef: {
+            artifactId: 'artifact-1',
+            version: 2,
+            title: 'Runtime Delivery Summary',
+            previewKind: 'markdown',
+            updatedAt: 10,
+          },
+        },
+      ]),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const deliverables = await (workspaceClient.projects as any).listDeliverables('proj-redesign')
+
+    expect(deliverables[0]?.id).toBe('artifact-1')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/deliverables',
       expect.objectContaining({
         method: 'GET',
         headers: expect.any(Headers),

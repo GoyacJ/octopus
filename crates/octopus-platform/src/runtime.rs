@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AppError, CancelRuntimeSubrunInput, CreateRuntimeSessionInput, ModelCatalogSnapshot,
-    ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
+    AppError, CancelRuntimeSubrunInput, CreateDeliverableVersionInput, CreateRuntimeSessionInput,
+    DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
+    PromoteDeliverableInput, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
     RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
@@ -27,6 +28,29 @@ pub trait RuntimeSessionService: Send + Sync {
             .await
     }
     async fn get_session(&self, session_id: &str) -> Result<RuntimeSessionDetail, AppError>;
+    async fn get_deliverable_detail(
+        &self,
+        deliverable_id: &str,
+    ) -> Result<DeliverableDetail, AppError>;
+    async fn list_deliverable_versions(
+        &self,
+        deliverable_id: &str,
+    ) -> Result<Vec<DeliverableVersionSummary>, AppError>;
+    async fn get_deliverable_version_content(
+        &self,
+        deliverable_id: &str,
+        version: u32,
+    ) -> Result<DeliverableVersionContent, AppError>;
+    async fn create_deliverable_version(
+        &self,
+        deliverable_id: &str,
+        input: CreateDeliverableVersionInput,
+    ) -> Result<DeliverableDetail, AppError>;
+    async fn promote_deliverable(
+        &self,
+        deliverable_id: &str,
+        input: PromoteDeliverableInput,
+    ) -> Result<DeliverableDetail, AppError>;
     async fn list_events(
         &self,
         session_id: &str,
@@ -347,6 +371,85 @@ mod tests {
         }
     }
 
+    fn sample_deliverable_detail() -> DeliverableDetail {
+        DeliverableDetail {
+            id: "runtime-artifact-run-1".into(),
+            workspace_id: "workspace-1".into(),
+            project_id: "project-1".into(),
+            conversation_id: "conversation-1".into(),
+            session_id: "session-1".into(),
+            run_id: "run-1".into(),
+            source_message_id: Some("message-1".into()),
+            parent_artifact_id: None,
+            title: "Workflow Summary".into(),
+            status: "review".into(),
+            preview_kind: "markdown".into(),
+            latest_version: 2,
+            latest_version_ref: octopus_core::ArtifactVersionReference {
+                artifact_id: "runtime-artifact-run-1".into(),
+                version: 2,
+                title: "Workflow Summary".into(),
+                preview_kind: "markdown".into(),
+                updated_at: 20,
+                content_type: Some("text/markdown".into()),
+            },
+            promotion_state: "not-promoted".into(),
+            promotion_knowledge_id: None,
+            updated_at: 20,
+            storage_path: Some("data/artifacts/deliverables/runtime-artifact-run-1/v2.json".into()),
+            content_hash: Some("sha256-123".into()),
+            byte_size: Some(128),
+            content_type: Some("text/markdown".into()),
+        }
+    }
+
+    fn sample_deliverable_versions() -> Vec<DeliverableVersionSummary> {
+        vec![
+            DeliverableVersionSummary {
+                artifact_id: "runtime-artifact-run-1".into(),
+                version: 2,
+                title: "Workflow Summary".into(),
+                preview_kind: "markdown".into(),
+                updated_at: 20,
+                session_id: Some("session-1".into()),
+                run_id: Some("run-1".into()),
+                source_message_id: Some("message-1".into()),
+                parent_version: Some(1),
+                byte_size: Some(128),
+                content_hash: Some("sha256-123".into()),
+                content_type: Some("text/markdown".into()),
+            },
+            DeliverableVersionSummary {
+                artifact_id: "runtime-artifact-run-1".into(),
+                version: 1,
+                title: "Workflow Summary".into(),
+                preview_kind: "markdown".into(),
+                updated_at: 10,
+                session_id: Some("session-1".into()),
+                run_id: Some("run-1".into()),
+                source_message_id: Some("message-1".into()),
+                parent_version: None,
+                byte_size: Some(96),
+                content_hash: Some("sha256-001".into()),
+                content_type: Some("text/markdown".into()),
+            },
+        ]
+    }
+
+    fn sample_deliverable_content() -> DeliverableVersionContent {
+        DeliverableVersionContent {
+            artifact_id: "runtime-artifact-run-1".into(),
+            version: 2,
+            preview_kind: "markdown".into(),
+            editable: true,
+            file_name: Some("workflow-summary-v2.md".into()),
+            content_type: Some("text/markdown".into()),
+            text_content: Some("# Workflow Summary".into()),
+            data_base64: None,
+            byte_size: Some(128),
+        }
+    }
+
     struct RuntimeHarness {
         detail: RuntimeSessionDetail,
         run: RuntimeRunSnapshot,
@@ -395,6 +498,53 @@ mod tests {
 
         async fn get_session(&self, _session_id: &str) -> Result<RuntimeSessionDetail, AppError> {
             Ok(self.detail.clone())
+        }
+
+        async fn get_deliverable_detail(
+            &self,
+            _deliverable_id: &str,
+        ) -> Result<DeliverableDetail, AppError> {
+            Ok(sample_deliverable_detail())
+        }
+
+        async fn list_deliverable_versions(
+            &self,
+            _deliverable_id: &str,
+        ) -> Result<Vec<DeliverableVersionSummary>, AppError> {
+            Ok(sample_deliverable_versions())
+        }
+
+        async fn get_deliverable_version_content(
+            &self,
+            _deliverable_id: &str,
+            _version: u32,
+        ) -> Result<DeliverableVersionContent, AppError> {
+            Ok(sample_deliverable_content())
+        }
+
+        async fn create_deliverable_version(
+            &self,
+            _deliverable_id: &str,
+            _input: CreateDeliverableVersionInput,
+        ) -> Result<DeliverableDetail, AppError> {
+            let mut detail = sample_deliverable_detail();
+            detail.latest_version = 3;
+            detail.latest_version_ref.version = 3;
+            detail.latest_version_ref.updated_at = 30;
+            detail.updated_at = 30;
+            Ok(detail)
+        }
+
+        async fn promote_deliverable(
+            &self,
+            _deliverable_id: &str,
+            _input: PromoteDeliverableInput,
+        ) -> Result<DeliverableDetail, AppError> {
+            let mut detail = sample_deliverable_detail();
+            detail.promotion_state = "promoted".into();
+            detail.promotion_knowledge_id = Some("knowledge-1".into());
+            detail.updated_at = 40;
+            Ok(detail)
         }
 
         async fn list_events(
@@ -517,6 +667,54 @@ mod tests {
             loaded.handoffs[0].artifact_refs,
             vec!["runtime-artifact-run-1"]
         );
+
+        let deliverable = session_service
+            .get_deliverable_detail("runtime-artifact-run-1")
+            .await
+            .expect("get deliverable detail");
+        assert_eq!(deliverable.latest_version, 2);
+
+        let versions = session_service
+            .list_deliverable_versions("runtime-artifact-run-1")
+            .await
+            .expect("list deliverable versions");
+        assert_eq!(versions[0].version, 2);
+
+        let content = session_service
+            .get_deliverable_version_content("runtime-artifact-run-1", 2)
+            .await
+            .expect("get deliverable content");
+        assert_eq!(content.preview_kind, "markdown");
+
+        let created = session_service
+            .create_deliverable_version(
+                "runtime-artifact-run-1",
+                CreateDeliverableVersionInput {
+                    title: Some("Workflow Summary v3".into()),
+                    preview_kind: "markdown".into(),
+                    text_content: Some("# Workflow Summary v3".into()),
+                    data_base64: None,
+                    content_type: Some("text/markdown".into()),
+                    source_message_id: Some("message-2".into()),
+                    parent_version: Some(2),
+                },
+            )
+            .await
+            .expect("create deliverable version");
+        assert_eq!(created.latest_version, 3);
+
+        let promoted = session_service
+            .promote_deliverable(
+                "runtime-artifact-run-1",
+                PromoteDeliverableInput {
+                    title: Some("Workflow Summary".into()),
+                    summary: Some("Promote deliverable".into()),
+                    kind: Some("shared".into()),
+                },
+            )
+            .await
+            .expect("promote deliverable");
+        assert_eq!(promoted.promotion_state, "promoted");
 
         let submitted = execution_service
             .submit_turn(

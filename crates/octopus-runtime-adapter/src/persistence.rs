@@ -176,6 +176,84 @@ fn hash_bytes(bytes: &[u8]) -> String {
     format!("sha256-{:x}", hasher.finalize())
 }
 
+fn deliverable_title_from_text(content: &str, fallback: &str) -> String {
+    let candidate = content
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.trim_start_matches('#').trim())
+        .filter(|line| !line.is_empty())
+        .unwrap_or(fallback);
+    let mut title = candidate.chars().take(80).collect::<String>();
+    if title.is_empty() {
+        title = fallback.to_string();
+    }
+    title
+}
+
+fn deliverable_summary_from_text(content: &str, fallback: &str) -> String {
+    let collapsed = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return fallback.to_string();
+    }
+    let mut summary = collapsed.chars().take(180).collect::<String>();
+    if collapsed.chars().count() > 180 {
+        summary.push_str("...");
+    }
+    summary
+}
+
+fn deliverable_content_bytes(content: &DeliverableVersionContent) -> Result<Vec<u8>, AppError> {
+    if let Some(text_content) = content.text_content.as_ref() {
+        return Ok(text_content.as_bytes().to_vec());
+    }
+    if let Some(data_base64) = content.data_base64.as_ref() {
+        return BASE64_STANDARD
+            .decode(data_base64.as_bytes())
+            .map_err(|error: base64::DecodeError| AppError::invalid_input(error.to_string()));
+    }
+    Ok(Vec::new())
+}
+
+fn deliverable_file_extension(preview_kind: &str, content_type: Option<&str>) -> &'static str {
+    match (preview_kind, content_type.unwrap_or_default()) {
+        ("markdown", _) => "md",
+        ("json", _) | (_, "application/json") => "json",
+        (_, "text/plain") => "txt",
+        (_, "text/html") => "html",
+        (_, "image/png") => "png",
+        (_, "image/jpeg") => "jpg",
+        (_, "image/webp") => "webp",
+        _ => "bin",
+    }
+}
+
+fn infer_deliverable_content_type(
+    preview_kind: &str,
+    explicit_content_type: Option<&str>,
+    text_content: Option<&str>,
+    data_base64: Option<&str>,
+) -> Option<String> {
+    explicit_content_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            if text_content.is_some() {
+                Some(match preview_kind {
+                    "markdown" => "text/markdown",
+                    "json" => "application/json",
+                    _ => "text/plain",
+                })
+            } else if data_base64.is_some() {
+                Some("application/octet-stream")
+            } else {
+                None
+            }
+            .map(str::to_string)
+        })
+}
+
 fn pending_mediation_projection_fields(
     pending: Option<&RuntimePendingMediationSummary>,
 ) -> (
@@ -461,6 +539,632 @@ impl RuntimeAdapter {
             .artifacts_dir
             .join("runtime")
             .join(format!("{artifact_ref}.json"))
+    }
+
+    fn deliverable_version_body_path(&self, artifact_id: &str, version: u32) -> PathBuf {
+        self.state
+            .paths
+            .artifacts_dir
+            .join("deliverables")
+            .join(artifact_id)
+            .join(format!("v{version}.json"))
+    }
+
+    fn deliverable_detail_from_connection(
+        &self,
+        connection: &Connection,
+        artifact_id: &str,
+    ) -> Result<Option<DeliverableDetail>, AppError> {
+        connection
+            .query_row(
+                "SELECT id, workspace_id, project_id, conversation_id, session_id, run_id,
+                        source_message_id, parent_artifact_id, title, status, preview_kind,
+                        latest_version, promotion_state, promotion_knowledge_id, updated_at,
+                        storage_path, content_hash, byte_size, content_type
+                 FROM artifact_records
+                 WHERE id = ?1",
+                [artifact_id],
+                |row| {
+                    let id = row.get::<_, String>(0)?;
+                    let title = row.get::<_, String>(8)?;
+                    let preview_kind = row.get::<_, String>(10)?;
+                    let latest_version = row.get::<_, i64>(11)?.max(0) as u32;
+                    let updated_at = row.get::<_, i64>(14)?.max(0) as u64;
+                    let content_type = row.get::<_, Option<String>>(18)?;
+                    Ok(DeliverableDetail {
+                        id: id.clone(),
+                        workspace_id: row.get(1)?,
+                        project_id: row.get(2)?,
+                        conversation_id: row.get(3)?,
+                        session_id: row.get(4)?,
+                        run_id: row.get(5)?,
+                        source_message_id: row.get(6)?,
+                        parent_artifact_id: row.get(7)?,
+                        title: title.clone(),
+                        status: row.get(9)?,
+                        preview_kind: preview_kind.clone(),
+                        latest_version,
+                        latest_version_ref: ArtifactVersionReference {
+                            artifact_id: id,
+                            version: latest_version,
+                            title,
+                            preview_kind,
+                            updated_at,
+                            content_type: content_type.clone(),
+                        },
+                        promotion_state: row.get(12)?,
+                        promotion_knowledge_id: row.get(13)?,
+                        updated_at,
+                        storage_path: row.get(15)?,
+                        content_hash: row.get(16)?,
+                        byte_size: row
+                            .get::<_, Option<i64>>(17)?
+                            .map(|value| value.max(0) as u64),
+                        content_type,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| AppError::database(error.to_string()))
+    }
+
+    fn deliverable_version_exists(
+        &self,
+        connection: &Connection,
+        artifact_id: &str,
+        version: u32,
+    ) -> Result<bool, AppError> {
+        connection
+            .query_row(
+                "SELECT 1
+                 FROM artifact_versions
+                 WHERE artifact_id = ?1 AND version = ?2",
+                params![artifact_id, i64::from(version)],
+                |_row| Ok(()),
+            )
+            .optional()
+            .map_err(|error| AppError::database(error.to_string()))
+            .map(|value| value.is_some())
+    }
+
+    fn next_deliverable_version(
+        &self,
+        connection: &Connection,
+        artifact_id: &str,
+    ) -> Result<u32, AppError> {
+        let latest = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0)
+                 FROM artifact_versions
+                 WHERE artifact_id = ?1",
+                [artifact_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(latest.max(0) as u32 + 1)
+    }
+
+    fn persist_deliverable_version_body(
+        &self,
+        content: &DeliverableVersionContent,
+    ) -> Result<(String, String, u64), AppError> {
+        let path = self.deliverable_version_body_path(&content.artifact_id, content.version);
+        let payload = serde_json::to_vec_pretty(content)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, payload)?;
+
+        let content_bytes = deliverable_content_bytes(content)?;
+        let byte_size = content
+            .byte_size
+            .unwrap_or_else(|| content_bytes.len() as u64);
+        let content_hash = if content_bytes.is_empty() {
+            hash_bytes(b"")
+        } else {
+            hash_bytes(&content_bytes)
+        };
+
+        Ok((self.relative_storage_path(&path), content_hash, byte_size))
+    }
+
+    fn insert_deliverable_version_row(
+        &self,
+        connection: &Connection,
+        detail: &DeliverableDetail,
+        version: u32,
+        title: &str,
+        preview_kind: &str,
+        updated_at: u64,
+        storage_path: &str,
+        content_hash: &str,
+        byte_size: u64,
+        content_type: Option<&str>,
+        source_message_id: Option<&str>,
+        parent_version: Option<u32>,
+    ) -> Result<(), AppError> {
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO artifact_versions
+                 (artifact_id, version, workspace_id, project_id, conversation_id, session_id,
+                  run_id, source_message_id, parent_version, title, preview_kind, updated_at,
+                  storage_path, content_hash, byte_size, content_type)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                params![
+                    &detail.id,
+                    i64::from(version),
+                    &detail.workspace_id,
+                    &detail.project_id,
+                    &detail.conversation_id,
+                    &detail.session_id,
+                    &detail.run_id,
+                    source_message_id,
+                    parent_version.map(i64::from),
+                    title,
+                    preview_kind,
+                    updated_at as i64,
+                    storage_path,
+                    content_hash,
+                    byte_size as i64,
+                    content_type,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(())
+    }
+
+    fn upsert_deliverable_record(
+        &self,
+        connection: &Connection,
+        detail: &DeliverableDetail,
+    ) -> Result<(), AppError> {
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO artifact_records
+                 (id, workspace_id, project_id, conversation_id, session_id, run_id,
+                  source_message_id, parent_artifact_id, title, status, preview_kind,
+                  latest_version, promotion_state, promotion_knowledge_id, updated_at,
+                  storage_path, content_hash, byte_size, content_type)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                params![
+                    &detail.id,
+                    &detail.workspace_id,
+                    &detail.project_id,
+                    &detail.conversation_id,
+                    &detail.session_id,
+                    &detail.run_id,
+                    detail.source_message_id.as_deref(),
+                    detail.parent_artifact_id.as_deref(),
+                    &detail.title,
+                    &detail.status,
+                    &detail.preview_kind,
+                    i64::from(detail.latest_version),
+                    &detail.promotion_state,
+                    detail.promotion_knowledge_id.as_deref(),
+                    detail.updated_at as i64,
+                    detail.storage_path.as_deref(),
+                    detail.content_hash.as_deref(),
+                    detail.byte_size.map(|value| value as i64),
+                    detail.content_type.as_deref(),
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(())
+    }
+
+    fn persist_runtime_generated_deliverable(
+        &self,
+        connection: &Connection,
+        aggregate: &RuntimeAggregate,
+        artifact: &RuntimeArtifactProjectionRow,
+    ) -> Result<(), AppError> {
+        if self.deliverable_version_exists(connection, &artifact.artifact_ref, 1)? {
+            return Ok(());
+        }
+
+        let source_message = aggregate.detail.messages.iter().rev().find(|message| {
+            message.sender_type == "assistant"
+                && message.artifacts.as_ref().is_some_and(|artifacts| {
+                    artifacts
+                        .iter()
+                        .any(|artifact_id| artifact_id == &artifact.artifact_ref)
+                })
+        });
+
+        let (title, preview_kind, content_type, text_content, source_message_id, updated_at) =
+            if let Some(message) = source_message {
+                (
+                    deliverable_title_from_text(&message.content, &aggregate.detail.summary.title),
+                    "markdown".to_string(),
+                    Some("text/markdown".to_string()),
+                    message.content.clone(),
+                    Some(message.id.clone()),
+                    message.timestamp,
+                )
+            } else {
+                let fallback_session = self
+                    .load_runtime_artifact::<PersistedRuntimeOutputArtifact>(Some(
+                        &artifact.storage_path,
+                    ))?
+                    .map(|record| serde_json::to_string_pretty(&record.serialized_session))
+                    .transpose()?
+                    .unwrap_or_else(|| "{}".to_string());
+                (
+                    aggregate.detail.summary.title.clone(),
+                    "json".to_string(),
+                    Some("application/json".to_string()),
+                    fallback_session,
+                    None,
+                    artifact.updated_at,
+                )
+            };
+
+        let mut content = DeliverableVersionContent {
+            artifact_id: artifact.artifact_ref.clone(),
+            version: 1,
+            preview_kind: preview_kind.clone(),
+            editable: true,
+            file_name: Some(format!(
+                "{}-v1.{}",
+                artifact.artifact_ref,
+                deliverable_file_extension(&preview_kind, content_type.as_deref())
+            )),
+            content_type: content_type.clone(),
+            text_content: Some(text_content),
+            data_base64: None,
+            byte_size: None,
+        };
+        let content_bytes = deliverable_content_bytes(&content)?;
+        content.byte_size = Some(content_bytes.len() as u64);
+        let (storage_path, content_hash, byte_size) =
+            self.persist_deliverable_version_body(&content)?;
+
+        let initial_detail = DeliverableDetail {
+            id: artifact.artifact_ref.clone(),
+            workspace_id: self.state.workspace_id.clone(),
+            project_id: aggregate.detail.summary.project_id.clone(),
+            conversation_id: aggregate.detail.summary.conversation_id.clone(),
+            session_id: artifact.session_id.clone(),
+            run_id: artifact.run_id.clone(),
+            source_message_id: source_message_id.clone(),
+            parent_artifact_id: None,
+            title: title.clone(),
+            status: "ready".into(),
+            preview_kind: preview_kind.clone(),
+            latest_version: 1,
+            latest_version_ref: ArtifactVersionReference {
+                artifact_id: artifact.artifact_ref.clone(),
+                version: 1,
+                title: title.clone(),
+                preview_kind: preview_kind.clone(),
+                updated_at,
+                content_type: content_type.clone(),
+            },
+            promotion_state: "not-promoted".into(),
+            promotion_knowledge_id: None,
+            updated_at,
+            storage_path: Some(storage_path.clone()),
+            content_hash: Some(content_hash.clone()),
+            byte_size: Some(byte_size),
+            content_type: content_type.clone(),
+        };
+
+        self.insert_deliverable_version_row(
+            connection,
+            &initial_detail,
+            1,
+            &title,
+            &preview_kind,
+            updated_at,
+            &storage_path,
+            &content_hash,
+            byte_size,
+            content_type.as_deref(),
+            source_message_id.as_deref(),
+            None,
+        )?;
+
+        if self
+            .deliverable_detail_from_connection(connection, &artifact.artifact_ref)?
+            .is_none()
+        {
+            self.upsert_deliverable_record(connection, &initial_detail)?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn get_deliverable_detail(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Option<DeliverableDetail>, AppError> {
+        let connection = self.open_db()?;
+        self.deliverable_detail_from_connection(&connection, artifact_id)
+    }
+
+    pub(crate) fn list_deliverable_versions(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Vec<DeliverableVersionSummary>, AppError> {
+        let connection = self.open_db()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT artifact_id, version, title, preview_kind, updated_at, session_id, run_id,
+                        source_message_id, parent_version, byte_size, content_hash, content_type
+                 FROM artifact_versions
+                 WHERE artifact_id = ?1
+                 ORDER BY version DESC",
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let rows = statement
+            .query_map([artifact_id], |row| {
+                Ok(DeliverableVersionSummary {
+                    artifact_id: row.get(0)?,
+                    version: row.get::<_, i64>(1)?.max(0) as u32,
+                    title: row.get(2)?,
+                    preview_kind: row.get(3)?,
+                    updated_at: row.get::<_, i64>(4)?.max(0) as u64,
+                    session_id: row.get(5)?,
+                    run_id: row.get(6)?,
+                    source_message_id: row.get(7)?,
+                    parent_version: row
+                        .get::<_, Option<i64>>(8)?
+                        .map(|value| value.max(0) as u32),
+                    byte_size: row
+                        .get::<_, Option<i64>>(9)?
+                        .map(|value| value.max(0) as u64),
+                    content_hash: row.get(10)?,
+                    content_type: row.get(11)?,
+                })
+            })
+            .map_err(|error| AppError::database(error.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AppError::database(error.to_string()))
+    }
+
+    pub(crate) fn get_deliverable_version_content(
+        &self,
+        artifact_id: &str,
+        version: u32,
+    ) -> Result<Option<DeliverableVersionContent>, AppError> {
+        let connection = self.open_db()?;
+        let storage_path = connection
+            .query_row(
+                "SELECT storage_path
+                 FROM artifact_versions
+                 WHERE artifact_id = ?1 AND version = ?2",
+                params![artifact_id, i64::from(version)],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let Some(storage_path) = storage_path else {
+            return Ok(None);
+        };
+        self.load_runtime_artifact::<DeliverableVersionContent>(Some(&storage_path))
+    }
+
+    pub(crate) async fn create_deliverable_version(
+        &self,
+        artifact_id: &str,
+        input: CreateDeliverableVersionInput,
+    ) -> Result<DeliverableDetail, AppError> {
+        let connection = self.open_db()?;
+        let existing = self
+            .deliverable_detail_from_connection(&connection, artifact_id)?
+            .ok_or_else(|| AppError::not_found(format!("deliverable `{artifact_id}`")))?;
+        let version = self.next_deliverable_version(&connection, artifact_id)?;
+        let title = input
+            .title
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                input
+                    .text_content
+                    .as_deref()
+                    .map(|content| deliverable_title_from_text(content, &existing.title))
+            })
+            .unwrap_or_else(|| existing.title.clone());
+        let preview_kind = if input.preview_kind.trim().is_empty() {
+            existing.preview_kind.clone()
+        } else {
+            input.preview_kind.clone()
+        };
+        let content_type = infer_deliverable_content_type(
+            &preview_kind,
+            input.content_type.as_deref(),
+            input.text_content.as_deref(),
+            input.data_base64.as_deref(),
+        )
+        .or(existing.content_type.clone());
+        let mut content = DeliverableVersionContent {
+            artifact_id: artifact_id.to_string(),
+            version,
+            preview_kind: preview_kind.clone(),
+            editable: input.data_base64.is_none(),
+            file_name: Some(format!(
+                "{artifact_id}-v{version}.{}",
+                deliverable_file_extension(&preview_kind, content_type.as_deref())
+            )),
+            content_type: content_type.clone(),
+            text_content: input.text_content.clone(),
+            data_base64: input.data_base64.clone(),
+            byte_size: None,
+        };
+        let content_bytes = deliverable_content_bytes(&content)?;
+        content.byte_size = Some(content_bytes.len() as u64);
+        let (storage_path, content_hash, byte_size) =
+            self.persist_deliverable_version_body(&content)?;
+        let updated_at = timestamp_now();
+        let parent_version = input.parent_version.or(Some(existing.latest_version));
+        let updated_detail = DeliverableDetail {
+            id: existing.id.clone(),
+            workspace_id: existing.workspace_id.clone(),
+            project_id: existing.project_id.clone(),
+            conversation_id: existing.conversation_id.clone(),
+            session_id: existing.session_id.clone(),
+            run_id: existing.run_id.clone(),
+            source_message_id: input.source_message_id.clone(),
+            parent_artifact_id: existing.parent_artifact_id.clone(),
+            title: title.clone(),
+            status: existing.status.clone(),
+            preview_kind: preview_kind.clone(),
+            latest_version: version,
+            latest_version_ref: ArtifactVersionReference {
+                artifact_id: existing.id.clone(),
+                version,
+                title: title.clone(),
+                preview_kind: preview_kind.clone(),
+                updated_at,
+                content_type: content_type.clone(),
+            },
+            promotion_state: existing.promotion_state.clone(),
+            promotion_knowledge_id: existing.promotion_knowledge_id.clone(),
+            updated_at,
+            storage_path: Some(storage_path.clone()),
+            content_hash: Some(content_hash.clone()),
+            byte_size: Some(byte_size),
+            content_type: content_type.clone(),
+        };
+
+        self.insert_deliverable_version_row(
+            &connection,
+            &updated_detail,
+            version,
+            &title,
+            &preview_kind,
+            updated_at,
+            &storage_path,
+            &content_hash,
+            byte_size,
+            content_type.as_deref(),
+            input.source_message_id.as_deref(),
+            parent_version,
+        )?;
+        self.upsert_deliverable_record(&connection, &updated_detail)?;
+        Ok(updated_detail)
+    }
+
+    pub(crate) async fn promote_deliverable(
+        &self,
+        artifact_id: &str,
+        input: PromoteDeliverableInput,
+    ) -> Result<DeliverableDetail, AppError> {
+        let connection = self.open_db()?;
+        let existing = self
+            .deliverable_detail_from_connection(&connection, artifact_id)?
+            .ok_or_else(|| AppError::not_found(format!("deliverable `{artifact_id}`")))?;
+        let latest_content =
+            self.get_deliverable_version_content(artifact_id, existing.latest_version)?;
+        let knowledge_title = input
+            .title
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| existing.title.clone());
+        let derived_summary = latest_content
+            .as_ref()
+            .and_then(|content| content.text_content.as_deref())
+            .map(|content| deliverable_summary_from_text(content, &knowledge_title))
+            .unwrap_or_else(|| deliverable_summary_from_text(&existing.title, &knowledge_title));
+        let knowledge_summary = input
+            .summary
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or(derived_summary);
+        let knowledge_kind = input
+            .kind
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("shared")
+            .to_string();
+        let knowledge_id = existing
+            .promotion_knowledge_id
+            .clone()
+            .unwrap_or_else(|| format!("knowledge-{}", Uuid::new_v4()));
+        let updated_at = timestamp_now();
+
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO knowledge_records
+                 (id, workspace_id, project_id, title, summary, kind, status, source_type, source_ref, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    &knowledge_id,
+                    &existing.workspace_id,
+                    Some(existing.project_id.as_str()),
+                    knowledge_title,
+                    knowledge_summary,
+                    knowledge_kind,
+                    "active",
+                    "artifact",
+                    artifact_id,
+                    updated_at as i64,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        let promoted_detail = DeliverableDetail {
+            promotion_state: "promoted".into(),
+            promotion_knowledge_id: Some(knowledge_id.clone()),
+            updated_at,
+            latest_version_ref: existing.latest_version_ref.clone(),
+            ..existing.clone()
+        };
+        self.upsert_deliverable_record(&connection, &promoted_detail)?;
+
+        let trace_detail =
+            format!("Promoted deliverable `{artifact_id}` to knowledge `{knowledge_id}`.");
+        self.state
+            .observation
+            .append_trace(TraceEventRecord {
+                id: format!("trace-{}", Uuid::new_v4()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: Some(promoted_detail.project_id.clone()),
+                run_id: Some(promoted_detail.run_id.clone()),
+                session_id: Some(promoted_detail.session_id.clone()),
+                event_kind: "deliverable_promoted".into(),
+                title: "Deliverable promoted".into(),
+                detail: trace_detail.clone(),
+                created_at: updated_at,
+            })
+            .await?;
+        self.state
+            .observation
+            .append_audit(AuditRecord {
+                id: format!("audit-{}", Uuid::new_v4()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: Some(promoted_detail.project_id.clone()),
+                actor_type: "system".into(),
+                actor_id: "runtime-adapter".into(),
+                action: "deliverable.promote".into(),
+                resource: artifact_id.into(),
+                outcome: "success".into(),
+                created_at: updated_at,
+            })
+            .await?;
+
+        let event = RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "deliverable.promoted".into(),
+            kind: Some("deliverable.promoted".into()),
+            workspace_id: self.state.workspace_id.clone(),
+            project_id: optional_project_id(&promoted_detail.project_id),
+            session_id: promoted_detail.session_id.clone(),
+            conversation_id: promoted_detail.conversation_id.clone(),
+            run_id: Some(promoted_detail.run_id.clone()),
+            emitted_at: updated_at,
+            sequence: 0,
+            target_kind: Some("deliverable".into()),
+            target_ref: Some(artifact_id.into()),
+            outcome: Some("promoted".into()),
+            ..Default::default()
+        };
+        self.emit_event(&promoted_detail.session_id, event).await?;
+
+        Ok(promoted_detail)
     }
 
     fn persist_runtime_output_artifacts_for_run(
@@ -1544,6 +2248,9 @@ impl RuntimeAdapter {
                     ],
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;
+        }
+        for artifact in runtime_artifact_rows.values() {
+            self.persist_runtime_generated_deliverable(&connection, aggregate, artifact)?;
         }
 
         connection

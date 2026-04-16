@@ -1,11 +1,11 @@
 import type {
   AccessRoleRecord,
   AgentRecord,
-  ArtifactRecord,
   AutomationRecord,
   CapabilityManagementProjection,
   CredentialBinding,
   DataPolicyRecord,
+  DeliverableSummary,
   InboxItemRecord,
   KnowledgeRecord,
   MenuDefinition,
@@ -22,6 +22,8 @@ import type {
   ProjectPromotionRequest,
   ProjectRecord,
   ProjectTeamLinkRecord,
+  DeliverableVersionContent,
+  DeliverableVersionSummary,
   RoleBindingRecord,
   RuntimeEffectiveConfig,
   SystemBootstrapStatus,
@@ -92,7 +94,9 @@ export interface WorkspaceFixtureState {
   resourceContents: Record<string, WorkspaceResourceContentDocument>
   resourceChildren: Record<string, WorkspaceResourceChildrenRecord[]>
   remoteDirectories: Record<string, WorkspaceDirectoryBrowserResponse>
-  artifacts: ArtifactRecord[]
+  deliverables: DeliverableSummary[]
+  deliverableVersionSummaries: Map<string, DeliverableVersionSummary[]>
+  deliverableVersionContents: Map<string, DeliverableVersionContent>
   inboxItems: InboxItemRecord[]
   workspaceKnowledge: KnowledgeRecord[]
   projectKnowledge: Record<string, KnowledgeRecord[]>
@@ -936,14 +940,25 @@ export function createWorkspaceFixtureState(
     },
   }
 
-  const artifacts: ArtifactRecord[] = [
+  const deliverables: DeliverableSummary[] = [
     {
       id: 'artifact-run-conv-redesign',
       workspaceId: workspace.id,
       projectId: 'proj-redesign',
+      conversationId: 'conv-redesign',
       title: 'Runtime Delivery Summary',
       status: 'review',
       latestVersion: 3,
+      latestVersionRef: {
+        artifactId: 'artifact-run-conv-redesign',
+        title: 'Runtime Delivery Summary',
+        version: 3,
+        previewKind: 'markdown',
+        contentType: 'text/markdown',
+        updatedAt: 103,
+      },
+      previewKind: 'markdown',
+      promotionState: 'candidate',
       updatedAt: 103,
       contentType: 'text/markdown',
     },
@@ -951,9 +966,20 @@ export function createWorkspaceFixtureState(
       id: 'artifact-run-conv-approval',
       workspaceId: workspace.id,
       projectId: 'proj-redesign',
+      conversationId: 'conv-approval',
       title: 'Approval Command Output',
       status: 'draft',
       latestVersion: 1,
+      latestVersionRef: {
+        artifactId: 'artifact-run-conv-approval',
+        title: 'Approval Command Output',
+        version: 1,
+        previewKind: 'text',
+        contentType: 'text/plain',
+        updatedAt: 104,
+      },
+      previewKind: 'text',
+      promotionState: 'not-promoted',
       updatedAt: 104,
       contentType: 'text/plain',
     },
@@ -961,9 +987,20 @@ export function createWorkspaceFixtureState(
       id: 'artifact-1',
       workspaceId: workspace.id,
       projectId: 'proj-redesign',
+      conversationId: 'conv-redesign',
       title: 'Workspace Protocol Baseline',
       status: 'approved',
       latestVersion: 5,
+      latestVersionRef: {
+        artifactId: 'artifact-1',
+        title: 'Workspace Protocol Baseline',
+        version: 5,
+        previewKind: 'markdown',
+        contentType: 'text/markdown',
+        updatedAt: 100,
+      },
+      previewKind: 'markdown',
+      promotionState: 'promoted',
       updatedAt: 100,
       contentType: 'text/markdown',
     },
@@ -2369,7 +2406,9 @@ export function createWorkspaceFixtureState(
     resourceContents,
     resourceChildren,
     remoteDirectories,
-    artifacts,
+    deliverables,
+    deliverableVersionSummaries: new Map(),
+    deliverableVersionContents: new Map(),
     inboxItems,
     workspaceKnowledge,
     projectKnowledge,

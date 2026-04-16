@@ -18,6 +18,7 @@
     "pause": "Pause",
     "resume": "Resume",
     "cancel": "Cancel",
+    "expand": "Expand",
     "collapse": "Collapse",
     "confirm": "Confirm",
     "confirmDelete": "Delete this item?",
@@ -39,7 +40,7 @@
     "workspace": "Workspace",
     "project": "Project",
     "members": "{count} members",
-    "artifacts": "{count} artifacts",
+    "artifacts": "{count} deliverables",
     "teams": "{count} teams",
     "conversations": "{count} conversations",
     "items": "{count} items",
@@ -201,6 +202,7 @@
     "emptyDescription": "Try a workspace, project, conversation, or surface name.",
     "sections": {
       "conversations": "Conversations",
+      "deliverables": "Deliverables",
       "projects": "Projects",
       "workspaces": "Workspaces",
       "navigation": "Navigation"
@@ -210,6 +212,7 @@
       "console": "Open the current console",
       "conversation": "Open the current conversation",
       "agents": "Open the agent center",
+      "deliverables": "Open deliverables",
       "resources": "Open resources",
       "knowledge": "Open knowledge",
       "trace": "Open trace",
@@ -264,6 +267,7 @@
       "overview": "Overview",
       "dashboard": "Dashboard",
       "conversation": "Conversation",
+      "deliverables": "Deliverables",
       "resources": "Resources",
       "knowledge": "Knowledge",
       "trace": "Trace",
@@ -296,7 +300,7 @@
       "activeConversations": "Active Sessions",
       "pendingInbox": "Pending Inbox",
       "projectPhase": "Project Phase",
-      "artifacts": "Artifacts",
+      "artifacts": "Deliverables",
       "teams": "Teams",
       "intent": "Intent",
       "progress": "Progress",
@@ -317,10 +321,10 @@
     },
     "highlights": {
       "title": "Recent Highlights",
-      "subtitle": "Quick access to sessions, artifacts, approvals, and traces.",
+      "subtitle": "Quick access to sessions, deliverables, approvals, and traces.",
       "conversationTitle": "Open current session",
       "conversationDescription": "Continue the latest workstream.",
-      "artifactTitle": "Review the latest artifact",
+      "artifactTitle": "Review the latest deliverable",
       "artifactDescription": "Jump into the conversation detail panel.",
       "traceTitle": "Inspect the trace run",
       "traceDescription": "Inspect the current execution chain."
@@ -332,10 +336,10 @@
       "emptyDescription": "There are no pending approvals or tasks right now."
     },
     "artifacts": {
-      "title": "Recent Artifacts",
+      "title": "Recent Deliverables",
       "subtitle": "Structured outputs generated within projects and sessions.",
-      "emptyTitle": "No artifacts yet",
-      "emptyDescription": "No project artifacts have been produced yet."
+      "emptyTitle": "No deliverables yet",
+      "emptyDescription": "No project deliverables have been produced yet."
     }
   },
   "overview": {
@@ -515,6 +519,12 @@
         "subtitle": "Review the latest session updates and jump directly into the active collaboration thread.",
         "meta": "{status}"
       },
+      "deliverables": {
+        "title": "Recent deliverables",
+        "subtitle": "Track the latest structured outputs and jump into version details.",
+        "meta": "v{version} • {state}",
+        "open": "Open deliverables"
+      },
       "modelMix": {
         "title": "Model mix",
         "subtitle": "Understand which configured models account for project token consumption.",
@@ -549,6 +559,8 @@
       "conversationsDescription": "Project runtime sessions will appear here after conversations start.",
       "activityTitle": "No project activity yet",
       "activityDescription": "There are no project logs available.",
+      "deliverablesTitle": "No deliverables yet",
+      "deliverablesDescription": "Project deliverables will appear here after conversations generate outputs.",
       "rankingTitle": "No session rankings yet",
       "rankingDescription": "Insufficient data for rankings.",
       "usersTitle": "No contributor analytics yet",
@@ -763,9 +775,12 @@
     "detail": {
       "title": "Session Detail",
       "sections": {
+        "deliverable": "Deliverable",
+        "context": "Context",
+        "ops": "Ops",
         "summary": "Summary",
         "memories": "Memories",
-        "artifacts": "Artifacts",
+        "artifacts": "Deliverables",
         "knowledge": "Knowledge",
         "resources": "Resources",
         "tools": "Tools",
@@ -778,7 +793,7 @@
         "tokenUsage": "Token usage",
         "cards": {
           "messages": "Messages",
-          "artifacts": "Artifacts",
+          "artifacts": "Deliverables",
           "resources": "Resources"
         }
       },
@@ -789,17 +804,39 @@
         "emptyTitle": "No memories",
         "emptyDescription": "No long-term memories have been established yet."
       },
-      "artifacts": {
-        "title": "Session Artifacts",
-        "filterPlaceholder": "Filter artifacts",
+      "deliverables": {
+        "title": "Session Deliverables",
+        "filterPlaceholder": "Filter deliverables",
         "updatedAt": "Updated",
         "contentType": "Content type",
-        "listTitle": "Conversation artifacts",
+        "switchTitle": "Conversation deliverables",
+        "listTitle": "Conversation deliverables",
+        "previewTitle": "Preview",
+        "loadingPreview": "Loading deliverable preview…",
+        "loadingVersions": "Loading version history…",
+        "versionsTitle": "Version history",
+        "versionCount": "{count} versions",
+        "versionLabel": "Version {version}",
+        "parentVersionLabel": "from v{version}",
+        "versionsEmptyTitle": "No versions yet",
+        "versionsEmptyDescription": "Saved versions for this deliverable will appear here.",
+        "previewUnavailableTitle": "No inline preview",
+        "previewUnavailableDescription": "This deliverable type does not support inline preview in the conversation rail yet.",
+        "previewMeta": "{size} · {contentType}",
+        "saveVersion": "Save version",
+        "savedVersion": "Saved as version {version}",
         "linkedResourcesTitle": "Linked resources",
         "noLinkedResourcesTitle": "No linked resources",
-        "noLinkedResourcesDescription": "This artifact has not been materialized into project resources yet.",
-        "emptyTitle": "No artifacts yet",
-        "emptyDescription": "Artifacts created by the current conversation will appear here."
+        "noLinkedResourcesDescription": "This deliverable has not been materialized into project resources yet.",
+        "emptyTitle": "No deliverables yet",
+        "emptyDescription": "Deliverables created by the current conversation will appear here."
+      },
+      "context": {
+        "promotionTitle": "Promotion context",
+        "lineageSession": "Session",
+        "lineageRun": "Run",
+        "lineageMessage": "Message",
+        "knowledgeLink": "Knowledge link"
       },
       "knowledge": {
         "title": "Linked Knowledge",
@@ -817,6 +854,12 @@
         "title": "Tool Usage",
         "emptyTitle": "No tool records",
         "emptyDescription": "Tool calls executed during the session will appear here."
+      },
+      "ops": {
+        "pendingTitle": "Pending review",
+        "currentStep": "Current step",
+        "toolCount": "Tools",
+        "timelineCount": "Timeline"
       },
       "timeline": {
         "title": "Execution Path",
@@ -886,13 +929,14 @@
         "openConversation": "Enter Session",
         "openTrace": "View Trace",
         "openResources": "View Resources",
+        "openDeliverable": "Open deliverable",
         "traceLabel": "Runtime Trace",
         "resourcesLabel": "Linked Resources"
       }
     },
     "empty": {
       "projectTitle": "No project knowledge yet",
-      "projectDescription": "Knowledge entries will appear here after conversations, artifacts, or runtime traces start to accumulate context.",
+      "projectDescription": "Knowledge entries will appear here after conversations, deliverables, or runtime traces start to accumulate context.",
       "workspaceTitle": "No global knowledge yet",
       "workspaceDescription": "A workspace-wide global knowledge hub hasn't been established yet.",
       "filteredTitle": "No matching knowledge",
@@ -903,16 +947,49 @@
     },
     "sourceDescriptions": {
       "conversation": "Settled from context in linked sessions.",
-      "artifact": "Refined from structured artifacts or documents.",
+      "artifact": "Refined from deliverables or documents.",
       "run": "Automatically promoted from runtime Trace findings."
     },
     "lineageTypes": {
       "conversation": "Conversation",
-      "artifact": "Artifact",
+      "artifact": "Deliverable",
       "run": "Run",
       "resource": "Resource",
       "trace": "Trace",
       "unknown": "Unknown"
+    }
+  },
+  "deliverables": {
+    "header": {
+      "eyebrow": "Project Deliverables",
+      "titleFallback": "Deliverables",
+      "subtitle": "Review generated outputs, version history, and downstream promotion status."
+    },
+    "filters": {
+      "searchPlaceholder": "Search by deliverable title, id, or type…"
+    },
+    "list": {
+      "eyebrow": "Version {version}"
+    },
+    "detail": {
+      "emptyTitle": "Select a deliverable",
+      "emptyDescription": "Choose a deliverable from the left list to inspect its content and version history.",
+      "updatedAt": "Updated",
+      "contentType": "Content type",
+      "sourceConversation": "Source conversation",
+      "actionsTitle": "Actions",
+      "openConversation": "Open conversation"
+    },
+    "empty": {
+      "title": "No deliverables yet",
+      "description": "Deliverables created inside the current project will appear here."
+    },
+    "actions": {
+      "promote": "Promote to knowledge",
+      "fork": "Fork into conversation"
+    },
+    "status": {
+      "promoted": "Deliverable promoted to project knowledge."
     }
   },
   "runtime": {
@@ -969,7 +1046,7 @@
       "eyebrow": "Resource Center",
       "title": "Project Assets",
       "projectTitleFallback": "Project Assets",
-      "subtitle": "Manage files, links, and generated outputs."
+      "subtitle": "Manage files, links, and deliverables."
     },
     "filters": {
       "searchPlaceholder": "Search by name, path, type, or tag…",
@@ -998,7 +1075,7 @@
       "total": "Total Assets",
       "source": "Original",
       "generated": "AI Generated",
-      "artifact": "Artifacts"
+      "artifact": "Deliverables"
     },
     "empty": {
       "title": "No resources yet",
@@ -1032,7 +1109,7 @@
       "file": "File",
       "folder": "Folder",
       "url": "External Link",
-      "artifact": "Session Artifact"
+      "artifact": "Session Deliverable"
     },
     "editForm": {
       "nameLabel": "Resource Name",
@@ -1798,10 +1875,15 @@
       "approved": "Approved",
       "published": "Published"
     },
+    "deliverablePromotionState": {
+      "not-promoted": "Not promoted",
+      "candidate": "Candidate",
+      "promoted": "Promoted"
+    },
     "projectResourceKind": {
       "file": "File",
       "folder": "Folder",
-      "artifact": "Artifact",
+      "artifact": "Deliverable",
       "url": "URL"
     },
     "projectResourceOrigin": {
@@ -1812,7 +1894,7 @@
       "file": "File",
       "folder": "Folder",
       "url": "External link",
-      "artifact": "Artifact"
+      "artifact": "Deliverable"
     },
     "resourceOrigin": {
       "source": "Source",
@@ -2009,7 +2091,7 @@
           "knowledge": "Knowledge",
           "workspace": "Workspace",
           "team": "Team",
-          "artifact": "Artifact",
+          "artifact": "Deliverable",
           "automation": "Automation",
           "inbox": "Inbox",
           "pet": "Pet",
@@ -2088,7 +2170,7 @@
         "tool": "Tool",
         "automation": "Automation",
         "pet": "Pet",
-        "artifact": "Artifact",
+        "artifact": "Deliverable",
         "inbox": "Inbox",
         "providerCredential": "Provider Credentials"
       },

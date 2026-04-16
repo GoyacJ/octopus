@@ -1,34 +1,13 @@
 import type {
-  ConversationMemorySource,
-  KnowledgeKind,
-  KnowledgePlaneScope,
-  KnowledgeSourceType,
-  KnowledgeStatus,
-  KnowledgeVisibilityMode,
-  RiskLevel,
-} from './shared'
+  KnowledgeEntryRecord as OpenApiKnowledgeEntryRecord,
+  KnowledgeRecord as OpenApiKnowledgeRecord,
+} from './generated'
+import type { ConversationMemorySource } from './shared'
 
-export interface KnowledgeEntry {
-  id: string
-  workspaceId: string
-  projectId?: string
-  conversationId?: string
-  title: string
-  kind: KnowledgeKind
-  scope: KnowledgePlaneScope
-  status: KnowledgeStatus
-  visibility: KnowledgeVisibilityMode
-  sourceType: KnowledgeSourceType
-  sourceId: string
-  summary: string
-  ownerUserId?: string
-  lastUsedAt: number
-  trustLevel: RiskLevel
-  lineage: string[]
-  createdByMessageId?: string
-}
+export type KnowledgeEntry = OpenApiKnowledgeEntryRecord
+export type KnowledgeRecord = OpenApiKnowledgeRecord
 
-export interface KnowledgeCandidate extends KnowledgeEntry {
+export interface KnowledgeCandidate extends OpenApiKnowledgeRecord {
   reviewNote: string
 }
 

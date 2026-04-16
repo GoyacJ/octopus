@@ -1177,18 +1177,156 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
-  /api/v1/artifacts:
+  /api/v1/deliverables/{deliverableId}:
     get:
-      operationId: listArtifacts
+      operationId: getDeliverableDetail
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliverableDetail"
+          description: Deliverable detail payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/deliverables/{deliverableId}/fork:
+    post:
+      operationId: forkDeliverableToConversation
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForkDeliverableInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationRecord"
+          description: Deliverable fork payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/deliverables/{deliverableId}/promote:
+    post:
+      operationId: promoteDeliverable
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteDeliverableInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeEntryRecord"
+          description: Deliverable promotion payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/deliverables/{deliverableId}/versions:
+    get:
+      operationId: listDeliverableVersions
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           content:
             application/json:
               schema:
                 items:
-                  $ref: "#/components/schemas/ArtifactRecord"
+                  $ref: "#/components/schemas/DeliverableVersionSummary"
                 type: array
-          description: Artifact list payload.
+          description: Deliverable version list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createDeliverableVersion
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeliverableVersionInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliverableDetail"
+          description: Saved deliverable version payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/deliverables/{deliverableId}/versions/{version}:
+    get:
+      operationId: getDeliverableVersionContent
+      parameters:
+        - in: path
+          name: deliverableId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliverableVersionContent"
+          description: Deliverable version content payload.
         default:
           content:
             application/json:
@@ -1824,6 +1962,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectDashboardSnapshot"
           description: Project dashboard payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/deliverables:
+    get:
+      operationId: listProjectDeliverables
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/DeliverableSummary"
+                type: array
+          description: Project deliverable list payload.
         default:
           content:
             application/json:
@@ -3682,6 +3844,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/deliverables:
+    get:
+      operationId: listWorkspaceDeliverables
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/DeliverableSummary"
+                type: array
+          description: Workspace deliverable list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/filesystem/directories:
     get:
       operationId: listWorkspaceFilesystemDirectories
@@ -4728,39 +4908,6 @@ components:
         - requireLineage
         - retainArtifacts
       type: object
-    ArtifactRecord:
-      additionalProperties: false
-      properties:
-        byteSize:
-          type: integer
-        contentHash:
-          type: string
-        contentType:
-          type: string
-        id:
-          type: string
-        latestVersion:
-          type: integer
-        projectId:
-          type: string
-        status:
-          $ref: "#/components/schemas/ArtifactStatus"
-        storagePath:
-          type: string
-        title:
-          type: string
-        updatedAt:
-          type: integer
-        workspaceId:
-          type: string
-      required:
-        - id
-        - workspaceId
-        - title
-        - status
-        - latestVersion
-        - updatedAt
-      type: object
     ArtifactStatus:
       enum:
         - draft
@@ -4768,6 +4915,28 @@ components:
         - approved
         - published
       type: string
+    ArtifactVersionReference:
+      additionalProperties: false
+      properties:
+        artifactId:
+          type: string
+        contentType:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        version:
+          type: integer
+      required:
+        - artifactId
+        - version
+        - title
+        - previewKind
+        - updatedAt
+      type: object
     AssetBundleAssetEntry:
       additionalProperties: false
       properties:
@@ -5703,6 +5872,26 @@ components:
       required:
         - slug
       type: object
+    CreateDeliverableVersionInput:
+      additionalProperties: false
+      properties:
+        contentType:
+          type: string
+        dataBase64:
+          type: string
+        parentVersion:
+          type: integer
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        sourceMessageId:
+          type: string
+        textContent:
+          type: string
+        title:
+          type: string
+      required:
+        - previewKind
+      type: object
     CreateHostWorkspaceConnectionInput:
       additionalProperties: false
       properties:
@@ -6023,6 +6212,171 @@ components:
         - allowParallelWorkers
         - maxWorkerCount
       type: object
+    DeliverableDetail:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentHash:
+          type: string
+        contentType:
+          type: string
+        conversationId:
+          type: string
+        id:
+          type: string
+        latestVersion:
+          type: integer
+        latestVersionRef:
+          $ref: "#/components/schemas/ArtifactVersionReference"
+        parentArtifactId:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        projectId:
+          type: string
+        promotionKnowledgeId:
+          type: string
+        promotionState:
+          $ref: "#/components/schemas/DeliverablePromotionState"
+        runId:
+          type: string
+        sessionId:
+          type: string
+        sourceMessageId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ArtifactStatus"
+        storagePath:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - conversationId
+        - sessionId
+        - runId
+        - title
+        - status
+        - previewKind
+        - latestVersion
+        - latestVersionRef
+        - promotionState
+        - updatedAt
+      type: object
+    DeliverablePromotionState:
+      enum:
+        - not-promoted
+        - candidate
+        - promoted
+      type: string
+    DeliverableSummary:
+      additionalProperties: false
+      properties:
+        contentType:
+          type: string
+        conversationId:
+          type: string
+        id:
+          type: string
+        latestVersion:
+          type: integer
+        latestVersionRef:
+          $ref: "#/components/schemas/ArtifactVersionReference"
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        projectId:
+          type: string
+        promotionState:
+          $ref: "#/components/schemas/DeliverablePromotionState"
+        status:
+          $ref: "#/components/schemas/ArtifactStatus"
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - conversationId
+        - title
+        - status
+        - previewKind
+        - latestVersion
+        - latestVersionRef
+        - promotionState
+        - updatedAt
+      type: object
+    DeliverableVersionContent:
+      additionalProperties: false
+      properties:
+        artifactId:
+          type: string
+        byteSize:
+          type: integer
+        contentType:
+          type: string
+        dataBase64:
+          type: string
+        editable:
+          type: boolean
+        fileName:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        textContent:
+          type: string
+        version:
+          type: integer
+      required:
+        - artifactId
+        - version
+        - previewKind
+        - editable
+      type: object
+    DeliverableVersionSummary:
+      additionalProperties: false
+      properties:
+        artifactId:
+          type: string
+        byteSize:
+          type: integer
+        contentHash:
+          type: string
+        contentType:
+          type: string
+        parentVersion:
+          type: integer
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        runId:
+          type: string
+        sessionId:
+          type: string
+        sourceMessageId:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        version:
+          type: integer
+      required:
+        - artifactId
+        - version
+        - title
+        - previewKind
+        - updatedAt
+      type: object
     EnterpriseAuthSuccess:
       additionalProperties: false
       properties:
@@ -6173,6 +6527,14 @@ components:
         - code
         - label
         - requiredPermissionCodes
+      type: object
+    ForkDeliverableInput:
+      additionalProperties: false
+      properties:
+        projectId:
+          type: string
+        title:
+          type: string
       type: object
     HealthcheckBackendStatus:
       additionalProperties: false
@@ -8314,6 +8676,16 @@ components:
         tools:
           $ref: "#/components/schemas/ProjectToolAssignments"
       type: object
+    PromoteDeliverableInput:
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/KnowledgeKind"
+        summary:
+          type: string
+        title:
+          type: string
+      type: object
     PromoteWorkspaceResourceInput:
       additionalProperties: false
       properties:
@@ -9367,7 +9739,7 @@ components:
       properties:
         artifactRefs:
           items:
-            type: string
+            $ref: "#/components/schemas/ArtifactVersionReference"
           type: array
         handoffRef:
           type: string
@@ -9615,7 +9987,7 @@ components:
       properties:
         artifacts:
           items:
-            type: string
+            $ref: "#/components/schemas/ArtifactVersionReference"
           type: array
         attachments:
           items:
@@ -9853,7 +10225,7 @@ components:
           $ref: "#/components/schemas/RuntimeApprovalRequest"
         artifactRefs:
           items:
-            type: string
+            $ref: "#/components/schemas/ArtifactVersionReference"
           type: array
         authTarget:
           $ref: "#/components/schemas/RuntimeAuthChallengeSummary"

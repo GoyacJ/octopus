@@ -133,4 +133,57 @@ describe('Workbench search overlay', () => {
 
     mounted.destroy()
   })
+
+  it('routes the navigation smart entry for deliverables to the project deliverables surface', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await nextTick()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    expect(input).not.toBeNull()
+
+    input!.value = 'deliverable'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushNavigation()
+
+    const deliverablesResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="nav-deliverables"]')
+    expect(deliverablesResult).not.toBeNull()
+
+    deliverablesResult?.click()
+    await flushNavigation()
+
+    expect(router.currentRoute.value.name).toBe('project-deliverables')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
+
+    mounted.destroy()
+  })
+
+  it('returns project deliverables as searchable results', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await nextTick()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    expect(input).not.toBeNull()
+
+    input!.value = 'runtime delivery summary'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushNavigation()
+
+    const deliverableResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="deliverable:artifact-run-conv-redesign"]')
+    expect(deliverableResult).not.toBeNull()
+
+    deliverableResult?.click()
+    await flushNavigation()
+
+    expect(router.currentRoute.value.name).toBe('project-deliverables')
+    expect(router.currentRoute.value.query.deliverable).toBe('artifact-run-conv-redesign')
+
+    mounted.destroy()
+  })
 })

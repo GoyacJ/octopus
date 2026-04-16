@@ -2,7 +2,12 @@
 
 import { describe, expect, it } from 'vitest'
 
-import type { RuntimeConfigPatch } from '@octopus/schema'
+import type {
+  CreateDeliverableVersionInput,
+  ForkDeliverableInput,
+  PromoteDeliverableInput,
+  RuntimeConfigPatch,
+} from '@octopus/schema'
 
 import {
   createHostBootstrap,
@@ -218,6 +223,205 @@ describe('runtime client transport', () => {
       note: 'Approved for durable reuse.',
     })
     expect(headers.get('Idempotency-Key')).toBe('idem-memory-proposal-1')
+  })
+
+  it('routes deliverable detail, versions, content, and actions through the runtime adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'artifact-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          conversationId: 'conv-1',
+          sessionId: 'rt-1',
+          runId: 'run-1',
+          title: 'Runtime Delivery Summary',
+          status: 'review',
+          previewKind: 'markdown',
+          latestVersion: 2,
+          updatedAt: 10,
+          promotionState: 'not-promoted',
+          latestVersionRef: {
+            artifactId: 'artifact-1',
+            version: 2,
+            title: 'Runtime Delivery Summary',
+            previewKind: 'markdown',
+            updatedAt: 10,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            artifactId: 'artifact-1',
+            version: 2,
+            title: 'Runtime Delivery Summary',
+            previewKind: 'markdown',
+            updatedAt: 10,
+            sessionId: 'rt-1',
+            runId: 'run-1',
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          artifactId: 'artifact-1',
+          version: 2,
+          previewKind: 'markdown',
+          editable: true,
+          contentType: 'text/markdown',
+          textContent: '# Runtime Delivery Summary',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'artifact-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          conversationId: 'conv-1',
+          sessionId: 'rt-1',
+          runId: 'run-1',
+          title: 'Edited Delivery Summary',
+          status: 'review',
+          previewKind: 'markdown',
+          latestVersion: 3,
+          updatedAt: 12,
+          promotionState: 'not-promoted',
+          latestVersionRef: {
+            artifactId: 'artifact-1',
+            version: 3,
+            title: 'Edited Delivery Summary',
+            previewKind: 'markdown',
+            updatedAt: 12,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'knowledge-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          title: 'Runtime Delivery Summary',
+          scope: 'project',
+          status: 'active',
+          sourceType: 'artifact',
+          sourceRef: 'artifact-1',
+          updatedAt: 20,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'conv-forked-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          sessionId: 'rt-fork-1',
+          title: 'Forked Deliverable',
+          status: 'draft',
+          updatedAt: 30,
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const createVersionInput: CreateDeliverableVersionInput = {
+      title: 'Edited Delivery Summary',
+      previewKind: 'markdown',
+      textContent: '# Edited Delivery Summary',
+      parentVersion: 2,
+    }
+    const promoteInput: PromoteDeliverableInput = {
+      title: 'Runtime Delivery Summary',
+      summary: 'Promote this deliverable into reusable project knowledge.',
+      kind: 'shared',
+    }
+    const forkInput: ForkDeliverableInput = {
+      projectId: 'proj-redesign',
+      title: 'Forked Deliverable',
+    }
+
+    await (workspaceClient.runtime as any).getDeliverableDetail('artifact-1')
+    await (workspaceClient.runtime as any).listDeliverableVersions('artifact-1')
+    await (workspaceClient.runtime as any).getDeliverableVersionContent('artifact-1', 2)
+    await (workspaceClient.runtime as any).createDeliverableVersion(
+      'artifact-1',
+      createVersionInput,
+      'idem-deliverable-version-1',
+    )
+    await (workspaceClient.runtime as any).promoteDeliverable(
+      'artifact-1',
+      promoteInput,
+      'idem-deliverable-promote-1',
+    )
+    await (workspaceClient.runtime as any).forkDeliverable(
+      'artifact-1',
+      forkInput,
+      'idem-deliverable-fork-1',
+    )
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1/versions',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1/versions/2',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1/versions',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1/promote',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      6,
+      'http://127.0.0.1:43127/api/v1/deliverables/artifact-1/fork',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+
+    const createVersionRequest = fetchSpy.mock.calls[3]?.[1]
+    const createVersionHeaders = createVersionRequest?.headers as Headers
+    expect(JSON.parse(String(createVersionRequest?.body))).toMatchObject(createVersionInput)
+    expect(createVersionHeaders.get('Idempotency-Key')).toBe('idem-deliverable-version-1')
+
+    const promoteRequest = fetchSpy.mock.calls[4]?.[1]
+    const promoteHeaders = promoteRequest?.headers as Headers
+    expect(JSON.parse(String(promoteRequest?.body))).toMatchObject(promoteInput)
+    expect(promoteHeaders.get('Idempotency-Key')).toBe('idem-deliverable-promote-1')
+
+    const forkRequest = fetchSpy.mock.calls[5]?.[1]
+    const forkHeaders = forkRequest?.headers as Headers
+    expect(JSON.parse(String(forkRequest?.body))).toMatchObject(forkInput)
+    expect(forkHeaders.get('Idempotency-Key')).toBe('idem-deliverable-fork-1')
   })
 
   it('posts auth challenge resolutions to the runtime auth challenge endpoint', async () => {

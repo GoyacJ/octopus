@@ -80,16 +80,20 @@ describe('useShellStore', () => {
     )
   })
 
-  it('syncs the detail focus and selected artifact from route state', () => {
+  it('syncs the workbench mode and selected deliverable from route state', () => {
     const store = useShellStore()
 
     store.syncFromRoute({
-      detail: 'resources',
-      artifact: 'art-roadmap',
+      conversationId: 'conv-redesign',
+      mode: 'deliverable',
+      deliverable: 'art-roadmap',
+      version: '4',
     })
 
-    expect(store.detailFocus).toBe('resources')
-    expect(store.selectedArtifactId).toBe('art-roadmap')
+    expect(store.activeConversationId).toBe('conv-redesign')
+    expect(store.workbenchMode).toBe('deliverable')
+    expect(store.selectedDeliverableId).toBe('art-roadmap')
+    expect(store.selectedDeliverableVersion).toBe(4)
   })
 
   it('toggles the shell chrome state for both rails and the search overlay', () => {

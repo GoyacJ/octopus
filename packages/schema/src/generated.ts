@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 8f9de092f6fe4b5591692370fda6a88076acd286b908fca5c17f9066e908d7ab
+// Source hash: 2b1159239ab33839e45176ea7cc168ac78d4ca9ede849495fa2752bab9386d04
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "8f9de092f6fe4b5591692370fda6a88076acd286b908fca5c17f9066e908d7ab"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "2b1159239ab33839e45176ea7cc168ac78d4ca9ede849495fa2752bab9386d04"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -199,21 +199,16 @@ export interface ArtifactHandoffPolicy {
   retainArtifacts: boolean
 }
 
-export interface ArtifactRecord {
-  byteSize?: number
-  contentHash?: string
+export type ArtifactStatus = "draft" | "review" | "approved" | "published"
+
+export interface ArtifactVersionReference {
+  artifactId: string
   contentType?: string
-  id: string
-  latestVersion: number
-  projectId?: string
-  status: ArtifactStatus
-  storagePath?: string
+  previewKind: ResourcePreviewKind
   title: string
   updatedAt: number
-  workspaceId: string
+  version: number
 }
-
-export type ArtifactStatus = "draft" | "review" | "approved" | "published"
 
 export interface AssetBundleAssetEntry {
   assetKind: "agent" | "team" | "skill" | "mcp-server" | "plugin" | "workflow-template"
@@ -531,6 +526,16 @@ export interface CopyWorkspaceSkillToManagedInput {
   slug: string
 }
 
+export interface CreateDeliverableVersionInput {
+  contentType?: string
+  dataBase64?: string
+  parentVersion?: number
+  previewKind: ResourcePreviewKind
+  sourceMessageId?: string
+  textContent?: string
+  title?: string
+}
+
 export interface CreateHostWorkspaceConnectionInput {
   authMode: WorkspaceAuthMode
   baseUrl: string
@@ -653,6 +658,73 @@ export interface DelegationPolicy {
   mode: "disabled" | "leader-orchestrated" | "single-worker" | "multi-worker"
 }
 
+export interface DeliverableDetail {
+  byteSize?: number
+  contentHash?: string
+  contentType?: string
+  conversationId: string
+  id: string
+  latestVersion: number
+  latestVersionRef: ArtifactVersionReference
+  parentArtifactId?: string
+  previewKind: ResourcePreviewKind
+  projectId: string
+  promotionKnowledgeId?: string
+  promotionState: DeliverablePromotionState
+  runId: string
+  sessionId: string
+  sourceMessageId?: string
+  status: ArtifactStatus
+  storagePath?: string
+  title: string
+  updatedAt: number
+  workspaceId: string
+}
+
+export type DeliverablePromotionState = "not-promoted" | "candidate" | "promoted"
+
+export interface DeliverableSummary {
+  contentType?: string
+  conversationId: string
+  id: string
+  latestVersion: number
+  latestVersionRef: ArtifactVersionReference
+  previewKind: ResourcePreviewKind
+  projectId: string
+  promotionState: DeliverablePromotionState
+  status: ArtifactStatus
+  title: string
+  updatedAt: number
+  workspaceId: string
+}
+
+export interface DeliverableVersionContent {
+  artifactId: string
+  byteSize?: number
+  contentType?: string
+  dataBase64?: string
+  editable: boolean
+  fileName?: string
+  previewKind: ResourcePreviewKind
+  textContent?: string
+  version: number
+}
+
+export interface DeliverableVersionSummary {
+  artifactId: string
+  byteSize?: number
+  contentHash?: string
+  contentType?: string
+  parentVersion?: number
+  previewKind: ResourcePreviewKind
+  runId?: string
+  sessionId?: string
+  sourceMessageId?: string
+  title: string
+  updatedAt: number
+  version: number
+}
+
 export interface EnterpriseAuthSuccess {
   session: EnterpriseSessionSummary
   workspace: WorkspaceSummary
@@ -708,6 +780,11 @@ export interface FeatureDefinition {
   id: string
   label: string
   requiredPermissionCodes: string[]
+}
+
+export interface ForkDeliverableInput {
+  projectId?: string
+  title?: string
 }
 
 export interface HealthcheckBackendStatus {
@@ -1445,6 +1522,12 @@ export interface ProjectWorkspaceAssignments {
   tools?: ProjectToolAssignments
 }
 
+export interface PromoteDeliverableInput {
+  kind?: KnowledgeKind
+  summary?: string
+  title?: string
+}
+
 export interface PromoteWorkspaceResourceInput {
   scope: WorkspaceResourceScope
 }
@@ -1806,7 +1889,7 @@ export interface RuntimeEventEnvelope {
 export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
 export interface RuntimeHandoffSummary {
-  artifactRefs: string[]
+  artifactRefs: ArtifactVersionReference[]
   handoffRef: string
   mailboxRef: string
   receiverActorRef: string
@@ -1898,7 +1981,7 @@ export interface RuntimeMemorySummary {
 }
 
 export interface RuntimeMessage {
-  artifacts?: string[]
+  artifacts?: ArtifactVersionReference[]
   attachments?: string[]
   configuredModelId?: string
   configuredModelName?: string
@@ -2000,7 +2083,7 @@ export interface RuntimeRunSnapshot {
   actorRef: string
   approvalState?: string
   approvalTarget?: RuntimeApprovalRequest
-  artifactRefs: string[]
+  artifactRefs: ArtifactVersionReference[]
   authTarget?: RuntimeAuthChallengeSummary
   backgroundState?: string
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
@@ -2973,8 +3056,21 @@ export interface OctopusApiPaths {
     get: { operationId: "listClientApps"; response: ClientAppRecord[]; error: ApiErrorEnvelope }
     post: { operationId: "registerClientApp"; response: ClientAppRecord; error: ApiErrorEnvelope }
   }
-  "/api/v1/artifacts": {
-    get: { operationId: "listArtifacts"; response: ArtifactRecord[]; error: ApiErrorEnvelope }
+  "/api/v1/deliverables/{deliverableId}": {
+    get: { operationId: "getDeliverableDetail"; response: DeliverableDetail; error: ApiErrorEnvelope }
+  }
+  "/api/v1/deliverables/{deliverableId}/fork": {
+    post: { operationId: "forkDeliverableToConversation"; response: ConversationRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/deliverables/{deliverableId}/promote": {
+    post: { operationId: "promoteDeliverable"; response: KnowledgeEntryRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/deliverables/{deliverableId}/versions": {
+    get: { operationId: "listDeliverableVersions"; response: DeliverableVersionSummary[]; error: ApiErrorEnvelope }
+    post: { operationId: "createDeliverableVersion"; response: DeliverableDetail; error: ApiErrorEnvelope }
+  }
+  "/api/v1/deliverables/{deliverableId}/versions/{version}": {
+    get: { operationId: "getDeliverableVersionContent"; response: DeliverableVersionContent; error: ApiErrorEnvelope }
   }
   "/api/v1/host/bootstrap": {
     get: { operationId: "getHostBootstrap"; response: ShellBootstrap; error: ApiErrorEnvelope }
@@ -3055,6 +3151,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/dashboard": {
     get: { operationId: "getProjectDashboard"; response: ProjectDashboardSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/deliverables": {
+    get: { operationId: "listProjectDeliverables"; response: DeliverableSummary[]; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/knowledge": {
     get: { operationId: "listProjectKnowledge"; response: KnowledgeRecord[]; error: ApiErrorEnvelope }
@@ -3259,6 +3358,9 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/catalog/tools/{toolId}": {
     patch: { operationId: "updateWorkspaceTool"; response: ToolRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceTool"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/deliverables": {
+    get: { operationId: "listWorkspaceDeliverables"; response: DeliverableSummary[]; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/filesystem/directories": {
     get: { operationId: "listWorkspaceFilesystemDirectories"; response: WorkspaceDirectoryBrowserResponse; error: ApiErrorEnvelope }

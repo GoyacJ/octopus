@@ -7,6 +7,7 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { useKnowledgeStore } from '@/stores/knowledge'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import * as tauriClient from '@/tauri/client'
 import { useRuntimeStore } from '@/stores/runtime'
@@ -470,7 +471,7 @@ describe('Conversation surfaces', () => {
   })
 
   it('renders runtime-backed summary, memories, and tools in the conversation context pane', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=summary')
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
     await router.isReady()
 
     const mounted = mountApp()
@@ -492,25 +493,127 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('renders artifact and resource details in the conversation context pane', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=artifacts')
+  it('renders deliverable metadata and preview chrome in the conversation context pane', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
     await router.isReady()
 
     const mounted = mountApp()
     const runtime = useRuntimeStore()
 
     await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-preview-panel"]') !== null)
 
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.artifacts.listTitle')))
+    expect(mounted.container.querySelector('[data-testid="deliverable-version-list"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.artifacts.linkedResourcesTitle')))
-    expect(mounted.container.textContent).toContain('Desktop Redesign API')
+    expect(mounted.container.textContent).toContain('artifact-run-conv-redesign')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.deliverables.previewTitle')))
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.deliverables.contentType')))
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary.md')
+    expect(mounted.container.textContent).toContain('text/markdown')
 
-    const artifactFilter = mounted.container.querySelector(`input[placeholder="${String(i18n.global.t('conversation.detail.artifacts.filterPlaceholder'))}"]`) as HTMLInputElement
-    artifactFilter.value = 'Delivery'
-    artifactFilter.dispatchEvent(new Event('input', { bubbles: true }))
+    mounted.destroy()
+  })
+
+  it('renders the selected deliverable as a preview surface with version history', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-preview-panel"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="deliverable-version-list"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Version 3 content for artifact-run-conv-redesign.')
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary v2')
+
+    mounted.destroy()
+  })
+
+  it('switches deliverable versions in place and syncs the route query', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-version-2"]') !== null)
+
+    const versionButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="deliverable-version-2"]')
+    expect(versionButton).not.toBeNull()
+    versionButton?.click()
+
+    await waitFor(() => router.currentRoute.value.query.version === '2')
+    await waitFor(() => mounted.container.textContent?.includes('Version 2 content for artifact-run-conv-redesign.') ?? false)
+    expect(mounted.container.textContent).not.toContain('Version 3 content for artifact-run-conv-redesign.')
+
+    mounted.destroy()
+  })
+
+  it('allows inline deliverable editing and saves a new version', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-edit-button"]') !== null)
+
+    const editButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="deliverable-edit-button"]')
+    expect(editButton).not.toBeNull()
+    editButton?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-editor"]') !== null)
+
+    const editor = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="deliverable-editor"]')
+    expect(editor).not.toBeNull()
+    editor!.value = '# Runtime Delivery Summary\n\nTask 5 saved version content.'
+    editor!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
-    expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
+
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="deliverable-save-version"]')
+    expect(saveButton).not.toBeNull()
+    saveButton?.click()
+
+    await waitFor(() => router.currentRoute.value.query.version === '4')
+    await waitFor(() => mounted.container.textContent?.includes('Task 5 saved version content.') ?? false)
+    expect(mounted.container.textContent).toContain('v4')
+
+    mounted.destroy()
+  })
+
+  it('promotes the selected deliverable and forks it into a new conversation from the context pane', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+    const knowledgeStore = useKnowledgeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-preview-panel"]') !== null)
+
+    const promoteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-deliverable-promote"]')
+    expect(promoteButton).not.toBeNull()
+    promoteButton?.click()
+
+    await waitFor(() =>
+      knowledgeStore.activeProjectKnowledge.some(entry => entry.sourceRef === 'artifact-run-conv-redesign'),
+    )
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('deliverables.status.promoted')))
+
+    const forkButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-deliverable-fork"]')
+    expect(forkButton).not.toBeNull()
+    forkButton?.click()
+
+    await waitFor(() =>
+      typeof router.currentRoute.value.params.conversationId === 'string'
+      && router.currentRoute.value.params.conversationId.startsWith('conv-fork-artifact-run-conv-redesign-'),
+    )
+    expect(router.currentRoute.value.fullPath).toContain('/conversations/conv-fork-artifact-run-conv-redesign-')
 
     mounted.destroy()
   })
@@ -809,7 +912,7 @@ describe('Conversation surfaces', () => {
   })
 
   it('renders conversation-linked resources in the resource detail pane', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=resources')
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
     await router.isReady()
 
     const mounted = mountApp()

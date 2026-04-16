@@ -4,6 +4,7 @@ export type MenuIconKey =
   | 'dashboard'
   | 'console'
   | 'conversations'
+  | 'deliverables'
   | 'agents'
   | 'resources'
   | 'knowledge'
@@ -128,6 +129,17 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.projectModules.conversations',
     icon: 'conversations',
     order: 30,
+  },
+  {
+    id: 'menu-project-deliverables',
+    source: 'main-sidebar',
+    section: 'project',
+    routeName: 'project-deliverables',
+    routeNames: ['project-deliverables'],
+    defaultLabel: '项目交付物',
+    labelKey: 'sidebar.navigation.deliverables',
+    icon: 'deliverables',
+    order: 35,
   },
   {
     id: 'menu-project-agents',

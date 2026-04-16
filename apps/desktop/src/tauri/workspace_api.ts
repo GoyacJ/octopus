@@ -191,6 +191,19 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           },
         )
       },
+      async listDeliverables(projectId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/deliverables',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
+          },
+        )
+      },
       async listPromotionRequests(projectId) {
         return await fetchWorkspaceOpenApi(
           context.connection,
@@ -412,9 +425,9 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         )
       },
     },
-    artifacts: {
+    deliverables: {
       async listWorkspace() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/artifacts', 'get', {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/deliverables', 'get', {
           session: assertWorkspaceRequestReady(context),
         })
       },

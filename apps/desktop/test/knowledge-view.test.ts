@@ -79,7 +79,29 @@ describe('Knowledge view', () => {
   beforeEach(async () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
-    installWorkspaceApiFixture()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.projectKnowledge['proj-redesign'] = [
+          {
+            id: 'proj-redesign-knowledge-artifact',
+            workspaceId: state.workspace.id,
+            projectId: 'proj-redesign',
+            title: 'Promoted Runtime Summary',
+            summary: 'Promoted from Runtime Delivery Summary.',
+            kind: 'shared',
+            status: 'shared',
+            sourceType: 'artifact',
+            sourceRef: 'artifact-run-conv-redesign',
+            updatedAt: 105,
+          },
+          ...(state.projectKnowledge['proj-redesign'] ?? []),
+        ]
+      },
+    })
     await router.push('/workspaces/ws-local/projects/proj-redesign/knowledge')
     await router.isReady()
     document.body.innerHTML = ''
@@ -241,6 +263,19 @@ describe('Knowledge view', () => {
     expect(mounted.container.textContent).toContain('Desktop Redesign Notes')
     expect(mounted.container.textContent).not.toContain('Workspace Protocol Baseline')
     expect(mounted.container.textContent).not.toContain('Owner Personal Playbook')
+
+    mounted.destroy()
+  })
+
+  it('links artifact-sourced knowledge entries back to the project deliverables surface', async () => {
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'Promoted Runtime Summary')
+
+    const sourceLink = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="knowledge-source-link-proj-redesign-knowledge-artifact"]')
+    expect(sourceLink).not.toBeNull()
+    expect(sourceLink?.getAttribute('href')).toContain('/workspaces/ws-local/projects/proj-redesign/deliverables')
+    expect(sourceLink?.getAttribute('href')).toContain('deliverable=artifact-run-conv-redesign')
 
     mounted.destroy()
   })

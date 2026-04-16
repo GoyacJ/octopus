@@ -2,12 +2,18 @@ import type {
   AccessExperienceResponse,
   AccessMemberSummary,
   AccessUserPresetUpdateRequest,
+  ConversationRecord,
+  CreateDeliverableVersionInput,
   AuditRecord,
   BindPetConversationInput,
   CapabilityAssetDisablePatch,
   CapabilityManagementProjection,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
+  DeliverableDetail,
+  DeliverableVersionContent,
+  DeliverableVersionSummary,
+  KnowledgeEntryRecord,
   CopyWorkspaceSkillToManagedInput,
   CreateProjectPromotionRequestInput,
   CreateWorkspaceResourceFolderInput,
@@ -25,6 +31,7 @@ import type {
   ProjectPromotionRequest,
   ProjectResourceKind,
   ProjectTeamLinkRecord,
+  PromoteDeliverableInput,
   PromoteWorkspaceResourceInput,
   ResourcePreviewKind,
   RuntimeApprovalRequest,
@@ -231,6 +238,150 @@ export function createWorkspaceClientFixture(
       },
     }
   }
+
+  const deliverableVersionSummaries = workspaceState.deliverableVersionSummaries
+  const deliverableVersionContents = workspaceState.deliverableVersionContents
+
+  const resolveDeliverablePreviewKind = (contentType?: string, fallback?: ResourcePreviewKind): ResourcePreviewKind => {
+    if (fallback) {
+      return fallback
+    }
+    if (contentType?.includes('markdown')) {
+      return 'markdown'
+    }
+    if (contentType?.includes('json')) {
+      return 'code'
+    }
+    return 'text'
+  }
+
+  const resolveDeliverableSessionState = (conversationId: string) =>
+    [...workspaceState.runtimeSessions.values()].find(
+      state => state.detail.summary.conversationId === conversationId,
+    )
+
+  const createVersionSummaryFromRecord = (
+    artifact: WorkspaceFixtureState['deliverables'][number],
+    version: number,
+  ): DeliverableVersionSummary => ({
+    artifactId: artifact.id,
+    version,
+    title: version === artifact.latestVersion ? artifact.title : `${artifact.title} v${version}`,
+    updatedAt: artifact.updatedAt - (artifact.latestVersion - version),
+    previewKind: resolveDeliverablePreviewKind(artifact.contentType, artifact.previewKind),
+    contentType: artifact.contentType,
+    byteSize: 256 + version,
+    contentHash: `${artifact.id}-hash-v${version}`,
+    parentVersion: version > 1 ? version - 1 : undefined,
+    sessionId: resolveDeliverableSessionState(artifact.conversationId)?.detail.summary.id,
+    runId: resolveDeliverableSessionState(artifact.conversationId)?.detail.run.id,
+    sourceMessageId: version === artifact.latestVersion ? `msg-${artifact.conversationId}-assistant-latest` : undefined,
+  })
+
+  const ensureDeliverableVersionState = (artifactId: string) => {
+    if (deliverableVersionSummaries.has(artifactId)) {
+      return
+    }
+
+    const artifact = workspaceState.deliverables.find(record => record.id === artifactId)
+    if (!artifact) {
+      return
+    }
+
+    const summaries: DeliverableVersionSummary[] = []
+    for (let version = 1; version <= artifact.latestVersion; version += 1) {
+      const summary = createVersionSummaryFromRecord(artifact, version)
+      summaries.push(summary)
+      deliverableVersionContents.set(
+        `${artifactId}:${version}`,
+        {
+          artifactId,
+          version,
+          editable: true,
+          fileName: `${artifact.title}.md`,
+          previewKind: summary.previewKind,
+          contentType: artifact.contentType,
+          byteSize: summary.byteSize,
+          textContent: summary.previewKind === 'markdown'
+            ? `# ${summary.title}\n\nVersion ${version} content for ${artifact.id}.`
+            : `${summary.title} (version ${version})`,
+        },
+      )
+    }
+    deliverableVersionSummaries.set(
+      artifactId,
+      summaries.sort((left, right) => right.version - left.version),
+    )
+  }
+
+  const getDeliverableDetail = (artifactId: string): DeliverableDetail => {
+    ensureDeliverableVersionState(artifactId)
+    const artifact = workspaceState.deliverables.find(record => record.id === artifactId)
+    if (!artifact) {
+      throw new WorkspaceApiError({
+        message: 'deliverable not found',
+        status: 404,
+        requestId: 'req-deliverable-not-found',
+        retryable: false,
+        code: 'NOT_FOUND',
+      })
+    }
+
+    const sessionState = resolveDeliverableSessionState(artifact.conversationId)
+    const promotedKnowledge = workspaceState.projectKnowledge[artifact.projectId]?.find(
+      record => record.sourceRef === artifact.id,
+    )
+
+    return {
+      id: artifact.id,
+      workspaceId: artifact.workspaceId,
+      projectId: artifact.projectId,
+      conversationId: artifact.conversationId,
+      sessionId: sessionState?.detail.summary.id ?? `session-${artifact.conversationId}`,
+      runId: sessionState?.detail.run.id ?? `run-${artifact.conversationId}`,
+      sourceMessageId: `msg-${artifact.conversationId}-assistant-latest`,
+      parentArtifactId: undefined,
+      title: artifact.title,
+      status: artifact.status,
+      latestVersion: artifact.latestVersion,
+      latestVersionRef: artifact.latestVersionRef,
+      previewKind: resolveDeliverablePreviewKind(artifact.contentType, artifact.previewKind),
+      contentType: artifact.contentType,
+      byteSize: 512 + artifact.latestVersion,
+      contentHash: `${artifact.id}-latest-hash`,
+      storagePath: `data/artifacts/${artifact.id}`,
+      updatedAt: artifact.updatedAt,
+      promotionState: artifact.promotionState,
+      promotionKnowledgeId: promotedKnowledge?.id,
+    }
+  }
+
+  const updateDeliverableRecord = (artifactId: string, nextRecord: WorkspaceFixtureState['deliverables'][number]) => {
+    workspaceState.deliverables = workspaceState.deliverables.map(record =>
+      record.id === artifactId ? nextRecord : record,
+    )
+  }
+
+  const createKnowledgeEntryRecord = (record: {
+    id: string
+    workspaceId: string
+    projectId?: string
+    title: string
+    sourceType: string
+    sourceRef: string
+    status: string
+    updatedAt: number
+  }): KnowledgeEntryRecord => ({
+    id: record.id,
+    workspaceId: record.workspaceId,
+    projectId: record.projectId,
+    scope: record.projectId ? 'project' : 'workspace',
+    title: record.title,
+    sourceType: record.sourceType,
+    sourceRef: record.sourceRef,
+    status: record.status,
+    updatedAt: record.updatedAt,
+  })
 
   const getCurrentUserId = () => workspaceState.currentUserId || defaultSession.session.userId
   const getCurrentUser = () =>
@@ -1999,6 +2150,14 @@ export function createWorkspaceClientFixture(
       async getDashboard(projectId) {
         return clone(workspaceState.dashboards[projectId])
       },
+      async listDeliverables(projectId) {
+        findProjectRecord(projectId)
+        return clone(
+          workspaceState.deliverables
+            .filter(record => record.projectId === projectId)
+            .sort((left, right) => right.updatedAt - left.updatedAt),
+        )
+      },
       async listPromotionRequests(projectId) {
         findProjectRecord(projectId)
         return clone(
@@ -2222,9 +2381,9 @@ export function createWorkspaceClientFixture(
         return clone(payload)
       },
     },
-    artifacts: {
+    deliverables: {
       async listWorkspace() {
-        return clone(workspaceState.artifacts)
+        return clone(workspaceState.deliverables)
       },
     },
     inbox: {
@@ -3605,6 +3764,100 @@ export function createWorkspaceClientFixture(
       async listSessions(): Promise<RuntimeSessionSummary[]> {
         return [...workspaceState.runtimeSessions.values()].map(state => clone(state.detail.summary))
       },
+      async getDeliverableDetail(deliverableId) {
+        return clone(getDeliverableDetail(deliverableId))
+      },
+      async listDeliverableVersions(deliverableId) {
+        ensureDeliverableVersionState(deliverableId)
+        return clone(deliverableVersionSummaries.get(deliverableId) ?? [])
+      },
+      async getDeliverableVersionContent(deliverableId, version) {
+        ensureDeliverableVersionState(deliverableId)
+        const content = deliverableVersionContents.get(`${deliverableId}:${version}`)
+        if (!content) {
+          throw new WorkspaceApiError({
+            message: 'deliverable version not found',
+            status: 404,
+            requestId: 'req-deliverable-version-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        return clone(content)
+      },
+      async createDeliverableVersion(deliverableId, input) {
+        ensureDeliverableVersionState(deliverableId)
+        const artifact = workspaceState.deliverables.find(record => record.id === deliverableId)
+        if (!artifact) {
+          throw new WorkspaceApiError({
+            message: 'deliverable not found',
+            status: 404,
+            requestId: 'req-deliverable-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        const nextVersion = artifact.latestVersion + 1
+        const updatedAt = Date.now()
+        const previewKind = input.previewKind ?? resolveDeliverablePreviewKind(artifact.contentType, artifact.previewKind)
+        const contentType = input.contentType ?? artifact.contentType
+        const title = input.title?.trim() || artifact.title
+        const textContent = input.textContent
+          ?? (input.dataBase64 ? decodeBase64Text(input.dataBase64) : undefined)
+          ?? deliverableVersionContents.get(`${deliverableId}:${artifact.latestVersion}`)?.textContent
+          ?? ''
+
+        const versionSummary: DeliverableVersionSummary = {
+          artifactId: deliverableId,
+          version: nextVersion,
+          title,
+          updatedAt,
+          previewKind,
+          contentType,
+          byteSize: Math.max(textContent.length, 1),
+          contentHash: `${deliverableId}-hash-v${nextVersion}`,
+          parentVersion: input.parentVersion ?? artifact.latestVersion,
+          sessionId: resolveDeliverableSessionState(artifact.conversationId)?.detail.summary.id,
+          runId: resolveDeliverableSessionState(artifact.conversationId)?.detail.run.id,
+          sourceMessageId: input.sourceMessageId,
+        }
+        deliverableVersionSummaries.set(
+          deliverableId,
+          [versionSummary, ...(deliverableVersionSummaries.get(deliverableId) ?? [])]
+            .sort((left, right) => right.version - left.version),
+        )
+        deliverableVersionContents.set(`${deliverableId}:${nextVersion}`, {
+          artifactId: deliverableId,
+          version: nextVersion,
+          editable: true,
+          fileName: `${title}.md`,
+          previewKind,
+          contentType,
+          byteSize: versionSummary.byteSize,
+          textContent,
+          dataBase64: input.dataBase64,
+        })
+
+        updateDeliverableRecord(deliverableId, {
+          ...artifact,
+          title,
+          latestVersion: nextVersion,
+          latestVersionRef: {
+            artifactId: deliverableId,
+            title,
+            version: nextVersion,
+            previewKind,
+            contentType,
+            updatedAt,
+          },
+          previewKind,
+          contentType,
+          updatedAt,
+        })
+
+        return clone(getDeliverableDetail(deliverableId))
+      },
       async createSession(input) {
         const existing = [...workspaceState.runtimeSessions.values()].find(state => state.detail.summary.conversationId === input.conversationId)
         if (existing) {
@@ -3630,6 +3883,50 @@ export function createWorkspaceClientFixture(
       },
       async loadSession(sessionId) {
         return clone(ensureRuntimeState(sessionId).detail)
+      },
+      async promoteDeliverable(deliverableId, input) {
+        const artifact = workspaceState.deliverables.find(record => record.id === deliverableId)
+        if (!artifact) {
+          throw new WorkspaceApiError({
+            message: 'deliverable not found',
+            status: 404,
+            requestId: 'req-deliverable-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        const updatedAt = Date.now()
+        const nextStatus = input.kind === 'candidate' ? 'candidate' : 'shared'
+        const existingKnowledge = workspaceState.projectKnowledge[artifact.projectId]?.find(
+          record => record.sourceRef === deliverableId,
+        )
+        const knowledgeRecord = {
+          id: existingKnowledge?.id ?? `${artifact.projectId}-knowledge-${updatedAt}`,
+          workspaceId: artifact.workspaceId,
+          projectId: artifact.projectId,
+          title: input.title,
+          summary: input.summary,
+          kind: input.kind,
+          status: nextStatus,
+          sourceType: 'artifact' as const,
+          sourceRef: deliverableId,
+          updatedAt,
+        }
+        workspaceState.projectKnowledge[artifact.projectId] = [
+          knowledgeRecord,
+          ...(workspaceState.projectKnowledge[artifact.projectId] ?? []).filter(
+            record => record.id !== knowledgeRecord.id,
+          ),
+        ]
+
+        updateDeliverableRecord(deliverableId, {
+          ...artifact,
+          promotionState: input.kind === 'candidate' ? 'candidate' : 'promoted',
+          updatedAt,
+        })
+
+        return clone(createKnowledgeEntryRecord(knowledgeRecord))
       },
       async pollEvents(sessionId, options = {}) {
         return clone(eventsAfter(ensureRuntimeState(sessionId), options.after))
@@ -3808,6 +4105,32 @@ export function createWorkspaceClientFixture(
         state.detail.summary.updatedAt = state.detail.run.updatedAt
         state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.run.updated', { run: clone(state.detail.run) }))
         return immediateRun
+      },
+      async forkDeliverable(deliverableId, input) {
+        const artifact = workspaceState.deliverables.find(record => record.id === deliverableId)
+        if (!artifact) {
+          throw new WorkspaceApiError({
+            message: 'deliverable not found',
+            status: 404,
+            requestId: 'req-deliverable-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        findProjectRecord(input.projectId)
+        const updatedAt = Date.now()
+        const conversationId = `conv-fork-${deliverableId}-${updatedAt}`
+        return {
+          id: conversationId,
+          workspaceId: artifact.workspaceId,
+          projectId: input.projectId,
+          sessionId: `rt-${conversationId}`,
+          title: input.title?.trim() || `${artifact.title} Fork`,
+          status: 'draft',
+          lastMessagePreview: `Forked from ${artifact.title}`,
+          updatedAt,
+        }
       },
       async resolveApproval(sessionId, approvalId, input) {
         const state = ensureRuntimeState(sessionId)

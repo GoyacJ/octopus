@@ -42,6 +42,16 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
+    async fn list_project_deliverables(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ArtifactRecord>, AppError> {
+        Ok(load_artifact_records(&self.state.open_db()?)?
+            .into_iter()
+            .filter(|record| record.project_id == project_id)
+            .collect())
+    }
+
     async fn create_project(
         &self,
         request: CreateProjectRequest,

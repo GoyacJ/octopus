@@ -49,10 +49,13 @@ use std::{
 };
 
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use octopus_core::{
-    timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
-    CancelRuntimeSubrunInput, ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput,
-    ModelCatalogSnapshot, ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput,
+    timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, ArtifactVersionReference,
+    AuditRecord, CancelRuntimeSubrunInput, ConfiguredModelRecord, CostLedgerEntry,
+    CreateDeliverableVersionInput, CreateRuntimeSessionInput, DeliverableDetail,
+    DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
+    ProjectWorkspaceAssignments, PromoteDeliverableInput, ResolveRuntimeApprovalInput,
     ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget,
     RuntimeAuthChallengeSummary, RuntimeAuthStateSummary, RuntimeBackgroundRunSummary,
     RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,

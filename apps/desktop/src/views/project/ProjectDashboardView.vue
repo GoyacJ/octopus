@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import {
   UiAreaChart,
@@ -18,7 +18,8 @@ import {
 } from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
-import { createProjectConversationTarget } from '@/i18n/navigation'
+import { createProjectConversationTarget, createProjectSurfaceTarget } from '@/i18n/navigation'
+import { useArtifactStore } from '@/stores/artifact'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 type MetricTone = 'default' | 'accent' | 'muted' | 'success' | 'warning'
@@ -51,14 +52,19 @@ const DONUT_COLORS = [
 
 const { t, te, locale } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const workspaceStore = useWorkspaceStore()
+const artifactStore = useArtifactStore()
 
 async function loadDashboard() {
   const projectId = typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId
   if (!projectId) {
     return
   }
-  await workspaceStore.loadProjectDashboard(projectId)
+  await Promise.all([
+    workspaceStore.loadProjectDashboard(projectId),
+    artifactStore.loadProjectDeliverables(projectId),
+  ])
 }
 
 watch(() => [route.params.projectId, workspaceStore.activeConnectionId], () => {
@@ -76,6 +82,7 @@ const modelBreakdown = computed(() => snapshot.value?.modelBreakdown ?? [])
 const conversationInsights = computed(() => snapshot.value?.conversationInsights ?? [])
 const conversations = computed(() => snapshot.value?.recentConversations ?? [])
 const recentActivity = computed(() => snapshot.value?.recentActivity ?? [])
+const recentDeliverables = computed(() => artifactStore.activeProjectDeliverables.slice(0, 3))
 
 const numberFormatter = computed(() => new Intl.NumberFormat(locale.value))
 const compactFormatter = computed(() => new Intl.NumberFormat(locale.value, {
@@ -111,6 +118,21 @@ function resolveMetricTone(value: number, preferred: MetricTone = 'default'): Me
 function breakdownLabel(id: string, fallback: string) {
   const key = `projectDashboard.breakdown.items.${id}`
   return te(key) ? t(key) : fallback
+}
+
+function deliverablesTarget(deliverableId: string) {
+  return {
+    ...createProjectSurfaceTarget(
+      'project-deliverables',
+      typeof route.params.workspaceId === 'string' ? route.params.workspaceId : workspaceStore.currentWorkspaceId,
+      typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId,
+    ),
+    query: { deliverable: deliverableId },
+  }
+}
+
+function deliverablesHref(deliverableId: string) {
+  return router.resolve(deliverablesTarget(deliverableId)).href
 }
 
 const trendTokens = computed(() => trend.value.map(item => item.tokenCount))
@@ -447,7 +469,7 @@ const activityItems = computed(() =>
         </UiPanelFrame>
       </section>
 
-      <section class="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+      <section class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
         <UiPanelFrame
           variant="panel"
           padding="md"
@@ -487,6 +509,41 @@ const activityItems = computed(() =>
         </UiPanelFrame>
 
         <div class="grid gap-4">
+          <UiPanelFrame
+            variant="subtle"
+            padding="md"
+            :title="t('projectDashboard.sections.deliverables.title')"
+            :subtitle="t('projectDashboard.sections.deliverables.subtitle')"
+          >
+            <div v-if="recentDeliverables.length" class="grid gap-3">
+              <UiRecordCard
+                v-for="deliverable in recentDeliverables"
+                :key="deliverable.id"
+                :title="deliverable.title"
+                :description="t('projectDashboard.sections.deliverables.meta', {
+                  version: deliverable.latestVersion,
+                  state: deliverable.promotionState,
+                })"
+              >
+                <template #meta>
+                  <a
+                    data-testid="project-dashboard-open-deliverables"
+                    class="text-sm font-medium text-primary hover:underline"
+                    :href="deliverablesHref(deliverable.id)"
+                  >
+                    {{ t('projectDashboard.sections.deliverables.open') }}
+                  </a>
+                  <span class="text-xs text-text-tertiary">{{ formatDateTime(deliverable.updatedAt) }}</span>
+                </template>
+              </UiRecordCard>
+            </div>
+            <UiEmptyState
+              v-else
+              :title="t('projectDashboard.empty.deliverablesTitle')"
+              :description="t('projectDashboard.empty.deliverablesDescription')"
+            />
+          </UiPanelFrame>
+
           <UiPanelFrame
             variant="subtle"
             padding="md"

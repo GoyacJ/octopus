@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Brain, FileText, FolderTree, Link2, PanelRight, Sparkles, Waypoints, Wrench } from 'lucide-vue-next'
+import { FileText, FolderTree, Link2, PanelRight, ShieldAlert, Wrench } from 'lucide-vue-next'
 
 import {
   UiBadge,
@@ -11,17 +11,26 @@ import {
   UiInput,
   UiListRow,
   UiPanelFrame,
+  UiSelect,
   UiStatTile,
+  UiStatusCallout,
   UiTimelineList,
 } from '@octopus/ui'
 
-import type { ConversationDetailFocus } from '@octopus/schema'
+import type { ConversationWorkbenchMode } from '@octopus/schema'
 
+import ArtifactPreviewPanel from '@/components/conversation/ArtifactPreviewPanel.vue'
+import ArtifactVersionList from '@/components/conversation/ArtifactVersionList.vue'
+import { isProjectOwner, resolveProjectActorUserId } from '@/composables/project-governance'
 import { enumLabel, formatDateTime } from '@/i18n/copy'
+import { createProjectConversationTarget } from '@/i18n/navigation'
+import { useArtifactStore } from '@/stores/artifact'
+import { useKnowledgeStore } from '@/stores/knowledge'
+import { useResourceStore } from '@/stores/resource'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
-import { useResourceStore } from '@/stores/resource'
-import { useArtifactStore } from '@/stores/artifact'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,16 +39,21 @@ const shell = useShellStore()
 const runtime = useRuntimeStore()
 const resourceStore = useResourceStore()
 const artifactStore = useArtifactStore()
-const artifactFilter = ref('')
+const knowledgeStore = useKnowledgeStore()
+const workspaceStore = useWorkspaceStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
+
 const resourceFilter = ref('')
+const isEditingDeliverable = ref(false)
+const saveStatus = ref('')
+const deliverableActionStatus = ref('')
+const promotingDeliverable = ref(false)
+const forkingDeliverable = ref(false)
 
 const sectionItems = computed(() => [
-  { id: 'summary', label: t('conversation.detail.sections.summary'), icon: Sparkles },
-  { id: 'memories', label: t('conversation.detail.sections.memories'), icon: Brain },
-  { id: 'artifacts', label: t('conversation.detail.sections.artifacts'), icon: FileText },
-  { id: 'resources', label: t('conversation.detail.sections.resources'), icon: FolderTree },
-  { id: 'tools', label: t('conversation.detail.sections.tools'), icon: Wrench },
-  { id: 'timeline', label: t('conversation.detail.sections.timeline'), icon: Waypoints },
+  { id: 'deliverable', label: t('conversation.detail.sections.deliverable'), icon: FileText },
+  { id: 'context', label: t('conversation.detail.sections.context'), icon: FolderTree },
+  { id: 'ops', label: t('conversation.detail.sections.ops'), icon: Wrench },
 ] as const)
 
 const timelineItems = computed(() =>
@@ -57,7 +71,13 @@ const conversationResources = computed(() =>
   resourceStore.activeProjectResources.filter(resource => conversationResourceIds.value.includes(resource.id)),
 )
 const conversationArtifacts = computed(() =>
-  artifactStore.activeProjectArtifacts.filter(artifact => conversationArtifactIds.value.includes(artifact.id)),
+  artifactStore.activeProjectDeliverables.filter(artifact => conversationArtifactIds.value.includes(artifact.id)),
+)
+const deliverableOptions = computed(() =>
+  conversationArtifacts.value.map(artifact => ({
+    label: artifact.title,
+    value: artifact.id,
+  })),
 )
 const localizedArtifactStatus = computed(() =>
   new Map(conversationArtifacts.value.map(artifact => [artifact.id, enumLabel('artifactStatus', artifact.status)])),
@@ -68,18 +88,6 @@ const localizedResourceKind = computed(() =>
 const localizedResourceOrigin = computed(() =>
   new Map(conversationResources.value.map(resource => [resource.id, enumLabel('projectResourceOrigin', resource.origin)])),
 )
-const filteredConversationArtifacts = computed(() => {
-  const query = artifactFilter.value.trim().toLowerCase()
-  return conversationArtifacts.value.filter((artifact) => {
-    if (!query) {
-      return true
-    }
-    return [artifact.title, artifact.id, artifact.status, artifact.contentType ?? '']
-      .join(' ')
-      .toLowerCase()
-      .includes(query)
-  })
-})
 const filteredConversationResources = computed(() => {
   const query = resourceFilter.value.trim().toLowerCase()
   return conversationResources.value.filter((resource) => {
@@ -92,11 +100,53 @@ const filteredConversationResources = computed(() => {
       .includes(query)
   })
 })
-const selectedArtifact = computed(() =>
-  filteredConversationArtifacts.value.find(artifact => artifact.id === shell.selectedArtifactId) ?? filteredConversationArtifacts.value[0] ?? null,
+const selectedConversationDeliverable = computed(() =>
+  conversationArtifacts.value.find(artifact => artifact.id === shell.selectedDeliverableId) ?? conversationArtifacts.value[0] ?? null,
 )
-const selectedArtifactSourceResources = computed(() =>
-  filteredConversationResources.value.filter(resource => resource.sourceArtifactId === selectedArtifact.value?.id),
+const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
+const projectRecord = computed(() => workspaceStore.projects.find(project => project.id === projectId.value) ?? null)
+const selectedDeliverableDetail = computed(() => {
+  const detail = artifactStore.selectedDeliverableDetail
+  if (!detail || detail.id !== selectedConversationDeliverable.value?.id) {
+    return null
+  }
+  return detail
+})
+const selectedDeliverableVersions = computed(() =>
+  selectedDeliverableDetail.value?.id === selectedConversationDeliverable.value?.id
+    ? artifactStore.selectedDeliverableVersions
+    : [],
+)
+const selectedDeliverableContent = computed(() =>
+  selectedDeliverableDetail.value?.id === selectedConversationDeliverable.value?.id
+    ? artifactStore.selectedDeliverableContent
+    : null,
+)
+const selectedDeliverableDraft = computed(() =>
+  selectedDeliverableDetail.value?.id === selectedConversationDeliverable.value?.id
+    ? artifactStore.selectedDeliverableDraft
+    : '',
+)
+const selectedDeliverableSourceResources = computed(() =>
+  filteredConversationResources.value.filter(resource => resource.sourceArtifactId === selectedConversationDeliverable.value?.id),
+)
+const localizedPromotionState = computed(() =>
+  selectedDeliverableDetail.value
+    ? enumLabel('deliverablePromotionState', selectedDeliverableDetail.value.promotionState)
+    : '',
+)
+const currentProjectActorUserId = computed(() =>
+  resolveProjectActorUserId(
+    workspaceAccessControlStore.currentUser?.id,
+    workspaceAccessControlStore.loading ? undefined : shell.activeWorkspaceSession?.session.userId,
+  ),
+)
+const canPromoteSelectedDeliverable = computed(() =>
+  Boolean(selectedConversationDeliverable.value)
+  && Boolean(projectRecord.value)
+  && Boolean(currentProjectActorUserId.value)
+  && isProjectOwner(projectRecord.value, currentProjectActorUserId.value)
+  && selectedDeliverableDetail.value?.promotionState !== 'promoted',
 )
 const summaryCards = computed(() => [
   {
@@ -142,8 +192,83 @@ const toolEntries = computed(() => {
 
   return [...entries.values()].sort((left, right) => right.count - left.count)
 })
+const opsCallouts = computed(() => {
+  const callouts: Array<{ title: string, description: string, tone: 'warning' | 'info' }> = []
+
+  if (runtime.pendingApproval) {
+    callouts.push({
+      title: runtime.pendingApproval.summary,
+      description: runtime.pendingApproval.detail,
+      tone: 'warning',
+    })
+  }
+
+  if (runtime.pendingMediation) {
+    callouts.push({
+      title: runtime.pendingMediation.summary,
+      description: runtime.pendingMediation.detail,
+      tone: runtime.pendingMediation.requiresApproval || runtime.pendingMediation.requiresAuth ? 'warning' : 'info',
+    })
+  } else if (runtime.authTarget) {
+    callouts.push({
+      title: runtime.authTarget.summary,
+      description: runtime.authTarget.detail,
+      tone: 'warning',
+    })
+  }
+
+  return callouts
+})
+const opsCards = computed(() => [
+  {
+    label: t('trace.stats.status'),
+    value: runtime.activeRunStatusLabel,
+  },
+  {
+    label: t('conversation.detail.ops.currentStep'),
+    value: runtime.activeRunCurrentStepLabel || t('common.na'),
+  },
+  {
+    label: t('conversation.detail.ops.toolCount'),
+    value: String(toolEntries.value.length),
+  },
+  {
+    label: t('conversation.detail.ops.timelineCount'),
+    value: String(timelineItems.value.length),
+  },
+])
 const usageSummary = computed(() =>
   runtime.activeMessages.reduce((total, message) => total + (message.usage?.totalTokens ?? 0), 0),
+)
+
+watch(
+  () => [
+    selectedConversationDeliverable.value?.id ?? '',
+    shell.selectedDeliverableVersion ?? null,
+    shell.workbenchMode,
+  ] as const,
+  async ([deliverableId, version, mode]) => {
+    if (!deliverableId || (mode !== 'deliverable' && mode !== 'context')) {
+      return
+    }
+    await artifactStore.ensureDeliverableState(deliverableId, version ?? undefined)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => `${selectedConversationDeliverable.value?.id ?? ''}:${artifactStore.resolvedSelectedVersion ?? 'none'}`,
+  (next, previous) => {
+    if (next === previous) {
+      return
+    }
+    isEditingDeliverable.value = false
+    saveStatus.value = ''
+    deliverableActionStatus.value = ''
+    if (selectedConversationDeliverable.value?.id) {
+      artifactStore.resetDraft(selectedConversationDeliverable.value.id)
+    }
+  },
 )
 
 async function pushConversationQuery(query: Record<string, string | undefined>) {
@@ -157,14 +282,6 @@ async function pushConversationQuery(query: Record<string, string | undefined>) 
   })
 }
 
-function openArtifact(artifactId: string) {
-  shell.selectArtifact(artifactId)
-  void pushConversationQuery({
-    detail: 'artifacts',
-    artifact: artifactId,
-  })
-}
-
 function openResource() {
   void router.push({
     name: 'project-resources',
@@ -172,9 +289,129 @@ function openResource() {
   })
 }
 
-function setDetail(detail: string) {
-  shell.setDetailFocus(detail as ConversationDetailFocus)
+function setWorkbenchMode(mode: string) {
+  shell.setWorkbenchMode(mode as ConversationWorkbenchMode)
   shell.setRightSidebarCollapsed(false)
+  void pushConversationQuery({
+    mode,
+    deliverable: shell.selectedDeliverableId || undefined,
+    version: shell.selectedDeliverableVersion ? String(shell.selectedDeliverableVersion) : undefined,
+  })
+}
+
+function selectConversationDeliverable(deliverableId: string) {
+  if (!deliverableId) {
+    return
+  }
+  isEditingDeliverable.value = false
+  saveStatus.value = ''
+  deliverableActionStatus.value = ''
+  shell.selectDeliverable(deliverableId)
+  void pushConversationQuery({
+    mode: 'deliverable',
+    deliverable: deliverableId,
+    version: undefined,
+  })
+}
+
+async function selectDeliverableVersion(version: number) {
+  if (!selectedConversationDeliverable.value) {
+    return
+  }
+
+  isEditingDeliverable.value = false
+  saveStatus.value = ''
+  deliverableActionStatus.value = ''
+  shell.setSelectedDeliverableVersion(version)
+  await artifactStore.loadDeliverableVersionContent(selectedConversationDeliverable.value.id, version)
+  await pushConversationQuery({
+    mode: 'deliverable',
+    deliverable: selectedConversationDeliverable.value.id,
+    version: String(version),
+  })
+}
+
+function beginEditingDeliverable() {
+  saveStatus.value = ''
+  isEditingDeliverable.value = true
+}
+
+function updateDeliverableDraft(value: string) {
+  artifactStore.updateDraft(value)
+}
+
+function cancelDeliverableEditing() {
+  if (selectedConversationDeliverable.value?.id) {
+    artifactStore.resetDraft(selectedConversationDeliverable.value.id)
+  }
+  saveStatus.value = ''
+  isEditingDeliverable.value = false
+}
+
+async function saveDeliverableVersion() {
+  if (!selectedConversationDeliverable.value) {
+    return
+  }
+
+  const detail = await artifactStore.saveDraftAsVersion({}, selectedConversationDeliverable.value.id)
+  if (!detail) {
+    return
+  }
+
+  isEditingDeliverable.value = false
+  saveStatus.value = t('conversation.detail.deliverables.savedVersion', { version: detail.latestVersion })
+  await pushConversationQuery({
+    mode: 'deliverable',
+    deliverable: selectedConversationDeliverable.value.id,
+    version: String(detail.latestVersion),
+  })
+}
+
+async function promoteSelectedDeliverable() {
+  if (!selectedConversationDeliverable.value || !projectId.value || promotingDeliverable.value || !canPromoteSelectedDeliverable.value) {
+    return
+  }
+
+  promotingDeliverable.value = true
+  deliverableActionStatus.value = ''
+  try {
+    const record = await artifactStore.promoteDeliverable(selectedConversationDeliverable.value.id)
+    if (!record) {
+      return
+    }
+    await knowledgeStore.loadProjectKnowledge(projectId.value)
+    deliverableActionStatus.value = t('deliverables.status.promoted')
+  } finally {
+    promotingDeliverable.value = false
+  }
+}
+
+async function forkSelectedDeliverable() {
+  if (!selectedConversationDeliverable.value || !projectId.value || forkingDeliverable.value) {
+    return
+  }
+
+  forkingDeliverable.value = true
+  deliverableActionStatus.value = ''
+  try {
+    const conversation = await artifactStore.forkDeliverable(
+      projectId.value,
+      selectedConversationDeliverable.value.title,
+      selectedConversationDeliverable.value.id,
+    )
+    if (!conversation) {
+      return
+    }
+    await router.push(
+      createProjectConversationTarget(
+        conversation.workspaceId,
+        conversation.projectId,
+        conversation.id,
+      ),
+    )
+  } finally {
+    forkingDeliverable.value = false
+  }
 }
 </script>
 
@@ -204,7 +441,7 @@ function setDetail(detail: string) {
         size="icon"
         class="h-9 w-9 rounded-lg"
         :title="item.label"
-        @click="setDetail(item.id)"
+        @click="setWorkbenchMode(item.id)"
       >
         <component :is="item.icon" :size="18" />
       </UiButton>
@@ -231,20 +468,157 @@ function setDetail(detail: string) {
           variant="ghost"
           size="sm"
           class="h-auto rounded-[var(--radius-s)] border border-transparent px-2.5 py-1.5 text-[11px]"
-          :class="shell.detailFocus === item.id ? 'border-border bg-surface text-text-primary shadow-xs' : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary'"
-          @click="setDetail(item.id)"
+          :class="shell.workbenchMode === item.id ? 'border-border bg-surface text-text-primary shadow-xs' : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary'"
+          @click="setWorkbenchMode(item.id)"
         >
           {{ item.label }}
         </UiButton>
       </nav>
 
       <div class="flex-1 overflow-y-auto p-4">
-        <div v-if="shell.detailFocus === 'summary'" class="space-y-4">
+        <div v-if="shell.workbenchMode === 'deliverable'" class="flex min-h-full flex-col gap-4">
+          <UiEmptyState
+            v-if="!selectedConversationDeliverable"
+            :title="t('conversation.detail.deliverables.emptyTitle')"
+            :description="t('conversation.detail.deliverables.emptyDescription')"
+          />
+
+          <template v-else>
+            <UiPanelFrame variant="subtle" padding="md" class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 space-y-1">
+                  <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                    {{ t('conversation.detail.sections.deliverable') }}
+                  </div>
+                  <div class="truncate text-sm font-semibold text-text-primary">
+                    {{ selectedDeliverableDetail?.title ?? selectedConversationDeliverable.title }}
+                  </div>
+                  <div class="truncate text-xs text-text-secondary">
+                    {{ selectedConversationDeliverable.id }}
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap justify-end gap-2">
+                  <UiBadge
+                    :label="enumLabel('resourcePreviewKind', selectedDeliverableContent?.previewKind ?? selectedDeliverableDetail?.previewKind ?? selectedConversationDeliverable.previewKind)"
+                    subtle
+                  />
+                  <UiBadge
+                    :label="localizedArtifactStatus.get(selectedConversationDeliverable.id) ?? selectedConversationDeliverable.status"
+                    subtle
+                  />
+                  <UiBadge
+                    :label="`v${artifactStore.resolvedSelectedVersion ?? selectedConversationDeliverable.latestVersion}`"
+                    subtle
+                  />
+                  <UiBadge
+                    v-if="localizedPromotionState"
+                    :label="localizedPromotionState"
+                    subtle
+                  />
+                </div>
+              </div>
+
+              <div v-if="deliverableOptions.length > 1" class="space-y-2">
+                <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                  {{ t('conversation.detail.deliverables.switchTitle') }}
+                </div>
+                <UiSelect
+                  data-testid="deliverable-selector"
+                  :model-value="selectedConversationDeliverable.id"
+                  :options="deliverableOptions"
+                  @update:model-value="selectConversationDeliverable"
+                />
+              </div>
+
+              <div class="grid gap-3 text-xs text-text-secondary sm:grid-cols-2">
+                <div>
+                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.updatedAt') }}</div>
+                  <div class="mt-1 text-text-primary">
+                    {{ formatDateTime(selectedDeliverableDetail?.updatedAt ?? selectedConversationDeliverable.updatedAt) }}
+                  </div>
+                </div>
+                <div>
+                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.contentType') }}</div>
+                  <div class="mt-1 text-text-primary">
+                    {{ selectedDeliverableContent?.contentType ?? selectedDeliverableDetail?.contentType ?? selectedConversationDeliverable.contentType ?? t('common.na') }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-3 rounded-[var(--radius-s)] border border-border bg-surface px-3 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                  {{ t('deliverables.detail.actionsTitle') }}
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                  <UiButton
+                    v-if="canPromoteSelectedDeliverable"
+                    size="sm"
+                    variant="outline"
+                    :disabled="promotingDeliverable"
+                    data-testid="conversation-deliverable-promote"
+                    @click="promoteSelectedDeliverable"
+                  >
+                    {{ t('deliverables.actions.promote') }}
+                  </UiButton>
+
+                  <UiButton
+                    size="sm"
+                    variant="outline"
+                    :disabled="forkingDeliverable"
+                    data-testid="conversation-deliverable-fork"
+                    @click="forkSelectedDeliverable"
+                  >
+                    {{ t('deliverables.actions.fork') }}
+                  </UiButton>
+                </div>
+
+                <UiStatusCallout
+                  v-if="deliverableActionStatus"
+                  :description="deliverableActionStatus"
+                />
+              </div>
+            </UiPanelFrame>
+
+            <ArtifactVersionList
+              :versions="selectedDeliverableVersions"
+              :selected-version="artifactStore.resolvedSelectedVersion"
+              :loading="artifactStore.loading && !selectedDeliverableVersions.length"
+              @select="selectDeliverableVersion"
+            />
+
+            <UiStatusCallout
+              v-if="artifactStore.loading && !selectedDeliverableContent"
+              :description="t('conversation.detail.deliverables.loadingPreview')"
+            />
+
+            <ArtifactPreviewPanel
+              :key="`${selectedConversationDeliverable.id}:${artifactStore.resolvedSelectedVersion ?? 'none'}:${isEditingDeliverable ? 'edit' : 'view'}`"
+              :content="selectedDeliverableContent"
+              :draft="selectedDeliverableDraft"
+              :editing="isEditingDeliverable"
+              :saving="artifactStore.saving"
+              :error="artifactStore.error"
+              :save-status="saveStatus"
+              @edit="beginEditingDeliverable"
+              @cancel="cancelDeliverableEditing"
+              @save="saveDeliverableVersion"
+              @update-draft="updateDeliverableDraft"
+            />
+          </template>
+        </div>
+
+        <div v-else-if="shell.workbenchMode === 'context'" class="space-y-4">
           <UiPanelFrame variant="subtle" padding="md">
             <div class="text-xs text-text-secondary">{{ t('conversation.detail.summary.title') }}</div>
             <div class="mt-2 text-sm text-text-primary">{{ runtime.activeSession?.summary.title ?? t('common.na') }}</div>
             <div class="mt-2 text-xs text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</div>
+            <div class="mt-3 text-xs text-text-secondary">
+              {{ t('conversation.detail.summary.tokenUsage') }}: {{ usageSummary }}
+            </div>
           </UiPanelFrame>
+
           <div class="grid grid-cols-2 gap-3">
             <UiStatTile
               v-for="card in summaryCards"
@@ -253,17 +627,37 @@ function setDetail(detail: string) {
               :value="card.value"
             />
           </div>
-          <UiPanelFrame variant="subtle" padding="md">
-            <div class="text-xs text-text-secondary">{{ t('conversation.detail.summary.tokenUsage') }}</div>
-            <div class="mt-2 text-sm text-text-primary">{{ usageSummary }}</div>
-          </UiPanelFrame>
-        </div>
 
-        <div v-else-if="shell.detailFocus === 'memories'" class="space-y-4">
+          <UiPanelFrame
+            v-if="selectedConversationDeliverable"
+            variant="subtle"
+            padding="md"
+            class="space-y-3"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                {{ t('conversation.detail.context.promotionTitle') }}
+              </div>
+              <UiBadge
+                v-if="localizedPromotionState"
+                :label="localizedPromotionState"
+                subtle
+              />
+            </div>
+
+            <div class="space-y-2 text-sm text-text-primary">
+              <div>{{ t('conversation.detail.context.lineageSession') }}: {{ selectedDeliverableDetail?.sessionId ?? t('common.na') }}</div>
+              <div>{{ t('conversation.detail.context.lineageRun') }}: {{ selectedDeliverableDetail?.runId ?? t('common.na') }}</div>
+              <div>{{ t('conversation.detail.context.lineageMessage') }}: {{ selectedDeliverableDetail?.sourceMessageId ?? t('common.na') }}</div>
+              <div>{{ t('conversation.detail.context.knowledgeLink') }}: {{ selectedDeliverableDetail?.promotionKnowledgeId ?? t('common.na') }}</div>
+            </div>
+          </UiPanelFrame>
+
           <div v-if="memorySelectionSummary" class="grid grid-cols-2 gap-3">
             <UiStatTile label="Selected" :value="String(memorySelectionSummary.selectedCount)" />
             <UiStatTile label="Ignored" :value="String(memorySelectionSummary.ignoredCount)" />
           </div>
+
           <UiPanelFrame v-if="freshnessSummary" variant="subtle" padding="md" class="space-y-2">
             <div class="flex items-center justify-between gap-3">
               <div class="text-xs text-text-secondary">Freshness</div>
@@ -274,6 +668,7 @@ function setDetail(detail: string) {
               <UiStatTile label="Stale" :value="String(freshnessSummary.staleCount)" />
             </div>
           </UiPanelFrame>
+
           <UiPanelFrame v-if="pendingMemoryProposal" variant="subtle" padding="md" class="space-y-2">
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -287,6 +682,7 @@ function setDetail(detail: string) {
               <UiBadge :label="pendingMemoryProposal.scope" subtle />
             </div>
           </UiPanelFrame>
+
           <div v-if="selectedMemory.length" class="space-y-2">
             <UiListRow
               v-for="entry in selectedMemory"
@@ -300,91 +696,15 @@ function setDetail(detail: string) {
               </template>
             </UiListRow>
           </div>
-          <UiEmptyState
-            v-else-if="!pendingMemoryProposal"
-            :title="t('conversation.detail.memories.emptyTitle')"
-            :description="t('conversation.detail.memories.emptyDescription')"
-          />
-        </div>
 
-        <div v-else-if="shell.detailFocus === 'artifacts'" class="space-y-4">
-          <UiPanelFrame variant="subtle" padding="sm">
-            <UiInput v-model="artifactFilter" :placeholder="t('conversation.detail.artifacts.filterPlaceholder')" />
-          </UiPanelFrame>
-          <div v-if="selectedArtifact" class="space-y-4">
-            <UiPanelFrame variant="raised" padding="md">
-              <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">{{ selectedArtifact.title }}</div>
-                  <div class="text-xs text-text-secondary">{{ selectedArtifact.id }}</div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <UiBadge :label="localizedArtifactStatus.get(selectedArtifact.id) ?? selectedArtifact.status" subtle />
-                  <UiBadge :label="`v${selectedArtifact.latestVersion}`" subtle />
-                </div>
-              </div>
-              <div class="mt-3 grid gap-3 text-xs text-text-secondary sm:grid-cols-2">
-                <div>
-                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.artifacts.updatedAt') }}</div>
-                  <div class="mt-1 text-text-primary">{{ formatDateTime(selectedArtifact.updatedAt) }}</div>
-                </div>
-                <div>
-                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.artifacts.contentType') }}</div>
-                  <div class="mt-1 text-text-primary">{{ selectedArtifact.contentType ?? t('common.na') }}</div>
-                </div>
-              </div>
-            </UiPanelFrame>
-
-            <div class="space-y-2">
-              <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.artifacts.listTitle') }}</div>
-              <UiListRow
-                v-for="artifact in filteredConversationArtifacts"
-                :key="artifact.id"
-                :title="artifact.title"
-                :subtitle="artifact.id"
-                @click="openArtifact(artifact.id)"
-              >
-                <template #meta>
-                  <UiBadge :label="localizedArtifactStatus.get(artifact.id) ?? artifact.status" subtle />
-                  <span class="text-xs text-text-tertiary">v{{ artifact.latestVersion }}</span>
-                </template>
-              </UiListRow>
-            </div>
-
-            <div class="space-y-2">
-              <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.artifacts.linkedResourcesTitle') }}</div>
-              <UiListRow
-                v-for="resource in selectedArtifactSourceResources"
-                :key="resource.id"
-                :title="resource.name"
-                :subtitle="resource.location || resource.origin"
-              >
-                <template #meta>
-                  <UiBadge :label="localizedResourceKind.get(resource.id) ?? resource.kind" subtle />
-                </template>
-              </UiListRow>
-              <UiEmptyState
-                v-if="!selectedArtifactSourceResources.length"
-                :title="t('conversation.detail.artifacts.noLinkedResourcesTitle')"
-                :description="t('conversation.detail.artifacts.noLinkedResourcesDescription')"
-              />
-            </div>
-          </div>
-          <UiEmptyState
-            v-else
-            :title="t('conversation.detail.artifacts.emptyTitle')"
-            :description="t('conversation.detail.artifacts.emptyDescription')"
-          />
-        </div>
-
-        <div v-else-if="shell.detailFocus === 'resources'" class="space-y-4">
           <UiPanelFrame variant="subtle" padding="sm" class="space-y-3">
             <UiInput v-model="resourceFilter" :placeholder="t('conversation.detail.resources.filterPlaceholder')" />
             <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
           </UiPanelFrame>
-          <div v-if="filteredConversationResources.length" class="space-y-2">
+
+          <div v-if="selectedDeliverableSourceResources.length" class="space-y-2">
             <UiListRow
-              v-for="resource in filteredConversationResources"
+              v-for="resource in selectedDeliverableSourceResources"
               :key="resource.id"
               :title="resource.name"
               :subtitle="resource.location || resource.origin"
@@ -401,39 +721,83 @@ function setDetail(detail: string) {
               </template>
             </UiListRow>
           </div>
+
           <UiEmptyState
             v-else
-            :title="t('conversation.detail.resources.emptyTitle')"
-            :description="t('conversation.detail.resources.emptyDescription')"
+            :title="t('conversation.detail.deliverables.noLinkedResourcesTitle')"
+            :description="t('conversation.detail.deliverables.noLinkedResourcesDescription')"
           />
         </div>
 
-        <div v-else-if="shell.detailFocus === 'tools'" class="space-y-4">
-          <div v-if="toolEntries.length" class="space-y-2">
-            <UiListRow
-              v-for="tool in toolEntries"
-              :key="tool.toolId"
-              :title="tool.label"
-              :subtitle="tool.toolId"
+        <div v-else-if="shell.workbenchMode === 'ops'" class="space-y-4">
+          <div v-if="opsCallouts.length" class="space-y-3">
+            <UiStatusCallout
+              v-for="(callout, index) in opsCallouts"
+              :key="`${callout.title}:${index}`"
+              :tone="callout.tone"
+              :title="callout.title"
+              :description="callout.description"
             >
-              <template #meta>
-                <div class="flex items-center gap-2">
-                  <UiBadge :label="tool.kind" subtle />
-                  <span class="text-xs text-text-tertiary">×{{ tool.count }}</span>
-                </div>
-              </template>
-            </UiListRow>
+              <div class="flex items-center gap-2 text-xs font-semibold">
+                <ShieldAlert :size="13" class="shrink-0" />
+                {{ t('conversation.detail.ops.pendingTitle') }}
+              </div>
+            </UiStatusCallout>
           </div>
-          <UiEmptyState
-            v-else
-            :title="t('conversation.detail.tools.emptyTitle')"
-            :description="t('conversation.detail.tools.emptyDescription')"
-          />
-        </div>
 
-        <div v-else-if="shell.detailFocus === 'timeline'" class="space-y-4">
-          <UiTimelineList v-if="timelineItems.length" :items="timelineItems" />
-          <UiEmptyState v-else :title="t('conversation.detail.timeline.emptyTitle')" :description="t('conversation.detail.timeline.emptyDescription')" />
+          <div class="grid grid-cols-2 gap-3">
+            <UiStatTile
+              v-for="card in opsCards"
+              :key="card.label"
+              :label="card.label"
+              :value="card.value"
+            />
+          </div>
+
+          <UiPanelFrame variant="subtle" padding="md" class="space-y-2">
+            <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+              {{ t('conversation.detail.tools.title') }}
+            </div>
+
+            <div v-if="toolEntries.length" class="space-y-2">
+              <UiListRow
+                v-for="tool in toolEntries"
+                :key="tool.toolId"
+                :title="tool.label"
+                :subtitle="tool.toolId"
+              >
+                <template #meta>
+                  <div class="flex items-center gap-2">
+                    <UiBadge :label="tool.kind" subtle />
+                    <span class="text-xs text-text-tertiary">×{{ tool.count }}</span>
+                  </div>
+                </template>
+              </UiListRow>
+            </div>
+
+            <UiEmptyState
+              v-else
+              :title="t('conversation.detail.tools.emptyTitle')"
+              :description="t('conversation.detail.tools.emptyDescription')"
+            />
+          </UiPanelFrame>
+
+          <UiPanelFrame variant="subtle" padding="md" class="space-y-3">
+            <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+              {{ t('conversation.detail.timeline.title') }}
+            </div>
+
+            <UiTimelineList
+              v-if="timelineItems.length"
+              :items="timelineItems"
+            />
+
+            <UiEmptyState
+              v-else
+              :title="t('conversation.detail.timeline.emptyTitle')"
+              :description="t('conversation.detail.timeline.emptyDescription')"
+            />
+          </UiPanelFrame>
         </div>
 
         <UiEmptyState

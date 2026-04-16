@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import {
   UiBadge,
@@ -16,6 +16,7 @@ import {
 } from '@octopus/ui'
 
 import { enumLabel, formatDateTime } from '@/i18n/copy'
+import { createProjectSurfaceTarget } from '@/i18n/navigation'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -77,6 +78,21 @@ const entries = computed(() => {
     ].join(' ').toLowerCase().includes(query)
   })
 })
+
+function sourceLinkForEntry(entry: (typeof entries.value)[number]) {
+  const workspaceId = workspaceStore.currentWorkspaceId
+  const projectId = typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId
+  if (!workspaceId || !projectId || entry.sourceType !== 'artifact' || !entry.sourceRef) {
+    return null
+  }
+
+  return {
+    ...createProjectSurfaceTarget('project-deliverables', workspaceId, projectId),
+    query: {
+      deliverable: entry.sourceRef,
+    },
+  }
+}
 </script>
 
 <template>
@@ -127,9 +143,24 @@ const entries = computed(() => {
             <UiBadge :label="entry.status" subtle />
             <UiBadge :label="enumLabel('resourceScope', entry.scope)" subtle />
             <UiBadge :label="enumLabel('resourceVisibility', entry.visibility)" subtle />
+            <UiBadge
+              v-if="entry.sourceType"
+              :label="t(`knowledge.lineageTypes.${entry.sourceType}`)"
+              subtle
+            />
           </template>
           <template #meta>
-            <span class="text-xs text-text-tertiary">{{ formatDateTime(entry.updatedAt) }}</span>
+            <div class="flex flex-wrap items-center gap-3 text-xs text-text-tertiary">
+              <span>{{ formatDateTime(entry.updatedAt) }}</span>
+              <RouterLink
+                v-if="sourceLinkForEntry(entry)"
+                :to="sourceLinkForEntry(entry)!"
+                class="font-medium text-primary hover:underline"
+                :data-testid="`knowledge-source-link-${entry.id}`"
+              >
+                {{ t('knowledge.detail.actions.openDeliverable') }}
+              </RouterLink>
+            </div>
           </template>
         </UiRecordCard>
       </div>

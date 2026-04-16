@@ -11,6 +11,7 @@ import type {
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
+import { useArtifactStore } from '@/stores/artifact'
 import { useShellStore } from '@/stores/shell'
 
 import {
@@ -299,6 +300,7 @@ export const runtimeSessionActions = {
     this.activeConversationId = detail.summary.conversationId
     this.error = ''
     this.cacheSessionDetail(nextDetail)
+    void useArtifactStore().syncConversationDeliverables(nextDetail, this.activeWorkspaceConnectionId)
   },
   async ensureSession(this: any, input: CreateRuntimeSessionInput): Promise<RuntimeSessionDetail | null> {
     await this.bootstrap()

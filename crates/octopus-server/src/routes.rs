@@ -397,6 +397,10 @@ pub fn build_router(state: ServerState) -> Router {
             patch(update_project_resource).delete(delete_project_resource),
         )
         .route(
+            "/api/v1/projects/:project_id/deliverables",
+            get(project_deliverables),
+        )
+        .route(
             "/api/v1/projects/:project_id/knowledge",
             get(project_knowledge),
         )
@@ -449,7 +453,27 @@ pub fn build_router(state: ServerState) -> Router {
             delete(unlink_project_team),
         )
         .route("/api/v1/inbox", get(inbox))
-        .route("/api/v1/artifacts", get(artifacts))
+        .route("/api/v1/workspace/deliverables", get(workspace_deliverables))
+        .route(
+            "/api/v1/deliverables/:deliverable_id",
+            get(get_deliverable_detail),
+        )
+        .route(
+            "/api/v1/deliverables/:deliverable_id/versions",
+            get(list_deliverable_versions).post(create_deliverable_version),
+        )
+        .route(
+            "/api/v1/deliverables/:deliverable_id/versions/:version",
+            get(get_deliverable_version_content),
+        )
+        .route(
+            "/api/v1/deliverables/:deliverable_id/promote",
+            post(promote_deliverable),
+        )
+        .route(
+            "/api/v1/deliverables/:deliverable_id/fork",
+            post(fork_deliverable),
+        )
         .route("/api/v1/knowledge", get(knowledge))
         .route(
             "/api/v1/workspace/promotion-requests",

@@ -32,6 +32,24 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/workspace/deliverables:
+  get:
+    operationId: listWorkspaceDeliverables
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/DeliverableSummary"
+              type: array
+        description: Workspace deliverable list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/overview:
   get:
     operationId: getWorkspaceOverview
