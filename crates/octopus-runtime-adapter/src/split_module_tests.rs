@@ -114,13 +114,17 @@ fn split_execution_service_module_normalizes_decision_and_permission_helpers() {
         execution_service::approval_decision_status("approve").expect("approve"),
         "approved"
     );
-    assert!(execution_service::requires_approval("workspace-write").expect("workspace-write"),);
+    assert!(!execution_service::requires_approval("workspace-write").expect("workspace-write"));
+    assert!(
+        !execution_service::requires_approval("danger-full-access").expect("danger-full-access")
+    );
     assert!(execution_service::approval_decision_status("nope").is_err());
 }
 
 #[test]
 fn split_execution_target_module_exposes_permission_helpers() {
-    assert!(execution_target::requires_approval("workspace-write").expect("workspace-write"));
+    assert!(!execution_target::requires_approval("workspace-write").expect("workspace-write"));
+    assert!(!execution_target::requires_approval("danger-full-access").expect("danger-full-access"));
     assert!(!execution_target::requires_approval("read-only").expect("read-only"));
 }
 

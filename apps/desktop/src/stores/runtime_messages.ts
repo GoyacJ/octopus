@@ -1,5 +1,4 @@
 import {
-  resolveRuntimePermissionMode,
   type ConversationAttachment,
   type Message,
   type PermissionMode,
@@ -8,7 +7,6 @@ import {
   type RuntimeMessage,
   type RuntimePermissionMode,
   type RuntimeRunSnapshot,
-  type RunStatus,
   type SubmitRuntimeTurnInput,
 } from '@octopus/schema'
 
@@ -54,9 +52,6 @@ export function createOptimisticRuntimeMessage(
   const requestedActor = parseActorRef(selectedActorRef)
   const resolvedActorKind = run?.resolvedActorKind ?? requestedActor.actorKind
   const resolvedActorId = run?.resolvedActorId ?? requestedActor.actorId
-  const status: RunStatus = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only') === 'workspace-write'
-    ? 'waiting_approval'
-    : 'running'
 
   return {
     id: `optimistic-msg-${timestamp}`,
@@ -69,7 +64,7 @@ export function createOptimisticRuntimeMessage(
     configuredModelId: run?.configuredModelId,
     configuredModelName: run?.configuredModelName,
     modelId: run?.modelId,
-    status,
+    status: 'running',
     requestedActorKind: requestedActor.actorKind,
     requestedActorId: requestedActor.actorId,
     resolvedActorKind,
@@ -282,10 +277,16 @@ export function mergeAssistantMessageWithPlaceholder(
 }
 
 export function toConversationMessage(message: RuntimeMessage, pendingApproval?: RuntimeApprovalRequest): Message {
+  const approvalEntryMatch = pendingApproval
+    ? (message.processEntries ?? []).some(entry => entry.id === pendingApproval.id)
+    : false
   const isPendingApprovalMessage = message.senderType === 'assistant'
     && message.status === 'waiting_approval'
     && pendingApproval
-    && message.conversationId === pendingApproval.conversationId
+    && (
+      message.id === `approval-assistant-${pendingApproval.id}`
+      || approvalEntryMatch
+    )
 
   return {
     id: message.id,

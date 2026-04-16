@@ -622,6 +622,40 @@ fn runtime_tools_compile_into_deferred_runtime_capabilities() {
 }
 
 #[test]
+fn workspace_write_runtime_tools_stay_deferred_without_approval_until_execution() {
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        vec![super::RuntimeToolDefinition {
+            name: "workspace_write_tool".to_string(),
+            description: Some("Writes inside the workspace.".to_string()),
+            input_schema: json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "additionalProperties": false
+            }),
+            required_permission: runtime::PermissionMode::WorkspaceWrite,
+        }],
+        Vec::new(),
+        None,
+    );
+    let surface = runtime
+        .surface_projection_for_allowlist(None, None)
+        .expect("runtime capabilities should plan");
+
+    let capability = surface
+        .deferred_tools
+        .iter()
+        .find(|entry| entry.display_name == "workspace_write_tool")
+        .expect("workspace write capability should be present");
+
+    assert_eq!(
+        capability.permission_profile.required_permission,
+        runtime::PermissionMode::WorkspaceWrite
+    );
+    assert!(!capability.invocation_policy.requires_approval);
+}
+
+#[test]
 fn runtime_tools_extend_provider_definitions_permissions_and_search() {
     let runtime = capability_runtime_from_sources(
         Vec::new(),
@@ -798,6 +832,32 @@ fn mcp_capability_helpers_build_tool_and_resource_specs() {
         super::capability_runtime::permission_mode_for_mcp_tool(&destructive_tool),
         PermissionMode::DangerFullAccess
     );
+
+    let workspace_write_tool = runtime::ManagedMcpTool {
+        server_name: "alpha".to_string(),
+        qualified_name: "mcp__alpha__apply".to_string(),
+        raw_name: "apply".to_string(),
+        tool: runtime::McpTool {
+            name: "apply".to_string(),
+            description: Some("Apply workspace edits".to_string()),
+            input_schema: Some(json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "required": ["path"]
+            })),
+            annotations: None,
+            meta: None,
+        },
+    };
+    let workspace_write_descriptor =
+        super::capability_runtime::mcp_tool_capability_descriptor(&workspace_write_tool);
+    assert_eq!(
+        workspace_write_descriptor.required_permission,
+        PermissionMode::WorkspaceWrite
+    );
+    assert!(!workspace_write_descriptor.requires_approval);
 
     let resource = runtime::McpResource {
         uri: "file://guide.txt".to_string(),

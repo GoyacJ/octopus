@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
-import { resolveRuntimePermissionMode, type ConversationActorKind, type Message, type PermissionMode, type WorkspaceResourceRecord } from '@octopus/schema'
+import { resolveRuntimePermissionMode, resolveUiPermissionMode, type ConversationActorKind, type Message, type PermissionMode, type WorkspaceResourceRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
@@ -22,6 +22,7 @@ import { useArtifactStore } from '@/stores/artifact'
 import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,6 +58,7 @@ const expandedMessageIds = ref<string[]>([])
 const focusedToolByMessageId = ref<Record<string, string>>({})
 const scrollContainer = ref<HTMLElement | null>(null)
 let lastProjectContextKey = ''
+let lastPermissionSeedKey = ''
 let lastSessionKey = ''
 let sessionLoadPromise: Promise<void> | null = null
 
@@ -72,10 +74,32 @@ const workspaceId = computed(() =>
 const projectSettings = computed(() =>
   projectId.value ? workspaceStore.getProjectSettings(projectId.value) : {},
 )
+const project = computed(() =>
+  workspaceStore.projects.find(item => item.id === projectId.value) ?? null,
+)
+const projectAssignments = computed(() => project.value?.assignments)
+const assignedConfiguredModelOptions = computed(() => {
+  const assignedIds = projectAssignments.value?.models?.configuredModelIds ?? []
+  return catalogStore.configuredModelOptions.filter(item => assignedIds.includes(item.value))
+})
+const resolvedModelSettings = computed(() =>
+  resolveProjectModelSettings(
+    projectSettings.value,
+    assignedConfiguredModelOptions.value.map(item => item.value),
+    projectAssignments.value?.models?.defaultConfiguredModelId ?? '',
+  ),
+)
+const resolvedAgentSettings = computed(() =>
+  resolveProjectAgentSettings(
+    projectSettings.value,
+    projectAssignments.value?.agents?.agentIds ?? [],
+    projectAssignments.value?.agents?.teamIds ?? [],
+  ),
+)
 
 const modelOptions = computed(() => {
-  const allowedConfiguredModelIds = projectSettings.value.models?.allowedConfiguredModelIds ?? []
-  return catalogStore.workspaceConfiguredModelOptions
+  const allowedConfiguredModelIds = resolvedModelSettings.value.allowedConfiguredModelIds
+  return assignedConfiguredModelOptions.value
     .filter(model => allowedConfiguredModelIds.includes(model.value))
     .map(model => ({
       value: model.value,
@@ -83,8 +107,8 @@ const modelOptions = computed(() => {
     }))
 })
 const actorOptions = computed<ActorOption[]>(() => {
-  const enabledAgentIds = projectSettings.value.agents?.enabledAgentIds ?? []
-  const enabledTeamIds = projectSettings.value.agents?.enabledTeamIds ?? []
+  const enabledAgentIds = resolvedAgentSettings.value.enabledAgentIds
+  const enabledTeamIds = resolvedAgentSettings.value.enabledTeamIds
   const visibleAgents = agentStore.effectiveProjectAgents
     .filter(agent => agent.projectId === projectId.value || enabledAgentIds.includes(agent.id))
   const visibleTeams = teamStore.effectiveProjectTeams
@@ -210,6 +234,16 @@ const hasModelOptions = computed(() => modelOptions.value.length > 0)
 const hasActorOptions = computed(() => actorOptions.value.length > 0)
 const canSubmit = computed(() => messageDraft.value.trim().length > 0 && hasModelOptions.value && !!selectedActor.value)
 
+function resolveConfiguredPermissionMode(value: unknown): PermissionMode | null {
+  if (value === 'auto' || value === 'readonly' || value === 'danger-full-access') {
+    return value
+  }
+  if (value === 'read-only' || value === 'workspace-write') {
+    return resolveUiPermissionMode(value)
+  }
+  return null
+}
+
 function createConversationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `conversation-${crypto.randomUUID()}`
@@ -231,6 +265,15 @@ async function ensureConversationProjectContext(connectionId: string, nextProjec
     resourceStore.loadProjectResources(nextProjectId, connectionId),
     artifactStore.loadWorkspaceArtifacts(connectionId),
   ])
+  if (lastPermissionSeedKey !== projectContextKey) {
+    const configuredDefaultMode = resolveConfiguredPermissionMode(
+      workspaceStore.activeProjectRuntimeConfig?.effectiveConfig?.permissions?.defaultMode,
+    )
+    if (configuredDefaultMode) {
+      selectedPermissionMode.value = configuredDefaultMode
+    }
+    lastPermissionSeedKey = projectContextKey
+  }
   lastProjectContextKey = projectContextKey
 }
 
@@ -427,12 +470,12 @@ function openArtifact(artifactId: string) {
   shell.setRightSidebarCollapsed(false)
 }
 
-async function approveMessageApproval() {
-  await runtime.resolveApproval('approve')
+async function approveMessageApproval(approvalId: string) {
+  await runtime.resolveApproval('approve', approvalId)
 }
 
-async function rejectMessageApproval() {
-  await runtime.resolveApproval('reject')
+async function rejectMessageApproval(approvalId: string) {
+  await runtime.resolveApproval('reject', approvalId)
 }
 
 async function resolveMessageAuthChallenge() {
@@ -485,6 +528,7 @@ async function rejectMemoryProposal() {
               :artifacts="resolveMessageArtifacts(message)"
               :is-expanded="expandedMessageIds.includes(message.id)"
               :focused-tool-id="focusedToolByMessageId[message.id]"
+              :approval-resolving="runtime.isApprovalResolving(message.approval?.id)"
               @toggle-detail="toggleDetail"
               @open-artifact="openArtifact"
               @approve="approveMessageApproval"
@@ -543,11 +587,7 @@ async function rejectMemoryProposal() {
             />
           </div>
           <div class="flex flex-wrap gap-2 pt-1">
-            <template v-if="activeMediationKind === 'approval' && runtime.pendingApproval && canResolveApproval">
-              <UiButton size="sm" @click="approveMessageApproval">{{ t('common.approve') }}</UiButton>
-              <UiButton variant="ghost" size="sm" @click="rejectMessageApproval">{{ t('common.reject') }}</UiButton>
-            </template>
-            <template v-else-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuth">
+            <template v-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuth">
               <UiButton size="sm" @click="resolveMessageAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
               <UiButton variant="ghost" size="sm" @click="cancelMessageAuthChallenge">{{ t('common.cancel') }}</UiButton>
             </template>

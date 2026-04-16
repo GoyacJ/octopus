@@ -29,6 +29,7 @@ const props = defineProps<{
   artifacts: Array<{ id: string, label: string, kindLabel?: string }>
   isExpanded: boolean
   focusedToolId?: string
+  approvalResolving?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -36,8 +37,8 @@ const emit = defineEmits<{
   (event: 'rollback', messageId: string): void
   (event: 'open-resource', resourceId: string): void
   (event: 'open-artifact', artifactId: string): void
-  (event: 'approve', messageId: string): void
-  (event: 'reject', messageId: string): void
+  (event: 'approve', approvalId: string): void
+  (event: 'reject', approvalId: string): void
   (event: 'focus-tool', payload: { messageId: string, toolId: string }): void
 }>()
 
@@ -211,10 +212,21 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             <UiBadge v-if="approvalRiskLabel" :label="approvalRiskLabel" subtle />
           </div>
           <div v-if="hasPendingApproval" class="flex flex-wrap gap-2">
-            <UiButton size="sm" data-testid="conversation-inline-approve" @click="emit('approve', message.id)">
+            <UiButton
+              size="sm"
+              data-testid="conversation-inline-approve"
+              :disabled="approvalResolving"
+              @click="message.approval && emit('approve', message.approval.id)"
+            >
               Approve
             </UiButton>
-            <UiButton size="sm" variant="ghost" data-testid="conversation-inline-reject" @click="emit('reject', message.id)">
+            <UiButton
+              size="sm"
+              variant="ghost"
+              data-testid="conversation-inline-reject"
+              :disabled="approvalResolving"
+              @click="message.approval && emit('reject', message.approval.id)"
+            >
               Reject
             </UiButton>
           </div>

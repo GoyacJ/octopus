@@ -304,6 +304,18 @@ fn trace_context_from_serialized_session(serialized_session: &Value) -> RuntimeT
         .unwrap_or_default()
 }
 
+fn requested_permission_mode_from_serialized_session(
+    serialized_session: &Value,
+    fallback: &str,
+) -> String {
+    serialized_session
+        .get("requestedPermissionMode")
+        .and_then(Value::as_str)
+        .and_then(octopus_core::normalize_runtime_permission_mode_label)
+        .unwrap_or(fallback)
+        .to_string()
+}
+
 fn assistant_message_from_events(
     events: Vec<runtime::AssistantEvent>,
 ) -> Result<(runtime::ConversationMessage, Option<runtime::TokenUsage>), AppError> {
@@ -434,19 +446,30 @@ fn latest_runtime_response(
     })
 }
 
-fn serialized_runtime_session(content: &str, trace_context: &RuntimeTraceContext) -> Value {
+fn serialized_runtime_session(
+    content: &str,
+    trace_context: &RuntimeTraceContext,
+    requested_permission_mode: &str,
+) -> Value {
     let session = initial_runtime_session(content).unwrap_or_default();
-    serialized_runtime_session_with_state(content, trace_context, &session)
+    serialized_runtime_session_with_state(
+        content,
+        trace_context,
+        requested_permission_mode,
+        &session,
+    )
 }
 
 fn serialized_runtime_session_with_state(
     content: &str,
     trace_context: &RuntimeTraceContext,
+    requested_permission_mode: &str,
     session: &runtime::Session,
 ) -> Value {
     json!({
         "content": content,
         "pendingContent": content,
+        "requestedPermissionMode": requested_permission_mode,
         "traceContext": trace_context,
         "pendingToolUses": [],
         "session": {
@@ -462,10 +485,16 @@ fn serialized_runtime_session_with_state(
 fn serialized_runtime_session_with_pending_tool_uses(
     content: &str,
     trace_context: &RuntimeTraceContext,
+    requested_permission_mode: &str,
     session: &runtime::Session,
     pending_tool_uses: &[RuntimePendingToolUse],
 ) -> Value {
-    let mut serialized = serialized_runtime_session_with_state(content, trace_context, session);
+    let mut serialized = serialized_runtime_session_with_state(
+        content,
+        trace_context,
+        requested_permission_mode,
+        session,
+    );
     if let Some(parent) = serialized.as_object_mut() {
         parent.insert(
             "pendingToolUses".to_string(),
@@ -519,6 +548,58 @@ fn approval_blocks_team_projection(approval: Option<&ApprovalRequestRecord>) -> 
     approval.is_some_and(|approval| {
         approval.status == "pending" && approval.target_kind.as_deref() == Some("team-spawn")
     })
+}
+
+fn resolved_approval_status(run: &RuntimeRunSnapshot, approval_id: &str) -> Option<String> {
+    run.last_mediation_outcome
+        .as_ref()
+        .filter(|outcome| {
+            outcome.mediation_kind == "approval"
+                && outcome.mediation_id.as_deref() == Some(approval_id)
+                && outcome.outcome != "pending"
+        })
+        .map(|outcome| outcome.outcome.clone())
+        .or_else(|| {
+            run.checkpoint
+                .last_mediation_outcome
+                .as_ref()
+                .filter(|outcome| {
+                    outcome.mediation_kind == "approval"
+                        && outcome.mediation_id.as_deref() == Some(approval_id)
+                        && outcome.outcome != "pending"
+                })
+                .map(|outcome| outcome.outcome.clone())
+        })
+        .or_else(|| {
+            run.approval_target
+                .as_ref()
+                .filter(|approval| approval.id == approval_id && approval.status != "pending")
+                .map(|approval| approval.status.clone())
+        })
+        .or_else(|| {
+            run.checkpoint
+                .pending_approval
+                .as_ref()
+                .filter(|approval| approval.id == approval_id && approval.status != "pending")
+                .map(|approval| approval.status.clone())
+        })
+}
+
+fn runtime_approval_lookup_error(aggregate: &RuntimeAggregate, approval_id: &str) -> AppError {
+    resolved_approval_status(&aggregate.detail.run, approval_id)
+        .or_else(|| {
+            aggregate
+                .metadata
+                .subrun_states
+                .values()
+                .find_map(|state| resolved_approval_status(&state.run, approval_id))
+        })
+        .map(|status| {
+            AppError::conflict(format!(
+                "runtime approval `{approval_id}` is already {status}"
+            ))
+        })
+        .unwrap_or_else(|| AppError::not_found("runtime approval"))
 }
 
 fn team_spawn_policy_decision(
@@ -718,6 +799,7 @@ async fn execute_runtime_turn_loop(
     configured_model: &ConfiguredModelRecord,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
+    requested_permission_mode: &str,
     capability_state_ref: &str,
     content: &str,
     trace_context: &RuntimeTraceContext,
@@ -783,6 +865,7 @@ async fn execute_runtime_turn_loop(
                 session_id,
                 conversation_id,
                 run_id,
+                requested_permission_mode,
                 &tool_use,
                 pending_mcp_servers.clone(),
                 mcp_degraded.clone(),
@@ -840,6 +923,7 @@ async fn execute_runtime_turn_loop(
                         serialized_session: serialized_runtime_session_with_pending_tool_uses(
                             content,
                             trace_context,
+                            requested_permission_mode,
                             &session,
                             &remaining_tool_uses,
                         ),
@@ -942,6 +1026,7 @@ async fn execute_runtime_turn_loop(
                 serialized_session: serialized_runtime_session_with_state(
                     content,
                     trace_context,
+                    requested_permission_mode,
                     &session,
                 ),
                 usage_summary,
@@ -1713,6 +1798,10 @@ async fn execute_team_subrun(
     };
     let session = restore_runtime_session(&state.serialized_session, &content)?;
     let pending_tool_uses = pending_tool_uses_from_serialized_session(&state.serialized_session)?;
+    let requested_permission_mode = requested_permission_mode_from_serialized_session(
+        &state.serialized_session,
+        &session_policy.execution_permission_mode,
+    );
     let loop_result = execute_runtime_turn_loop(
         adapter,
         session_id,
@@ -1722,6 +1811,7 @@ async fn execute_team_subrun(
         &configured_model,
         &actor_manifest,
         &session_policy,
+        &requested_permission_mode,
         &capability_state_ref,
         &content,
         &trace_context,
@@ -2069,9 +2159,9 @@ fn load_pending_team_subrun_approval(
             .detail
             .pending_approval
             .clone()
-            .ok_or_else(|| AppError::not_found("runtime approval"))?;
+            .ok_or_else(|| runtime_approval_lookup_error(aggregate, approval_id))?;
         if approval.id != approval_id {
-            return Err(AppError::not_found("runtime approval"));
+            return Err(runtime_approval_lookup_error(aggregate, approval_id));
         }
         if approval.run_id == aggregate.detail.run.id {
             return Ok(None);
@@ -2089,12 +2179,18 @@ fn load_pending_team_subrun_approval(
         .approval_target
         .clone()
         .or_else(|| state.run.checkpoint.pending_approval.clone())
-        .ok_or_else(|| AppError::not_found("runtime approval"))?;
+        .ok_or_else(|| {
+            AppError::conflict(format!(
+                "runtime approval `{approval_id}` is already consumed"
+            ))
+        })?;
     if subrun_approval.id != approval_id {
-        return Err(AppError::not_found("runtime approval"));
+        return Err(AppError::conflict(format!(
+            "runtime approval `{approval_id}` is already consumed"
+        )));
     }
     if approval.status != "pending" {
-        return Err(AppError::invalid_input(format!(
+        return Err(AppError::conflict(format!(
             "runtime approval `{approval_id}` is already {}",
             approval.status
         )));
@@ -2546,9 +2642,7 @@ impl AgentRuntimeCore {
             .execution_policy_decision
             .as_ref()
             .map(|decision| decision.requires_approval)
-            .unwrap_or(execution_target::requires_approval(
-                &run_context.requested_permission_mode,
-            )?);
+            .unwrap_or(false);
         let provider_auth_required = !run_context
             .auth_state_summary
             .challenged_provider_keys
@@ -2598,6 +2692,7 @@ impl AgentRuntimeCore {
                     &run_context.configured_model,
                     &run_context.actor_manifest,
                     &run_context.session_policy,
+                    &run_context.requested_permission_mode,
                     &run_context.capability_state_ref,
                     &input.content,
                     &run_context.trace_context,
@@ -2643,7 +2738,11 @@ impl AgentRuntimeCore {
             .as_ref()
             .map(|step| step.serialized_session.clone())
             .unwrap_or_else(|| {
-                serialized_runtime_session(&input.content, &run_context.trace_context)
+                serialized_runtime_session(
+                    &input.content,
+                    &run_context.trace_context,
+                    &run_context.requested_permission_mode,
+                )
             });
         let blocking_mediation_request = runtime_loop
             .as_ref()
@@ -2853,6 +2952,10 @@ impl AgentRuntimeCore {
             let session = restore_runtime_session(&checkpoint_serialized_session, content)?;
             let pending_tool_uses =
                 pending_tool_uses_from_serialized_session(&checkpoint_serialized_session)?;
+            let requested_permission_mode = requested_permission_mode_from_serialized_session(
+                &checkpoint_serialized_session,
+                &session_policy.execution_permission_mode,
+            );
             Some(
                 execute_runtime_turn_loop(
                     adapter,
@@ -2863,6 +2966,7 @@ impl AgentRuntimeCore {
                     &configured_model,
                     &actor_manifest,
                     &session_policy,
+                    &requested_permission_mode,
                     &capability_projection.capability_state_ref,
                     content,
                     &trace_context_from_serialized_session(&checkpoint_serialized_session),
@@ -3060,6 +3164,10 @@ impl AgentRuntimeCore {
             let session = restore_runtime_session(&checkpoint_serialized_session, content)?;
             let pending_tool_uses =
                 pending_tool_uses_from_serialized_session(&checkpoint_serialized_session)?;
+            let requested_permission_mode = requested_permission_mode_from_serialized_session(
+                &checkpoint_serialized_session,
+                &session_policy.execution_permission_mode,
+            );
             Some(
                 execute_runtime_turn_loop(
                     adapter,
@@ -3070,6 +3178,7 @@ impl AgentRuntimeCore {
                     &configured_model,
                     &actor_manifest,
                     &session_policy,
+                    &requested_permission_mode,
                     &capability_projection.capability_state_ref,
                     content,
                     &trace_context_from_serialized_session(&checkpoint_serialized_session),
@@ -3297,9 +3406,9 @@ fn load_pending_checkpoint(
             .detail
             .pending_approval
             .clone()
-            .ok_or_else(|| AppError::not_found("runtime approval"))?;
+            .ok_or_else(|| runtime_approval_lookup_error(aggregate, approval_id))?;
         if approval.id != approval_id {
-            return Err(AppError::not_found("runtime approval"));
+            return Err(runtime_approval_lookup_error(aggregate, approval_id));
         }
         let checkpoint = aggregate.detail.run.checkpoint.clone();
         (
@@ -3338,7 +3447,7 @@ fn load_pending_checkpoint(
     let (resolved_target, configured_model) = adapter
         .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
     if approval.status != "pending" {
-        return Err(AppError::invalid_input(format!(
+        return Err(AppError::conflict(format!(
             "runtime approval `{approval_id}` is already {}",
             approval.status
         )));
@@ -3823,14 +3932,22 @@ fn apply_approval_resolution_state(
     let aggregate = sessions
         .get_mut(session_id)
         .ok_or_else(|| AppError::not_found("runtime session"))?;
+    if aggregate.detail.pending_approval.is_none() {
+        return Err(runtime_approval_lookup_error(&*aggregate, approval_id));
+    }
+    if aggregate
+        .detail
+        .pending_approval
+        .as_ref()
+        .is_some_and(|pending| pending.id != approval_id)
+    {
+        return Err(runtime_approval_lookup_error(&*aggregate, approval_id));
+    }
     let pending = aggregate
         .detail
         .pending_approval
         .as_mut()
-        .ok_or_else(|| AppError::not_found("runtime approval"))?;
-    if pending.id != approval_id {
-        return Err(AppError::not_found("runtime approval"));
-    }
+        .expect("pending approval checked above");
     pending.status = decision_status.into();
     let mut approval = pending.clone();
     let resolved_target_kind = approval.target_kind.clone();

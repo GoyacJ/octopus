@@ -706,7 +706,8 @@ pub fn mcp_tool_capability_descriptor(tool: &runtime::ManagedMcpTool) -> McpCapa
         state: CapabilityState::Ready,
         required_permission: permission_mode_for_mcp_tool(&tool.tool),
         requires_auth: false,
-        requires_approval: permission_mode_for_mcp_tool(&tool.tool) != PermissionMode::ReadOnly,
+        requires_approval: permission_mode_for_mcp_tool(&tool.tool)
+            == PermissionMode::DangerFullAccess,
         trust_profile: CapabilityTrustProfile::default(),
         scope_constraints: CapabilityScopeConstraints::default(),
     }

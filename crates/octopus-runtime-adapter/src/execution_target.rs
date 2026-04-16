@@ -1,12 +1,12 @@
 use super::*;
 use octopus_core::normalize_runtime_permission_mode_label;
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn requires_approval(permission_mode: &str) -> Result<bool, AppError> {
-    let normalized_permission_mode = normalize_runtime_permission_mode_label(permission_mode)
-        .ok_or_else(|| {
-            AppError::invalid_input(format!("unsupported permission mode: {permission_mode}"))
-        })?;
-    Ok(normalized_permission_mode == RUNTIME_PERMISSION_WORKSPACE_WRITE)
+    normalize_runtime_permission_mode_label(permission_mode).ok_or_else(|| {
+        AppError::invalid_input(format!("unsupported permission mode: {permission_mode}"))
+    })?;
+    Ok(false)
 }
 
 fn configured_model_from_registry(

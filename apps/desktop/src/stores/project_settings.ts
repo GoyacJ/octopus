@@ -105,3 +105,48 @@ export function parseProjectSettingsDocument(document: Record<string, JsonValue>
     agents: parseProjectAgentSettings(projectSettings.agents),
   }
 }
+
+export function resolveProjectModelSettings(
+  projectSettings: ProjectSettingsConfig,
+  assignedConfiguredModelIds: string[],
+  assignmentDefaultConfiguredModelId = '',
+): ProjectModelSettings {
+  const configuredIds = [...new Set(assignedConfiguredModelIds.filter(Boolean))]
+  const saved = projectSettings.models
+  const allowedConfiguredModelIds = saved?.allowedConfiguredModelIds?.length
+    ? saved.allowedConfiguredModelIds.filter(item => configuredIds.includes(item))
+    : configuredIds
+  const fallbackDefaultConfiguredModelId = configuredIds.includes(assignmentDefaultConfiguredModelId)
+    ? assignmentDefaultConfiguredModelId
+    : configuredIds[0] ?? ''
+  const defaultConfiguredModelId = allowedConfiguredModelIds.includes(saved?.defaultConfiguredModelId ?? '')
+    ? saved?.defaultConfiguredModelId ?? ''
+    : allowedConfiguredModelIds.includes(fallbackDefaultConfiguredModelId)
+      ? fallbackDefaultConfiguredModelId
+      : allowedConfiguredModelIds[0] ?? ''
+
+  return {
+    allowedConfiguredModelIds,
+    defaultConfiguredModelId,
+    totalTokens: saved?.totalTokens,
+  }
+}
+
+export function resolveProjectAgentSettings(
+  projectSettings: ProjectSettingsConfig,
+  assignedAgentIds: string[],
+  assignedTeamIds: string[],
+): ProjectAgentSettings {
+  const normalizedAssignedAgentIds = [...new Set(assignedAgentIds.filter(Boolean))]
+  const normalizedAssignedTeamIds = [...new Set(assignedTeamIds.filter(Boolean))]
+  const saved = projectSettings.agents
+
+  return {
+    enabledAgentIds: saved?.enabledAgentIds?.length
+      ? saved.enabledAgentIds.filter(agentId => normalizedAssignedAgentIds.includes(agentId))
+      : normalizedAssignedAgentIds,
+    enabledTeamIds: saved?.enabledTeamIds?.length
+      ? saved.enabledTeamIds.filter(teamId => normalizedAssignedTeamIds.includes(teamId))
+      : normalizedAssignedTeamIds,
+  }
+}

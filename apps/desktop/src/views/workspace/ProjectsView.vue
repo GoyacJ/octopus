@@ -55,7 +55,7 @@ const form = reactive({
 })
 
 const projects = computed(() => workspaceStore.projects)
-const workspaceConfiguredModels = computed(() => catalogStore.workspaceConfiguredModelOptions)
+const workspaceConfiguredModels = computed(() => catalogStore.configuredModelOptions)
 const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets.filter(entry => entry.enabled))
 const workspaceAgents = computed(() => agentStore.workspaceAgents)
 const workspaceTeams = computed(() => teamStore.workspaceTeams)

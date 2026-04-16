@@ -174,7 +174,7 @@ pub(crate) fn concurrency_policy(
 fn invocation_policy(required_permission: PermissionMode) -> CapabilityInvocationPolicy {
     CapabilityInvocationPolicy {
         selectable: true,
-        requires_approval: required_permission != PermissionMode::ReadOnly,
+        requires_approval: required_permission == PermissionMode::DangerFullAccess,
         requires_auth: false,
     }
 }

@@ -296,6 +296,97 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('keeps approval actions only on the inline assistant card', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = 'Run pwd in the workspace terminal.'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-approval"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-runtime-mediation"]') !== null)
+
+    expect(mounted.container.querySelectorAll('[data-testid="conversation-inline-approve"]')).toHaveLength(1)
+    expect(mounted.container.querySelectorAll('[data-testid="conversation-inline-reject"]')).toHaveLength(1)
+    expect(
+      mounted.container
+        .querySelector('[data-testid="conversation-runtime-mediation"]')
+        ?.querySelectorAll('button'),
+    ).toHaveLength(0)
+
+    mounted.destroy()
+  })
+
+  it('seeds the permission selector from the effective project runtime config default mode', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      preloadConversationMessages: true,
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
+        if (!projectConfig) {
+          throw new Error('Expected proj-redesign runtime config')
+        }
+
+        state.runtimeProjectConfigs['proj-redesign'] = {
+          ...projectConfig,
+          effectiveConfig: {
+            ...(projectConfig.effectiveConfig as Record<string, any>),
+            permissions: {
+              defaultMode: 'danger-full-access',
+              maxMode: 'danger-full-access',
+            },
+          },
+          sources: projectConfig.sources.map((source) => (
+            source.scope === 'project'
+              ? {
+                  ...source,
+                  document: {
+                    ...((source.document as Record<string, any>) ?? {}),
+                    permissions: {
+                      defaultMode: 'danger-full-access',
+                      maxMode: 'danger-full-access',
+                    },
+                  },
+                }
+              : source
+          )),
+        }
+      },
+    })
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() =>
+      (mounted.container.querySelector('[data-testid="conversation-permission-select"]') as HTMLSelectElement | null)?.value === 'danger-full-access',
+    )
+
+    const permissionSelect = mounted.container.querySelector('[data-testid="conversation-permission-select"]') as HTMLSelectElement
+    expect(permissionSelect.value).toBe('danger-full-access')
+
+    mounted.destroy()
+  })
+
   it('queues follow-up turns above the composer while a run is pending and lets the user remove them', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
     await router.isReady()
@@ -549,6 +640,108 @@ describe('Conversation surfaces', () => {
     expect(actorOptionLabels).toContain('Redesign Tiger Team')
     expect(actorOptionLabels).toContain('Finance Ops Template')
     expect(actorOptionLabels).not.toContain('Coder Agent')
+
+    mounted.destroy()
+  })
+
+  it('falls back to assigned seeded models when project settings are absent', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      preloadConversationMessages: true,
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments?.models) {
+          throw new Error('Expected proj-redesign model assignments')
+        }
+
+        project.assignments.models.configuredModelIds = ['claude-sonnet-4-5']
+        project.assignments.models.defaultConfiguredModelId = 'claude-sonnet-4-5'
+
+        state.catalog.configuredModels = [
+          {
+            configuredModelId: 'claude-sonnet-4-5',
+            name: 'Claude Sonnet 4.5',
+            providerId: 'anthropic',
+            modelId: 'claude-sonnet-4-5',
+            credentialRef: 'env:ANTHROPIC_API_KEY',
+            tokenUsage: {
+              usedTokens: 0,
+              exhausted: false,
+            },
+            enabled: true,
+            source: 'seeded',
+            status: 'unconfigured',
+            configured: false,
+          },
+        ]
+        state.catalog.defaultSelections = {
+          conversation: {
+            configuredModelId: 'claude-sonnet-4-5',
+            providerId: 'anthropic',
+            modelId: 'claude-sonnet-4-5',
+            surface: 'conversation',
+          },
+        }
+
+        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
+        if (!projectConfig) {
+          throw new Error('Expected proj-redesign runtime config')
+        }
+
+        state.runtimeProjectConfigs['proj-redesign'] = {
+          ...projectConfig,
+          effectiveConfig: {
+            approvals: {
+              defaultMode: 'manual',
+            },
+          },
+          sources: projectConfig.sources.map(source =>
+            source.scope === 'project'
+              ? {
+                  ...source,
+                  document: {
+                    approvals: {
+                      defaultMode: 'manual',
+                    },
+                  },
+                }
+              : source
+          ),
+        }
+      },
+    })
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => {
+      const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
+      const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+      return modelOptionLabels.includes('Claude Sonnet 4.5')
+    })
+
+    const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
+    expect(modelSelect).not.toBeNull()
+    const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+    expect(modelOptionLabels).toContain('Claude Sonnet 4.5')
+    expect(modelSelect?.disabled).toBe(false)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '继续推进真实 workspace API 收尾。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    expect(sendButton?.disabled).toBe(false)
 
     mounted.destroy()
   })

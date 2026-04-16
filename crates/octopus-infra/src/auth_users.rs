@@ -2,6 +2,8 @@ use super::*;
 use octopus_core::{AuthorizationRequest, DataPolicyRecord};
 use std::collections::BTreeSet;
 
+const BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID: &str = "user-owner";
+
 pub(super) fn to_user_summary(paths: &WorkspacePaths, user: &StoredUser) -> UserRecordSummary {
     UserRecordSummary {
         id: user.record.id.clone(),
@@ -570,6 +572,55 @@ impl InfraAuthService {
         Ok(self.state.workspace_snapshot()?.owner_user_id.is_some())
     }
 
+    pub(super) fn adopt_bootstrap_projects(
+        &self,
+        db: &Connection,
+        user_id: &str,
+    ) -> Result<(), AppError> {
+        let mut projects = self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))?;
+
+        for project in projects.iter_mut() {
+            let replaces_owner = project.owner_user_id == BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID;
+            let had_placeholder_member = project
+                .member_user_ids
+                .iter()
+                .any(|member_user_id| member_user_id == BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID);
+
+            if !replaces_owner && !had_placeholder_member {
+                continue;
+            }
+
+            if replaces_owner {
+                project.owner_user_id = user_id.to_string();
+            }
+
+            let mut member_user_ids = project
+                .member_user_ids
+                .iter()
+                .filter(|member_user_id| member_user_id.as_str() != BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            member_user_ids.insert(user_id.to_string());
+            project.member_user_ids = member_user_ids.into_iter().collect();
+
+            db.execute(
+                "UPDATE projects SET owner_user_id = ?2, member_user_ids_json = ?3 WHERE id = ?1",
+                params![
+                    project.id,
+                    project.owner_user_id,
+                    serde_json::to_string(&project.member_user_ids)?,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        }
+
+        Ok(())
+    }
+
     pub(super) fn persist_session(
         &self,
         user: &StoredUser,
@@ -781,6 +832,7 @@ impl AuthService for InfraAuthService {
             params![format!("binding-user-{user_id}-owner"), user_id],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
+        self.adopt_bootstrap_projects(&db, &user_id)?;
 
         {
             let mut workspace_state = self
@@ -1186,8 +1238,9 @@ mod tests {
         AccessUserUpsertRequest, AuthorizationRequest, AvatarUploadPayload,
         DataPolicyUpsertRequest, LoginRequest, RegisterBootstrapAdminRequest,
         ResourcePolicyUpsertRequest, RoleBindingUpsertRequest, RoleUpsertRequest,
+        DEFAULT_PROJECT_ID,
     };
-    use octopus_platform::{AccessControlService, AuthService, AuthorizationService};
+    use octopus_platform::{AccessControlService, AuthService, AuthorizationService, WorkspaceService};
 
     fn avatar_payload() -> AvatarUploadPayload {
         AvatarUploadPayload {
@@ -1250,6 +1303,127 @@ mod tests {
                 .expect("login user")
                 .session
         })
+    }
+
+    #[test]
+    fn bootstrap_admin_adopts_seeded_default_project_membership() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let session = bootstrap_admin(&bundle);
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let project = bundle
+                .workspace
+                .list_projects()
+                .await
+                .expect("projects")
+                .into_iter()
+                .find(|record| record.id == DEFAULT_PROJECT_ID)
+                .expect("default project");
+
+            assert_eq!(project.owner_user_id, session.user_id);
+            assert!(project.member_user_ids.iter().any(|user_id| user_id == &session.user_id));
+            assert!(!project.member_user_ids.iter().any(|user_id| user_id == "user-owner"));
+        });
+    }
+
+    #[test]
+    fn default_project_seeds_model_assignments() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let project = bundle
+                .workspace
+                .list_projects()
+                .await
+                .expect("projects")
+                .into_iter()
+                .find(|record| record.id == DEFAULT_PROJECT_ID)
+                .expect("default project");
+
+            let models = project
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.models.as_ref())
+                .expect("default project model assignments");
+
+            assert_eq!(models.default_configured_model_id, "claude-sonnet-4-5");
+            assert!(models
+                .configured_model_ids
+                .iter()
+                .any(|configured_model_id| configured_model_id == "claude-sonnet-4-5"));
+        });
+    }
+
+    #[test]
+    fn loading_existing_workspace_backfills_missing_default_project_model_assignments() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+
+        let db = bundle.workspace.state.open_db().expect("open db");
+        db.execute(
+            "UPDATE projects SET assignments_json = NULL WHERE id = ?1",
+            params![DEFAULT_PROJECT_ID],
+        )
+        .expect("clear default project assignments");
+
+        let reloaded = build_infra_bundle(temp.path()).expect("reloaded bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let project = reloaded
+                .workspace
+                .list_projects()
+                .await
+                .expect("projects")
+                .into_iter()
+                .find(|record| record.id == DEFAULT_PROJECT_ID)
+                .expect("default project");
+
+            let models = project
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.models.as_ref())
+                .expect("backfilled default project model assignments");
+
+            assert_eq!(models.default_configured_model_id, "claude-sonnet-4-5");
+            assert!(models
+                .configured_model_ids
+                .iter()
+                .any(|configured_model_id| configured_model_id == "claude-sonnet-4-5"));
+        });
+    }
+
+    #[test]
+    fn loading_existing_workspace_backfills_placeholder_project_membership_to_owner() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let session = bootstrap_admin(&bundle);
+
+        let db = bundle.workspace.state.open_db().expect("open db");
+        db.execute(
+            "UPDATE projects SET owner_user_id = 'user-owner', member_user_ids_json = '[\"user-owner\"]' WHERE id = ?1",
+            params![DEFAULT_PROJECT_ID],
+        )
+        .expect("reset project placeholder owner");
+
+        let reloaded = build_infra_bundle(temp.path()).expect("reloaded bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let project = reloaded
+                .workspace
+                .list_projects()
+                .await
+                .expect("projects")
+                .into_iter()
+                .find(|record| record.id == DEFAULT_PROJECT_ID)
+                .expect("default project");
+
+            assert_eq!(project.owner_user_id, session.user_id);
+            assert_eq!(project.member_user_ids, vec![session.user_id.clone()]);
+        });
     }
 
     #[test]

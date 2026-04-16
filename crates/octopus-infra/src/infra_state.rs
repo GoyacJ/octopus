@@ -1,5 +1,7 @@
 use super::*;
-use octopus_core::BundleAssetDescriptorRecord;
+use octopus_core::{BundleAssetDescriptorRecord, ProjectModelAssignments};
+
+const BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID: &str = "user-owner";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct WorkspaceConfigFile {
@@ -45,6 +47,21 @@ pub(super) fn empty_project_linked_workspace_assets() -> ProjectLinkedWorkspaceA
         resource_ids: Vec::new(),
         tool_source_keys: Vec::new(),
         knowledge_ids: Vec::new(),
+    }
+}
+
+pub(super) fn default_project_model_assignments() -> ProjectModelAssignments {
+    ProjectModelAssignments {
+        configured_model_ids: vec!["claude-sonnet-4-5".into()],
+        default_configured_model_id: "claude-sonnet-4-5".into(),
+    }
+}
+
+pub(super) fn default_project_assignments() -> ProjectWorkspaceAssignments {
+    ProjectWorkspaceAssignments {
+        models: Some(default_project_model_assignments()),
+        tools: None,
+        agents: None,
     }
 }
 
@@ -829,6 +846,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     if project_exists.is_none() {
         let default_project_resource_directory =
             paths.default_project_resource_directory(DEFAULT_PROJECT_ID);
+        let default_project_assignments =
+            serde_json::to_string(&default_project_assignments())?;
         let default_permission_overrides = serde_json::to_string(&ProjectPermissionOverrides {
             agents: "inherit".into(),
             resources: "inherit".into(),
@@ -854,7 +873,7 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                     "active",
                     "Bootstrap project for the local workspace.",
                     default_project_resource_directory,
-                    Option::<String>::None,
+                    Some(default_project_assignments),
                     "user-owner",
                     default_member_user_ids,
                     default_permission_overrides,
@@ -2581,10 +2600,13 @@ fn backfill_project_governance(
     connection: &Connection,
     workspace_owner_user_id: Option<&str>,
 ) -> Result<(), AppError> {
-    let fallback_owner_user_id = workspace_owner_user_id
+    let resolved_workspace_owner_user_id = workspace_owner_user_id
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("user-owner")
-        .to_string();
+        .map(str::to_string);
+    let replace_bootstrap_placeholder = resolved_workspace_owner_user_id.is_some();
+    let fallback_owner_user_id = resolved_workspace_owner_user_id
+        .clone()
+        .unwrap_or_else(|| BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID.to_string());
     let data_policies = load_data_policies(connection)?;
     let selected_project_members = data_policies
         .into_iter()
@@ -2637,6 +2659,9 @@ fn backfill_project_governance(
     {
         let owner_user_id = stored_owner_user_id
             .filter(|value| !value.trim().is_empty())
+            .filter(|value| {
+                !(replace_bootstrap_placeholder && value == BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID)
+            })
             .unwrap_or_else(|| fallback_owner_user_id.clone());
         let member_user_ids = stored_member_user_ids_json
             .as_deref()
@@ -2648,7 +2673,12 @@ fn backfill_project_governance(
                     .get(&project_id)
                     .cloned()
                     .unwrap_or_default()
-            });
+            })
+            .into_iter()
+            .filter(|user_id| {
+                !(replace_bootstrap_placeholder && user_id == BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID)
+            })
+            .collect::<Vec<_>>();
         let permission_overrides = stored_permission_overrides_json
             .as_deref()
             .filter(|value| !value.trim().is_empty())
@@ -2708,6 +2738,53 @@ fn backfill_project_governance(
     Ok(())
 }
 
+fn backfill_default_project_assignments(connection: &Connection) -> Result<(), AppError> {
+    let stored_assignments_json = connection
+        .query_row(
+            "SELECT assignments_json FROM projects WHERE id = ?1",
+            params![DEFAULT_PROJECT_ID],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|error| AppError::database(error.to_string()))?
+        .flatten();
+    let parsed_assignments = stored_assignments_json
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(serde_json::from_str::<ProjectWorkspaceAssignments>)
+        .transpose()?;
+    let needs_model_backfill = parsed_assignments
+        .as_ref()
+        .and_then(|assignments| assignments.models.as_ref())
+        .is_none_or(|models| {
+            models.default_configured_model_id.trim().is_empty()
+                || models.configured_model_ids.is_empty()
+        });
+    if !needs_model_backfill {
+        return Ok(());
+    }
+
+    let next_assignments = match parsed_assignments {
+        Some(mut assignments) => {
+            assignments.models = Some(default_project_model_assignments());
+            assignments
+        }
+        None => default_project_assignments(),
+    };
+
+    connection
+        .execute(
+            "UPDATE projects SET assignments_json = ?2 WHERE id = ?1",
+            params![
+                DEFAULT_PROJECT_ID,
+                serde_json::to_string(&next_assignments)?,
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    Ok(())
+}
+
 pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let workspace_file: WorkspaceConfigFile =
         toml::from_str(&fs::read_to_string(&paths.workspace_config)?)?;
@@ -2730,6 +2807,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
     ensure_default_owner_role_permissions(&connection)?;
     backfill_project_resource_directories(&connection, &paths)?;
+    backfill_default_project_assignments(&connection)?;
     let users = load_users(&connection)?;
     let owner_user_id = users
         .iter()

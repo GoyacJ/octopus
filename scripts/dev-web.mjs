@@ -94,7 +94,6 @@ async function main() {
   const authToken = randomUUID()
   const stateRoot = createRepoStateRoot()
   const preferencesPath = join(stateRoot, 'shell-preferences.json')
-  const runtimeRoot = join(stateRoot, 'runtime')
   const baseUrl = `http://127.0.0.1:${port}`
 
   await runCommand(pnpmCommand, ['prepare:desktop-backend:dev'])
@@ -118,8 +117,8 @@ async function main() {
     'browser',
     '--preferences-path',
     preferencesPath,
-    '--runtime-root',
-    runtimeRoot,
+    '--workspace-root',
+    stateRoot,
   ])
 
   let shuttingDown = false

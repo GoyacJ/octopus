@@ -46,6 +46,7 @@ export const useRuntimeStore = defineStore('runtime', {
     activeConversationId: '',
     queuedTurns: {} as Record<string, RuntimeQueueItem[]>,
     lastEventIds: {} as Record<string, string>,
+    resolvingApprovalIds: {} as Record<string, boolean>,
     activeWorkspaceConnectionId: '',
     workspaceStateSnapshots: {} as Record<string, RuntimeWorkspaceSnapshot>,
     transportMode: 'idle' as RuntimeTransportMode,
@@ -81,6 +82,9 @@ export const useRuntimeStore = defineStore('runtime', {
     },
     pendingApproval(): RuntimeApprovalRequest | null {
       return this.activeRun?.approvalTarget ?? this.activeSession?.pendingApproval ?? null
+    },
+    isApprovalResolving(state): (approvalId?: string | null) => boolean {
+      return (approvalId?: string | null) => !!approvalId && !!state.resolvingApprovalIds[approvalId]
     },
     pendingMediation(): RuntimePendingMediation | null {
       if (this.activeRun) {

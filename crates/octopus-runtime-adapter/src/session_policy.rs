@@ -126,10 +126,7 @@ impl RuntimeAdapter {
         if permission_rank(normalized_requested)
             > permission_rank(&session_policy.execution_permission_mode)
         {
-            return Err(AppError::invalid_input(format!(
-                "turn permission mode `{normalized_requested}` exceeds session ceiling `{}`",
-                session_policy.execution_permission_mode
-            )));
+            return Ok(session_policy.execution_permission_mode.clone());
         }
         Ok(normalized_requested.to_string())
     }

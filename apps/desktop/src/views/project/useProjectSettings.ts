@@ -17,6 +17,7 @@ import { useNotificationStore } from '@/stores/notifications'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
 export type ToolPermissionSelection = 'inherit' | WorkspaceToolPermissionMode
@@ -89,7 +90,7 @@ export function useProjectSettings() {
   const workspaceAssignments = computed(() => project.value?.assignments)
   const allowedWorkspaceConfiguredModels = computed(() => {
     const assignedIds = workspaceAssignments.value?.models?.configuredModelIds ?? []
-    return catalogStore.workspaceConfiguredModelOptions.filter(item => assignedIds.includes(item.value))
+    return catalogStore.configuredModelOptions.filter(item => assignedIds.includes(item.value))
   })
   const allowedToolSourceKeys = computed(() =>
     workspaceAssignments.value?.tools?.sourceKeys ?? [],
@@ -136,23 +137,11 @@ export function useProjectSettings() {
   )
 
   const resolvedModelSettings = computed(() => {
-    const configuredIds = allowedWorkspaceConfiguredModels.value.map(item => item.value)
-    const saved = projectSettings.value.models
-    const savedAllowedIds = saved?.allowedConfiguredModelIds ?? []
-    const allowedConfiguredModelIds = savedAllowedIds.length
-      ? savedAllowedIds.filter(item => configuredIds.includes(item))
-      : configuredIds
-    const defaultConfiguredModelId = allowedConfiguredModelIds.includes(saved?.defaultConfiguredModelId ?? '')
-      ? saved?.defaultConfiguredModelId ?? ''
-      : allowedConfiguredModelIds.includes(workspaceDefaultConfiguredModelId.value)
-        ? workspaceDefaultConfiguredModelId.value
-        : allowedConfiguredModelIds[0] ?? ''
-
-    return {
-      allowedConfiguredModelIds,
-      defaultConfiguredModelId,
-      totalTokens: saved?.totalTokens,
-    }
+    return resolveProjectModelSettings(
+      projectSettings.value,
+      allowedWorkspaceConfiguredModels.value.map(item => item.value),
+      workspaceDefaultConfiguredModelId.value,
+    )
   })
 
   const resolvedToolSettings = computed(() => {
@@ -169,18 +158,11 @@ export function useProjectSettings() {
   })
 
   const resolvedAgentSettings = computed(() => {
-    const assignedAgentIds = workspaceAssignments.value?.agents?.agentIds ?? []
-    const assignedTeamIds = workspaceAssignments.value?.agents?.teamIds ?? []
-    const saved = projectSettings.value.agents
-
-    return {
-      enabledAgentIds: saved?.enabledAgentIds?.length
-        ? saved.enabledAgentIds.filter(agentId => assignedAgentIds.includes(agentId))
-        : assignedAgentIds,
-      enabledTeamIds: saved?.enabledTeamIds?.length
-        ? saved.enabledTeamIds.filter(teamId => assignedTeamIds.includes(teamId))
-        : assignedTeamIds,
-    }
+    return resolveProjectAgentSettings(
+      projectSettings.value,
+      workspaceAssignments.value?.agents?.agentIds ?? [],
+      workspaceAssignments.value?.agents?.teamIds ?? [],
+    )
   })
 
   const toolSections = computed<ToolSection[]>(() =>

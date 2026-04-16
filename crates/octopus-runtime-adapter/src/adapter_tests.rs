@@ -497,6 +497,104 @@ async fn runtime_config_resolution_respects_user_workspace_project_precedence() 
 }
 
 #[tokio::test]
+async fn session_policy_clamps_requested_permission_mode_to_project_runtime_max() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    grant_owner_permissions(&infra, "user-owner");
+
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    write_json(
+        &infra
+            .paths
+            .runtime_project_config_dir
+            .join(format!("{}.json", octopus_core::DEFAULT_PROJECT_ID)),
+        json!({
+            "permissions": {
+                "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                "maxMode": octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE
+            }
+        }),
+    );
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![
+                "agent-permission-clamp",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Permission Clamp Agent",
+                Option::<String>::None,
+                "Operator",
+                serde_json::to_string(&vec!["runtime"]).expect("tags"),
+                "Use the runtime capability planner.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for session permission clamp tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert permission clamp agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-permission-clamp",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Permission Clamp Session",
+                "agent:agent-permission-clamp",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    assert_eq!(
+        session.summary.session_policy.execution_permission_mode,
+        octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE
+    );
+
+    let policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", session.summary.id))
+        .expect("policy snapshot");
+    assert_eq!(
+        policy.execution_permission_mode,
+        octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -4079,7 +4177,7 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
                 "Writer",
                 serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
                 "Write the delegated file after approval.",
-                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Worker that blocks on capability approval.",
@@ -4203,10 +4301,13 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
             runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
             runtime::AssistantEvent::ToolUse {
                 id: "tool-team-subrun-write".into(),
-                name: "write_file".into(),
+                name: "bash".into(),
                 input: serde_json::json!({
-                    "path": output_path_string,
-                    "content": "team subrun approval content\n"
+                    "command": format!(
+                        "printf 'team subrun approval content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
                 })
                 .to_string(),
             },
@@ -4257,7 +4358,7 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
                 "Queued Subrun Approval Session",
                 "team:team-subrun-scheduler-approval",
                 Some("scheduler-model"),
-                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
             ),
             "user-owner",
         )
@@ -4419,6 +4520,15 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
         last_user_text(&requests[2]),
         Some("Queue the workers and pause the first on approval")
     );
+    for _ in 0..20 {
+        if fs::read_to_string(&output_path)
+            .map(|content| content == "team subrun approval content\n")
+            .unwrap_or(false)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     assert_eq!(
         fs::read_to_string(&output_path).expect("written output"),
         "team subrun approval content\n"
@@ -4701,7 +4811,7 @@ async fn team_worker_subrun_explicit_cancel_releases_scheduler_queue() {
                 "Writer",
                 serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
                 "Write the delegated file after approval.",
-                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Worker that blocks on capability approval.",
@@ -4825,10 +4935,13 @@ async fn team_worker_subrun_explicit_cancel_releases_scheduler_queue() {
             runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
             runtime::AssistantEvent::ToolUse {
                 id: "tool-team-subrun-explicit-cancel-write".into(),
-                name: "write_file".into(),
+                name: "bash".into(),
                 input: serde_json::json!({
-                    "path": output_path_string,
-                    "content": "team subrun explicit cancel content\n"
+                    "command": format!(
+                        "printf 'team subrun explicit cancel content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
                 })
                 .to_string(),
             },
@@ -4870,7 +4983,7 @@ async fn team_worker_subrun_explicit_cancel_releases_scheduler_queue() {
                 "Queued Subrun Explicit Cancel Session",
                 "team:team-subrun-scheduler-approval",
                 Some("scheduler-model"),
-                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
             ),
             "user-owner",
         )
@@ -5028,7 +5141,7 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
                 "Writer",
                 serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
                 "Write the delegated file after mediation resumes.",
-                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Worker that will be rewritten into an auth-blocked subrun.",
@@ -5152,10 +5265,13 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
             runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
             runtime::AssistantEvent::ToolUse {
                 id: "tool-team-subrun-auth-write".into(),
-                name: "write_file".into(),
+                name: "bash".into(),
                 input: serde_json::json!({
-                    "path": output_path_string,
-                    "content": "team subrun auth content\n"
+                    "command": format!(
+                        "printf 'team subrun auth content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
                 })
                 .to_string(),
             },
@@ -5206,7 +5322,7 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
                 "Queued Subrun Auth Session",
                 "team:team-subrun-scheduler-auth",
                 Some("scheduler-model"),
-                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
             ),
             "user-owner",
         )
@@ -5256,7 +5372,7 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
     let capability_store = adapter
         .load_capability_store(Some(&capability_state_ref))
         .expect("capability store");
-    capability_store.approve_tool("write_file");
+    capability_store.approve_tool("bash");
     adapter
         .persist_capability_store(&capability_state_ref, &capability_store)
         .expect("persist capability store");
@@ -5275,8 +5391,11 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
         "providerKey": "delegated-provider",
         "concurrencyPolicy": "serialized",
         "input": {
-            "path": output_path_string,
-            "content": "team subrun auth content\n"
+            "command": format!(
+                "printf 'team subrun auth content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
         },
         "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
         "requiresApproval": false,
@@ -5286,8 +5405,8 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
         "status": "pending",
         "summary": "Complete provider authentication for the delegated worker.",
         "targetKind": "capability-call",
-        "targetRef": "write_file",
-        "toolName": "write_file"
+        "targetRef": "bash",
+        "toolName": "bash"
     });
     let pending_mediation = json!({
         "approvalLayer": "provider",
@@ -5302,8 +5421,11 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
         "providerKey": "delegated-provider",
         "concurrencyPolicy": "serialized",
         "input": {
-            "path": output_path_string,
-            "content": "team subrun auth content\n"
+            "command": format!(
+                "printf 'team subrun auth content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
         },
         "reason": "provider authentication required",
         "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
@@ -5312,8 +5434,8 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
         "state": "pending",
         "summary": "Complete provider authentication for the delegated worker.",
         "targetKind": "capability-call",
-        "targetRef": "write_file",
-        "toolName": "write_file"
+        "targetRef": "bash",
+        "toolName": "bash"
     });
 
     blocked_state["run"]["status"] = json!("auth-required");
@@ -5399,6 +5521,15 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
 
     assert_eq!(resolved.status, "completed");
     assert_eq!(executor.request_count(), 4);
+    for _ in 0..20 {
+        if fs::read_to_string(&output_path)
+            .map(|content| content == "team subrun auth content\n")
+            .unwrap_or(false)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     assert_eq!(
         fs::read_to_string(&output_path).expect("written output"),
         "team subrun auth content\n"
@@ -5500,7 +5631,7 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
                 "Writer",
                 serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
                 "Write the delegated file after mediation resumes.",
-                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Worker that will be rewritten into an auth-blocked subrun.",
@@ -5624,10 +5755,13 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
             runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
             runtime::AssistantEvent::ToolUse {
                 id: "tool-team-subrun-auth-cancel-write".into(),
-                name: "write_file".into(),
+                name: "bash".into(),
                 input: serde_json::json!({
-                    "path": output_path_string,
-                    "content": "team subrun auth cancel content\n"
+                    "command": format!(
+                        "printf 'team subrun auth cancel content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
                 })
                 .to_string(),
             },
@@ -5668,7 +5802,7 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
                 "Queued Subrun Auth Cancellation Session",
                 "team:team-subrun-scheduler-auth",
                 Some("scheduler-model"),
-                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
             ),
             "user-owner",
         )
@@ -5718,7 +5852,7 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
     let capability_store = adapter
         .load_capability_store(Some(&capability_state_ref))
         .expect("capability store");
-    capability_store.approve_tool("write_file");
+    capability_store.approve_tool("bash");
     adapter
         .persist_capability_store(&capability_state_ref, &capability_store)
         .expect("persist capability store");
@@ -5737,8 +5871,11 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
         "providerKey": "delegated-provider",
         "concurrencyPolicy": "serialized",
         "input": {
-            "path": output_path_string,
-            "content": "team subrun auth cancel content\n"
+            "command": format!(
+                "printf 'team subrun auth cancel content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
         },
         "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
         "requiresApproval": false,
@@ -5748,8 +5885,8 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
         "status": "pending",
         "summary": "Complete provider authentication for the delegated worker.",
         "targetKind": "capability-call",
-        "targetRef": "write_file",
-        "toolName": "write_file"
+        "targetRef": "bash",
+        "toolName": "bash"
     });
     let pending_mediation = json!({
         "approvalLayer": "provider",
@@ -5764,8 +5901,11 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
         "providerKey": "delegated-provider",
         "concurrencyPolicy": "serialized",
         "input": {
-            "path": output_path_string,
-            "content": "team subrun auth cancel content\n"
+            "command": format!(
+                "printf 'team subrun auth cancel content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
         },
         "reason": "provider authentication required",
         "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
@@ -5774,8 +5914,8 @@ async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits
         "state": "pending",
         "summary": "Complete provider authentication for the delegated worker.",
         "targetKind": "capability-call",
-        "targetRef": "write_file",
-        "toolName": "write_file"
+        "targetRef": "bash",
+        "toolName": "bash"
     });
 
     blocked_state["run"]["status"] = json!("auth-required");
@@ -7922,8 +8062,8 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
         .execute(
-            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 "agent-capability-approval",
                 octopus_core::DEFAULT_WORKSPACE_ID,
@@ -7938,6 +8078,14 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Agent for capability approval tests.",
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
                 "active",
                 timestamp_now() as i64,
             ],
@@ -8192,6 +8340,82 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
 }
 
 #[tokio::test]
+async fn submit_turn_with_workspace_write_does_not_require_blanket_model_execution_approval() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workspace-write-submit",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Workspace Write Agent",
+                Option::<String>::None,
+                "Operator",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Use the runtime capability planner.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for workspace-write submit tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workspace-write agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-workspace-write-submit",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Workspace Write Session",
+                "agent:agent-workspace-write-submit",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Do the workspace write action", Some("workspace-write")),
+        )
+        .await
+        .expect("run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(run.current_step, "completed");
+    assert!(run.pending_mediation.is_none());
+    assert!(run.approval_target.is_none());
+    assert_eq!(run.approval_state, "not-required");
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn submit_turn_uses_compiled_model_execution_policy_for_tool_execution_approval() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -8306,6 +8530,122 @@ async fn submit_turn_uses_compiled_model_execution_policy_for_tool_execution_app
             .and_then(|approval| approval.target_kind.as_deref()),
         Some("model-execution")
     );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn resolving_a_consumed_runtime_approval_returns_conflict() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "agent-consumed-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Consumed Approval Agent",
+                Option::<String>::None,
+                "Approver",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Require approval before model execution starts.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for consumed approval tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({})).expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("memory policy"),
+                serde_json::to_string(&json!({})).expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert consumed approval agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-consumed-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Consumed Approval Session",
+                "agent:agent-consumed-approval",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_READ_ONLY,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Pause for approval first", None),
+        )
+        .await
+        .expect("pending run");
+    assert_eq!(pending_run.status, "waiting_approval");
+
+    let approval_id = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail")
+        .pending_approval
+        .map(|approval| approval.id)
+        .expect("approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved approval");
+    assert_eq!(resolved.status, "completed");
+
+    let error = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect_err("consumed approval should conflict");
+    assert!(matches!(error, AppError::Conflict(_)));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -8695,8 +9035,8 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
         .execute(
-            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 "agent-mcp-approval",
                 octopus_core::DEFAULT_WORKSPACE_ID,
@@ -8711,6 +9051,14 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&vec!["remote"]).expect("mcp server names"),
                 "Agent for MCP approval projection tests.",
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
                 "active",
                 timestamp_now() as i64,
             ],
@@ -9003,8 +9351,8 @@ async fn approval_resume_uses_runtime_tool_loop_instead_of_one_shot_execution() 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
         .execute(
-            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 "agent-runtime-approval-loop",
                 octopus_core::DEFAULT_WORKSPACE_ID,
@@ -9019,6 +9367,14 @@ async fn approval_resume_uses_runtime_tool_loop_instead_of_one_shot_execution() 
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Agent for approval loop tests.",
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
                 "active",
                 timestamp_now() as i64,
             ],
@@ -9154,7 +9510,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
                 "Writer",
                 serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
                 "Resume a blocked capability call without replaying the whole turn.",
-                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
                 serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                 serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
                 "Agent for capability-call approval resume tests.",
@@ -9176,13 +9532,16 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
 
     let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
         vec![
-            runtime::AssistantEvent::TextDelta("Writing the requested file.".into()),
+            runtime::AssistantEvent::TextDelta("Running the requested danger tool.".into()),
             runtime::AssistantEvent::ToolUse {
                 id: "tool-write-approved-note".into(),
-                name: "write_file".into(),
+                name: "bash".into(),
                 input: serde_json::json!({
-                    "path": output_path_string,
-                    "content": "capability approval content\n"
+                    "command": format!(
+                        "printf 'capability approval content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
                 })
                 .to_string(),
             },
@@ -9195,7 +9554,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
             runtime::AssistantEvent::MessageStop,
         ],
         vec![
-            runtime::AssistantEvent::TextDelta("Completed the approved file write.".into()),
+            runtime::AssistantEvent::TextDelta("Completed the approved danger tool.".into()),
             runtime::AssistantEvent::Usage(runtime::TokenUsage {
                 input_tokens: 7,
                 output_tokens: 5,
@@ -9221,7 +9580,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
                 "Capability Call Approval Loop Session",
                 "agent:agent-capability-call-approval-loop",
                 Some("quota-model"),
-                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
             ),
             "user-owner",
         )
@@ -9252,7 +9611,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
             .approval_target
             .as_ref()
             .map(|approval| approval.tool_name.as_str()),
-        Some("write_file")
+        Some("bash")
     );
     let pending_run_json = serde_json::to_value(&pending_run).expect("pending run json");
     assert!(
@@ -9311,6 +9670,15 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
     assert_eq!(resolved.current_step, "completed");
     assert_eq!(resolved.checkpoint.current_iteration_index, 2);
     assert_eq!(executor.request_count(), 2);
+    for _ in 0..20 {
+        if fs::read_to_string(&output_path)
+            .map(|content| content == "capability approval content\n")
+            .unwrap_or(false)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     assert_eq!(
         fs::read_to_string(&output_path).expect("written file"),
         "capability approval content\n"

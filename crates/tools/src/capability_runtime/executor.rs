@@ -308,24 +308,32 @@ impl CapabilityExecutor {
     fn mediation_decision(
         &self,
         request: &CapabilityExecutionRequest,
-        store: &SessionCapabilityStore,
     ) -> CapabilityMediationDecision {
+        let Some(hook) = self.mediation_hook() else {
+            return CapabilityMediationDecision::Allow;
+        };
+        hook(request)
+    }
+
+    fn effective_request(
+        &self,
+        request: &CapabilityExecutionRequest,
+        store: &SessionCapabilityStore,
+    ) -> CapabilityExecutionRequest {
         let (approval_resolved, auth_resolved) = store.with_state(|state| {
             (
                 state.is_tool_approved(&request.tool_name),
                 state.is_tool_auth_resolved(&request.tool_name),
             )
         });
-        let needs_mediation = (request.requires_approval && !approval_resolved)
-            || (request.requires_auth && !auth_resolved);
-        if !needs_mediation {
-            return CapabilityMediationDecision::Allow;
+        let mut effective = request.clone();
+        if approval_resolved {
+            effective.requires_approval = false;
         }
-
-        let Some(hook) = self.mediation_hook() else {
-            return CapabilityMediationDecision::Allow;
-        };
-        hook(request)
+        if auth_resolved {
+            effective.requires_auth = false;
+        }
+        effective
     }
 
     fn handle_mediation_decision(
@@ -500,49 +508,53 @@ impl CapabilityExecutor {
             requires_approval: capability.invocation_policy.requires_approval,
             input: input.clone(),
         };
+        let effective_request = self.effective_request(&request, store);
         if let Some(outcome) = self.handle_mediation_decision(
-            &request,
-            self.mediation_decision(&request, store),
+            &effective_request,
+            self.mediation_decision(&effective_request),
             store,
         ) {
             return outcome;
         }
         self.emit_event(CapabilityExecutionEvent::from_request(
-            &request,
+            &effective_request,
             CapabilityExecutionPhase::Started,
             None,
         ));
 
-        let result = self.with_concurrency_gate(request.concurrency_policy, || match tool_name {
-            "ToolSearch" => {
-                let input: crate::ToolSearchInput = serde_json::from_value(input)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                let output = runtime.search(
-                    &input.query,
-                    input.max_results.unwrap_or(5),
-                    planner_input,
-                    pending_mcp_servers,
-                    mcp_degraded,
-                );
-                self.activate_search_selection(&input.query, &output, store);
-                serde_json::to_string_pretty(&output)
-                    .map(|output| ToolExecutionOutcome::Allow { output })
-                    .map_err(|error| ToolError::new(error.to_string()))
-            }
-            _ => match request.dispatch_kind {
-                CapabilityDispatchKind::BuiltinOrPlugin => runtime
-                    .execute_local_tool(tool_name, &input)
-                    .map(|output| ToolExecutionOutcome::Allow { output }),
-                CapabilityDispatchKind::RuntimeCapability => {
-                    dispatch(CapabilityDispatchKind::RuntimeCapability, tool_name, input)
+        let result =
+            self.with_concurrency_gate(effective_request.concurrency_policy, || match tool_name {
+                "ToolSearch" => {
+                    let input: crate::ToolSearchInput =
+                        serde_json::from_value(input).map_err(|error| {
+                            ToolError::new(format!("invalid tool input JSON: {error}"))
+                        })?;
+                    let output = runtime.search(
+                        &input.query,
+                        input.max_results.unwrap_or(5),
+                        planner_input,
+                        pending_mcp_servers,
+                        mcp_degraded,
+                    );
+                    self.activate_search_selection(&input.query, &output, store);
+                    serde_json::to_string_pretty(&output)
+                        .map(|output| ToolExecutionOutcome::Allow { output })
+                        .map_err(|error| ToolError::new(error.to_string()))
                 }
-            },
-        });
+                _ => match request.dispatch_kind {
+                    CapabilityDispatchKind::BuiltinOrPlugin => runtime
+                        .execute_local_tool(tool_name, &input)
+                        .map(|output| ToolExecutionOutcome::Allow { output }),
+                    CapabilityDispatchKind::RuntimeCapability => {
+                        dispatch(CapabilityDispatchKind::RuntimeCapability, tool_name, input)
+                    }
+                },
+            });
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(error) => Self::classify_dispatch_error(tool_name, error),
         };
-        self.emit_terminal_event(&request, &outcome);
+        self.emit_terminal_event(&effective_request, &outcome);
         outcome
     }
 

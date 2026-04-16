@@ -17,6 +17,41 @@ fn permission_rank(value: &str) -> Option<u8> {
     }
 }
 
+fn normalize_permission_mode_input(value: &str, field: &str) -> Result<Option<String>, AppError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    octopus_core::normalize_runtime_permission_mode_label(trimmed)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            AppError::invalid_input(format!(
+                "unsupported permission mode for {field}: {trimmed}"
+            ))
+        })
+        .map(Some)
+}
+
+fn configured_permission_mode(
+    effective_config: &serde_json::Value,
+    pointer: &str,
+) -> Option<String> {
+    effective_config
+        .pointer(pointer)
+        .and_then(serde_json::Value::as_str)
+        .and_then(octopus_core::normalize_runtime_permission_mode_label)
+        .map(ToOwned::to_owned)
+}
+
+fn clamp_permission_mode(requested: &str, ceiling: &str) -> String {
+    if permission_rank(requested) > permission_rank(ceiling) {
+        ceiling.to_string()
+    } else {
+        requested.to_string()
+    }
+}
+
 fn synthetic_runtime_session(
     adapter: &RuntimeAdapter,
     session_id: &str,
@@ -227,9 +262,6 @@ fn compile_target_decisions(
     let mut decisions = RuntimeTargetPolicyDecisions::new();
 
     if let Some(configured_model_id) = configured_model_id {
-        let tool_execution_requires_approval =
-            execution_target::requires_approval(execution_permission_mode).unwrap_or(false)
-                || approval_preference.tool_execution == "require-approval";
         let model_execution_decision =
             if !configured_model_enabled(effective_config, configured_model_id) {
                 deny_decision(
@@ -239,7 +271,7 @@ fn compile_target_decisions(
                     None,
                     Some(execution_permission_mode.into()),
                 )
-            } else if tool_execution_requires_approval {
+            } else if approval_preference.tool_execution == "require-approval" {
                 RuntimeTargetPolicyDecision {
                     target_kind: "model-execution".into(),
                     action: "requireApproval".into(),
@@ -248,14 +280,7 @@ fn compile_target_decisions(
                     deferred: true,
                     requires_approval: true,
                     requires_auth: false,
-                    reason: Some(
-                        if approval_preference.tool_execution == "require-approval" {
-                            "tool execution requires mediation review"
-                        } else {
-                            "session ceiling requires approval before model execution can continue"
-                        }
-                        .into(),
-                    ),
+                    reason: Some("tool execution requires mediation review".into()),
                     capability_id: Some(format!("model-execution:{configured_model_id}")),
                     provider_key: None,
                     required_permission: Some(execution_permission_mode.into()),
@@ -425,24 +450,27 @@ pub(super) async fn compile_session_policy(
     user_id: &str,
     project_id: Option<&str>,
 ) -> Result<session_policy::CompiledSessionPolicy, AppError> {
-    let normalized_execution_permission_mode =
-        octopus_core::normalize_runtime_permission_mode_label(execution_permission_mode)
-            .ok_or_else(|| {
-                AppError::invalid_input(format!(
-                    "unsupported permission mode: {execution_permission_mode}"
-                ))
-            })?
-            .to_string();
+    let effective_config = adapter.config_snapshot_value(&snapshot.id)?;
+    let configured_default_mode =
+        configured_permission_mode(&effective_config, "/permissions/defaultMode");
+    let configured_max_mode = configured_permission_mode(&effective_config, "/permissions/maxMode");
+    let requested_permission_mode = normalize_permission_mode_input(
+        execution_permission_mode,
+        "session execution permission mode",
+    )?
+    .or(configured_default_mode)
+    .unwrap_or_else(|| RUNTIME_PERMISSION_WORKSPACE_WRITE.to_string());
     let manifest_permission_ceiling =
         octopus_core::normalize_runtime_permission_mode_label(manifest.permission_ceiling())
             .unwrap_or(RUNTIME_PERMISSION_WORKSPACE_WRITE);
-    if permission_rank(&normalized_execution_permission_mode)
-        > permission_rank(manifest_permission_ceiling)
-    {
-        return Err(AppError::invalid_input(format!(
-            "session permission mode `{normalized_execution_permission_mode}` exceeds actor permission ceiling `{manifest_permission_ceiling}`"
-        )));
-    }
+    let effective_permission_ceiling = configured_max_mode
+        .as_deref()
+        .map(|configured_max_mode| {
+            clamp_permission_mode(manifest_permission_ceiling, configured_max_mode)
+        })
+        .unwrap_or_else(|| manifest_permission_ceiling.to_string());
+    let normalized_execution_permission_mode =
+        clamp_permission_mode(&requested_permission_mode, &effective_permission_ceiling);
 
     let builtin = authorize_bucket(
         adapter,
@@ -475,7 +503,6 @@ pub(super) async fn compile_session_policy(
     let configured_model_id = selected_configured_model_id
         .map(ToOwned::to_owned)
         .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned));
-    let effective_config = adapter.config_snapshot_value(&snapshot.id)?;
     let target_decisions = compile_manifest_target_decisions(
         manifest,
         &normalized_execution_permission_mode,

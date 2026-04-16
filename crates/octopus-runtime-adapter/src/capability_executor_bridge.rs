@@ -78,13 +78,34 @@ fn dispatch_runtime_capability(
 
 fn runtime_capability_mediation_decision(
     request: &tools::CapabilityExecutionRequest,
+    requested_permission_mode: &str,
 ) -> tools::CapabilityMediationDecision {
+    let Some(requested_permission_mode) =
+        octopus_core::normalize_runtime_permission_mode_label(requested_permission_mode)
+    else {
+        return tools::CapabilityMediationDecision::Deny(format!(
+            "runtime permission mode `{requested_permission_mode}` is unsupported"
+        ));
+    };
+
+    if requested_permission_mode == RUNTIME_PERMISSION_READ_ONLY
+        && request.required_permission != runtime::PermissionMode::ReadOnly
+    {
+        return tools::CapabilityMediationDecision::Deny(format!(
+            "tool `{}` requires `{}` and is blocked in read-only mode",
+            request.tool_name,
+            request.required_permission.as_str()
+        ));
+    }
+
     if request.requires_auth {
         tools::CapabilityMediationDecision::RequireAuth(Some(format!(
             "tool `{}` requires auth before execution can continue",
             request.tool_name
         )))
-    } else if request.requires_approval {
+    } else if requested_permission_mode == RUNTIME_PERMISSION_WORKSPACE_WRITE
+        && request.requires_approval
+    {
         tools::CapabilityMediationDecision::RequireApproval(Some(format!(
             "tool `{}` requires approval before execution can continue",
             request.tool_name
@@ -177,6 +198,7 @@ pub(crate) fn execute_pending_tool_use(
     session_id: &str,
     conversation_id: &str,
     run_id: &str,
+    requested_permission_mode: &str,
     tool_use: &agent_runtime_core::RuntimePendingToolUse,
     pending_mcp_servers: Option<Vec<String>>,
     mcp_degraded: Option<runtime::McpDegradedReport>,
@@ -198,8 +220,10 @@ pub(crate) fn execute_pending_tool_use(
     });
     capability_runtime.set_mediation_hook({
         let mediation_capture = Arc::clone(&mediation_capture);
+        let requested_permission_mode = requested_permission_mode.to_string();
         move |request| {
-            let decision = runtime_capability_mediation_decision(request);
+            let decision =
+                runtime_capability_mediation_decision(request, &requested_permission_mode);
             let mut slot = mediation_capture
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);

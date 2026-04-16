@@ -617,6 +617,105 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
+  it('ignores stale approval ids instead of resolving the current pending approval', async () => {
+    let resolveCalls = 0
+
+    const baseImplementation = vi.mocked(tauriClient.createWorkspaceClient).getMockImplementation()
+    expect(baseImplementation).toBeTypeOf('function')
+    vi.mocked(tauriClient.createWorkspaceClient).mockImplementation((context) => {
+      const client = baseImplementation!(context)
+      return {
+        ...client,
+        runtime: {
+          ...client.runtime,
+          async resolveApproval(sessionId, approvalId, input, idempotencyKey) {
+            resolveCalls += 1
+            return await client.runtime.resolveApproval(sessionId, approvalId, input, idempotencyKey)
+          },
+        },
+      }
+    })
+
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-stale-approval',
+      projectId: 'proj-redesign',
+      title: 'Stale Approval Session',
+    })
+
+    await runtime.submitTurn({
+      content: 'Run pwd in the workspace terminal.',
+      permissionMode: 'auto',
+    })
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    const activeApprovalId = runtime.pendingApproval!.id
+
+    await (runtime as any).resolveApproval('approve', 'approval-stale')
+
+    expect(resolveCalls).toBe(0)
+    expect(runtime.pendingApproval?.id).toBe(activeApprovalId)
+
+    runtime.dispose()
+  })
+
+  it('locks approval resolution while the current approval request is in flight', async () => {
+    let resolveCalls = 0
+    let releaseResolution: (() => void) | null = null
+    const resolutionGate = new Promise<void>((resolve) => {
+      releaseResolution = resolve
+    })
+
+    const baseImplementation = vi.mocked(tauriClient.createWorkspaceClient).getMockImplementation()
+    expect(baseImplementation).toBeTypeOf('function')
+    vi.mocked(tauriClient.createWorkspaceClient).mockImplementation((context) => {
+      const client = baseImplementation!(context)
+      return {
+        ...client,
+        runtime: {
+          ...client.runtime,
+          async resolveApproval(sessionId, approvalId, input, idempotencyKey) {
+            resolveCalls += 1
+            await resolutionGate
+            return await client.runtime.resolveApproval(sessionId, approvalId, input, idempotencyKey)
+          },
+        },
+      }
+    })
+
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-approval-lock',
+      projectId: 'proj-redesign',
+      title: 'Approval Lock Session',
+    })
+
+    await runtime.submitTurn({
+      content: 'Run pwd in the workspace terminal.',
+      permissionMode: 'auto',
+    })
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    const approvalId = runtime.pendingApproval!.id
+
+    const firstResolution = (runtime as any).resolveApproval('approve', approvalId)
+    const secondResolution = (runtime as any).resolveApproval('approve', approvalId)
+
+    await waitFor(() => resolveCalls > 0)
+
+    expect(resolveCalls).toBe(1)
+    expect((runtime as any).resolvingApprovalIds?.[approvalId]).toBe(true)
+
+    releaseResolution?.()
+    await Promise.all([firstResolution, secondResolution])
+    await waitFor(() => runtime.pendingApproval === null)
+    expect((runtime as any).resolvingApprovalIds?.[approvalId]).toBeFalsy()
+
+    runtime.dispose()
+  })
+
   it('treats typed mediation and auth targets as the canonical paused runtime state', async () => {
     const { runtime } = await prepareRuntimeStore()
 

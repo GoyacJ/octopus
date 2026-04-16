@@ -504,18 +504,28 @@ export const runtimeStoreActions = {
 
     await this.submitTurn(nextQueuedTurn)
   },
-  async resolveApproval(this: any, decision: RuntimeDecisionAction) {
+  async resolveApproval(this: any, decision: RuntimeDecisionAction, approvalId?: string) {
     if (!this.activeSessionId || !this.pendingApproval) {
       return
     }
 
     this.error = ''
     const pendingApprovalId = this.pendingApproval.id
+    if (approvalId && approvalId !== pendingApprovalId) {
+      return
+    }
+    if (this.resolvingApprovalIds[pendingApprovalId]) {
+      return
+    }
     const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
     if (!resolvedClient) {
       return
     }
     const { connectionId, client } = resolvedClient
+    this.resolvingApprovalIds = {
+      ...this.resolvingApprovalIds,
+      [pendingApprovalId]: true,
+    }
 
     try {
       const input: ResolveRuntimeApprovalInput = { decision }
@@ -543,6 +553,10 @@ export const runtimeStoreActions = {
       this.saveActiveWorkspaceSnapshot()
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to resolve runtime approval'
+    } finally {
+      const nextResolvingApprovalIds = { ...this.resolvingApprovalIds }
+      delete nextResolvingApprovalIds[pendingApprovalId]
+      this.resolvingApprovalIds = nextResolvingApprovalIds
     }
   },
   async resolveAuthChallenge(
