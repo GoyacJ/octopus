@@ -852,10 +852,19 @@
     },
     "filters": {
       "searchPlaceholder": "搜索标题、内容、来源或负责人…",
+      "allScopes": "全部范围",
       "sourceAll": "全部来源",
       "sortRecent": "最近使用",
       "sortTrust": "可信度优先",
       "sortTitle": "按标题"
+    },
+    "workspaceSections": {
+      "workspace": "工作区知识",
+      "workspaceDescription": "在整个工作区内共享的规则、经验和上下文。",
+      "personal": "个人知识",
+      "personalDescription": "仅当前所有者可见的私人偏好、方法和经验。",
+      "projectGroups": "项目知识",
+      "projectGroupsDescription": "按项目容器分组展示各项目沉淀的知识。"
     },
     "kinds": {
       "all": "全部类型",

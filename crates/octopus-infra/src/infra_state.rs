@@ -1,5 +1,7 @@
 use super::*;
-use octopus_core::{default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments};
+use octopus_core::{
+    default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments,
+};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -8,24 +10,8 @@ const PERSONAL_PET_ASSET_ROLE: &str = "pet";
 const PET_CONTEXT_SCOPE_HOME: &str = "home";
 const PET_CONTEXT_SCOPE_PROJECT: &str = "project";
 const PERSONAL_PET_SPECIES_REGISTRY: &[&str] = &[
-    "duck",
-    "goose",
-    "blob",
-    "cat",
-    "dragon",
-    "octopus",
-    "owl",
-    "penguin",
-    "turtle",
-    "snail",
-    "ghost",
-    "axolotl",
-    "capybara",
-    "cactus",
-    "robot",
-    "rabbit",
-    "mushroom",
-    "chonk",
+    "duck", "goose", "blob", "cat", "dragon", "octopus", "owl", "penguin", "turtle", "snail",
+    "ghost", "axolotl", "capybara", "cactus", "robot", "rabbit", "mushroom", "chonk",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -331,7 +317,10 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               title TEXT NOT NULL,
               summary TEXT NOT NULL,
               kind TEXT NOT NULL,
+              scope TEXT,
               status TEXT NOT NULL,
+              visibility TEXT,
+              owner_user_id TEXT,
               source_type TEXT NOT NULL,
               source_ref TEXT NOT NULL,
               updated_at INTEGER NOT NULL
@@ -893,6 +882,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_runtime_memory_projection_tables(&connection)?;
     ensure_cost_entry_columns(&connection)?;
     ensure_resource_columns(&connection)?;
+    ensure_knowledge_columns(&connection)?;
     agent_seed::ensure_import_source_tables(&connection)?;
 
     Ok(())
@@ -913,8 +903,7 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     if project_exists.is_none() {
         let default_project_resource_directory =
             paths.default_project_resource_directory(DEFAULT_PROJECT_ID);
-        let default_project_assignments =
-            serde_json::to_string(&default_project_assignments())?;
+        let default_project_assignments = serde_json::to_string(&default_project_assignments())?;
         let default_permission_overrides = serde_json::to_string(&ProjectPermissionOverrides {
             agents: "inherit".into(),
             resources: "inherit".into(),
@@ -1006,8 +995,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         for record in default_knowledge_records() {
             connection
                 .execute(
-                    "INSERT INTO knowledge_records (id, workspace_id, project_id, title, summary, kind, status, source_type, source_ref, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    "INSERT INTO knowledge_records (id, workspace_id, project_id, title, summary, kind, scope, status, visibility, owner_user_id, source_type, source_ref, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                     params![
                         record.id,
                         record.workspace_id,
@@ -1015,7 +1004,10 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                         record.title,
                         record.summary,
                         record.kind,
+                        record.scope,
                         record.status,
+                        record.visibility,
+                        record.owner_user_id,
                         record.source_type,
                         record.source_ref,
                         record.updated_at as i64,
@@ -1235,10 +1227,7 @@ pub(super) fn ensure_agent_record_columns(connection: &Connection) -> Result<(),
         "agents",
         &[
             ("owner_user_id", "TEXT"),
-            (
-                "asset_role",
-                "TEXT NOT NULL DEFAULT 'default'",
-            ),
+            ("asset_role", "TEXT NOT NULL DEFAULT 'default'"),
             ("avatar_path", "TEXT"),
             ("personality", "TEXT NOT NULL DEFAULT ''"),
             ("tags", "TEXT NOT NULL DEFAULT '[]'"),
@@ -2538,6 +2527,44 @@ pub(super) fn ensure_resource_columns(connection: &Connection) -> Result<(), App
     )
 }
 
+pub(super) fn ensure_knowledge_columns(connection: &Connection) -> Result<(), AppError> {
+    ensure_columns(
+        connection,
+        "knowledge_records",
+        &[
+            ("scope", "TEXT"),
+            ("visibility", "TEXT"),
+            ("owner_user_id", "TEXT"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "UPDATE knowledge_records
+             SET scope = CASE
+                 WHEN project_id IS NULL THEN 'workspace'
+                 ELSE 'project'
+             END
+             WHERE scope IS NULL OR TRIM(scope) = ''",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    connection
+        .execute(
+            "UPDATE knowledge_records
+             SET visibility = CASE
+                 WHEN COALESCE(scope, '') = 'personal' THEN 'private'
+                 ELSE 'public'
+             END
+             WHERE visibility IS NULL OR TRIM(visibility) = ''",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    Ok(())
+}
+
 fn infer_resource_preview_kind(
     kind: &str,
     name: &str,
@@ -3251,7 +3278,8 @@ fn personal_pet_defaults(
     hasher.update(b":");
     hasher.update(owner_user_id.as_bytes());
     let digest = hasher.finalize();
-    let species = PERSONAL_PET_SPECIES_REGISTRY[(digest[0] as usize) % PERSONAL_PET_SPECIES_REGISTRY.len()];
+    let species =
+        PERSONAL_PET_SPECIES_REGISTRY[(digest[0] as usize) % PERSONAL_PET_SPECIES_REGISTRY.len()];
     let pet_id = format!("pet-{owner_user_id}");
     let display_name = format!("{}伙伴", species);
     let summary = format!("{display_name} 会陪着主人一起完成日常工作。");
@@ -3396,10 +3424,7 @@ pub(super) fn load_pet_presences(
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row_to_pet_presence(row)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row_to_pet_presence(row)?))
         })
         .map_err(|error| AppError::database(error.to_string()))?;
     rows.collect::<Result<HashMap<_, _>, _>>()
@@ -3435,10 +3460,7 @@ pub(super) fn load_pet_bindings(
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row_to_pet_binding(row)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row_to_pet_binding(row)?))
         })
         .map_err(|error| AppError::database(error.to_string()))?;
     rows.collect::<Result<HashMap<_, _>, _>>()
@@ -3645,7 +3667,28 @@ pub(super) fn load_knowledge_records(
 ) -> Result<Vec<KnowledgeRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, project_id, title, summary, kind, status, source_type, source_ref, updated_at FROM knowledge_records",
+            "SELECT
+                id,
+                workspace_id,
+                project_id,
+                title,
+                summary,
+                kind,
+                COALESCE(scope, CASE WHEN project_id IS NULL THEN 'workspace' ELSE 'project' END) AS scope,
+                status,
+                COALESCE(
+                    visibility,
+                    CASE
+                        WHEN COALESCE(scope, CASE WHEN project_id IS NULL THEN 'workspace' ELSE 'project' END) = 'personal'
+                            THEN 'private'
+                        ELSE 'public'
+                    END
+                ) AS visibility,
+                owner_user_id,
+                source_type,
+                source_ref,
+                updated_at
+             FROM knowledge_records",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
@@ -3657,10 +3700,13 @@ pub(super) fn load_knowledge_records(
                 title: row.get(3)?,
                 summary: row.get(4)?,
                 kind: row.get(5)?,
-                status: row.get(6)?,
-                source_type: row.get(7)?,
-                source_ref: row.get(8)?,
-                updated_at: row.get::<_, i64>(9)? as u64,
+                scope: row.get(6)?,
+                status: row.get(7)?,
+                visibility: row.get(8)?,
+                owner_user_id: row.get(9)?,
+                source_type: row.get(10)?,
+                source_ref: row.get(11)?,
+                updated_at: row.get::<_, i64>(12)? as u64,
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -4329,7 +4375,10 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
             title: "Workspace onboarding".into(),
             summary: "Shared operating rules, review expectations, and release cadence for this workspace.".into(),
             kind: "shared".into(),
+            scope: "workspace".into(),
             status: "shared".into(),
+            visibility: "public".into(),
+            owner_user_id: None,
             source_type: "artifact".into(),
             source_ref: "workspace-handbook".into(),
             updated_at: now,
@@ -4341,7 +4390,10 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
             title: "Default project brief".into(),
             summary: "Project goals, runtime expectations, and delivery checkpoints.".into(),
             kind: "private".into(),
+            scope: "project".into(),
             status: "reviewed".into(),
+            visibility: "public".into(),
+            owner_user_id: None,
             source_type: "run".into(),
             source_ref: "default-project".into(),
             updated_at: now,

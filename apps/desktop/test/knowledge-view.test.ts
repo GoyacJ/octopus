@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
+import type { KnowledgeRecord } from '@octopus/schema'
+
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
@@ -56,6 +58,23 @@ async function waitForText(container: HTMLElement, value: string, timeoutMs = 20
   }
 }
 
+function createKnowledgeRecord(overrides: Partial<KnowledgeRecord> = {}): KnowledgeRecord {
+  return {
+    id: 'knowledge-default',
+    workspaceId: 'ws-local',
+    title: 'Knowledge Default',
+    summary: 'Knowledge default summary.',
+    kind: 'shared',
+    status: 'reviewed',
+    sourceType: 'artifact',
+    sourceRef: 'artifact-default',
+    updatedAt: 100,
+    scope: 'workspace',
+    visibility: 'public',
+    ...overrides,
+  }
+}
+
 describe('Knowledge view', () => {
   beforeEach(async () => {
     vi.restoreAllMocks()
@@ -92,6 +111,136 @@ describe('Knowledge view', () => {
 
     expect(mounted.container.textContent).toContain(String(i18n.global.t('knowledge.empty.projectTitle')))
     expect(mounted.container.textContent).toContain(String(i18n.global.t('knowledge.empty.projectDescription')))
+
+    mounted.destroy()
+  })
+
+  it('shows a personal section on the workspace knowledge page and hides another user personal knowledge', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state) {
+        state.workspaceKnowledge = [
+          createKnowledgeRecord({
+            id: 'knowledge-workspace-shared',
+            title: 'Workspace Protocol Baseline',
+            summary: 'Shared workspace operations.',
+            sourceRef: 'workspace-handbook',
+            scope: 'workspace',
+            visibility: 'public',
+          }),
+          createKnowledgeRecord({
+            id: 'knowledge-personal-owner',
+            title: 'Owner Personal Playbook',
+            summary: 'Private owner guidance.',
+            sourceRef: 'owner-playbook',
+            scope: 'personal',
+            visibility: 'private',
+            ownerUserId: 'user-owner',
+          }),
+          createKnowledgeRecord({
+            id: 'knowledge-personal-other',
+            title: 'Operator Personal Notes',
+            summary: 'Should not be visible to the owner.',
+            sourceRef: 'operator-notes',
+            scope: 'personal',
+            visibility: 'private',
+            ownerUserId: 'user-operator',
+          }),
+          createKnowledgeRecord({
+            id: 'knowledge-project-redesign',
+            title: 'Desktop Redesign Notes',
+            summary: 'Project scoped notes.',
+            sourceRef: 'proj-redesign-notes',
+            scope: 'project',
+            projectId: 'proj-redesign',
+            visibility: 'public',
+          }),
+        ]
+      },
+    })
+    await router.push('/workspaces/ws-local/console/knowledge')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'Owner Personal Playbook')
+
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('knowledge.workspaceSections.personal')))
+    expect(mounted.container.textContent).toContain('Owner Personal Playbook')
+    expect(mounted.container.textContent).not.toContain('Operator Personal Notes')
+
+    mounted.destroy()
+  })
+
+  it('supports personal, project, and workspace scope filtering on the project knowledge page', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state) {
+        state.workspaceKnowledge = [
+          createKnowledgeRecord({
+            id: 'knowledge-workspace-shared',
+            title: 'Workspace Protocol Baseline',
+            summary: 'Shared workspace operations.',
+            sourceRef: 'workspace-handbook',
+            scope: 'workspace',
+            visibility: 'public',
+          }),
+          createKnowledgeRecord({
+            id: 'knowledge-personal-owner',
+            title: 'Owner Personal Playbook',
+            summary: 'Private owner guidance.',
+            sourceRef: 'owner-playbook',
+            scope: 'personal',
+            visibility: 'private',
+            ownerUserId: 'user-owner',
+          }),
+        ]
+        state.projectKnowledge['proj-redesign'] = [
+          createKnowledgeRecord({
+            id: 'knowledge-project-redesign',
+            title: 'Desktop Redesign Notes',
+            summary: 'Project scoped notes.',
+            sourceRef: 'proj-redesign-notes',
+            scope: 'project',
+            projectId: 'proj-redesign',
+            visibility: 'public',
+          }),
+        ]
+      },
+    })
+    await router.push('/workspaces/ws-local/projects/proj-redesign/knowledge')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'Workspace Protocol Baseline')
+    await waitForText(mounted.container, 'Owner Personal Playbook')
+    await waitForText(mounted.container, 'Desktop Redesign Notes')
+
+    const scopeFilter = mounted.container.querySelector<HTMLSelectElement>('[data-testid="project-knowledge-scope-filter"]')
+    expect(scopeFilter).not.toBeNull()
+
+    scopeFilter!.value = 'personal'
+    scopeFilter!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    expect(mounted.container.textContent).toContain('Owner Personal Playbook')
+    expect(mounted.container.textContent).not.toContain('Workspace Protocol Baseline')
+    expect(mounted.container.textContent).not.toContain('Desktop Redesign Notes')
+
+    scopeFilter!.value = 'workspace'
+    scopeFilter!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    expect(mounted.container.textContent).toContain('Workspace Protocol Baseline')
+    expect(mounted.container.textContent).not.toContain('Owner Personal Playbook')
+    expect(mounted.container.textContent).not.toContain('Desktop Redesign Notes')
+
+    scopeFilter!.value = 'project'
+    scopeFilter!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    expect(mounted.container.textContent).toContain('Desktop Redesign Notes')
+    expect(mounted.container.textContent).not.toContain('Workspace Protocol Baseline')
+    expect(mounted.container.textContent).not.toContain('Owner Personal Playbook')
 
     mounted.destroy()
   })

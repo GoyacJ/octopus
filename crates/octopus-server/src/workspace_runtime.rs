@@ -206,6 +206,36 @@ fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourc
     }
 }
 
+fn knowledge_visibility_allows(session: &SessionRecord, record: &KnowledgeRecord) -> bool {
+    if record.scope == "personal" {
+        return record.owner_user_id.as_deref() == Some(session.user_id.as_str());
+    }
+
+    match record.visibility.as_str() {
+        "private" => record.owner_user_id.as_deref() == Some(session.user_id.as_str()),
+        _ => true,
+    }
+}
+
+fn knowledge_relevant_to_project_context(record: &KnowledgeRecord, project_id: &str) -> bool {
+    record.project_id.as_deref() == Some(project_id)
+        || matches!(record.scope.as_str(), "workspace" | "personal")
+}
+
+fn knowledge_entry_record(record: KnowledgeRecord) -> octopus_core::KnowledgeEntryRecord {
+    octopus_core::KnowledgeEntryRecord {
+        id: record.id,
+        workspace_id: record.workspace_id,
+        project_id: record.project_id,
+        title: record.title,
+        scope: record.scope,
+        status: record.status,
+        source_type: record.source_type,
+        source_ref: record.source_ref,
+        updated_at: record.updated_at,
+    }
+}
+
 fn agent_visible_in_generic_catalog(record: &AgentRecord) -> bool {
     record.asset_role != "pet"
 }
@@ -246,8 +276,8 @@ async fn knowledge_authorization_request(
             project_id: record.project_id.clone(),
             tags: Vec::new(),
             classification: "internal".into(),
-            owner_subject_type: None,
-            owner_subject_id: None,
+            owner_subject_type: record.owner_user_id.as_ref().map(|_| "user".into()),
+            owner_subject_id: record.owner_user_id.clone(),
         },
         protected_resource_metadata(state, "knowledge", &record.id)
             .await?
@@ -1369,16 +1399,18 @@ pub(crate) async fn workspace_knowledge(
     )
     .await?;
     let knowledge = state.services.workspace.list_workspace_knowledge().await?;
+    let request_id = request_id(&headers);
     let mut visible = Vec::new();
     for record in knowledge {
         if authorize_request(
             &state,
             &session,
             &knowledge_authorization_request(&state, &session, "knowledge.view", &record).await?,
-            &request_id(&headers),
+            &request_id,
         )
         .await
         .is_ok()
+            && knowledge_visibility_allows(&session, &record)
         {
             visible.push(record);
         }
@@ -1408,21 +1440,22 @@ pub(crate) async fn project_knowledge(
         ),
     )
     .await?;
-    let knowledge = state
-        .services
-        .workspace
-        .list_project_knowledge(&project_id)
-        .await?;
+    let knowledge = state.services.workspace.list_workspace_knowledge().await?;
+    let request_id = request_id(&headers);
     let mut visible = Vec::new();
     for record in knowledge {
+        if !knowledge_relevant_to_project_context(&record, &project_id) {
+            continue;
+        }
         if authorize_request(
             &state,
             &session,
             &knowledge_authorization_request(&state, &session, "knowledge.view", &record).await?,
-            &request_id(&headers),
+            &request_id,
         )
         .await
         .is_ok()
+            && knowledge_visibility_allows(&session, &record)
         {
             visible.push(record);
         }
@@ -1474,8 +1507,7 @@ pub(crate) async fn save_workspace_pet_presence(
     Json(input): Json<SavePetPresenceInput>,
 ) -> Result<Json<PetPresenceState>, ApiError> {
     let session =
-        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None)
-            .await?;
+        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None).await?;
     Ok(Json(
         state
             .services
@@ -1515,8 +1547,7 @@ pub(crate) async fn bind_workspace_pet_conversation(
     Json(input): Json<octopus_core::BindPetConversationInput>,
 ) -> Result<Json<PetConversationBinding>, ApiError> {
     let session =
-        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None)
-            .await?;
+        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None).await?;
     Ok(Json(
         state
             .services
@@ -2759,29 +2790,20 @@ pub(crate) async fn knowledge(
     headers: HeaderMap,
 ) -> Result<Json<Vec<octopus_core::KnowledgeEntryRecord>>, ApiError> {
     let session = authenticate_session(&state, &headers).await?;
+    let request_id = request_id(&headers);
     let mut visible = Vec::new();
-    for record in state.services.knowledge.list_knowledge().await? {
+    for record in state.services.workspace.list_workspace_knowledge().await? {
         if authorize_request(
             &state,
             &session,
-            &capability_authorization_request(
-                &session.user_id,
-                "knowledge.view",
-                record.project_id.as_deref(),
-                Some("knowledge"),
-                Some(&record.id),
-                None,
-                &[],
-                Some("internal"),
-                None,
-                None,
-            ),
-            &request_id(&headers),
+            &knowledge_authorization_request(&state, &session, "knowledge.view", &record).await?,
+            &request_id,
         )
         .await
         .is_ok()
+            && knowledge_visibility_allows(&session, &record)
         {
-            visible.push(record);
+            visible.push(knowledge_entry_record(record));
         }
     }
     Ok(Json(visible))
@@ -3747,7 +3769,8 @@ async fn derive_runtime_owner_permission_ceiling(
     };
 
     let project = lookup_project(state, project_id).await?;
-    if workspace_owner == Some(session.user_id.as_str()) || project.owner_user_id == session.user_id {
+    if workspace_owner == Some(session.user_id.as_str()) || project.owner_user_id == session.user_id
+    {
         return Ok(octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into());
     }
     if !project
@@ -4160,6 +4183,32 @@ mod tests {
             updated_at: 1,
             tags: Vec::new(),
             source_artifact_id: None,
+        }
+    }
+
+    fn sample_knowledge(
+        scope: &str,
+        visibility: &str,
+        owner_user_id: Option<&str>,
+    ) -> KnowledgeRecord {
+        KnowledgeRecord {
+            id: "kn-1".into(),
+            workspace_id: "ws-local".into(),
+            project_id: if scope == "project" {
+                Some("proj-redesign".into())
+            } else {
+                None
+            },
+            title: "Knowledge brief".into(),
+            summary: "Knowledge summary".into(),
+            kind: "shared".into(),
+            status: "reviewed".into(),
+            source_type: "artifact".into(),
+            source_ref: "artifact-1".into(),
+            updated_at: 1,
+            scope: scope.into(),
+            visibility: visibility.into(),
+            owner_user_id: owner_user_id.map(str::to_string),
         }
     }
 
@@ -4613,6 +4662,24 @@ mod tests {
         assert!(!resource_visibility_allows(
             &session,
             &sample_resource("private", "another-user")
+        ));
+    }
+
+    #[test]
+    fn knowledge_visibility_allows_personal_records_only_for_the_owner() {
+        let session = sample_session();
+
+        assert!(knowledge_visibility_allows(
+            &session,
+            &sample_knowledge("workspace", "public", None)
+        ));
+        assert!(knowledge_visibility_allows(
+            &session,
+            &sample_knowledge("personal", "private", Some("user-owner"))
+        ));
+        assert!(!knowledge_visibility_allows(
+            &session,
+            &sample_knowledge("personal", "private", Some("another-user"))
         ));
     }
 }

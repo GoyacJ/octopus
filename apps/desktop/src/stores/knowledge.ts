@@ -20,12 +20,17 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const workspaceKnowledge = computed(() => workspaceKnowledgeByConnection.value[activeConnectionId.value] ?? [])
   const activeProjectKnowledge = computed(() => {
-    if (!activeConnectionId.value || !workspaceStore.currentProjectId) {
-      return []
-    }
-    return projectKnowledge.value[`${activeConnectionId.value}:${workspaceStore.currentProjectId}`] ?? []
+    return projectKnowledgeFor(workspaceStore.currentProjectId)
   })
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
+
+  function projectKnowledgeFor(projectId?: string | null): KnowledgeRecord[] {
+    if (!activeConnectionId.value || !projectId) {
+      return []
+    }
+
+    return projectKnowledge.value[`${activeConnectionId.value}:${projectId}`] ?? []
+  }
 
   async function loadWorkspaceKnowledge(workspaceConnectionId?: string) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
@@ -104,6 +109,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   return {
     workspaceKnowledge,
     activeProjectKnowledge,
+    projectKnowledgeFor,
     error,
     loadWorkspaceKnowledge,
     loadProjectKnowledge,

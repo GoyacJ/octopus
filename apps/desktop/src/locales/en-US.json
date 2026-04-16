@@ -852,10 +852,19 @@
     },
     "filters": {
       "searchPlaceholder": "Search by title, content, source, or owner…",
+      "allScopes": "All scopes",
       "sourceAll": "All Sources",
       "sortRecent": "Recently Used",
       "sortTrust": "By Trust",
       "sortTitle": "By Title"
+    },
+    "workspaceSections": {
+      "workspace": "Workspace knowledge",
+      "workspaceDescription": "Shared guidance and operating context available across the workspace.",
+      "personal": "Personal knowledge",
+      "personalDescription": "Private guidance and patterns only visible to the current owner.",
+      "projectGroups": "Project knowledge",
+      "projectGroupsDescription": "Project-scoped knowledge grouped by project container."
     },
     "kinds": {
       "all": "All Kinds",

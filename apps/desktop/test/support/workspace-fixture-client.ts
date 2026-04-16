@@ -16,6 +16,7 @@ import type {
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundlePreviewInput,
   ImportWorkspaceAgentBundleResult,
+  KnowledgeRecord,
   PetConversationBinding,
   ProjectAgentLinkRecord,
   ProjectPromotionRequest,
@@ -413,6 +414,48 @@ export function createWorkspaceClientFixture(
     ...workspaceState.workspaceResources,
     ...Object.values(workspaceState.projectResources).flat(),
   ]
+
+  const knowledgeVisibleToCurrentUser = (record: KnowledgeRecord) => {
+    if (record.scope === 'personal') {
+      return record.ownerUserId === getCurrentUserId()
+    }
+
+    if (record.visibility === 'private') {
+      return record.ownerUserId === getCurrentUserId()
+    }
+
+    return true
+  }
+
+  const knowledgeRelevantToProjectContext = (record: KnowledgeRecord, projectId: string) =>
+    record.projectId === projectId
+    || record.scope === 'workspace'
+    || record.scope === 'personal'
+
+  const listAllKnowledgeRecords = () => {
+    const records = [
+      ...workspaceState.workspaceKnowledge,
+      ...Object.values(workspaceState.projectKnowledge).flat(),
+    ]
+
+    const seen = new Set<string>()
+    return records.filter((record) => {
+      if (seen.has(record.id)) {
+        return false
+      }
+      seen.add(record.id)
+      return true
+    })
+  }
+
+  const listWorkspaceKnowledge = () =>
+    listAllKnowledgeRecords().filter(knowledgeVisibleToCurrentUser)
+
+  const listProjectKnowledge = (projectId: string) =>
+    listAllKnowledgeRecords().filter(record =>
+      knowledgeRelevantToProjectContext(record, projectId)
+      && knowledgeVisibleToCurrentUser(record),
+    )
 
   const findResourceLocation = (resourceId: string) => {
     const workspaceIndex = workspaceState.workspaceResources.findIndex(record => record.id === resourceId)
@@ -1924,10 +1967,11 @@ export function createWorkspaceClientFixture(
     },
     knowledge: {
       async listWorkspace() {
-        return clone(workspaceState.workspaceKnowledge)
+        return clone(listWorkspaceKnowledge())
       },
       async listProject(projectId) {
-        return clone(workspaceState.projectKnowledge[projectId] ?? [])
+        findProjectRecord(projectId)
+        return clone(listProjectKnowledge(projectId))
       },
     },
     pet: {

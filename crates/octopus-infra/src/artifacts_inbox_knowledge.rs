@@ -39,11 +39,7 @@ impl KnowledgeService for InfraKnowledgeService {
                 workspace_id: record.workspace_id.clone(),
                 project_id: record.project_id.clone(),
                 title: record.title.clone(),
-                scope: if record.project_id.is_some() {
-                    "project".into()
-                } else {
-                    "workspace".into()
-                },
+                scope: record.scope.clone(),
                 status: record.status.clone(),
                 source_type: record.source_type.clone(),
                 source_ref: record.source_ref.clone(),
