@@ -19,6 +19,7 @@ import { usePagination } from '@/composables/usePagination'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useNotificationStore } from '@/stores/notifications'
+import { usePetStore } from '@/stores/pet'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -72,6 +73,7 @@ export function useAgentCenter(scope: CenterScope) {
   const agentStore = useAgentStore()
   const teamStore = useTeamStore()
   const catalogStore = useCatalogStore()
+  const petStore = usePetStore()
   const notificationStore = useNotificationStore()
 
   const activeTab = ref<CenterTab>('agent')
@@ -152,12 +154,15 @@ export function useAgentCenter(scope: CenterScope) {
     isProjectScope.value || !isBuiltinTemplateRecord(record)
   const isRemovableRecord = (record: AgentRecord | TeamRecord) =>
     isProjectScope.value ? isProjectOwnedRecord(record) : !isBuiltinTemplateRecord(record)
+  const isVisibleWorkspaceAgentRecord = (record: AgentRecord) =>
+    isProjectScope.value || record.id !== petStore.profile.id
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
   )
   const currentAgents = computed(() => {
     if (!isProjectScope.value) {
       return [...agentStore.workspaceOwnedAgents, ...agentStore.builtinTemplateAgents]
+        .filter(isVisibleWorkspaceAgentRecord)
     }
     return agentStore.effectiveProjectAgents
   })
@@ -169,7 +174,9 @@ export function useAgentCenter(scope: CenterScope) {
   })
   const resolvedAgents = computed(() => {
     const merged = [...currentAgents.value, ...agentStore.agents]
-    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+    return merged
+      .filter(record => isVisibleWorkspaceAgentRecord(record))
+      .filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
   })
   const effectiveProjectAgents = computed(() => currentAgents.value)
   const effectiveProjectTeams = computed(() => currentTeams.value)
@@ -577,6 +584,10 @@ export function useAgentCenter(scope: CenterScope) {
   async function reloadCenterData(connectionId = shell.activeWorkspaceConnectionId, nextProjectId = projectId.value) {
     if (!connectionId) {
       return
+    }
+
+    if (!isProjectScope.value) {
+      await petStore.loadSnapshot(undefined, connectionId, true)
     }
 
     const tasks: Promise<unknown>[] = [

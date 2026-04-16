@@ -1,12 +1,18 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { resolveRuntimePermissionMode, type PetChatSender, type PetMessage, type PetMotionState, type PetPresenceState, type PetProfile, type PetWorkspaceSnapshot } from '@octopus/schema'
+import {
+  resolveRuntimePermissionMode,
+  type PetChatSender,
+  type PetDashboardSummary,
+  type PetMessage,
+  type PetMotionState,
+  type PetPresenceState,
+  type PetProfile,
+  type PetWorkspaceSnapshot,
+} from '@octopus/schema'
 
 import { useAgentStore } from '@/stores/agent'
-
-const DEFAULT_PET_PERMISSION_MODE = 'read-only'
-
 import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
@@ -18,6 +24,11 @@ import {
   createWorkspaceRequestToken,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
+
+const DEFAULT_PET_PERMISSION_MODE = 'read-only'
+const DEFAULT_REMINDER_TTL_MINUTES = 180
+const DEFAULT_QUIET_HOURS_START = '22:00'
+const DEFAULT_QUIET_HOURS_END = '07:30'
 
 function createConversationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -68,8 +79,32 @@ function defaultSnapshot(): PetWorkspaceSnapshot {
   }
 }
 
+function defaultDashboardSummary(
+  profile = defaultProfile(),
+  workspaceId = '',
+  lastInteractionAt?: number | null,
+): PetDashboardSummary {
+  return {
+    petId: profile.id,
+    workspaceId,
+    ownerUserId: profile.ownerUserId,
+    species: profile.species,
+    mood: profile.mood,
+    activeConversationCount: 0,
+    knowledgeCount: 0,
+    memoryCount: 0,
+    reminderCount: 0,
+    resourceCount: 0,
+    lastInteractionAt: lastInteractionAt ? lastInteractionAt : undefined,
+  }
+}
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTimeString(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim())
 }
 
 export const usePetStore = defineStore('pet', () => {
@@ -78,6 +113,11 @@ export const usePetStore = defineStore('pet', () => {
   const errors = ref<Record<string, string>>({})
   const requestTokens = ref<Record<string, number>>({})
   const initializedScopes = ref<Record<string, boolean>>({})
+  const dashboardsByConnection = ref<Record<string, PetDashboardSummary>>({})
+  const dashboardLoadingByConnection = ref<Record<string, boolean>>({})
+  const dashboardErrorsByConnection = ref<Record<string, string>>({})
+  const dashboardRequestTokens = ref<Record<string, number>>({})
+  const initializedDashboards = ref<Record<string, boolean>>({})
 
   const shell = useShellStore()
   const workspaceStore = useWorkspaceStore()
@@ -115,6 +155,16 @@ export const usePetStore = defineStore('pet', () => {
   }))
   const presence = computed(() => snapshot.value.presence)
   const binding = computed(() => snapshot.value.binding)
+  const dashboard = computed(() =>
+    dashboardsByConnection.value[activeConnectionId.value]
+    ?? defaultDashboardSummary(
+      profile.value,
+      snapshot.value.workspaceId || workspaceStore.currentWorkspaceId,
+      presence.value.lastInteractionAt,
+    ),
+  )
+  const dashboardLoading = computed(() => dashboardLoadingByConnection.value[activeConnectionId.value] ?? false)
+  const dashboardError = computed(() => dashboardErrorsByConnection.value[activeConnectionId.value] ?? '')
   const loading = computed(() => loadingByScope.value[activeScopeKey.value] ?? false)
   const error = computed(() => errors.value[activeScopeKey.value] ?? '')
   const currentConversationId = computed(() => binding.value?.conversationId ?? '')
@@ -155,6 +205,28 @@ export const usePetStore = defineStore('pet', () => {
       return permissionValue
     }
     return DEFAULT_PET_PERMISSION_MODE
+  })
+  const preferredReminderTtlMinutes = computed(() => {
+    const rawValue = petConfig.value?.reminderTtlMinutes
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue > 0) {
+      return Math.round(rawValue)
+    }
+    if (typeof rawValue === 'string') {
+      const parsed = Number.parseInt(rawValue, 10)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed
+      }
+    }
+    return DEFAULT_REMINDER_TTL_MINUTES
+  })
+  const preferredQuietHours = computed(() => {
+    const rawValue = petConfig.value?.quietHours
+    const quietHours = isObjectRecord(rawValue) ? rawValue : {}
+    return {
+      enabled: quietHours.enabled === true,
+      start: isTimeString(quietHours.start) ? quietHours.start.trim() : DEFAULT_QUIET_HOURS_START,
+      end: isTimeString(quietHours.end) ? quietHours.end.trim() : DEFAULT_QUIET_HOURS_END,
+    }
   })
   const allowedConfiguredModelIds = computed(() =>
     workspaceStore.getProjectSettings(activeProjectId.value).models?.allowedConfiguredModelIds ?? [],
@@ -267,6 +339,70 @@ export const usePetStore = defineStore('pet', () => {
         loadingByScope.value = {
           ...loadingByScope.value,
           [scopeKey]: false,
+        }
+      }
+    }
+  }
+
+  async function loadDashboard(workspaceConnectionId = activeConnectionId.value, force = false) {
+    if (!workspaceConnectionId) {
+      return null
+    }
+    if (!force && initializedDashboards.value[workspaceConnectionId]) {
+      return dashboardsByConnection.value[workspaceConnectionId]
+        ?? defaultDashboardSummary(
+          profile.value,
+          snapshot.value.workspaceId || workspaceStore.currentWorkspaceId,
+          presence.value.lastInteractionAt,
+        )
+    }
+
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return null
+    }
+
+    const token = createWorkspaceRequestToken(dashboardRequestTokens.value[workspaceConnectionId] ?? 0)
+    dashboardRequestTokens.value = {
+      ...dashboardRequestTokens.value,
+      [workspaceConnectionId]: token,
+    }
+    dashboardLoadingByConnection.value = {
+      ...dashboardLoadingByConnection.value,
+      [workspaceConnectionId]: true,
+    }
+    dashboardErrorsByConnection.value = {
+      ...dashboardErrorsByConnection.value,
+      [workspaceConnectionId]: '',
+    }
+
+    try {
+      const nextDashboard = await resolvedClient.client.pet.getDashboard()
+      if (dashboardRequestTokens.value[workspaceConnectionId] !== token) {
+        return null
+      }
+      dashboardsByConnection.value = {
+        ...dashboardsByConnection.value,
+        [workspaceConnectionId]: nextDashboard,
+      }
+      initializedDashboards.value = {
+        ...initializedDashboards.value,
+        [workspaceConnectionId]: true,
+      }
+      return nextDashboard
+    } catch (cause) {
+      if (dashboardRequestTokens.value[workspaceConnectionId] === token) {
+        dashboardErrorsByConnection.value = {
+          ...dashboardErrorsByConnection.value,
+          [workspaceConnectionId]: cause instanceof Error ? cause.message : 'Failed to load pet dashboard',
+        }
+      }
+      return null
+    } finally {
+      if (dashboardRequestTokens.value[workspaceConnectionId] === token) {
+        dashboardLoadingByConnection.value = {
+          ...dashboardLoadingByConnection.value,
+          [workspaceConnectionId]: false,
         }
       }
     }
@@ -443,6 +579,11 @@ export const usePetStore = defineStore('pet', () => {
     const nextErrors = { ...errors.value }
     const nextTokens = { ...requestTokens.value }
     const nextInitialized = { ...initializedScopes.value }
+    const nextDashboards = { ...dashboardsByConnection.value }
+    const nextDashboardLoading = { ...dashboardLoadingByConnection.value }
+    const nextDashboardErrors = { ...dashboardErrorsByConnection.value }
+    const nextDashboardTokens = { ...dashboardRequestTokens.value }
+    const nextInitializedDashboards = { ...initializedDashboards.value }
     Object.keys(nextSnapshots).forEach((key) => {
       if (key.startsWith(`${workspaceConnectionId}:`)) {
         delete nextSnapshots[key]
@@ -468,11 +609,21 @@ export const usePetStore = defineStore('pet', () => {
         delete nextInitialized[key]
       }
     })
+    delete nextDashboards[workspaceConnectionId]
+    delete nextDashboardLoading[workspaceConnectionId]
+    delete nextDashboardErrors[workspaceConnectionId]
+    delete nextDashboardTokens[workspaceConnectionId]
+    delete nextInitializedDashboards[workspaceConnectionId]
     snapshots.value = nextSnapshots
     loadingByScope.value = nextLoading
     errors.value = nextErrors
     requestTokens.value = nextTokens
     initializedScopes.value = nextInitialized
+    dashboardsByConnection.value = nextDashboards
+    dashboardLoadingByConnection.value = nextDashboardLoading
+    dashboardErrorsByConnection.value = nextDashboardErrors
+    dashboardRequestTokens.value = nextDashboardTokens
+    initializedDashboards.value = nextInitializedDashboards
   }
 
   const isReady = computed(() => !!shell.activeWorkspaceConnectionId && initializedScopes.value[activeScopeKey.value])
@@ -481,6 +632,9 @@ export const usePetStore = defineStore('pet', () => {
     profile,
     presence,
     binding,
+    dashboard,
+    dashboardLoading,
+    dashboardError,
     messages,
     motionState,
     unreadCount,
@@ -490,7 +644,10 @@ export const usePetStore = defineStore('pet', () => {
     currentConversationId,
     preferredConfiguredModelId,
     preferredPermissionMode,
+    preferredReminderTtlMinutes,
+    preferredQuietHours,
     resolvedConfiguredModelId,
+    loadDashboard,
     loadSnapshot,
     savePresence,
     ensureConversation,

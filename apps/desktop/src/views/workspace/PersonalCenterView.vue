@@ -59,7 +59,7 @@ function handleTabChange(routeName: string) {
     <UiPageHeader
       :eyebrow="t('personalCenter.header.eyebrow')"
       :title="t('personalCenter.header.title')"
-      :description="userProfileStore.currentUser?.displayName ?? t('common.na')"
+      :description="t('personalCenter.header.subtitle')"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">

@@ -1976,13 +1976,14 @@ export function createWorkspaceClientFixture(
     },
     pet: {
       async getDashboard() {
+        const hasHomePetSession = Boolean(workspaceState.workspacePetBinding?.sessionId)
         return clone({
           petId: workspaceState.petProfile.id,
           workspaceId: workspaceState.workspace.id,
           ownerUserId: workspaceState.petProfile.ownerUserId,
           species: workspaceState.petProfile.species,
           mood: workspaceState.petProfile.mood,
-          memoryCount: workspaceState.runtimeSessions.size,
+          memoryCount: hasHomePetSession ? 1 : 0,
           knowledgeCount: workspaceState.workspaceKnowledge.length,
           resourceCount: workspaceState.workspaceResources.length,
           reminderCount: workspaceState.inboxItems.length,

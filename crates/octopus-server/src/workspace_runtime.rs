@@ -3,7 +3,7 @@ use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
     CostLedgerEntry, CreateProjectPromotionRequestInput, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ProjectDashboardBreakdownItem,
+    ExportWorkspaceAgentBundleResult, PetDashboardSummary, ProjectDashboardBreakdownItem,
     ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSummary,
     ProjectDashboardTrendPoint, ProjectDashboardUserStat, ProjectPromotionRequest,
     ProjectTokenUsageRecord, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
@@ -1476,6 +1476,82 @@ pub(crate) async fn workspace_pet_snapshot(
             .get_workspace_pet_snapshot(&session.user_id)
             .await?,
     ))
+}
+
+pub(crate) async fn workspace_pet_dashboard(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<PetDashboardSummary>, ApiError> {
+    let session =
+        ensure_capability_session(&state, &headers, "pet.view", None, Some("pet"), None).await?;
+    let snapshot = state
+        .services
+        .workspace
+        .get_workspace_pet_snapshot(&session.user_id)
+        .await?;
+    let request_id = request_id(&headers);
+
+    let mut resource_count = 0_u64;
+    for record in state.services.workspace.list_workspace_resources().await? {
+        if record.project_id.is_some() {
+            continue;
+        }
+        if authorize_request(
+            &state,
+            &session,
+            &resource_authorization_request(&state, &session, "resource.view", &record).await?,
+            &request_id,
+        )
+        .await
+        .is_ok()
+            && resource_visibility_allows(&session, &record)
+        {
+            resource_count += 1;
+        }
+    }
+
+    let mut knowledge_count = 0_u64;
+    for record in state.services.workspace.list_workspace_knowledge().await? {
+        if record.project_id.is_some() {
+            continue;
+        }
+        if authorize_request(
+            &state,
+            &session,
+            &knowledge_authorization_request(&state, &session, "knowledge.view", &record).await?,
+            &request_id,
+        )
+        .await
+        .is_ok()
+            && knowledge_visibility_allows(&session, &record)
+        {
+            knowledge_count += 1;
+        }
+    }
+
+    let reminder_count = state.services.inbox.list_inbox().await?.len() as u64;
+    let has_home_binding = snapshot.binding.is_some();
+    let has_home_session = snapshot
+        .binding
+        .as_ref()
+        .and_then(|binding| binding.session_id.as_ref())
+        .is_some();
+    let last_interaction_at = (snapshot.presence.last_interaction_at > 0)
+        .then_some(snapshot.presence.last_interaction_at);
+
+    Ok(Json(PetDashboardSummary {
+        pet_id: snapshot.profile.id,
+        workspace_id: snapshot.workspace_id,
+        owner_user_id: snapshot.owner_user_id,
+        species: snapshot.profile.species,
+        mood: snapshot.profile.mood,
+        active_conversation_count: if has_home_binding { 1 } else { 0 },
+        knowledge_count,
+        memory_count: if has_home_session { 1 } else { 0 },
+        reminder_count,
+        resource_count,
+        last_interaction_at,
+    }))
 }
 
 pub(crate) async fn project_pet_snapshot(

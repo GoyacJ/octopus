@@ -2764,6 +2764,44 @@
         "greeting": "问候语",
         "summary": "角色摘要"
       },
+      "stats": {
+        "title": "宠物概览",
+        "description": "查看当前账号宠物的工作状态、可见资产与最近互动情况。",
+        "badges": {
+          "mood": "心情 · {mood}",
+          "lastInteraction": "最近互动 · {time}"
+        },
+        "summary": {
+          "species": "物种",
+          "model": "默认模型",
+          "permission": "权限模式"
+        },
+        "metrics": {
+          "memory": "记忆",
+          "knowledge": "知识",
+          "resource": "资源",
+          "reminder": "提醒",
+          "activity": "活跃会话"
+        },
+        "helpers": {
+          "memory": "当前 home 宠物会话已绑定的记忆数。",
+          "knowledge": "当前账号宠物可访问的知识条目数量。",
+          "resource": "当前账号宠物可访问的资源数量。",
+          "reminder": "宠物当前可看到的提醒总数。",
+          "activity": "当前账号宠物正在保持的 home 会话数。"
+        }
+      },
+      "preferences": {
+        "reminderTitle": "提醒偏好",
+        "reminderDescription": "控制提醒在宠物面板内的停留时长，以及静默时段设置。",
+        "previewTitle": "运行配置预览",
+        "fields": {
+          "reminderTtlMinutes": "提醒停留时长（分钟）",
+          "quietHoursEnabled": "启用静默时段",
+          "quietHoursStart": "开始时间",
+          "quietHoursEnd": "结束时间"
+        }
+      },
       "runtime": {
         "title": "宠物运行预览",
         "description": "保存后会写入当前用户 runtime override 中的 pet 配置段。"

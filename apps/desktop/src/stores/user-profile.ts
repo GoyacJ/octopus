@@ -44,6 +44,48 @@ function emptyProfileState(): UserProfileState {
   }
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function applyJsonMergePatch(
+  target: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = structuredClone(target)
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete next[key]
+      continue
+    }
+    if (Array.isArray(value)) {
+      next[key] = structuredClone(value)
+      continue
+    }
+    if (isObjectRecord(value)) {
+      const current = isObjectRecord(next[key]) ? next[key] : {}
+      next[key] = applyJsonMergePatch(current, value)
+      continue
+    }
+    next[key] = value
+  }
+  return next
+}
+
+function parseRuntimeDraftDocument(value: string): Record<string, unknown> {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    return isObjectRecord(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 function toUserSummary(user: AccessUserRecord, previous?: UserRecordSummary | null): UserRecordSummary {
   return {
     id: user.id,
@@ -229,6 +271,25 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     runtimeDraftsByConnection.value = {
       ...runtimeDraftsByConnection.value,
       [connectionId]: value,
+    }
+  }
+
+  function mergeCurrentUserRuntimeDraftPatch(
+    patch: Record<string, unknown>,
+    workspaceConnectionId?: string,
+  ) {
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!connectionId) {
+      return
+    }
+
+    const current = parseRuntimeDraftDocument(
+      runtimeDraftsByConnection.value[connectionId] ?? '{}',
+    )
+    const next = applyJsonMergePatch(current, patch)
+    runtimeDraftsByConnection.value = {
+      ...runtimeDraftsByConnection.value,
+      [connectionId]: JSON.stringify(next, null, 2),
     }
   }
 
@@ -423,6 +484,7 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     updateCurrentUserProfile,
     changeCurrentUserPassword,
     setCurrentUserRuntimeDraft,
+    mergeCurrentUserRuntimeDraftPatch,
     loadCurrentUserRuntimeConfig,
     validateCurrentUserRuntimeConfig,
     saveCurrentUserRuntimeConfig,

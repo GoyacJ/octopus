@@ -2764,6 +2764,44 @@
         "greeting": "Greeting",
         "summary": "Summary"
       },
+      "stats": {
+        "title": "Pet overview",
+        "description": "Review the current pet's status, visible assets, and recent interaction state for this account.",
+        "badges": {
+          "mood": "Mood · {mood}",
+          "lastInteraction": "Last interaction · {time}"
+        },
+        "summary": {
+          "species": "Species",
+          "model": "Default model",
+          "permission": "Permission mode"
+        },
+        "metrics": {
+          "memory": "Memory",
+          "knowledge": "Knowledge",
+          "resource": "Resources",
+          "reminder": "Reminders",
+          "activity": "Active sessions"
+        },
+        "helpers": {
+          "memory": "Memory currently bound to the home pet session.",
+          "knowledge": "Knowledge entries visible to the current account's pet.",
+          "resource": "Resources visible to the current account's pet.",
+          "reminder": "Reminder items currently available to the pet.",
+          "activity": "Home pet conversations currently kept active."
+        }
+      },
+      "preferences": {
+        "reminderTitle": "Reminder preferences",
+        "reminderDescription": "Control how long reminders stay visible and when quiet hours should suppress them.",
+        "previewTitle": "Runtime config preview",
+        "fields": {
+          "reminderTtlMinutes": "Reminder dwell time (minutes)",
+          "quietHoursEnabled": "Enable quiet hours",
+          "quietHoursStart": "Start time",
+          "quietHoursEnd": "End time"
+        }
+      },
       "runtime": {
         "title": "Pet runtime preview",
         "description": "Saving writes the pet section into the current user's runtime override."

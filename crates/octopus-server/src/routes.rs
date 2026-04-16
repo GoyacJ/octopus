@@ -220,6 +220,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/workspace/knowledge", get(workspace_knowledge))
         .route("/api/v1/workspace/pet", get(workspace_pet_snapshot))
         .route(
+            "/api/v1/workspace/pet/dashboard",
+            get(workspace_pet_dashboard),
+        )
+        .route(
             "/api/v1/workspace/pet/presence",
             patch(save_workspace_pet_presence),
         )
