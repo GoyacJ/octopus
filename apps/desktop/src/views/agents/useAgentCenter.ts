@@ -64,6 +64,8 @@ export interface TeamFormState {
   status: string
 }
 
+type AgentRecordWithAssetRole = AgentRecord & { assetRole?: string }
+
 export function useAgentCenter(scope: CenterScope) {
   const { t } = useI18n()
   const route = useRoute()
@@ -154,17 +156,20 @@ export function useAgentCenter(scope: CenterScope) {
     isProjectScope.value || !isBuiltinTemplateRecord(record)
   const isRemovableRecord = (record: AgentRecord | TeamRecord) =>
     isProjectScope.value ? isProjectOwnedRecord(record) : !isBuiltinTemplateRecord(record)
-  const isVisibleWorkspaceAgentRecord = (record: AgentRecord) =>
-    isProjectScope.value || record.id !== petStore.profile.id
+  // Keep personal pet assets out of generic agent management even if one leaks into local client state.
+  const isPetAssetRecord = (record: AgentRecord) =>
+    (record as AgentRecordWithAssetRole).assetRole === 'pet'
+  const isVisibleAgentRecord = (record: AgentRecord) =>
+    record.id !== petStore.profile.id && !isPetAssetRecord(record)
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
   )
   const currentAgents = computed(() => {
     if (!isProjectScope.value) {
       return [...agentStore.workspaceOwnedAgents, ...agentStore.builtinTemplateAgents]
-        .filter(isVisibleWorkspaceAgentRecord)
+        .filter(isVisibleAgentRecord)
     }
-    return agentStore.effectiveProjectAgents
+    return agentStore.effectiveProjectAgents.filter(isVisibleAgentRecord)
   })
   const currentTeams = computed(() => {
     if (!isProjectScope.value) {
@@ -175,7 +180,7 @@ export function useAgentCenter(scope: CenterScope) {
   const resolvedAgents = computed(() => {
     const merged = [...currentAgents.value, ...agentStore.agents]
     return merged
-      .filter(record => isVisibleWorkspaceAgentRecord(record))
+      .filter(record => isVisibleAgentRecord(record))
       .filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
   })
   const effectiveProjectAgents = computed(() => currentAgents.value)

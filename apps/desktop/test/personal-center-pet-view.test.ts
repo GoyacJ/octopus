@@ -270,9 +270,11 @@ describe('personal center pet experience', () => {
           return
         }
 
-        const leakedPetRecord: AgentRecord = {
+        const leakedPetRecord: AgentRecord & { assetRole: string } = {
           ...state.agents[0]!,
-          id: state.petProfile.id,
+          id: 'agent-leaked-pet',
+          scope: 'personal',
+          assetRole: 'pet',
           name: '个人宠物记录',
           description: 'Should not appear in the generic agent center list.',
           prompt: 'hidden pet asset',
