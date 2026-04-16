@@ -1622,6 +1622,8 @@ pub struct AccessRoleRecord {
     pub description: String,
     pub status: String,
     pub permission_codes: Vec<String>,
+    pub source: String,
+    pub editable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1651,6 +1653,109 @@ pub struct RoleBindingUpsertRequest {
     pub subject_type: String,
     pub subject_id: String,
     pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessExperienceSummary {
+    pub experience_level: String,
+    pub member_count: u32,
+    pub has_org_structure: bool,
+    pub has_custom_roles: bool,
+    pub has_advanced_policies: bool,
+    pub has_menu_governance: bool,
+    pub has_resource_governance: bool,
+    pub recommended_landing_section: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessExperienceSnapshot {
+    pub experience_level: String,
+    pub member_count: u32,
+    pub has_org_structure: bool,
+    pub has_custom_roles: bool,
+    pub has_advanced_policies: bool,
+    pub has_menu_governance: bool,
+    pub has_resource_governance: bool,
+    pub counts: AccessExperienceCounts,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessSectionGrant {
+    pub section: String,
+    pub allowed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessRoleTemplate {
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub managed_role_codes: Vec<String>,
+    pub editable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessRolePreset {
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub recommended_for: String,
+    pub template_codes: Vec<String>,
+    pub capability_bundle_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessCapabilityBundle {
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub permission_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessExperienceCounts {
+    pub custom_role_count: u32,
+    pub org_unit_count: u32,
+    pub data_policy_count: u32,
+    pub resource_policy_count: u32,
+    pub menu_policy_count: u32,
+    pub protected_resource_count: u32,
+    pub session_count: u32,
+    pub audit_event_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessExperienceResponse {
+    pub summary: AccessExperienceSummary,
+    pub section_grants: Vec<AccessSectionGrant>,
+    pub role_templates: Vec<AccessRoleTemplate>,
+    pub role_presets: Vec<AccessRolePreset>,
+    pub capability_bundles: Vec<AccessCapabilityBundle>,
+    pub counts: AccessExperienceCounts,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessMemberSummary {
+    pub user: AccessUserRecord,
+    pub primary_preset_code: Option<String>,
+    pub primary_preset_name: String,
+    pub effective_role_names: Vec<String>,
+    pub has_org_assignments: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessUserPresetUpdateRequest {
+    pub preset_code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

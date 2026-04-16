@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
 import type {
+  AccessUserRecord,
   AgentRecord,
   CapabilityAssetManifest,
   ProjectRecord,
@@ -120,11 +121,16 @@ export function useProjectSettings() {
     const assignedIds = workspaceAssignments.value?.agents?.teamIds ?? []
     return actorCandidateTeams.value.filter(team => assignedIds.includes(team.id))
   })
-  const workspaceUsers = computed(() =>
-    [...workspaceAccessControlStore.users].sort((left, right) =>
+  const workspaceUsers = computed(() => {
+    const records = new Map<string, AccessUserRecord>()
+    for (const member of workspaceAccessControlStore.members) {
+      records.set(member.user.id, member.user)
+    }
+
+    return [...records.values()].sort((left, right) =>
       (left.displayName || left.username).localeCompare(right.displayName || right.username),
-    ),
-  )
+    )
+  })
   const workspaceDefaultConfiguredModelId = computed(() =>
     workspaceAssignments.value?.models?.defaultConfiguredModelId
     ?? allowedWorkspaceConfiguredModels.value[0]?.value
@@ -228,7 +234,7 @@ export function useProjectSettings() {
           agentStore.load(nextConnectionId),
           catalogStore.load(nextConnectionId),
           teamStore.load(nextConnectionId),
-          workspaceAccessControlStore.load(nextConnectionId),
+          workspaceAccessControlStore.loadMembersData(nextConnectionId),
         ])
       } finally {
         loadingDependencies.value = false

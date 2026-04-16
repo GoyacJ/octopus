@@ -69,6 +69,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/access/experience:
+    get:
+      operationId: getAccessExperience
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessExperienceResponse"
+          description: Progressive access experience entry data for members, access, and governance.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/members:
+    get:
+      operationId: listAccessMembers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AccessMemberSummary"
+                type: array
+          description: Lightweight member summaries for the progressive access members and access surfaces.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/access/menus/definitions:
     get:
       operationId: listAccessMenuDefinitions
@@ -1052,6 +1086,34 @@ paths:
       responses:
         "204":
           description: Access user deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/users/{userId}/preset:
+    put:
+      operationId: updateAccessUserPreset
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessUserPresetUpdateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessMemberSummary"
+          description: Updated lightweight member summary after replacing the user's direct platform-managed preset binding.
         default:
           content:
             application/json:
@@ -4111,6 +4173,179 @@ components:
       required:
         - items
       type: object
+    AccessCapabilityBundle:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        permissionCodes:
+          items:
+            type: string
+          type: array
+      required:
+        - code
+        - name
+        - description
+        - permissionCodes
+      type: object
+    AccessExperienceCounts:
+      additionalProperties: false
+      properties:
+        auditEventCount:
+          format: int32
+          type: integer
+        customRoleCount:
+          format: int32
+          type: integer
+        dataPolicyCount:
+          format: int32
+          type: integer
+        menuPolicyCount:
+          format: int32
+          type: integer
+        orgUnitCount:
+          format: int32
+          type: integer
+        protectedResourceCount:
+          format: int32
+          type: integer
+        resourcePolicyCount:
+          format: int32
+          type: integer
+        sessionCount:
+          format: int32
+          type: integer
+      required:
+        - customRoleCount
+        - orgUnitCount
+        - dataPolicyCount
+        - resourcePolicyCount
+        - menuPolicyCount
+        - protectedResourceCount
+        - sessionCount
+        - auditEventCount
+      type: object
+    AccessExperienceLevel:
+      enum:
+        - personal
+        - team
+        - enterprise
+      type: string
+    AccessExperienceResponse:
+      additionalProperties: false
+      properties:
+        capabilityBundles:
+          items:
+            $ref: "#/components/schemas/AccessCapabilityBundle"
+          type: array
+        counts:
+          $ref: "#/components/schemas/AccessExperienceCounts"
+        rolePresets:
+          items:
+            $ref: "#/components/schemas/AccessRolePreset"
+          type: array
+        roleTemplates:
+          items:
+            $ref: "#/components/schemas/AccessRoleTemplate"
+          type: array
+        sectionGrants:
+          items:
+            $ref: "#/components/schemas/AccessSectionGrant"
+          type: array
+        summary:
+          $ref: "#/components/schemas/AccessExperienceSummary"
+      required:
+        - summary
+        - sectionGrants
+        - roleTemplates
+        - rolePresets
+        - capabilityBundles
+        - counts
+      type: object
+    AccessExperienceSummary:
+      additionalProperties: false
+      properties:
+        experienceLevel:
+          $ref: "#/components/schemas/AccessExperienceLevel"
+        hasAdvancedPolicies:
+          type: boolean
+        hasCustomRoles:
+          type: boolean
+        hasMenuGovernance:
+          type: boolean
+        hasOrgStructure:
+          type: boolean
+        hasResourceGovernance:
+          type: boolean
+        memberCount:
+          format: int32
+          type: integer
+        recommendedLandingSection:
+          $ref: "#/components/schemas/AccessSectionCode"
+      required:
+        - experienceLevel
+        - memberCount
+        - hasOrgStructure
+        - hasCustomRoles
+        - hasAdvancedPolicies
+        - hasMenuGovernance
+        - hasResourceGovernance
+        - recommendedLandingSection
+      type: object
+    AccessMemberSummary:
+      additionalProperties: false
+      properties:
+        effectiveRoleNames:
+          items:
+            type: string
+          type: array
+        hasOrgAssignments:
+          type: boolean
+        primaryPresetCode:
+          nullable: true
+          type: string
+        primaryPresetName:
+          type: string
+        user:
+          $ref: "#/components/schemas/AccessUserRecord"
+      required:
+        - user
+        - primaryPresetCode
+        - primaryPresetName
+        - effectiveRoleNames
+        - hasOrgAssignments
+      type: object
+    AccessRolePreset:
+      additionalProperties: false
+      properties:
+        capabilityBundleCodes:
+          items:
+            type: string
+          type: array
+        code:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        recommendedFor:
+          type: string
+        templateCodes:
+          items:
+            type: string
+          type: array
+      required:
+        - code
+        - name
+        - description
+        - recommendedFor
+        - templateCodes
+        - capabilityBundleCodes
+      type: object
     AccessRoleRecord:
       additionalProperties: false
       properties:
@@ -4118,6 +4353,8 @@ components:
           type: string
         description:
           type: string
+        editable:
+          type: boolean
         id:
           type: string
         name:
@@ -4126,6 +4363,8 @@ components:
           items:
             type: string
           type: array
+        source:
+          $ref: "#/components/schemas/AccessRoleSource"
         status:
           type: string
       required:
@@ -4135,6 +4374,52 @@ components:
         - description
         - status
         - permissionCodes
+        - source
+        - editable
+      type: object
+    AccessRoleSource:
+      enum:
+        - system
+        - custom
+      type: string
+    AccessRoleTemplate:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        editable:
+          type: boolean
+        managedRoleCodes:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+      required:
+        - code
+        - name
+        - description
+        - managedRoleCodes
+        - editable
+      type: object
+    AccessSectionCode:
+      enum:
+        - members
+        - access
+        - governance
+      type: string
+    AccessSectionGrant:
+      additionalProperties: false
+      properties:
+        allowed:
+          type: boolean
+        section:
+          $ref: "#/components/schemas/AccessSectionCode"
+      required:
+        - section
+        - allowed
       type: object
     AccessSessionRecord:
       additionalProperties: false
@@ -4168,6 +4453,14 @@ components:
         - status
         - createdAt
         - current
+      type: object
+    AccessUserPresetUpdateRequest:
+      additionalProperties: false
+      properties:
+        presetCode:
+          type: string
+      required:
+        - presetCode
       type: object
     AccessUserRecord:
       additionalProperties: false

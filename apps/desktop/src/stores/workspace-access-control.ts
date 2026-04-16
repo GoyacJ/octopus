@@ -2,10 +2,17 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type {
+  AccessCapabilityBundle,
   AccessAuditQuery,
+  AccessExperienceResponse,
+  AccessMemberSummary,
   AccessRoleRecord,
+  AccessRolePreset,
+  AccessRoleTemplate,
   AccessSessionRecord,
+  AccessSectionCode,
   AccessUserRecord,
+  AccessUserPresetUpdateRequest,
   AccessUserUpsertRequest,
   AuditRecord,
   AuthorizationSnapshot,
@@ -48,8 +55,38 @@ function sortMenus(left: MenuDefinition, right: MenuDefinition) {
   return left.order - right.order
 }
 
+function isAdvancedDataPolicy(policy: DataPolicyRecord) {
+  return policy.resourceType !== 'project'
+    || policy.scopeType !== 'selected-projects'
+    || policy.effect !== 'allow'
+}
+
+const ACCESS_CONTROL_MEMBER_PERMISSION_CODES = [
+  'access.users.read',
+  'access.users.manage',
+] as const
+
+const ACCESS_CONTROL_GOVERNANCE_PERMISSION_CODES = [
+  'access.org.read',
+  'access.org.manage',
+  'access.policies.read',
+  'access.policies.manage',
+  'access.menus.read',
+  'access.menus.manage',
+  'access.sessions.read',
+  'access.sessions.manage',
+  'audit.read',
+] as const
+
+interface AccessPresetCard extends AccessRolePreset {
+  capabilityBundles: AccessCapabilityBundle[]
+  templates: AccessRoleTemplate[]
+}
+
 export const useWorkspaceAccessControlStore = defineStore('workspace-access-control', () => {
   const authorizationsByConnection = ref<Record<string, AuthorizationSnapshot>>({})
+  const experiencesByConnection = ref<Record<string, AccessExperienceResponse>>({})
+  const membersByConnection = ref<Record<string, AccessMemberSummary[]>>({})
   const auditByConnection = ref<Record<string, AuditRecord[]>>({})
   const auditNextCursorByConnection = ref<Record<string, string | undefined>>({})
   const auditQueryByConnection = ref<Record<string, AccessAuditQuery>>({})
@@ -74,12 +111,18 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   const loadingByConnection = ref<Record<string, boolean>>({})
   const errorsByConnection = ref<Record<string, string>>({})
   const authorizationContextLoadedAtByConnection = ref<Record<string, number>>({})
-  const adminDataLoadedAtByConnection = ref<Record<string, number>>({})
+  const experienceLoadedAtByConnection = ref<Record<string, number>>({})
+  const membersDataLoadedAtByConnection = ref<Record<string, number>>({})
+  const governanceDataLoadedAtByConnection = ref<Record<string, number>>({})
   const authorizationContextInflightByConnection: Record<string, Promise<void> | undefined> = {}
-  const adminDataInflightByConnection: Record<string, Promise<void> | undefined> = {}
+  const experienceInflightByConnection: Record<string, Promise<void> | undefined> = {}
+  const membersDataInflightByConnection: Record<string, Promise<void> | undefined> = {}
+  const governanceDataInflightByConnection: Record<string, Promise<void> | undefined> = {}
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const authorization = computed(() => authorizationsByConnection.value[activeConnectionId.value] ?? null)
+  const experience = computed(() => experiencesByConnection.value[activeConnectionId.value] ?? null)
+  const members = computed(() => membersByConnection.value[activeConnectionId.value] ?? [])
   const auditRecords = computed(() => auditByConnection.value[activeConnectionId.value] ?? [])
   const auditNextCursor = computed(() => auditNextCursorByConnection.value[activeConnectionId.value])
   const auditQuery = computed(() => auditQueryByConnection.value[activeConnectionId.value] ?? {})
@@ -118,17 +161,131 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
       .filter(menu => currentEffectiveMenuIds.value.includes(menu.id))
       .sort(sortMenus),
   )
+  const experienceSummary = computed(() => experience.value?.summary ?? null)
+  const roleTemplates = computed(() => experience.value?.roleTemplates ?? [])
+  const rolePresets = computed(() => experience.value?.rolePresets ?? [])
+  const capabilityBundles = computed(() => experience.value?.capabilityBundles ?? [])
+  const accessSectionGrants = computed<Record<AccessSectionCode, boolean>>(() => {
+    const grants: Record<AccessSectionCode, boolean> = {
+      members: false,
+      access: false,
+      governance: false,
+    }
+    for (const grant of experience.value?.sectionGrants ?? []) {
+      grants[grant.section] = grant.allowed
+    }
+    return grants
+  })
+  const sidebarAccessSectionGrants = computed<Record<AccessSectionCode, boolean>>(() => {
+    if (experience.value?.sectionGrants.length) {
+      return accessSectionGrants.value
+    }
+
+    const permissionCodes = new Set(authorization.value?.effectivePermissionCodes ?? [])
+    const membersAllowed = ACCESS_CONTROL_MEMBER_PERMISSION_CODES
+      .some(code => permissionCodes.has(code))
+    const governanceAllowed = ACCESS_CONTROL_GOVERNANCE_PERMISSION_CODES
+      .some(code => permissionCodes.has(code))
+
+    return {
+      members: membersAllowed,
+      access: membersAllowed,
+      governance: governanceAllowed,
+    }
+  })
+  const canShowAccessControlNavigation = computed(() =>
+    Object.values(sidebarAccessSectionGrants.value).some(Boolean),
+  )
+  const recommendedAccessSection = computed<AccessSectionCode | null>(() => {
+    const recommended = experienceSummary.value?.recommendedLandingSection
+    if (recommended && accessSectionGrants.value[recommended]) {
+      return recommended
+    }
+
+    return (experience.value?.sectionGrants.find(grant => grant.allowed)?.section ?? null) as AccessSectionCode | null
+  })
+  const capabilityBundlesByCode = computed(() =>
+    new Map(capabilityBundles.value.map(bundle => [bundle.code, bundle])),
+  )
+  const templateByCode = computed(() =>
+    new Map(roleTemplates.value.map(template => [template.code, template])),
+  )
+  const presetCards = computed<AccessPresetCard[]>(() =>
+    rolePresets.value.map((preset) => ({
+      ...preset,
+      capabilityBundles: preset.capabilityBundleCodes
+        .map(code => capabilityBundlesByCode.value.get(code))
+        .filter((bundle): bundle is AccessCapabilityBundle => Boolean(bundle)),
+      templates: preset.templateCodes
+        .map(code => templateByCode.value.get(code))
+        .filter((template): template is AccessRoleTemplate => Boolean(template)),
+    })),
+  )
+  const membersByPresetCode = computed(() => {
+    const buckets = new Map<string, AccessMemberSummary[]>()
+    for (const member of members.value) {
+      if (!member.primaryPresetCode) {
+        continue
+      }
+      const bucket = buckets.get(member.primaryPresetCode) ?? []
+      bucket.push(member)
+      buckets.set(member.primaryPresetCode, bucket)
+    }
+    return buckets
+  })
+  const rootOrgUnitId = computed(() =>
+    orgUnits.value.find(unit => !unit.parentId)?.id ?? '',
+  )
+  const hasSummaryGovernanceSignals = computed(() =>
+    Boolean(
+      experienceSummary.value?.hasOrgStructure
+      || experienceSummary.value?.hasCustomRoles
+      || experienceSummary.value?.hasAdvancedPolicies
+      || experienceSummary.value?.hasMenuGovernance
+      || experienceSummary.value?.hasResourceGovernance,
+    ),
+  )
+  const hasLoadedGovernanceSignals = computed(() => {
+    const hasOrgStructure = orgUnits.value.some(unit => unit.id !== rootOrgUnitId.value)
+      || positions.value.length > 0
+      || userGroups.value.length > 0
+      || userOrgAssignments.value.some(assignment =>
+        assignment.orgUnitId !== rootOrgUnitId.value
+        || assignment.positionIds.length > 0
+        || assignment.userGroupIds.length > 0,
+      )
+    const hasCustomRoles = roles.value.some(role => role.source === 'custom')
+    const hasAdvancedPolicies = dataPolicies.value.some(policy => isAdvancedDataPolicy(policy))
+    const hasMenuGovernance = menuPolicies.value.length > 0
+    const hasResourceGovernance = resourcePolicies.value.length > 0 || protectedResources.value.length > 0
+
+    return hasOrgStructure
+      || hasCustomRoles
+      || hasAdvancedPolicies
+      || hasMenuGovernance
+      || hasResourceGovernance
+  })
+  const isGovernanceEmpty = computed(() => {
+    if (hasSummaryGovernanceSignals.value) {
+      return false
+    }
+
+    if (experienceSummary.value?.experienceLevel === 'personal') {
+      return true
+    }
+
+    return !hasLoadedGovernanceSignals.value
+  })
   const availableConsoleMenus = computed(() =>
     currentVisibleMenus.value.filter((menu) => getMenuDefinition(menu.id)?.section === 'console'),
-  )
-  const availableAccessControlMenus = computed(() =>
-    currentVisibleMenus.value.filter((menu) => getMenuDefinition(menu.id)?.section === 'access-control'),
   )
   const firstAccessibleConsoleRouteName = computed(() =>
     availableConsoleMenus.value.find(menu => Boolean(getMenuDefinition(menu.id)?.routeName))?.routeName ?? null,
   )
   const firstAccessibleAccessControlRouteName = computed(() =>
-    availableAccessControlMenus.value.find(menu => Boolean(getMenuDefinition(menu.id)?.routeName))?.routeName ?? null,
+    recommendedAccessSection.value
+      ? `workspace-access-control-${recommendedAccessSection.value}` as const
+      : null,
   )
 
   function logDevTiming(label: string, startedAt: number, detail?: string) {
@@ -142,6 +299,14 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
 
   function hasAuthorizationContext(connectionId: string) {
     return Boolean(authorizationsByConnection.value[connectionId] && menuDefinitionsByConnection.value[connectionId])
+  }
+
+  function hasExperience(connectionId: string) {
+    return Boolean(experiencesByConnection.value[connectionId])
+  }
+
+  function hasMembersData(connectionId: string) {
+    return Boolean(membersDataLoadedAtByConnection.value[connectionId] && membersByConnection.value[connectionId])
   }
 
   async function ensureAuthorizationContext(
@@ -208,7 +373,7 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     }
   }
 
-  async function loadAdminData(
+  async function loadExperience(
     workspaceConnectionId?: string,
     options: { force?: boolean } = {},
   ) {
@@ -218,17 +383,73 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     }
 
     const { client, connectionId } = resolvedClient
-    if (!options.force && adminDataLoadedAtByConnection.value[connectionId]) {
+    if (!options.force && hasExperience(connectionId)) {
       return
     }
 
-    const inflight = adminDataInflightByConnection[connectionId]
+    const inflight = experienceInflightByConnection[connectionId]
     if (inflight && !options.force) {
       await inflight
       return
     }
 
     await ensureAuthorizationContext(connectionId, options)
+
+    const startedAt = performance.now()
+
+    const task = (async () => {
+      const nextExperience = await client.accessControl.getAccessExperience()
+      experiencesByConnection.value = {
+        ...experiencesByConnection.value,
+        [connectionId]: nextExperience,
+      }
+      experienceLoadedAtByConnection.value = {
+        ...experienceLoadedAtByConnection.value,
+        [connectionId]: Date.now(),
+      }
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: '',
+      }
+    })()
+    experienceInflightByConnection[connectionId] = task
+
+    try {
+      await task
+    } catch (cause) {
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load access experience',
+      }
+    } finally {
+      if (experienceInflightByConnection[connectionId] === task) {
+        delete experienceInflightByConnection[connectionId]
+      }
+      logDevTiming('loadExperience', startedAt, connectionId)
+    }
+  }
+
+  async function loadGovernanceData(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { client, connectionId } = resolvedClient
+    if (!options.force && governanceDataLoadedAtByConnection.value[connectionId]) {
+      return
+    }
+
+    const inflight = governanceDataInflightByConnection[connectionId]
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    await loadMembersData(connectionId, options)
 
     const startedAt = performance.now()
     loadingByConnection.value = {
@@ -349,8 +570,8 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         ...protectedResourcesByConnection.value,
         [connectionId]: nextProtectedResources,
       }
-      adminDataLoadedAtByConnection.value = {
-        ...adminDataLoadedAtByConnection.value,
+      governanceDataLoadedAtByConnection.value = {
+        ...governanceDataLoadedAtByConnection.value,
         [connectionId]: Date.now(),
       }
       errorsByConnection.value = {
@@ -358,24 +579,91 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         [connectionId]: '',
       }
     })()
-    adminDataInflightByConnection[connectionId] = task
+    governanceDataInflightByConnection[connectionId] = task
 
     try {
       await task
     } catch (cause) {
       errorsByConnection.value = {
         ...errorsByConnection.value,
-        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load access-control data',
+        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load governance data',
       }
     } finally {
-      if (adminDataInflightByConnection[connectionId] === task) {
-        delete adminDataInflightByConnection[connectionId]
+      if (governanceDataInflightByConnection[connectionId] === task) {
+        delete governanceDataInflightByConnection[connectionId]
       }
       loadingByConnection.value = {
         ...loadingByConnection.value,
         [connectionId]: false,
       }
-      logDevTiming('loadAdminData', startedAt, connectionId)
+      logDevTiming('loadGovernanceData', startedAt, connectionId)
+    }
+  }
+
+  async function loadMembersData(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { client, connectionId } = resolvedClient
+    if (!options.force && hasMembersData(connectionId)) {
+      return
+    }
+
+    const inflight = membersDataInflightByConnection[connectionId]
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    await Promise.all([
+      ensureAuthorizationContext(connectionId, options),
+      loadExperience(connectionId, options),
+    ])
+
+    const startedAt = performance.now()
+    loadingByConnection.value = {
+      ...loadingByConnection.value,
+      [connectionId]: true,
+    }
+
+    const task = (async () => {
+      const nextMembers = await client.accessControl.listMembers()
+      membersByConnection.value = {
+        ...membersByConnection.value,
+        [connectionId]: nextMembers,
+      }
+      membersDataLoadedAtByConnection.value = {
+        ...membersDataLoadedAtByConnection.value,
+        [connectionId]: Date.now(),
+      }
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: '',
+      }
+    })()
+    membersDataInflightByConnection[connectionId] = task
+
+    try {
+      await task
+    } catch (cause) {
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load access members',
+      }
+    } finally {
+      if (membersDataInflightByConnection[connectionId] === task) {
+        delete membersDataInflightByConnection[connectionId]
+      }
+      loadingByConnection.value = {
+        ...loadingByConnection.value,
+        [connectionId]: false,
+      }
+      logDevTiming('loadMembersData', startedAt, connectionId)
     }
   }
 
@@ -459,6 +747,8 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     }
 
     authorizationsByConnection.value = clearRecord(authorizationsByConnection.value)
+    experiencesByConnection.value = clearRecord(experiencesByConnection.value)
+    membersByConnection.value = clearRecord(membersByConnection.value)
     auditByConnection.value = clearRecord(auditByConnection.value)
     auditNextCursorByConnection.value = clearRecord(auditNextCursorByConnection.value)
     auditQueryByConnection.value = clearRecord(auditQueryByConnection.value)
@@ -483,9 +773,28 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     loadingByConnection.value = clearRecord(loadingByConnection.value)
     errorsByConnection.value = clearRecord(errorsByConnection.value)
     authorizationContextLoadedAtByConnection.value = clearRecord(authorizationContextLoadedAtByConnection.value)
-    adminDataLoadedAtByConnection.value = clearRecord(adminDataLoadedAtByConnection.value)
+    experienceLoadedAtByConnection.value = clearRecord(experienceLoadedAtByConnection.value)
+    membersDataLoadedAtByConnection.value = clearRecord(membersDataLoadedAtByConnection.value)
+    governanceDataLoadedAtByConnection.value = clearRecord(governanceDataLoadedAtByConnection.value)
     delete authorizationContextInflightByConnection[workspaceConnectionId]
-    delete adminDataInflightByConnection[workspaceConnectionId]
+    delete experienceInflightByConnection[workspaceConnectionId]
+    delete membersDataInflightByConnection[workspaceConnectionId]
+    delete governanceDataInflightByConnection[workspaceConnectionId]
+  }
+
+  async function refreshMembersLayer(workspaceConnectionId?: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { connectionId } = resolvedClient
+    if (governanceDataLoadedAtByConnection.value[connectionId]) {
+      await loadGovernanceData(connectionId, { force: true })
+      return
+    }
+
+    await loadMembersData(connectionId, { force: true })
   }
 
   async function revokeSession(sessionId: string, workspaceConnectionId?: string) {
@@ -501,27 +810,38 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   }
 
   async function reloadAll(workspaceConnectionId?: string) {
-    await loadAdminData(workspaceConnectionId, { force: true })
+    await loadGovernanceData(workspaceConnectionId, { force: true })
   }
 
   async function createUser(input: AccessUserUpsertRequest, workspaceConnectionId?: string) {
     const { client } = ensureWorkspaceClientForConnection(workspaceConnectionId)
     const record = await client.accessControl.createUser(input)
-    await reloadAll(workspaceConnectionId)
+    await refreshMembersLayer(workspaceConnectionId)
     return record
   }
 
   async function updateUser(userId: string, input: AccessUserUpsertRequest, workspaceConnectionId?: string) {
     const { client } = ensureWorkspaceClientForConnection(workspaceConnectionId)
     const record = await client.accessControl.updateUser(userId, input)
-    await reloadAll(workspaceConnectionId)
+    await refreshMembersLayer(workspaceConnectionId)
     return record
   }
 
   async function deleteUser(userId: string, workspaceConnectionId?: string) {
     const { client } = ensureWorkspaceClientForConnection(workspaceConnectionId)
     await client.accessControl.deleteUser(userId)
-    await reloadAll(workspaceConnectionId)
+    await refreshMembersLayer(workspaceConnectionId)
+  }
+
+  async function assignUserPreset(
+    userId: string,
+    input: AccessUserPresetUpdateRequest,
+    workspaceConnectionId?: string,
+  ) {
+    const { client } = ensureWorkspaceClientForConnection(workspaceConnectionId)
+    const record = await client.accessControl.updateUserPreset(userId, input)
+    await refreshMembersLayer(workspaceConnectionId)
+    return record
   }
 
   async function setProjectMembers(projectId: string, userIds: string[], workspaceConnectionId?: string) {
@@ -763,6 +1083,8 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     auditQuery,
     auditLoading,
     auditError,
+    members,
+    membersByPresetCode,
     sessions,
     users,
     orgUnits,
@@ -789,13 +1111,25 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     currentEffectiveMenuIds,
     currentResourceActionGrants,
     currentVisibleMenus,
+    experience,
+    experienceSummary,
+    roleTemplates,
+    rolePresets,
+    capabilityBundles,
+    capabilityBundlesByCode,
+    accessSectionGrants,
+    sidebarAccessSectionGrants,
+    canShowAccessControlNavigation,
+    recommendedAccessSection,
+    presetCards,
+    isGovernanceEmpty,
     availableConsoleMenus,
-    availableAccessControlMenus,
     firstAccessibleConsoleRouteName,
     firstAccessibleAccessControlRouteName,
     ensureAuthorizationContext,
-    loadAdminData,
-    load: loadAdminData,
+    loadExperience,
+    loadMembersData,
+    loadGovernanceData,
     loadAudit,
     loadMoreAudit,
     reloadAll,
@@ -804,6 +1138,7 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     createUser,
     updateUser,
     deleteUser,
+    assignUserPreset,
     setProjectMembers,
     createOrgUnit,
     updateOrgUnit,

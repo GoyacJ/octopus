@@ -127,8 +127,8 @@ describe('Project settings view', () => {
     expect(mounted.container.textContent).toContain('Finance Ops Template')
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Lin Zhou') ?? false)
-    expect(mounted.container.textContent).toContain('Lin Zhou')
+    await waitFor(() => mounted.container.textContent?.includes('Workspace Operator') ?? false)
+    expect(mounted.container.textContent).toContain('Workspace Operator')
     expect(mounted.container.textContent).toContain('Octopus Owner')
 
     mounted.destroy()

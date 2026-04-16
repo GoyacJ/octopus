@@ -1,9 +1,12 @@
 import type {
+  AccessExperienceResponse,
+  AccessMemberSummary,
   AccessAuditListResponse,
   AccessAuditQuery,
   AccessSessionRecord,
   AccessRoleRecord,
   AccessUserRecord,
+  AccessUserPresetUpdateRequest,
   AccessUserUpsertRequest,
   AgentRecord,
   AutomationRecord,
@@ -292,12 +295,18 @@ export interface WorkspaceClient {
   }
   accessControl: {
     getCurrentAuthorization: () => Promise<AuthorizationSnapshot>
+    getAccessExperience: () => Promise<AccessExperienceResponse>
+    listMembers: () => Promise<AccessMemberSummary[]>
     listAudit: (query?: AccessAuditQuery) => Promise<AccessAuditListResponse>
     listSessions: () => Promise<AccessSessionRecord[]>
     revokeCurrentSession: () => Promise<void>
     revokeSession: (sessionId: string) => Promise<void>
     revokeUserSessions: (userId: string) => Promise<void>
     listUsers: () => Promise<AccessUserRecord[]>
+    updateUserPreset: (
+      userId: string,
+      input: AccessUserPresetUpdateRequest,
+    ) => Promise<AccessMemberSummary>
     createUser: (input: AccessUserUpsertRequest) => Promise<AccessUserRecord>
     updateUser: (userId: string, input: AccessUserUpsertRequest) => Promise<AccessUserRecord>
     deleteUser: (userId: string) => Promise<void>

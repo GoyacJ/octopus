@@ -225,6 +225,10 @@ AccessRoleRecord:
       items:
         type: string
       type: array
+    source:
+      $ref: "#/components/schemas/AccessRoleSource"
+    editable:
+      type: boolean
   required:
     - id
     - code
@@ -232,6 +236,8 @@ AccessRoleRecord:
     - description
     - status
     - permissionCodes
+    - source
+    - editable
   type: object
 RoleUpsertRequest:
   additionalProperties: false
@@ -683,4 +689,229 @@ AccessAuditListResponse:
       type: string
   required:
     - items
+  type: object
+AccessSectionCode:
+  type: string
+  enum:
+    - members
+    - access
+    - governance
+AccessRoleSource:
+  type: string
+  enum:
+    - system
+    - custom
+AccessExperienceLevel:
+  type: string
+  enum:
+    - personal
+    - team
+    - enterprise
+AccessExperienceSummary:
+  additionalProperties: false
+  properties:
+    experienceLevel:
+      $ref: "#/components/schemas/AccessExperienceLevel"
+    memberCount:
+      type: integer
+      format: int32
+    hasOrgStructure:
+      type: boolean
+    hasCustomRoles:
+      type: boolean
+    hasAdvancedPolicies:
+      type: boolean
+    hasMenuGovernance:
+      type: boolean
+    hasResourceGovernance:
+      type: boolean
+    recommendedLandingSection:
+      $ref: "#/components/schemas/AccessSectionCode"
+  required:
+    - experienceLevel
+    - memberCount
+    - hasOrgStructure
+    - hasCustomRoles
+    - hasAdvancedPolicies
+    - hasMenuGovernance
+    - hasResourceGovernance
+    - recommendedLandingSection
+  type: object
+AccessSectionGrant:
+  additionalProperties: false
+  properties:
+    section:
+      $ref: "#/components/schemas/AccessSectionCode"
+    allowed:
+      type: boolean
+  required:
+    - section
+    - allowed
+  type: object
+AccessRoleTemplate:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    managedRoleCodes:
+      items:
+        type: string
+      type: array
+    editable:
+      type: boolean
+  required:
+    - code
+    - name
+    - description
+    - managedRoleCodes
+    - editable
+  type: object
+AccessRolePreset:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    recommendedFor:
+      type: string
+    templateCodes:
+      items:
+        type: string
+      type: array
+    capabilityBundleCodes:
+      items:
+        type: string
+      type: array
+  required:
+    - code
+    - name
+    - description
+    - recommendedFor
+    - templateCodes
+    - capabilityBundleCodes
+  type: object
+AccessCapabilityBundle:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    permissionCodes:
+      items:
+        type: string
+      type: array
+  required:
+    - code
+    - name
+    - description
+    - permissionCodes
+  type: object
+AccessExperienceCounts:
+  additionalProperties: false
+  properties:
+    customRoleCount:
+      type: integer
+      format: int32
+    orgUnitCount:
+      type: integer
+      format: int32
+    dataPolicyCount:
+      type: integer
+      format: int32
+    resourcePolicyCount:
+      type: integer
+      format: int32
+    menuPolicyCount:
+      type: integer
+      format: int32
+    protectedResourceCount:
+      type: integer
+      format: int32
+    sessionCount:
+      type: integer
+      format: int32
+    auditEventCount:
+      type: integer
+      format: int32
+  required:
+    - customRoleCount
+    - orgUnitCount
+    - dataPolicyCount
+    - resourcePolicyCount
+    - menuPolicyCount
+    - protectedResourceCount
+    - sessionCount
+    - auditEventCount
+  type: object
+AccessExperienceResponse:
+  additionalProperties: false
+  properties:
+    summary:
+      $ref: "#/components/schemas/AccessExperienceSummary"
+    sectionGrants:
+      items:
+        $ref: "#/components/schemas/AccessSectionGrant"
+      type: array
+    roleTemplates:
+      items:
+        $ref: "#/components/schemas/AccessRoleTemplate"
+      type: array
+    rolePresets:
+      items:
+        $ref: "#/components/schemas/AccessRolePreset"
+      type: array
+    capabilityBundles:
+      items:
+        $ref: "#/components/schemas/AccessCapabilityBundle"
+      type: array
+    counts:
+      $ref: "#/components/schemas/AccessExperienceCounts"
+  required:
+    - summary
+    - sectionGrants
+    - roleTemplates
+    - rolePresets
+    - capabilityBundles
+    - counts
+  type: object
+AccessMemberSummary:
+  additionalProperties: false
+  properties:
+    user:
+      $ref: "#/components/schemas/AccessUserRecord"
+    primaryPresetCode:
+      type: string
+      nullable: true
+    primaryPresetName:
+      type: string
+    effectiveRoleNames:
+      items:
+        type: string
+      type: array
+    hasOrgAssignments:
+      type: boolean
+  required:
+    - user
+    - primaryPresetCode
+    - primaryPresetName
+    - effectiveRoleNames
+    - hasOrgAssignments
+  type: object
+AccessUserPresetUpdateRequest:
+  additionalProperties: false
+  properties:
+    presetCode:
+      type: string
+  required:
+    - presetCode
   type: object

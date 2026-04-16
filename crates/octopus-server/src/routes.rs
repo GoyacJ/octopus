@@ -67,6 +67,8 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/access/authorization/current",
             get(current_authorization),
         )
+        .route("/api/v1/access/experience", get(get_access_experience))
+        .route("/api/v1/access/members", get(list_access_members))
         .route("/api/v1/access/sessions", get(list_access_sessions))
         .route("/api/v1/access/audit", get(list_access_audit))
         .route(
@@ -88,6 +90,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/access/users/:user_id",
             put(update_access_user).delete(delete_access_user),
+        )
+        .route(
+            "/api/v1/access/users/:user_id/preset",
+            put(update_access_user_preset),
         )
         .route(
             "/api/v1/access/org/units",

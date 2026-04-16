@@ -1882,7 +1882,10 @@
     "header": {
       "eyebrow": "访问控制",
       "title": "访问控制",
-      "description": "在统一工作台中审查工作区身份、访问绑定、策略与审计态势。"
+      "description": "在统一工作台中审查工作区身份、访问绑定、策略与审计态势。",
+      "personalDescription": "先处理成员与日常访问，再在需要时进入治理细节。",
+      "teamDescription": "先管理成员与访问分工，再按需展开治理设置。",
+      "enterpriseDescription": "工作区已进入完整治理阶段，可继续处理组织、策略和审计。"
     },
     "nav": {
       "users": "用户管理",
@@ -1892,6 +1895,17 @@
       "menus": "菜单管理",
       "resources": "资源与授权",
       "sessions": "会话与审计"
+    },
+    "sections": {
+      "members": {
+        "label": "成员"
+      },
+      "access": {
+        "label": "访问"
+      },
+      "governance": {
+        "label": "治理"
+      }
     },
     "common": {
       "pagination": {
@@ -2597,6 +2611,141 @@
         "loadMoreFailed": "加载更多审计日志失败。",
         "toastSessionRevoked": "会话已撤销",
         "toastUserSessionsRevoked": "用户会话已撤销"
+      }
+    },
+    "members": {
+      "title": "成员工作台",
+      "description": "先确认谁在这个工作区里，以及他们承担什么层级的访问职责。",
+      "metrics": {
+        "members": "成员数",
+        "membersHelper": "工作区当前参与人数",
+        "structure": "组织结构",
+        "structureHelper": "是否已经进入组织化治理",
+        "structureEnabled": "已启用",
+        "structureDisabled": "未启用",
+        "landing": "推荐入口",
+        "landingHelper": "系统建议优先处理的访问层"
+      },
+      "empty": {
+        "title": "当前只有你自己",
+        "description": "这个工作区还处在个人使用阶段。需要协作时，再补充成员和预设访问即可。",
+        "primaryAction": "创建成员",
+        "secondaryAction": "分配访问预设"
+      },
+      "actions": {
+        "createUser": "创建成员",
+        "assignPreset": "分配访问预设",
+        "openAdvanced": "打开高级详情",
+        "openGovernance": "进入治理"
+      },
+      "directory": {
+        "title": "成员目录",
+        "description": "在这里完成日常成员管理，把复杂治理留到真正需要的时候。"
+      },
+      "list": {
+        "memberEyebrow": "成员",
+        "currentAccount": "当前账号",
+        "currentAccess": "当前访问：{preset}",
+        "orgAssigned": "已参与组织结构",
+        "orgNotAssigned": "未参与组织结构",
+        "noEffectiveRoles": "暂无有效角色"
+      },
+      "detail": {
+        "subtitle": "查看该成员当前继承到的角色、组织参与情况与预设分配。",
+        "emptyTitle": "选择一名成员",
+        "emptyDescription": "从左侧成员列表中选择后即可查看详情。",
+        "usernameLabel": "用户名",
+        "primaryPresetLabel": "主访问预设",
+        "orgParticipationLabel": "组织参与情况",
+        "effectiveRolesLabel": "有效角色",
+        "orgAssigned": "已参与组织结构"
+      },
+      "createDialog": {
+        "title": "创建成员",
+        "description": "先补充基础成员身份，再在 Access 面分配预设。",
+        "usernameLabel": "用户名",
+        "usernamePlaceholder": "例如 qa.lead",
+        "displayNameLabel": "显示名称",
+        "displayNamePlaceholder": "例如 QA Lead",
+        "submit": "创建成员"
+      },
+      "validation": {
+        "usernameRequired": "请输入用户名",
+        "displayNameRequired": "请输入显示名称"
+      },
+      "feedback": {
+        "created": "已创建成员 {member}",
+        "createFailed": "创建成员失败"
+      }
+    },
+    "access": {
+      "title": "访问",
+      "description": "优先用预设和能力包分配日常访问，而不是直接暴露底层 capability 细节。",
+      "metrics": {
+        "presets": "预设",
+        "presetsHelper": "日常分配访问的首选入口",
+        "bundles": "能力包",
+        "bundlesHelper": "按业务动作组合的授权能力",
+        "customRoles": "自定义角色",
+        "customRolesHelper": "是否已经进入高级角色治理",
+        "customRolesEnabled": "已存在",
+        "customRolesDisabled": "未使用"
+      },
+      "empty": {
+        "title": "暂无可用预设",
+        "description": "当前工作区还没有可展示的访问预设。"
+      },
+      "presetEyebrow": "预设",
+      "includedBundles": "包含能力包",
+      "managedTemplates": "底层模板",
+      "templateCount": "{count} 个模板",
+      "memberCount": "{count} 名成员",
+      "assignment": {
+        "emptyTitle": "选择一个访问预设",
+        "emptyDescription": "从左侧预设中选择后，在右侧查看适用对象和当前已应用成员。",
+        "audienceLabel": "适用对象",
+        "appliedMembersLabel": "当前已应用成员",
+        "noAppliedMembers": "还没有成员使用这个预设。",
+        "memberPlaceholder": "选择成员",
+        "openRoles": "前往治理中的角色"
+      }
+    },
+    "assignment": {
+      "dialogTitle": "分配访问预设",
+      "dialogDescription": "将 {member} 的直接 system.* 绑定替换为新的预设，同时保留继承与自定义访问。",
+      "memberLabel": "成员",
+      "presetLabel": "访问预设",
+      "submit": "应用预设",
+      "validation": {
+        "memberRequired": "请选择成员",
+        "presetRequired": "请选择访问预设"
+      },
+      "feedback": {
+        "applied": "已将 {preset} 应用给 {member}",
+        "failedTitle": "分配访问预设失败"
+      }
+    },
+    "governance": {
+      "title": "治理中心",
+      "description": "把组织、角色、策略、菜单、受保护资源和会话审计集中在一处处理。",
+      "sections": {
+        "organization": "组织结构",
+        "roles": "自定义角色",
+        "policies": "策略",
+        "menus": "菜单治理",
+        "resources": "受保护资源",
+        "sessions": "会话"
+      },
+      "metrics": {
+        "orgUnits": "组织单元",
+        "policies": "策略数量",
+        "sessions": "活跃会话"
+      },
+      "empty": {
+        "title": "还没有需要展开的治理对象",
+        "description": "这个工作区目前还不需要复杂治理。需要时，再回到这里展开组织、角色和策略。",
+        "primaryAction": "返回访问",
+        "secondaryAction": "返回成员"
       }
     }
   },

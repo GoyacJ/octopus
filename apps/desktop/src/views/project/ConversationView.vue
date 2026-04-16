@@ -266,8 +266,15 @@ async function ensureConversationProjectContext(connectionId: string, nextProjec
     artifactStore.loadWorkspaceArtifacts(connectionId),
   ])
   if (lastPermissionSeedKey !== projectContextKey) {
+    const permissionsConfig = (
+      workspaceStore.activeProjectRuntimeConfig?.effectiveConfig as {
+        permissions?: {
+          defaultMode?: unknown
+        }
+      } | undefined
+    )?.permissions
     const configuredDefaultMode = resolveConfiguredPermissionMode(
-      workspaceStore.activeProjectRuntimeConfig?.effectiveConfig?.permissions?.defaultMode,
+      permissionsConfig?.defaultMode,
     )
     if (configuredDefaultMode) {
       selectedPermissionMode.value = configuredDefaultMode

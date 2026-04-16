@@ -2813,7 +2813,11 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         .iter()
         .find(|user| {
             resolve_effective_role_ids(&connection, &user.record.id)
-                .map(|(role_ids, _)| role_ids.iter().any(|role_id| role_id == "owner"))
+                .map(|(role_ids, _)| {
+                    role_ids
+                        .iter()
+                        .any(|role_id| role_id == SYSTEM_OWNER_ROLE_ID)
+                })
                 .unwrap_or(false)
         })
         .map(|user| user.record.id.clone());
