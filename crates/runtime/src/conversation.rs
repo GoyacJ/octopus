@@ -128,7 +128,6 @@ impl ToolExecutionOutcome {
         )
     }
 
-    #[must_use]
     pub fn into_result(self, tool_name: &str) -> Result<String, ToolError> {
         match self {
             Self::Allow { output } => Ok(output),

@@ -189,13 +189,21 @@ async fn authorize_bucket(
     })
 }
 
-fn configured_model_enabled(effective_config: &serde_json::Value, configured_model_id: &str) -> bool {
+fn configured_model_enabled(
+    effective_config: &serde_json::Value,
+    configured_model_id: &str,
+) -> bool {
     effective_config
         .get("configuredModels")
         .and_then(serde_json::Value::as_object)
         .and_then(|models| models.get(configured_model_id))
         .and_then(serde_json::Value::as_object)
-        .map(|model| model.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(true))
+        .map(|model| {
+            model
+                .get("enabled")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true)
+        })
         .unwrap_or(false)
 }
 
@@ -222,43 +230,44 @@ fn compile_target_decisions(
         let tool_execution_requires_approval =
             execution_target::requires_approval(execution_permission_mode).unwrap_or(false)
                 || approval_preference.tool_execution == "require-approval";
-        let model_execution_decision = if !configured_model_enabled(effective_config, configured_model_id) {
-            deny_decision(
-                "model-execution",
-                "configured model is disabled or unavailable in the frozen runtime config",
-                Some(format!("model-execution:{configured_model_id}")),
-                None,
-                Some(execution_permission_mode.into()),
-            )
-        } else if tool_execution_requires_approval {
-            RuntimeTargetPolicyDecision {
-                target_kind: "model-execution".into(),
-                action: "requireApproval".into(),
-                hidden: false,
-                visible: false,
-                deferred: true,
-                requires_approval: true,
-                requires_auth: false,
-                reason: Some(
-                    if approval_preference.tool_execution == "require-approval" {
-                        "tool execution requires mediation review"
-                    } else {
-                        "session ceiling requires approval before model execution can continue"
-                    }
-                    .into(),
-                ),
-                capability_id: Some(format!("model-execution:{configured_model_id}")),
-                provider_key: None,
-                required_permission: Some(execution_permission_mode.into()),
-            }
-        } else {
-            allow_decision(
-                "model-execution",
-                Some(format!("model-execution:{configured_model_id}")),
-                Some("model execution is enabled by the frozen session policy".into()),
-                Some(execution_permission_mode.into()),
-            )
-        };
+        let model_execution_decision =
+            if !configured_model_enabled(effective_config, configured_model_id) {
+                deny_decision(
+                    "model-execution",
+                    "configured model is disabled or unavailable in the frozen runtime config",
+                    Some(format!("model-execution:{configured_model_id}")),
+                    None,
+                    Some(execution_permission_mode.into()),
+                )
+            } else if tool_execution_requires_approval {
+                RuntimeTargetPolicyDecision {
+                    target_kind: "model-execution".into(),
+                    action: "requireApproval".into(),
+                    hidden: false,
+                    visible: false,
+                    deferred: true,
+                    requires_approval: true,
+                    requires_auth: false,
+                    reason: Some(
+                        if approval_preference.tool_execution == "require-approval" {
+                            "tool execution requires mediation review"
+                        } else {
+                            "session ceiling requires approval before model execution can continue"
+                        }
+                        .into(),
+                    ),
+                    capability_id: Some(format!("model-execution:{configured_model_id}")),
+                    provider_key: None,
+                    required_permission: Some(execution_permission_mode.into()),
+                }
+            } else {
+                allow_decision(
+                    "model-execution",
+                    Some(format!("model-execution:{configured_model_id}")),
+                    Some("model execution is enabled by the frozen session policy".into()),
+                    Some(execution_permission_mode.into()),
+                )
+            };
         decisions.insert(
             decision_key("model-execution", configured_model_id),
             model_execution_decision,
@@ -346,15 +355,7 @@ fn compile_target_decisions(
     );
 
     for provider_key in manifest.mcp_server_names() {
-        let provider_auth_decision = if !mcp_server_configured(effective_config, provider_key) {
-            deny_decision(
-                "provider-auth",
-                "provider or MCP server is not configured in the frozen runtime config",
-                Some(format!("provider-auth:{provider_key}")),
-                Some(provider_key.clone()),
-                None,
-            )
-        } else {
+        let provider_auth_decision = if mcp_server_configured(effective_config, provider_key) {
             deferred_decision(
                 "provider-auth",
                 "requireAuth",
@@ -363,6 +364,14 @@ fn compile_target_decisions(
                 Some(provider_key.clone()),
                 approval_preference.mcp_auth == "require-approval",
                 true,
+            )
+        } else {
+            deny_decision(
+                "provider-auth",
+                "provider or MCP server is not configured in the frozen runtime config",
+                Some(format!("provider-auth:{provider_key}")),
+                Some(provider_key.clone()),
+                None,
             )
         };
         decisions.insert(

@@ -369,26 +369,25 @@ impl RuntimeAdapter {
                         .provided_capabilities()
                         .into_iter()
                         .filter(|capability| {
-                            capability.provider_key.as_deref().map_or(true, |provider| {
+                            capability.provider_key.as_deref().is_none_or(|provider| {
                                 allowed_mcp_servers.is_empty()
                                     || allowed_mcp_servers.contains(provider)
                             })
                         }),
                 );
                 for server_name in mcp_runtime.pending_servers().unwrap_or_default() {
-                    if allowed_mcp_servers.is_empty() || allowed_mcp_servers.contains(&server_name)
-                    {
-                        if provider_state_summary
+                    if (allowed_mcp_servers.is_empty()
+                        || allowed_mcp_servers.contains(&server_name))
+                        && provider_state_summary
                             .iter()
                             .all(|provider| provider.provider_key != server_name)
-                        {
-                            provider_state_summary.push(RuntimeCapabilityProviderState {
-                                provider_key: server_name,
-                                state: "pending".into(),
-                                detail: Some("server discovery is pending".into()),
-                                degraded: false,
-                            });
-                        }
+                    {
+                        provider_state_summary.push(RuntimeCapabilityProviderState {
+                            provider_key: server_name,
+                            state: "pending".into(),
+                            detail: Some("server discovery is pending".into()),
+                            degraded: false,
+                        });
                     }
                 }
                 managed_mcp_runtime = Some(Arc::new(Mutex::new(mcp_runtime)));

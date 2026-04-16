@@ -1,3 +1,5 @@
+#![allow(clippy::large_futures)]
+
 use super::*;
 
 #[cfg(test)]

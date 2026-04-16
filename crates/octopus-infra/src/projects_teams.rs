@@ -544,7 +544,7 @@ impl WorkspaceService for InfraWorkspaceService {
             return Ok(Vec::new());
         }
         let mut children = Vec::new();
-        self.collect_resource_children(&absolute_path, &absolute_path, &mut children)?;
+        Self::collect_resource_children(&absolute_path, &absolute_path, &mut children)?;
         children.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
         Ok(children)
     }
@@ -596,9 +596,7 @@ impl WorkspaceService for InfraWorkspaceService {
         entries.sort_by(|left, right| left.name.cmp(&right.name).then(left.path.cmp(&right.path)));
 
         let parent_path = current_path.parent().and_then(|parent| {
-            if parent == self.state.paths.root {
-                Some(self.display_storage_path(parent))
-            } else if parent.starts_with(&self.state.paths.root) {
+            if parent.starts_with(&self.state.paths.root) {
                 Some(self.display_storage_path(parent))
             } else {
                 None
@@ -2067,8 +2065,9 @@ impl InfraWorkspaceService {
             record.project_id.is_some(),
         ) {
             ("personal", "project", true) => Ok("project".into()),
-            ("personal", "workspace", false) => Ok("workspace".into()),
-            ("project", "workspace", _) => Ok("workspace".into()),
+            ("personal", "workspace", false) | ("project", "workspace", _) => {
+                Ok("workspace".into())
+            }
             ("workspace", _, _) => Err(AppError::invalid_input(
                 "workspace resources cannot be promoted further",
             )),
@@ -2441,7 +2440,9 @@ impl InfraWorkspaceService {
 
         let content_type = match extension.as_str() {
             "md" => "text/markdown",
-            "txt" | "csv" => "text/plain",
+            "txt" | "csv" | "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java"
+            | "kt" | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml"
+            | "yml" | "toml" | "sql" | "sh" => "text/plain",
             "json" => "application/json",
             "pdf" => "application/pdf",
             "png" => "image/png",
@@ -2456,9 +2457,6 @@ impl InfraWorkspaceService {
             "mp4" => "video/mp4",
             "mov" => "video/quicktime",
             "webm" => "video/webm",
-            "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift"
-            | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml" | "toml"
-            | "sql" | "sh" => "text/plain",
             _ => "application/octet-stream",
         };
 
@@ -2881,7 +2879,6 @@ impl InfraWorkspaceService {
     }
 
     fn collect_resource_children(
-        &self,
         root: &Path,
         current: &Path,
         children: &mut Vec<WorkspaceResourceChildrenRecord>,
@@ -2891,7 +2888,7 @@ impl InfraWorkspaceService {
             let path = entry.path();
             let file_type = entry.file_type()?;
             if file_type.is_dir() {
-                self.collect_resource_children(root, &path, children)?;
+                Self::collect_resource_children(root, &path, children)?;
                 continue;
             }
             if !file_type.is_file() {

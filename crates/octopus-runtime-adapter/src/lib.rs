@@ -51,12 +51,11 @@ use std::{
 use async_trait::async_trait;
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
-    CancelRuntimeSubrunInput, ConfiguredModelRecord, CostLedgerEntry,
-    CreateRuntimeSessionInput, ModelCatalogSnapshot, ProjectWorkspaceAssignments,
-    ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget, RuntimeAuthChallengeSummary,
-    RuntimeAuthStateSummary, RuntimeBackgroundRunSummary, RuntimeBootstrap,
-    RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
+    CancelRuntimeSubrunInput, ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput,
+    ModelCatalogSnapshot, ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput,
+    ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget,
+    RuntimeAuthChallengeSummary, RuntimeAuthStateSummary, RuntimeBackgroundRunSummary,
+    RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
     RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
     RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
     RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
@@ -94,8 +93,7 @@ use adapter_state::{
 };
 use executor::ModelExecutionResult;
 pub use executor::{
-    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationRequest,
-    RuntimeModelDriver,
+    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationRequest, RuntimeModelDriver,
 };
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};

@@ -1,3 +1,5 @@
+#![allow(clippy::large_futures)]
+
 use super::*;
 
 pub(crate) fn approval_decision_status(decision: &str) -> Result<&'static str, AppError> {

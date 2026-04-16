@@ -33,7 +33,12 @@ pub(crate) fn handoff_actor_refs<'a>(
 mod tests {
     use super::*;
 
-    fn test_subrun(run_id: &str, actor_ref: &str, status: &str, updated_at: u64) -> RuntimeSubrunSummary {
+    fn test_subrun(
+        run_id: &str,
+        actor_ref: &str,
+        status: &str,
+        updated_at: u64,
+    ) -> RuntimeSubrunSummary {
         RuntimeSubrunSummary {
             run_id: run_id.into(),
             parent_run_id: Some("parent-run".into()),
@@ -84,7 +89,8 @@ mod tests {
             },
         ];
 
-        let summary = mailbox_runtime::summarize_handoffs("mailbox-test", "leader-hub", &handoffs, 30);
+        let summary =
+            mailbox_runtime::summarize_handoffs("mailbox-test", "leader-hub", &handoffs, 30);
         assert_eq!(summary.status, "pending");
         assert_eq!(summary.pending_count, 2);
         assert_eq!(summary.total_messages, 2);

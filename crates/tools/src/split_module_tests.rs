@@ -1389,7 +1389,7 @@ fn skill_discovery_lists_only_model_invocable_skills() {
     fs::create_dir_all(&bundled_root).expect("bundled root should exist");
     fs::write(
         executable_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -1402,12 +1402,12 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
     )
     .expect("executable skill file should exist");
     fs::write(
         doc_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: reference
 description: Reference-only skill that should not be model invocable.
 model-invocable: false
@@ -1415,7 +1415,7 @@ model-invocable: false
 # reference
 
 Reference notes only.
-"#,
+",
     )
     .expect("doc skill file should exist");
 
@@ -1458,7 +1458,7 @@ fn skill_discovery_surfaces_bundled_skills_with_distinct_source_kinds() {
     fs::create_dir_all(&bundled_skill_dir).expect("bundled skill dir should exist");
     fs::write(
         local_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: local-help
 description: Local workspace guidance skill.
 model-invocable: true
@@ -1467,12 +1467,12 @@ user-invocable: true
 # local-help
 
 Local workspace guidance.
-"#,
+",
     )
     .expect("local skill file should exist");
     fs::write(
         bundled_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: bundled-help
 description: Bundled workspace guidance skill.
 model-invocable: true
@@ -1481,7 +1481,7 @@ user-invocable: true
 # bundled-help
 
 Bundled workspace guidance.
-"#,
+",
     )
     .expect("bundled skill file should exist");
 
@@ -1551,7 +1551,7 @@ fn skill_discovery_trust_gates_local_skills_but_keeps_bundled_skills_visible() {
     .expect("workspace settings should exist");
     fs::write(
         local_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: local-help
 description: Local workspace guidance skill.
 model-invocable: true
@@ -1560,12 +1560,12 @@ user-invocable: true
 # local-help
 
 Local workspace guidance.
-"#,
+",
     )
     .expect("local skill file should exist");
     fs::write(
         bundled_skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: bundled-help
 description: Bundled workspace guidance skill.
 model-invocable: true
@@ -1574,7 +1574,7 @@ user-invocable: true
 # bundled-help
 
 Bundled workspace guidance.
-"#,
+",
     )
     .expect("bundled skill file should exist");
 
@@ -1752,9 +1752,7 @@ fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_r
         )
         .expect_err("provider-backed prompt skills without executors should be surface gated");
 
-    assert!(error
-        .to_string()
-        .contains("is not enabled in the current capability surface"));
+    assert!(error.contains("is not enabled in the current capability surface"));
     let snapshot = store.snapshot();
     assert!(snapshot.skill_state_updates().is_empty());
     assert!(snapshot.injected_skill_messages().is_empty());
@@ -1780,9 +1778,7 @@ fn capability_runtime_execute_tool_reports_hidden_provider_prompt_skill_as_surfa
         )
         .expect_err("hidden provider prompt skills should be surface gated");
 
-    assert!(error
-        .to_string()
-        .contains("is not enabled in the current capability surface"));
+    assert!(error.contains("is not enabled in the current capability surface"));
 }
 
 #[test]
@@ -1874,7 +1870,7 @@ fn prompt_skill_runtime_does_not_bypass_workspace_gating() {
     fs::create_dir_all(cwd.join(".claw")).expect("workspace config dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: workspace-guide-compat-local
 description: Workspace-scoped compat skill.
 model-invocable: true
@@ -1886,7 +1882,7 @@ context: inline
 # workspace-guide-compat-local
 
 Scoped workspace guidance.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -1958,7 +1954,7 @@ fn skill_tool_rejects_model_non_invocable_skills() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: reference
 description: Reference-only user skill.
 model-invocable: false
@@ -1968,7 +1964,7 @@ context: inline
 # reference
 
 Reference notes only.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -2007,7 +2003,7 @@ fn skill_tool_fork_context_spawns_structured_agent_state() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: planner
 description: Fork planning guidance into a dedicated subagent.
 allowed-tools:
@@ -2022,7 +2018,7 @@ context: fork
 # planner
 
 Build a plan for the provided task.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -2094,7 +2090,7 @@ fn capability_surface_projects_prompt_skills_separately_from_tool_surface() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -2107,7 +2103,7 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -2150,7 +2146,7 @@ fn capability_runtime_facade_projects_surface_and_search_from_provider() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -2163,7 +2159,7 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -2246,7 +2242,7 @@ fn capability_runtime_execute_tool_applies_skill_state_updates() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -2261,7 +2257,7 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -2314,7 +2310,7 @@ fn capability_runtime_execute_tool_persists_failed_fork_skill_state_updates() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: planner
 description: Fork planning guidance into a dedicated subagent.
 allowed-tools:
@@ -2329,7 +2325,7 @@ context: fork
 # planner
 
 Build a plan for the provided task.
-"#,
+",
     )
     .expect("skill file should exist");
 
@@ -3216,7 +3212,7 @@ fn skill_tool_grants_deferred_tools_into_visible_surface() {
     fs::create_dir_all(&skill_dir).expect("skill dir should exist");
     fs::write(
         skill_dir.join("SKILL.md"),
-        r#"---
+        r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -3229,7 +3225,7 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
     )
     .expect("skill file should exist");
 

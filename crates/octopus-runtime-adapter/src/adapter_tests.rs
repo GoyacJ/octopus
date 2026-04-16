@@ -1379,12 +1379,10 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert_eq!(mailbox.status, "completed");
     assert_eq!(mailbox.pending_count, 0);
     assert!(mailbox.total_messages >= 2);
-    assert!(
-        detail
-            .handoffs
-            .iter()
-            .all(|handoff| handoff.state == "acknowledged")
-    );
+    assert!(detail
+        .handoffs
+        .iter()
+        .all(|handoff| handoff.state == "acknowledged"));
     assert!(infra
         .paths
         .runtime_events_dir
@@ -2640,9 +2638,12 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
         .expect("session detail");
 
     let policy_ref = format!("{}-policy", session.summary.id);
-    let policy_path = infra.paths.runtime_state_dir.join(format!("{policy_ref}.json"));
-    let legacy_policy_path = legacy_runtime_sessions_dir(&infra.paths.root)
+    let policy_path = infra
+        .paths
+        .runtime_state_dir
         .join(format!("{policy_ref}.json"));
+    let legacy_policy_path =
+        legacy_runtime_sessions_dir(&infra.paths.root).join(format!("{policy_ref}.json"));
     if let Some(parent) = legacy_policy_path.parent() {
         fs::create_dir_all(parent).expect("legacy policy dir");
     }
@@ -2672,8 +2673,8 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
         .paths
         .runtime_state_dir
         .join(format!("{capability_state_ref}.json"));
-    let legacy_capability_path = legacy_runtime_sessions_dir(&infra.paths.root)
-        .join(format!("{capability_state_ref}.json"));
+    let legacy_capability_path =
+        legacy_runtime_sessions_dir(&infra.paths.root).join(format!("{capability_state_ref}.json"));
     if let Some(parent) = legacy_capability_path.parent() {
         fs::create_dir_all(parent).expect("legacy capability dir");
     }
@@ -2827,7 +2828,11 @@ async fn team_session_reload_ignores_legacy_runtime_sessions_subrun_artifacts() 
     assert_eq!(reloaded_subrun.status, original_status);
     assert_ne!(reloaded_subrun.status, "failed");
     assert_eq!(
-        reloaded_detail.run.worker_dispatch.as_ref().map(|dispatch| dispatch.total_subruns),
+        reloaded_detail
+            .run
+            .worker_dispatch
+            .as_ref()
+            .map(|dispatch| dispatch.total_subruns),
         Some(detail.subruns.len() as u64)
     );
 
@@ -7014,7 +7019,8 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
     assert!(
         records
             .iter()
-            .find(|record| record.summary == "Please remember that approval reviews need the finance tag.")
+            .find(|record| record.summary
+                == "Please remember that approval reviews need the finance tag.")
             .map(|record| adapter.runtime_memory_body_path(&record.memory_id))
             .is_some_and(|path| path.exists()),
         "memory body should be persisted under data/knowledge"
@@ -8530,7 +8536,10 @@ async fn policy_compiler_uses_runtime_config_enablement_for_model_and_mcp_target
 async fn policy_compiler_uses_workspace_authorization_for_capability_buckets() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
-    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
@@ -9258,7 +9267,8 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
         .clone()
         .expect("pending checkpoint artifact ref");
     let pending_checkpoint_artifact: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(root.join(&pending_checkpoint_ref)).expect("pending checkpoint artifact"),
+        &fs::read_to_string(root.join(&pending_checkpoint_ref))
+            .expect("pending checkpoint artifact"),
     )
     .expect("pending checkpoint artifact json");
     assert_eq!(

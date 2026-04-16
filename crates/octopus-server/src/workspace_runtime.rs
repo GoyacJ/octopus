@@ -1,13 +1,12 @@
 use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
-    AuditRecord, AuthorizationRequest, CapabilityManagementProjection, CostLedgerEntry,
-    CancelRuntimeSubrunInput, CreateProjectPromotionRequestInput,
-    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
-    ProjectDashboardBreakdownItem, ProjectDashboardConversationInsight,
-    ProjectDashboardRankingItem, ProjectDashboardSummary, ProjectDashboardTrendPoint,
-    ProjectDashboardUserStat, ProjectPromotionRequest, ProjectTokenUsageRecord,
-    ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
+    AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
+    CostLedgerEntry, CreateProjectPromotionRequestInput, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ProjectDashboardBreakdownItem,
+    ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSummary,
+    ProjectDashboardTrendPoint, ProjectDashboardUserStat, ProjectPromotionRequest,
+    ProjectTokenUsageRecord, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -3313,7 +3312,7 @@ fn build_dashboard_trend(
                 session_tokens += token_count;
             }
             if session_tokens == 0 {
-                buckets[index].token_count += detail.run.consumed_tokens.unwrap_or(0) as u64;
+                buckets[index].token_count += u64::from(detail.run.consumed_tokens.unwrap_or(0));
             }
             if detail.pending_mediation.is_some() {
                 buckets[index].approval_count += 1;
@@ -3358,7 +3357,7 @@ fn build_conversation_insights(
                 if total > 0 {
                     total
                 } else {
-                    value.run.consumed_tokens.unwrap_or(0) as u64
+                    u64::from(value.run.consumed_tokens.unwrap_or(0))
                 }
             });
             let approval_count = detail
@@ -3905,8 +3904,8 @@ pub(crate) async fn cancel_runtime_subrun(
         &request_id,
     )
     .await?;
-    let idempotency_scope =
-        idempotency_key(&headers).map(|key| idempotency_scope(&session, "runtime.cancel_subrun", &subrun_id, &key));
+    let idempotency_scope = idempotency_key(&headers)
+        .map(|key| idempotency_scope(&session, "runtime.cancel_subrun", &subrun_id, &key));
     if let Some(scope) = idempotency_scope.as_deref() {
         if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
             return Ok(response);

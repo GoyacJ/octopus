@@ -1,3 +1,5 @@
+#![allow(clippy::large_futures)]
+
 use super::*;
 use octopus_core::RuntimeTargetPolicyDecision;
 
@@ -1785,11 +1787,12 @@ async fn execute_team_subrun(
         .as_ref()
         .and_then(|mediation| mediation.mediation_id.as_deref())
     {
-        let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
-            checkpoint.clone(),
-            loop_result.serialized_session.clone(),
-            json!({}),
-        );
+        let checkpoint_artifact =
+            persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                checkpoint.clone(),
+                loop_result.serialized_session.clone(),
+                json!({}),
+            );
         let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
             session_id,
             &state.run.id,
@@ -2007,7 +2010,9 @@ fn load_session_team_manifest(
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     match adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)? {
         actor_manifest::CompiledActorManifest::Team(team_manifest) => Ok(team_manifest),
-        _ => Err(AppError::runtime("runtime session is not a team session")),
+        actor_manifest::CompiledActorManifest::Agent(_) => {
+            Err(AppError::runtime("runtime session is not a team session"))
+        }
     }
 }
 
@@ -2224,8 +2229,8 @@ fn cancelled_subrun_state(
         .clone()
         .map(|value| format!("subrun cancelled: {value}"))
         .or_else(|| Some("subrun cancelled explicitly".into()));
-    let requires_approval = state.run.approval_target.is_some()
-        || state.run.checkpoint.pending_approval.is_some();
+    let requires_approval =
+        state.run.approval_target.is_some() || state.run.checkpoint.pending_approval.is_some();
     let requires_auth =
         state.run.auth_target.is_some() || state.run.checkpoint.pending_auth_challenge.is_some();
     let last_execution_outcome = Some(capability_execution_outcome(
@@ -3312,11 +3317,10 @@ fn load_pending_checkpoint(
                 .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
-    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) = adapter
-        .load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
+    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) =
+        adapter.load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
             persisted_checkpoint.checkpoint_artifact_ref.as_deref(),
-        )?
-    {
+        )? {
         (
             checkpoint_artifact.checkpoint,
             checkpoint_artifact.serialized_session,
@@ -3416,11 +3420,10 @@ fn load_pending_auth_checkpoint(
                 .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
-    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) = adapter
-        .load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
+    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) =
+        adapter.load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
             persisted_checkpoint.checkpoint_artifact_ref.as_deref(),
-        )?
-    {
+        )? {
         (
             checkpoint_artifact.checkpoint,
             checkpoint_artifact.serialized_session,
@@ -3647,11 +3650,12 @@ fn apply_submit_state(
         .as_ref()
         .and_then(|mediation| mediation.mediation_id.as_deref())
     {
-        let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
-            checkpoint.clone(),
-            serialized_session.clone(),
-            json!({}),
-        );
+        let checkpoint_artifact =
+            persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                checkpoint.clone(),
+                serialized_session.clone(),
+                json!({}),
+            );
         let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
             &run_context.session_id,
             &run_context.run_id,
@@ -3748,8 +3752,7 @@ fn apply_submit_state(
     aggregate.detail.memory_summary = run_context.memory_selection.summary.clone();
     aggregate.detail.memory_selection_summary =
         run_context.memory_selection.selection_summary.clone();
-    aggregate.detail.pending_memory_proposal_count =
-        u64::from(pending_memory_proposal.is_some());
+    aggregate.detail.pending_memory_proposal_count = u64::from(pending_memory_proposal.is_some());
     aggregate.detail.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.capability_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.provider_state_summary = run_context.provider_state_summary.clone();
@@ -3952,11 +3955,12 @@ fn apply_approval_resolution_state(
             .as_ref()
             .and_then(|mediation| mediation.mediation_id.as_deref())
         {
-            let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
-                next_checkpoint.clone(),
-                serialized_session.clone(),
-                json!({}),
-            );
+            let checkpoint_artifact =
+                persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                    next_checkpoint.clone(),
+                    serialized_session.clone(),
+                    json!({}),
+                );
             let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
                 session_id,
                 &aggregate.detail.run.id,
@@ -4041,11 +4045,12 @@ fn apply_approval_resolution_state(
                 .as_ref()
                 .and_then(|mediation| mediation.mediation_id.as_deref())
             {
-                let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
-                    next_checkpoint.clone(),
-                    serialized_session.clone(),
-                    json!({}),
-                );
+                let checkpoint_artifact =
+                    persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                        next_checkpoint.clone(),
+                        serialized_session.clone(),
+                        json!({}),
+                    );
                 let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
                     session_id,
                     &aggregate.detail.run.id,

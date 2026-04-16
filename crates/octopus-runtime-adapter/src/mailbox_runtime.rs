@@ -55,7 +55,11 @@ pub(crate) fn summarize_handoffs(
         mailbox_ref: mailbox_ref.to_string(),
         channel: channel.to_string(),
         status: status.to_string(),
-        pending_count: if has_terminal_failure { 0 } else { pending_count },
+        pending_count: if has_terminal_failure {
+            0
+        } else {
+            pending_count
+        },
         total_messages: handoffs.len() as u64,
         updated_at: now,
     }

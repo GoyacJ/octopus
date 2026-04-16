@@ -21,7 +21,6 @@ fn normalize_memory_kind(value: &str) -> &'static str {
         "user" => "user",
         "feedback" => "feedback",
         "project" => "project",
-        "reference" => "reference",
         _ => "reference",
     }
 }
@@ -54,7 +53,8 @@ fn normalize_memory_scope(
             }
         }
     }
-    if !project_id.trim().is_empty() && policy_contains_scope(policy, &["project-shared", "project"])
+    if !project_id.trim().is_empty()
+        && policy_contains_scope(policy, &["project-shared", "project"])
     {
         return "project-shared".into();
     }
@@ -242,7 +242,12 @@ fn proposal_candidates(
     workflow_detail: Option<&RuntimeWorkflowRunDetail>,
 ) -> Vec<MemoryProposalCandidate> {
     let mut candidates = Vec::new();
-    if let Some(intent) = input.memory_intent.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(intent) = input
+        .memory_intent
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         let content = input.content.trim();
         if !content.is_empty() {
             candidates.push(MemoryProposalCandidate {
@@ -293,9 +298,9 @@ pub(crate) fn build_memory_proposal(
         }
 
         let summary = memory_runtime::truncate_memory_summary(&normalized_content);
-        let matching_memory = candidate_memory
-            .iter()
-            .find(|item| item.kind == candidate.kind && normalized_text_eq(&item.summary, &summary));
+        let matching_memory = candidate_memory.iter().find(|item| {
+            item.kind == candidate.kind && normalized_text_eq(&item.summary, &summary)
+        });
         if matching_memory.is_some_and(|item| item.freshness_state == "fresh") {
             continue;
         }
@@ -336,9 +341,7 @@ pub(crate) fn build_persisted_memory_record(
         "workspace" | "workspace-shared" if !workspace_id.trim().is_empty() => {
             Some(format!("workspace:{workspace_id}"))
         }
-        "team" | "team-shared" | "agent-private"
-            if !selected_actor_ref.trim().is_empty() =>
-        {
+        "team" | "team-shared" | "agent-private" if !selected_actor_ref.trim().is_empty() => {
             Some(selected_actor_ref.to_string())
         }
         "user" | "user-private" => Some(
@@ -665,7 +668,9 @@ mod tests {
             &memory_policy(),
             &agent_manifest("agent:agent-project-delivery"),
             &memory_input_without_intent("What should I remember from this run?"),
-            Some(&execution_response("The user prefers concise implementation summaries.")),
+            Some(&execution_response(
+                "The user prefers concise implementation summaries.",
+            )),
             None,
             &[],
         )

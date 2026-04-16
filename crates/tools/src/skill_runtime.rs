@@ -565,6 +565,7 @@ fn execute_resolved_skill_capability_detailed(
                 Ok(agent) => agent,
                 Err(failure) => {
                     if let Some(manifest) = failure.manifest {
+                        let manifest = *manifest;
                         state_updates.push(SkillStateUpdate::ForkSpawned {
                             agent_id: manifest.agent_id.clone(),
                             subagent_type: manifest.subagent_type.clone(),

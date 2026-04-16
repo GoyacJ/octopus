@@ -262,6 +262,30 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['check:desktop-release']).toContain('pnpm check:runtime-phase8')
   })
 
+  it('keeps the Phase 8 plan aligned with the compat-only legacy deletion gate', () => {
+    const phaseEightPlan = readRepoFile('docs', 'plans', 'runtime', 'phase-8-legacy-deletion.md')
+    const phaseEightScript = readRepoFile('scripts', 'check-runtime-phase8-governance.mjs')
+
+    expect(phaseEightScript).toContain('/\\bturn_submit\\b/')
+    expect(phaseEightScript).toContain('/\\bRuntimeModelExecutor\\b/')
+    expect(phaseEightScript).toContain('/\\bSkillDiscoveryInput\\b/')
+    expect(phaseEightScript).toContain('/\\bSkillToolInput\\b/')
+    expect(phaseEightScript).not.toContain('/\\bsubmit_turn\\b/')
+
+    expect(phaseEightPlan).toContain(
+      'rg -n "turn_submit|ExecutionResponse|RuntimeModelExecutor|execute_turn\\\\(" crates/octopus-runtime-adapter/src',
+    )
+    expect(phaseEightPlan).toContain(
+      'rg -n "\\"SkillDiscovery\\"|\\"SkillTool\\"|SkillDiscoveryInput|SkillToolInput|run_skill_discovery|run_skill_tool" crates/tools/src crates/octopus-runtime-adapter/src',
+    )
+    expect(phaseEightPlan).not.toContain(
+      'rg -n "turn_submit|submit_turn\\\\(" crates/octopus-runtime-adapter/src crates/runtime/src',
+    )
+    expect(phaseEightPlan).not.toContain(
+      'rg -n "SkillDiscovery|SkillTool" crates/tools/src crates/octopus-runtime-adapter/src',
+    )
+  })
+
   it('documents AI-first API governance through canonical policy docs and local AGENTS files', () => {
     const rootAgents = readRepoFile('AGENTS.md')
     const docsAgentsPath = path.join(repoRoot, 'docs', 'AGENTS.md')

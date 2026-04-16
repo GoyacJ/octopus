@@ -14,9 +14,7 @@ fn projected_subrun_status(run_status: &str) -> &'static str {
     }
 }
 
-fn subrun_sort_key(
-    state: &team_runtime::PersistedSubrunState,
-) -> (u64, u64, String) {
+fn subrun_sort_key(state: &team_runtime::PersistedSubrunState) -> (u64, u64, String) {
     (
         state.run.started_at,
         state.run.updated_at,
@@ -107,10 +105,16 @@ pub(crate) fn planned_subruns(
 }
 
 #[cfg(test)]
+#[allow(clippy::large_stack_arrays)]
 mod tests {
     use super::*;
 
-    fn test_run(run_id: &str, status: &str, started_at: u64, updated_at: u64) -> RuntimeRunSnapshot {
+    fn test_run(
+        run_id: &str,
+        status: &str,
+        started_at: u64,
+        updated_at: u64,
+    ) -> RuntimeRunSnapshot {
         RuntimeRunSnapshot {
             id: run_id.into(),
             session_id: "session-test".into(),
@@ -146,7 +150,10 @@ mod tests {
             auth_target: None,
             usage_summary: RuntimeUsageSummary::default(),
             artifact_refs: Vec::new(),
-            trace_context: trace_context::runtime_trace_context("session-test", Some(run_id.into())),
+            trace_context: trace_context::runtime_trace_context(
+                "session-test",
+                Some(run_id.into()),
+            ),
             checkpoint: RuntimeRunCheckpoint {
                 approval_layer: None,
                 broker_decision: None,
@@ -207,14 +214,20 @@ mod tests {
     #[test]
     fn scheduler_tick_promotes_oldest_queued_subrun_within_available_slots() {
         let mut subrun_states = std::collections::BTreeMap::from([
-            ("run-a".into(), test_subrun_state("run-a", "running", 10, 10)),
+            (
+                "run-a".into(),
+                test_subrun_state("run-a", "running", 10, 10),
+            ),
             ("run-b".into(), test_subrun_state("run-b", "queued", 20, 20)),
             ("run-c".into(), test_subrun_state("run-c", "queued", 30, 30)),
         ]);
 
         let tick = schedule_subrun_tick(&mut subrun_states, 2, 40);
 
-        assert_eq!(tick.runnable_run_ids, vec!["run-a".to_string(), "run-b".to_string()]);
+        assert_eq!(
+            tick.runnable_run_ids,
+            vec!["run-a".to_string(), "run-b".to_string()]
+        );
         assert_eq!(tick.promoted_run_ids, vec!["run-b".to_string()]);
         assert_eq!(tick.occupied_slots, 2);
         assert_eq!(subrun_states["run-b"].run.status, "running");
@@ -232,7 +245,10 @@ mod tests {
                 "run-auth".into(),
                 test_subrun_state("run-auth", "auth-required", 20, 20),
             ),
-            ("run-queued".into(), test_subrun_state("run-queued", "queued", 30, 30)),
+            (
+                "run-queued".into(),
+                test_subrun_state("run-queued", "queued", 30, 30),
+            ),
         ]);
 
         let tick = schedule_subrun_tick(&mut subrun_states, 2, 40);

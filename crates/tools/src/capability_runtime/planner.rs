@@ -65,7 +65,7 @@ pub struct CapabilityCompiler;
 
 impl CapabilityCompiler {
     pub(crate) fn compile(
-        &self,
+        self,
         input: CapabilityCompilationInput,
     ) -> Result<CapabilityGraph, String> {
         let has_invalid_plugin_permission = input
@@ -98,7 +98,7 @@ pub struct CapabilityPlanner;
 impl CapabilityPlanner {
     #[must_use]
     pub(crate) fn surface_projection(
-        &self,
+        self,
         graph: CapabilityGraph,
         planner_input: CapabilityPlannerInput<'_>,
     ) -> CapabilitySurfaceProjection {

@@ -17,6 +17,7 @@
 - Debug export JSON files, legacy runtime event files, or old session JSON shapes are not allowed to remain as hidden recovery dependencies.
 - Compatibility helpers may survive only if they are strictly import, translation, or offline reference utilities. They may not participate in runtime discovery, planning, dispatch, or recovery.
 - `ToolRegistry` is not allowed to remain a runtime discovery or execution dependency.
+- The runtime-native `submit_turn(...)` entrypoint and capability-search result types such as `SkillDiscoveryOutput` are allowed to remain. Phase 8 removes legacy compat wrappers and duplicate execution roots, not the surviving runtime trunk surface.
 - Legacy configured-model fallback generation is not allowed to remain the runtime source of truth once modern runtime config and registry paths are cut over.
 - This phase includes stale tests, comments, and docs. Deleting code while leaving old architectural claims in place is not considered finished.
 
@@ -69,8 +70,7 @@ Phase 8 starts from this real state: the new trunk exists, but the old trunk has
 
 **Deletion gate checks:**
 ```bash
-rg -n "turn_submit|submit_turn\\(" crates/octopus-runtime-adapter/src crates/runtime/src
-rg -n "ExecutionResponse|execute_turn\\(" crates/octopus-runtime-adapter/src
+rg -n "turn_submit|ExecutionResponse|RuntimeModelExecutor|execute_turn\\(" crates/octopus-runtime-adapter/src
 ```
 
 **Verification:**
@@ -103,7 +103,7 @@ cargo test -p runtime
 
 **Deletion gate checks:**
 ```bash
-rg -n "SkillDiscovery|SkillTool" crates/tools/src crates/octopus-runtime-adapter/src
+rg -n "\"SkillDiscovery\"|\"SkillTool\"|SkillDiscoveryInput|SkillToolInput|run_skill_discovery|run_skill_tool" crates/tools/src crates/octopus-runtime-adapter/src
 rg -n "ToolRegistry" crates/tools/src crates/compat-harness/src crates/octopus-runtime-adapter/src
 rg -n "workspace_runtime::|run_agent|run_worker_|run_task_|run_team_|run_cron_" crates/tools/src crates/octopus-runtime-adapter/src crates/runtime/src
 ```
@@ -201,7 +201,7 @@ cargo test -p octopus-runtime-adapter
 cargo test -p octopus-platform
 cargo test -p octopus-server
 pnpm -C apps/desktop exec vitest run test/tauri-client-host.test.ts test/tauri-client-runtime.test.ts test/openapi-transport.test.ts test/runtime-store.test.ts
-rg -n "turn_submit|ExecutionResponse|SkillDiscovery|SkillTool|legacy_configured_models|runtime_debug_events_path|workspace_runtime::" \
+rg -n "turn_submit|ExecutionResponse|RuntimeModelExecutor|execute_turn\\(|\"SkillDiscovery\"|\"SkillTool\"|SkillDiscoveryInput|SkillToolInput|run_skill_discovery|run_skill_tool|ToolRegistry|legacy_configured_models|build_legacy_configured_models|runtime_debug_events_path|workspace_runtime::" \
   crates/runtime/src crates/tools/src crates/compat-harness/src crates/octopus-runtime-adapter/src
 git diff --stat -- \
   crates/runtime/src \

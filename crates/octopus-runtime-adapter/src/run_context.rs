@@ -99,8 +99,10 @@ impl RuntimeAdapter {
                 &capability_store,
             )
             .await?;
-        let memory_lineage =
-            memory_selector::RuntimeMemoryLineageContext::from_run_state(&current_run, &current_subruns);
+        let memory_lineage = memory_selector::RuntimeMemoryLineageContext::from_run_state(
+            &current_run,
+            &current_subruns,
+        );
         let memory_selection = self.select_runtime_memory(
             &actor_manifest,
             &session_policy,

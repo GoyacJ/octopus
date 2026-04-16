@@ -42,20 +42,6 @@ fn model_streamed(message: &RuntimeMessage) -> bool {
     !message.content.trim().is_empty()
 }
 
-fn capability_dispatch_kind_label(dispatch_kind: tools::CapabilityDispatchKind) -> &'static str {
-    match dispatch_kind {
-        tools::CapabilityDispatchKind::BuiltinOrPlugin => "builtin_or_plugin",
-        tools::CapabilityDispatchKind::RuntimeCapability => "runtime_capability",
-    }
-}
-
-fn capability_concurrency_policy_label(policy: tools::CapabilityConcurrencyPolicy) -> &'static str {
-    match policy {
-        tools::CapabilityConcurrencyPolicy::ParallelRead => "parallel_read",
-        tools::CapabilityConcurrencyPolicy::Serialized => "serialized",
-    }
-}
-
 fn capability_family(record: &agent_runtime_core::RuntimeLoopCapabilityEvent) -> &'static str {
     let Some(capability) = record.capability.as_ref() else {
         return "tool";
@@ -210,21 +196,6 @@ fn append_runtime_loop_events(
     for record in capability_events {
         let family = capability_family(record);
         let target_ref = format!("capability-call:{}:{}", run.id, record.tool_use_id);
-        let capability_id = record.execution.capability_id.clone();
-        let tool_name = record.execution.tool_name.clone();
-        let source_kind = record
-            .capability
-            .as_ref()
-            .map(|capability| capability.source_kind.as_str().to_string());
-        let execution_kind = record
-            .capability
-            .as_ref()
-            .map(|capability| capability.execution_kind.as_str().to_string());
-        let provider_key = record
-            .capability
-            .as_ref()
-            .and_then(|capability| capability.provider_key.clone());
-        let detail = record.execution.detail.clone();
         if requested_tool_uses.insert(record.tool_use_id.clone()) {
             let mut requested = base_run_event(
                 adapter,
@@ -369,7 +340,12 @@ fn workflow_terminal_step(
     workflow_detail
         .current_step_id
         .as_ref()
-        .and_then(|step_id| workflow_detail.steps.iter().find(|step| step.step_id == *step_id))
+        .and_then(|step_id| {
+            workflow_detail
+                .steps
+                .iter()
+                .find(|step| step.step_id == *step_id)
+        })
         .or_else(|| workflow_detail.steps.last())
 }
 
@@ -1120,10 +1096,10 @@ pub(super) async fn emit_subrun_cancellation_events(
     project_id: String,
     run: RuntimeRunSnapshot,
     subrun_id: &str,
-    note: Option<String>,
+    _note: Option<String>,
 ) -> Result<(), AppError> {
     let subruns = subrun_summaries_for_run(adapter, session_id, &run.id)?;
-    let cancelled_subrun = subruns
+    let _cancelled_subrun = subruns
         .iter()
         .find(|subrun| subrun.run_id == subrun_id)
         .cloned();

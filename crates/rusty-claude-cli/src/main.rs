@@ -8155,10 +8155,7 @@ UU conflicted.rs",
                 .path
                 .canonicalize()
                 .expect("resolved path should exist"),
-            handle
-                .path
-                .canonicalize()
-                .expect("jsonl path should exist")
+            handle.path.canonicalize().expect("jsonl path should exist")
         );
         assert!(resolve_session_reference("legacy").is_err());
 
@@ -8893,7 +8890,7 @@ UU conflicted.rs",
         fs::create_dir_all(&skill_dir).expect("skill dir should exist");
         fs::write(
             skill_dir.join("SKILL.md"),
-            r#"---
+            r"---
 name: help
 description: Help the model decide when to use the workspace guidance skill.
 when_to_use: Use when the task asks for workspace orientation.
@@ -8908,7 +8905,7 @@ context: inline
 # help
 
 Guide the model through the workspace.
-"#,
+",
         )
         .expect("skill file should exist");
 

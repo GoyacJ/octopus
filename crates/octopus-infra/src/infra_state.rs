@@ -2437,8 +2437,6 @@ fn infer_resource_preview_kind(
         ) {
             return if extension.as_deref() == Some("md") {
                 "markdown".into()
-            } else if extension.as_deref() == Some("json") {
-                "code".into()
             } else {
                 "code".into()
             };
@@ -2524,7 +2522,9 @@ fn infer_resource_content_type(name: &str, location: Option<&str>) -> Option<Str
 
     let content_type = match extension.as_str() {
         "md" => "text/markdown",
-        "txt" | "csv" => "text/plain",
+        "txt" | "csv" | "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java"
+        | "kt" | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml"
+        | "toml" | "sql" | "sh" => "text/plain",
         "json" => "application/json",
         "pdf" => "application/pdf",
         "png" => "image/png",
@@ -2539,9 +2539,6 @@ fn infer_resource_content_type(name: &str, location: Option<&str>) -> Option<Str
         "mp4" => "video/mp4",
         "mov" => "video/quicktime",
         "webm" => "video/webm",
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift"
-        | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml" | "toml" | "sql"
-        | "sh" => "text/plain",
         _ => "application/octet-stream",
     };
 

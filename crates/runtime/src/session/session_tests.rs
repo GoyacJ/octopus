@@ -73,8 +73,8 @@ fn rejects_object_form_session_files() {
     );
     fs::write(&path, legacy.render()).expect("legacy file should write");
 
-    let error = Session::load_from_path(&path)
-        .expect_err("object-form session files should be rejected");
+    let error =
+        Session::load_from_path(&path).expect_err("object-form session files should be rejected");
     fs::remove_file(&path).expect("temp file should be removable");
 
     assert!(error.to_string().contains("missing type"));

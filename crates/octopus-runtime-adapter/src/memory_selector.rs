@@ -21,7 +21,6 @@ pub(crate) struct RuntimeMemorySelection {
 fn normalize_recall_mode(value: Option<&str>) -> &'static str {
     match value.map(str::trim) {
         Some("skip") => "skip",
-        Some("default") | None | Some("") => "default",
         _ => "default",
     }
 }
@@ -69,18 +68,27 @@ fn actor_can_access_record(
     let owner_ref = record.owner_ref.as_deref();
     let user_owner_ref = (!session_policy.user_id.trim().is_empty())
         .then(|| format!("user:{}", session_policy.user_id));
-    let project_owner_ref = (!project_id.trim().is_empty()).then(|| format!("project:{project_id}"));
+    let project_owner_ref =
+        (!project_id.trim().is_empty()).then(|| format!("project:{project_id}"));
     match record.scope.trim() {
-        "user" | "user-private" => owner_ref.is_none()
-            || owner_ref == Some("user:runtime")
-            || user_owner_ref.as_deref() == owner_ref,
-        "agent-private" => matches!(actor_manifest, actor_manifest::CompiledActorManifest::Agent(manifest)
-            if owner_ref.is_none() || owner_ref == Some(manifest.actor_ref.as_str())),
-        "team" | "team-shared" => matches!(actor_manifest, actor_manifest::CompiledActorManifest::Team(manifest)
-            if owner_ref.is_none() || owner_ref == Some(manifest.actor_ref.as_str())),
-        "project" | "project-shared" => owner_ref.is_none()
-            || project_owner_ref.as_deref() == owner_ref
-            || record.project_id.as_deref() == Some(project_id),
+        "user" | "user-private" => {
+            owner_ref.is_none()
+                || owner_ref == Some("user:runtime")
+                || user_owner_ref.as_deref() == owner_ref
+        }
+        "agent-private" => {
+            matches!(actor_manifest, actor_manifest::CompiledActorManifest::Agent(manifest)
+            if owner_ref.is_none() || owner_ref == Some(manifest.actor_ref.as_str()))
+        }
+        "team" | "team-shared" => {
+            matches!(actor_manifest, actor_manifest::CompiledActorManifest::Team(manifest)
+            if owner_ref.is_none() || owner_ref == Some(manifest.actor_ref.as_str()))
+        }
+        "project" | "project-shared" => {
+            owner_ref.is_none()
+                || project_owner_ref.as_deref() == owner_ref
+                || record.project_id.as_deref() == Some(project_id)
+        }
         "workspace" | "workspace-shared" => record.project_id.is_none(),
         _ => false,
     }
@@ -141,13 +149,15 @@ fn freshness_score(state: &str) -> i64 {
         "fresh" => 300,
         "revalidated" => 280,
         "unknown" => 40,
-        "stale" => 0,
         _ => 0,
     }
 }
 
 fn project_like_scope(scope: &str) -> bool {
-    matches!(canonical_memory_scope(scope), "project" | "team" | "workspace")
+    matches!(
+        canonical_memory_scope(scope),
+        "project" | "team" | "workspace"
+    )
 }
 
 fn lineage_score(
@@ -180,14 +190,21 @@ impl RuntimeMemoryLineageContext {
         if !run.id.trim().is_empty() {
             related_run_ids.insert(run.id.clone());
         }
-        if let Some(parent_run_id) = run.parent_run_id.as_ref().filter(|value| !value.trim().is_empty())
+        if let Some(parent_run_id) = run
+            .parent_run_id
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
         {
             related_run_ids.insert(parent_run_id.clone());
         }
 
         if let Some(workflow_detail) = run.workflow_run_detail.as_ref() {
             for step in &workflow_detail.steps {
-                if let Some(run_id) = step.run_id.as_ref().filter(|value| !value.trim().is_empty()) {
+                if let Some(run_id) = step
+                    .run_id
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                {
                     related_run_ids.insert(run_id.clone());
                 }
                 if let Some(parent_run_id) = step
@@ -250,7 +267,11 @@ impl RuntimeAdapter {
         });
         let total_candidate_count = candidates.len() as u64;
         let query_tokens = tokenize_text(&input.content);
-        let intent = input.memory_intent.as_deref().map(str::trim).unwrap_or_default();
+        let intent = input
+            .memory_intent
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default();
 
         let mut ranked_candidates = candidates
             .iter()
@@ -268,7 +289,10 @@ impl RuntimeAdapter {
                     last_validated_at: record.last_validated_at,
                 };
                 let overlap = query_tokens
-                    .intersection(&tokenize_text(&format!("{} {}", record.title, record.summary)))
+                    .intersection(&tokenize_text(&format!(
+                        "{} {}",
+                        record.title, record.summary
+                    )))
                     .count() as i64;
                 let score = freshness_score(&record.freshness_state)
                     + scope_score(actor_manifest, &record.scope)
@@ -279,9 +303,18 @@ impl RuntimeAdapter {
                         record.owner_ref.as_deref(),
                     )
                     + lineage_score(lineage, record.source_run_id.as_deref(), &record.scope)
-                    + if !intent.is_empty() && record.kind == intent { 90 } else { 0 }
+                    + if !intent.is_empty() && record.kind == intent {
+                        90
+                    } else {
+                        0
+                    }
                     + overlap * 15;
-                (item, score, record.updated_at, record.last_validated_at.unwrap_or(0))
+                (
+                    item,
+                    score,
+                    record.updated_at,
+                    record.last_validated_at.unwrap_or(0),
+                )
             })
             .collect::<Vec<_>>();
         ranked_candidates.sort_by_key(|(item, score, updated_at, last_validated_at)| {
@@ -446,8 +479,6 @@ mod tests {
             lineage_score(&lineage, Some("run-subrun"), "project-shared")
                 > lineage_score(&lineage, Some("run-unrelated"), "project-shared")
         );
-        assert!(
-            lineage_score(&lineage, Some("run-unrelated"), "project-shared") < 0
-        );
+        assert!(lineage_score(&lineage, Some("run-unrelated"), "project-shared") < 0);
     }
 }

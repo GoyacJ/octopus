@@ -186,7 +186,6 @@ fn capability_source_kind(entry: &WorkspaceToolCatalogEntry) -> String {
         .source_kind
         .clone()
         .unwrap_or_else(|| match entry.kind.as_str() {
-            "builtin" => "builtin".into(),
             "skill" => {
                 if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
                     "bundled_skill".into()

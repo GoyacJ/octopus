@@ -253,11 +253,8 @@ fn apply_subrun_lineage_state(
             .handoff_ref
             .clone()
             .unwrap_or_else(|| format!("handoff-{}", subrun.run_id));
-        let handoff_state = handoff_runtime::handoff_state_for_subrun(
-            subruns,
-            primary_run_blocked,
-            &subrun.status,
-        );
+        let handoff_state =
+            handoff_runtime::handoff_state_for_subrun(subruns, primary_run_blocked, &subrun.status);
         let mut handoff =
             existing_handoffs
                 .get(&handoff_ref)
@@ -298,12 +295,8 @@ fn apply_subrun_lineage_state(
             .then_with(|| left.handoff_ref.cmp(&right.handoff_ref))
     });
 
-    let mailbox = mailbox_runtime::summarize_handoffs(
-        &mailbox_ref,
-        &mailbox_channel,
-        &handoffs,
-        updated_at,
-    );
+    let mailbox =
+        mailbox_runtime::summarize_handoffs(&mailbox_ref, &mailbox_channel, &handoffs, updated_at);
 
     let workflow_run_id = detail
         .workflow
@@ -685,11 +678,11 @@ fn subrun_serialized_session(
 }
 
 fn subrun_checkpoint_missing_serialized_messages(serialized_session: &Value) -> bool {
-    !serialized_session
+    serialized_session
         .get("session")
         .and_then(|session| session.get("messages"))
         .and_then(Value::as_array)
-        .is_some_and(|messages| !messages.is_empty())
+        .is_none_or(|messages| messages.is_empty())
 }
 
 fn seed_subrun_checkpoint_from_dispatch(state: &mut PersistedSubrunState) {
@@ -697,7 +690,8 @@ fn seed_subrun_checkpoint_from_dispatch(state: &mut PersistedSubrunState) {
         state.serialized_session =
             subrun_serialized_session(&state.dispatch.worker_input, &state.run.trace_context);
     }
-    if state.run.checkpoint.input.is_none() && !state.dispatch.worker_input.content.trim().is_empty()
+    if state.run.checkpoint.input.is_none()
+        && !state.dispatch.worker_input.content.trim().is_empty()
     {
         state.run.checkpoint.input = Some(json!({
             "content": state.dispatch.worker_input.content,
@@ -709,10 +703,10 @@ fn seed_subrun_checkpoint_from_dispatch(state: &mut PersistedSubrunState) {
     if state.run.checkpoint.concurrency_policy.is_none() {
         state.run.checkpoint.concurrency_policy =
             Some(if state.dispatch.worker_concurrency_ceiling <= 1 {
-            "serialized".into()
-        } else {
-            "parallel".into()
-        });
+                "serialized".into()
+            } else {
+                "parallel".into()
+            });
     }
 }
 

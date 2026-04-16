@@ -176,6 +176,7 @@ pub(crate) struct BuiltinTeamTemplateSource {
     pub(crate) model: Option<String>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone)]
 pub(crate) struct BuiltinCatalogSources {
     pub(crate) skill_sources: Vec<BuiltinSkillCatalogSource>,
@@ -1520,7 +1521,7 @@ fn parse_frontmatter(
 
     let normalized_frontmatter_lines = frontmatter_lines
         .into_iter()
-        .map(|line| sanitize_frontmatter_line(line))
+        .map(sanitize_frontmatter_line)
         .collect::<Vec<_>>();
 
     let frontmatter = if normalized_frontmatter_lines.is_empty() {

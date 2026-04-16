@@ -2036,22 +2036,12 @@ pub struct RuntimeMemoryProposal {
     pub normalized_content: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeMemoryFreshnessSummary {
     pub freshness_required: bool,
     pub fresh_count: u64,
     pub stale_count: u64,
-}
-
-impl Default for RuntimeMemoryFreshnessSummary {
-    fn default() -> Self {
-        Self {
-            freshness_required: false,
-            fresh_count: 0,
-            stale_count: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

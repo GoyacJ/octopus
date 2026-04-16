@@ -49,7 +49,7 @@ pub(crate) struct AgentJob {
 
 #[derive(Debug, Clone)]
 pub(crate) struct AgentSpawnFailure {
-    pub(crate) manifest: Option<AgentOutput>,
+    pub(crate) manifest: Option<Box<AgentOutput>>,
     pub(crate) error: String,
 }
 
@@ -164,12 +164,12 @@ where
         let error = format!("failed to spawn sub-agent: {error}");
         persist_agent_terminal_state(&manifest, "failed", None, Some(error.clone())).map_err(
             |persist_error| AgentSpawnFailure {
-                manifest: Some(manifest.clone()),
+                manifest: Some(Box::new(manifest.clone())),
                 error: persist_error,
             },
         )?;
         return Err(AgentSpawnFailure {
-            manifest: Some(manifest),
+            manifest: Some(Box::new(manifest)),
             error,
         });
     }
