@@ -248,7 +248,7 @@ fn grant_owner_permissions(infra: &octopus_infra::InfraBundle, user_id: &str) {
     connection
         .execute(
             "INSERT OR REPLACE INTO role_bindings (id, role_id, subject_type, subject_id, effect)
-             VALUES (?1, 'owner', 'user', ?2, 'allow')",
+             VALUES (?1, 'system.owner', 'user', ?2, 'allow')",
             params![format!("binding-user-{user_id}-owner"), user_id],
         )
         .expect("grant owner permissions");

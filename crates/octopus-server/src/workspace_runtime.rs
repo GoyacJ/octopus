@@ -86,6 +86,17 @@ fn optional_transport_project_id(project_id: &str) -> Option<String> {
     }
 }
 
+fn resolved_fork_target_project_id(
+    requested_project_id: Option<&str>,
+    source_project_id: &str,
+) -> Option<String> {
+    requested_project_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| optional_transport_project_id(source_project_id))
+}
+
 fn deliverable_conversation_record(
     workspace_id: &str,
     detail: &octopus_core::RuntimeSessionDetail,
@@ -1041,7 +1052,13 @@ pub(crate) async fn project_deliverables(
         ),
     )
     .await?;
-    Ok(Json(state.services.workspace.list_project_deliverables(&project_id).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_project_deliverables(&project_id)
+            .await?,
+    ))
 }
 
 pub(crate) async fn create_workspace_resource(
@@ -3201,32 +3218,30 @@ pub(crate) async fn fork_deliverable(
         ),
     )
     .await?;
-    let target_project_id = input
-        .project_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(detail.project_id.as_str())
-        .to_string();
-    if target_project_id != detail.project_id {
-        authorize_request(
-            &state,
-            &session,
-            &capability_authorization_request(
-                &session.user_id,
-                "project.view",
-                Some(&target_project_id),
-                Some("project"),
-                Some(&target_project_id),
-                None,
-                &[],
-                Some("internal"),
-                None,
-                None,
-            ),
-            &request_id,
-        )
-        .await?;
+    let source_project_id = optional_transport_project_id(&detail.project_id);
+    let target_project_id =
+        resolved_fork_target_project_id(input.project_id.as_deref(), &detail.project_id);
+    if target_project_id != source_project_id {
+        if let Some(target_project_id) = target_project_id.as_deref() {
+            authorize_request(
+                &state,
+                &session,
+                &capability_authorization_request(
+                    &session.user_id,
+                    "project.view",
+                    Some(target_project_id),
+                    Some("project"),
+                    Some(target_project_id),
+                    None,
+                    &[],
+                    Some("internal"),
+                    None,
+                    None,
+                ),
+                &request_id,
+            )
+            .await?;
+        }
     }
     let source_session = state
         .services
@@ -5187,5 +5202,15 @@ mod tests {
             &session,
             &sample_knowledge("personal", "private", Some("another-user"))
         ));
+    }
+
+    #[test]
+    fn resolved_fork_target_project_id_preserves_workspace_scope() {
+        assert_eq!(resolved_fork_target_project_id(None, ""), None);
+        assert_eq!(resolved_fork_target_project_id(Some("   "), ""), None);
+        assert_eq!(
+            resolved_fork_target_project_id(Some(" project-2 "), ""),
+            Some("project-2".into())
+        );
     }
 }
