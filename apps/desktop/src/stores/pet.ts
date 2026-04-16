@@ -307,7 +307,7 @@ export const usePetStore = defineStore('pet', () => {
 
   async function ensureConversation(projectId = activeProjectId.value, workspaceConnectionId = activeConnectionId.value) {
     const resolvedScope = resolveScope(projectId, workspaceConnectionId)
-    if (!resolvedScope || !projectId) {
+    if (!resolvedScope) {
       return null
     }
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
@@ -319,8 +319,8 @@ export const usePetStore = defineStore('pet', () => {
     const conversationId = existingBinding?.conversationId ?? createConversationId()
     const session = await runtime.ensureSession({
       conversationId,
-      projectId,
-      title: `${current.profile.displayName} ${projectId}`,
+      projectId: projectId || undefined,
+      title: projectId ? `${current.profile.displayName} ${projectId}` : current.profile.displayName,
       sessionKind: 'pet',
       selectedActorRef: preferredActor.value
         ? `${preferredActor.value.kind}:${preferredActor.value.id}`
@@ -380,7 +380,7 @@ export const usePetStore = defineStore('pet', () => {
   async function sendMessage(content: string) {
     const trimmed = content.trim()
     const resolvedScope = resolveScope(activeProjectId.value, activeConnectionId.value)
-    if (!trimmed || !activeProjectId.value || !resolvedScope) {
+    if (!trimmed || !resolvedScope) {
       return false
     }
     errors.value = {
@@ -388,16 +388,21 @@ export const usePetStore = defineStore('pet', () => {
       [resolvedScope.scopeKey]: '',
     }
     try {
-      await Promise.all([
+      const preloadTasks = [
         loadSnapshot(activeProjectId.value, activeConnectionId.value),
-        workspaceStore.loadProjectRuntimeConfig(activeProjectId.value),
         userProfileStore.loadCurrentUserRuntimeConfig(false, activeConnectionId.value),
         catalog.load(),
         agentStore.load(),
         teamStore.load(),
-        agentStore.loadProjectLinks(activeProjectId.value),
-        teamStore.loadProjectLinks(activeProjectId.value),
-      ])
+      ]
+      if (activeProjectId.value) {
+        preloadTasks.push(
+          workspaceStore.loadProjectRuntimeConfig(activeProjectId.value),
+          agentStore.loadProjectLinks(activeProjectId.value),
+          teamStore.loadProjectLinks(activeProjectId.value),
+        )
+      }
+      await Promise.all(preloadTasks)
       const ensuredBinding = await ensureConversation(activeProjectId.value, activeConnectionId.value)
       if (!ensuredBinding?.sessionId) {
         errors.value = {

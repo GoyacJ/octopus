@@ -205,9 +205,27 @@ fn session_input(
 ) -> CreateRuntimeSessionInput {
     CreateRuntimeSessionInput {
         conversation_id: conversation_id.into(),
-        project_id: project_id.into(),
+        project_id: Some(project_id.into()),
         title: title.into(),
         session_kind: None,
+        selected_actor_ref: selected_actor_ref.into(),
+        selected_configured_model_id: selected_configured_model_id.map(str::to_string),
+        execution_permission_mode: execution_permission_mode.into(),
+    }
+}
+
+fn home_session_input(
+    conversation_id: &str,
+    title: &str,
+    selected_actor_ref: &str,
+    selected_configured_model_id: Option<&str>,
+    execution_permission_mode: &str,
+) -> CreateRuntimeSessionInput {
+    CreateRuntimeSessionInput {
+        conversation_id: conversation_id.into(),
+        project_id: None,
+        title: title.into(),
+        session_kind: Some("pet".into()),
         selected_actor_ref: selected_actor_ref.into(),
         selected_configured_model_id: selected_configured_model_id.map(str::to_string),
         execution_permission_mode: execution_permission_mode.into(),
@@ -589,6 +607,115 @@ async fn session_policy_clamps_requested_permission_mode_to_project_runtime_max(
     assert_eq!(
         policy.execution_permission_mode,
         octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn create_session_supports_pet_home_context_without_project_id() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    grant_owner_permissions(&infra, "user-owner");
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let detail = adapter
+        .create_session_with_owner_ceiling(
+            home_session_input(
+                "conv-pet-home",
+                "Pet Home Session",
+                "agent:agent-project-delivery",
+                None,
+                octopus_core::RUNTIME_PERMISSION_READ_ONLY,
+            ),
+            "user-owner",
+            None,
+        )
+        .await
+        .expect("home session");
+
+    assert_eq!(detail.summary.project_id, "");
+    assert_eq!(detail.summary.session_kind, "pet");
+    assert!(detail.summary.started_from_scope_set.is_empty());
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn session_policy_clamps_requested_permission_mode_to_owner_ceiling() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![
+                "agent-owner-ceiling",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Owner Ceiling Agent",
+                Option::<String>::None,
+                "Operator",
+                serde_json::to_string(&vec!["runtime"]).expect("tags"),
+                "Use the runtime capability planner.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for owner ceiling clamp tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert owner ceiling agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let session = adapter
+        .create_session_with_owner_ceiling(
+            session_input(
+                "conv-owner-ceiling",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Owner Ceiling Session",
+                "agent:agent-owner-ceiling",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+            ),
+            "user-owner",
+            Some(octopus_core::RUNTIME_PERMISSION_READ_ONLY),
+        )
+        .await
+        .expect("session");
+
+    assert_eq!(
+        session.summary.session_policy.execution_permission_mode,
+        octopus_core::RUNTIME_PERMISSION_READ_ONLY
     );
 
     fs::remove_dir_all(root).expect("cleanup temp dir");

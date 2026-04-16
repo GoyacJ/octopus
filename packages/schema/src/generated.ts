@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: ea10e0393ca3752fed60175cc3c602f478874043f642a90ef43df7cae349d11a
+// Source hash: 81870f2a5a0a3651322e9114cd4e8f05d74726af7ea7fbe47b3d159de88e48c6
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "ea10e0393ca3752fed60175cc3c602f478874043f642a90ef43df7cae349d11a"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "81870f2a5a0a3651322e9114cd4e8f05d74726af7ea7fbe47b3d159de88e48c6"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -494,7 +494,7 @@ export interface CreateProjectRequest {
 export interface CreateRuntimeSessionInput {
   conversationId: string
   executionPermissionMode: RuntimePermissionMode
-  projectId: string
+  projectId?: string
   selectedActorRef: string
   selectedConfiguredModelId?: string
   sessionKind?: RuntimeSessionKind

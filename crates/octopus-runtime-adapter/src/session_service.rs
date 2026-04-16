@@ -37,10 +37,11 @@ impl RuntimeSessionService for RuntimeAdapter {
             .collect())
     }
 
-    async fn create_session(
+    async fn create_session_with_owner_ceiling(
         &self,
         input: CreateRuntimeSessionInput,
         user_id: &str,
+        owner_permission_ceiling: Option<&str>,
     ) -> Result<RuntimeSessionDetail, AppError> {
         let session_id = format!("rt-{}", Uuid::new_v4());
         let conversation_id = if input.conversation_id.is_empty() {
@@ -50,7 +51,7 @@ impl RuntimeSessionService for RuntimeAdapter {
         };
         let run_id = format!("run-{}", Uuid::new_v4());
         let now = timestamp_now();
-        let project_id = input.project_id.clone();
+        let project_id = input.project_id.clone().unwrap_or_default();
         let snapshot = self
             .current_config_snapshot(optional_project_id(&project_id).as_deref(), Some(user_id))?;
         self.persist_config_snapshot(&snapshot)?;
@@ -63,7 +64,8 @@ impl RuntimeSessionService for RuntimeAdapter {
                 input.selected_configured_model_id.as_deref(),
                 &input.execution_permission_mode,
                 user_id,
-                Some(&project_id),
+                optional_project_id(&project_id).as_deref(),
+                owner_permission_ceiling,
             )
             .await?;
         self.persist_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref, &manifest)?;

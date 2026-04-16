@@ -12,11 +12,20 @@ use octopus_core::{
 pub trait RuntimeSessionService: Send + Sync {
     async fn bootstrap(&self) -> Result<RuntimeBootstrap, AppError>;
     async fn list_sessions(&self) -> Result<Vec<RuntimeSessionSummary>, AppError>;
+    async fn create_session_with_owner_ceiling(
+        &self,
+        input: CreateRuntimeSessionInput,
+        user_id: &str,
+        owner_permission_ceiling: Option<&str>,
+    ) -> Result<RuntimeSessionDetail, AppError>;
     async fn create_session(
         &self,
         input: CreateRuntimeSessionInput,
         user_id: &str,
-    ) -> Result<RuntimeSessionDetail, AppError>;
+    ) -> Result<RuntimeSessionDetail, AppError> {
+        self.create_session_with_owner_ceiling(input, user_id, None)
+            .await
+    }
     async fn get_session(&self, session_id: &str) -> Result<RuntimeSessionDetail, AppError>;
     async fn list_events(
         &self,
@@ -375,10 +384,11 @@ mod tests {
             Ok(vec![self.detail.summary.clone()])
         }
 
-        async fn create_session(
+        async fn create_session_with_owner_ceiling(
             &self,
             _input: CreateRuntimeSessionInput,
             _user_id: &str,
+            _owner_permission_ceiling: Option<&str>,
         ) -> Result<RuntimeSessionDetail, AppError> {
             Ok(self.detail.clone())
         }

@@ -2990,7 +2990,8 @@ pub struct RuntimeBootstrap {
 #[serde(rename_all = "camelCase")]
 pub struct CreateRuntimeSessionInput {
     pub conversation_id: String,
-    pub project_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
     pub title: String,
     pub session_kind: Option<String>,
     pub selected_actor_ref: String,

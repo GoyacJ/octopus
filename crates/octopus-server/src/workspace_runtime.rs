@@ -3680,12 +3680,16 @@ pub(crate) async fn create_runtime_session(
     Json(input): Json<octopus_core::CreateRuntimeSessionInput>,
 ) -> Result<Response, ApiError> {
     let request_id = request_id(&headers);
-    let project_id = normalize_project_scope(&input.project_id);
+    let project_id = input
+        .project_id
+        .as_deref()
+        .and_then(normalize_project_scope)
+        .map(str::to_string);
     let session = ensure_authorized_session_with_request_id(
         &state,
         &headers,
         "runtime.session.read",
-        project_id,
+        project_id.as_deref(),
         &request_id,
     )
     .await?;
@@ -3703,10 +3707,17 @@ pub(crate) async fn create_runtime_session(
         }
     }
 
+    let input = octopus_core::CreateRuntimeSessionInput {
+        project_id: project_id.clone(),
+        ..input
+    };
+    let owner_permission_ceiling =
+        derive_runtime_owner_permission_ceiling(&state, &session, project_id.as_deref()).await?;
+
     let detail = state
         .services
         .runtime_session
-        .create_session(input, &session.user_id)
+        .create_session_with_owner_ceiling(input, &session.user_id, Some(&owner_permission_ceiling))
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
         let payload = runtime_transport_payload(&detail, &request_id)?;
@@ -3717,6 +3728,39 @@ pub(crate) async fn create_runtime_session(
     let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
+}
+
+async fn derive_runtime_owner_permission_ceiling(
+    state: &ServerState,
+    session: &SessionRecord,
+    project_id: Option<&str>,
+) -> Result<String, ApiError> {
+    let workspace = state.services.workspace.workspace_summary().await?;
+    let workspace_owner = workspace.owner_user_id.as_deref();
+
+    let Some(project_id) = project_id else {
+        return Ok(if workspace_owner == Some(session.user_id.as_str()) {
+            octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into()
+        } else {
+            octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into()
+        });
+    };
+
+    let project = lookup_project(state, project_id).await?;
+    if workspace_owner == Some(session.user_id.as_str()) || project.owner_user_id == session.user_id {
+        return Ok(octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into());
+    }
+    if !project
+        .member_user_ids
+        .iter()
+        .any(|user_id| user_id == &session.user_id)
+    {
+        return Ok(octopus_core::RUNTIME_PERMISSION_READ_ONLY.into());
+    }
+    if resolve_project_module_permission(&workspace, &project, "tools") == "deny" {
+        return Ok(octopus_core::RUNTIME_PERMISSION_READ_ONLY.into());
+    }
+    Ok(octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into())
 }
 
 pub(crate) async fn get_runtime_session(

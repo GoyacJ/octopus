@@ -3222,7 +3222,7 @@ export function createWorkspaceClientFixture(
 
         const detail = createSessionDetail(
           input.conversationId,
-          input.projectId,
+          input.projectId ?? '',
           input.title,
           input.sessionKind ?? 'project',
           input.selectedActorRef,

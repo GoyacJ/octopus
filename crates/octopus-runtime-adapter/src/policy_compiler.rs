@@ -8,15 +8,6 @@ use octopus_core::{
 };
 use serde::de::DeserializeOwned;
 
-fn permission_rank(value: &str) -> Option<u8> {
-    match value {
-        RUNTIME_PERMISSION_READ_ONLY => Some(0),
-        RUNTIME_PERMISSION_WORKSPACE_WRITE => Some(1),
-        RUNTIME_PERMISSION_DANGER_FULL_ACCESS => Some(2),
-        _ => None,
-    }
-}
-
 fn normalize_permission_mode_input(value: &str, field: &str) -> Result<Option<String>, AppError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -45,11 +36,7 @@ fn configured_permission_mode(
 }
 
 fn clamp_permission_mode(requested: &str, ceiling: &str) -> String {
-    if permission_rank(requested) > permission_rank(ceiling) {
-        ceiling.to_string()
-    } else {
-        requested.to_string()
-    }
+    octopus_core::clamp_runtime_permission_mode(requested, ceiling)
 }
 
 fn synthetic_runtime_session(
@@ -449,6 +436,7 @@ pub(super) async fn compile_session_policy(
     execution_permission_mode: &str,
     user_id: &str,
     project_id: Option<&str>,
+    owner_permission_ceiling: Option<&str>,
 ) -> Result<session_policy::CompiledSessionPolicy, AppError> {
     let effective_config = adapter.config_snapshot_value(&snapshot.id)?;
     let configured_default_mode =
@@ -469,6 +457,11 @@ pub(super) async fn compile_session_policy(
             clamp_permission_mode(manifest_permission_ceiling, configured_max_mode)
         })
         .unwrap_or_else(|| manifest_permission_ceiling.to_string());
+    let effective_permission_ceiling = owner_permission_ceiling
+        .map(|owner_permission_ceiling| {
+            clamp_permission_mode(&effective_permission_ceiling, owner_permission_ceiling)
+        })
+        .unwrap_or(effective_permission_ceiling);
     let normalized_execution_permission_mode =
         clamp_permission_mode(&requested_permission_mode, &effective_permission_ceiling);
 

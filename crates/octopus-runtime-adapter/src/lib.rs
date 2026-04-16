@@ -69,8 +69,7 @@ use octopus_core::{
     RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
     RuntimeWorkerDispatchSummary, RuntimeWorkflowBlockingSummary, RuntimeWorkflowRunDetail,
     RuntimeWorkflowStepSummary, RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord,
-    TraceEventRecord, RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
-    RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    TraceEventRecord, RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{

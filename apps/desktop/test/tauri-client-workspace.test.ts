@@ -536,6 +536,215 @@ describe('workspace client transport', () => {
     )
   })
 
+  it('submits a pet home runtime session without requiring projectId in the transport body', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        summary: {
+          id: 'rt-pet-home',
+          conversationId: 'conversation-home',
+          projectId: '',
+          title: 'Pet Home',
+          sessionKind: 'pet',
+          status: 'draft',
+          updatedAt: 10,
+          lastMessagePreview: null,
+          configSnapshotId: 'config-home',
+          effectiveConfigHash: 'hash-home',
+          startedFromScopeSet: ['user', 'workspace'],
+          selectedActorRef: 'agent:agent-architect',
+          manifestRevision: 'asset-manifest-v2',
+          sessionPolicy: {
+            selectedActorRef: 'agent:agent-architect',
+            selectedConfiguredModelId: '',
+            executionPermissionMode: 'readonly',
+            configSnapshotId: 'config-home',
+            manifestRevision: 'asset-manifest-v2',
+            capabilityPolicy: {},
+            memoryPolicy: {},
+            delegationPolicy: {},
+            approvalPreference: {},
+          },
+          activeRunId: 'run-home',
+          subrunCount: 0,
+          memorySummary: { totalCount: 0, byScope: {}, writableScopes: [] },
+          memorySelectionSummary: {
+            selectedCount: 0,
+            sharedCount: 0,
+            privateCount: 0,
+            staleCount: 0,
+          },
+          pendingMemoryProposalCount: 0,
+          memoryStateRef: 'memory-home',
+          capabilityPlanSummary: {
+            visibleTools: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            availableResources: [],
+            hiddenCapabilities: [],
+            activatedTools: [],
+            grantedTools: [],
+            pendingTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            providerFallbacks: [],
+          },
+          providerStateSummary: [],
+          authStateSummary: {
+            pendingChallenges: 0,
+            challengedTargets: [],
+            resolvedTargets: [],
+          },
+          policyDecisionSummary: {
+            allowedCount: 0,
+            deniedCount: 0,
+            deferredCount: 0,
+            hiddenCount: 0,
+          },
+        },
+        selectedActorRef: 'agent:agent-architect',
+        manifestRevision: 'asset-manifest-v2',
+        sessionPolicy: {
+          selectedActorRef: 'agent:agent-architect',
+          selectedConfiguredModelId: '',
+          executionPermissionMode: 'readonly',
+          configSnapshotId: 'config-home',
+          manifestRevision: 'asset-manifest-v2',
+          capabilityPolicy: {},
+          memoryPolicy: {},
+          delegationPolicy: {},
+          approvalPreference: {},
+        },
+        activeRunId: 'run-home',
+        subrunCount: 0,
+        memorySummary: { totalCount: 0, byScope: {}, writableScopes: [] },
+        memorySelectionSummary: {
+          selectedCount: 0,
+          sharedCount: 0,
+          privateCount: 0,
+          staleCount: 0,
+        },
+        pendingMemoryProposalCount: 0,
+        memoryStateRef: 'memory-home',
+        capabilityPlanSummary: {
+          visibleTools: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          availableResources: [],
+          hiddenCapabilities: [],
+          activatedTools: [],
+          grantedTools: [],
+          pendingTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          providerFallbacks: [],
+        },
+        providerStateSummary: [],
+        authStateSummary: {
+          pendingChallenges: 0,
+          challengedTargets: [],
+          resolvedTargets: [],
+        },
+        policyDecisionSummary: {
+          allowedCount: 0,
+          deniedCount: 0,
+          deferredCount: 0,
+          hiddenCount: 0,
+        },
+        run: {
+          id: 'run-home',
+          sessionId: 'rt-pet-home',
+          conversationId: 'conversation-home',
+          status: 'draft',
+          currentStep: 'ready',
+          startedAt: 10,
+          updatedAt: 10,
+          selectedMemory: [],
+          configSnapshotId: 'config-home',
+          effectiveConfigHash: 'hash-home',
+          startedFromScopeSet: ['user', 'workspace'],
+          runKind: 'primary',
+          parentRunId: null,
+          actorRef: 'agent:agent-architect',
+          delegatedByToolCallId: null,
+          approvalState: 'not-required',
+          approvalTarget: null,
+          authTarget: null,
+          usageSummary: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          artifactRefs: [],
+          traceContext: { sessionId: 'rt-pet-home', branchKey: 'main' },
+          checkpoint: {
+            currentIterationIndex: 0,
+            usageSummary: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            capabilityPlanSummary: {
+              visibleTools: [],
+              deferredTools: [],
+              discoverableSkills: [],
+              availableResources: [],
+              hiddenCapabilities: [],
+              activatedTools: [],
+              grantedTools: [],
+              pendingTools: [],
+              approvedTools: [],
+              authResolvedTools: [],
+              providerFallbacks: [],
+            },
+          },
+          capabilityPlanSummary: {
+            visibleTools: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            availableResources: [],
+            hiddenCapabilities: [],
+            activatedTools: [],
+            grantedTools: [],
+            pendingTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            providerFallbacks: [],
+          },
+          providerStateSummary: [],
+          pendingMediation: null,
+        },
+        subruns: [],
+        handoffs: [],
+        messages: [],
+        trace: [],
+        pendingApproval: null,
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    await workspaceClient.runtime.createSession({
+      conversationId: 'conversation-home',
+      title: 'Pet Home',
+      sessionKind: 'pet',
+      selectedActorRef: 'agent:agent-architect',
+      executionPermissionMode: 'readonly',
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/sessions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: 'conversation-home',
+          title: 'Pet Home',
+          sessionKind: 'pet',
+          selectedActorRef: 'agent:agent-architect',
+          executionPermissionMode: 'readonly',
+        }),
+      }),
+    )
+  })
+
   it('calls the workspace inbox endpoint through the workspace client adapter', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({

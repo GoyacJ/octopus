@@ -5520,7 +5520,6 @@ components:
           type: string
       required:
         - conversationId
-        - projectId
         - title
         - selectedActorRef
         - executionPermissionMode

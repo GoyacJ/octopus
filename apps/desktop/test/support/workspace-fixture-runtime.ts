@@ -239,7 +239,7 @@ export function createPetSnapshot(
 
 export function createSessionDetail(
   conversationId: string,
-  projectId: string,
+  projectId = '',
   title: string,
   sessionKind: 'project' | 'pet' = 'project',
   selectedActorRef?: string,
@@ -252,19 +252,22 @@ export function createSessionDetail(
   const mailboxRef = `mailbox-${runId}`
   const memoryStateRef = `memstate-${runId}`
   const resolvedSelectedActorRef = selectedActorRef ?? (sessionKind === 'pet' ? 'team:pet-runtime' : 'agent:agent-architect')
-  const selectedMemory = [
-    {
-      memoryId: `mem-${conversationId}-project-context`,
-      title: 'Project context',
-      summary: `Remember the active project scope for ${projectId}.`,
-      kind: 'project',
-      scope: 'project',
-      ownerRef: `project:${projectId}`,
-      sourceRunId: `source-${runId}`,
-      freshnessState: 'fresh',
-      lastValidatedAt: 1,
-    },
-  ]
+  const isHomeSession = !projectId
+  const selectedMemory = isHomeSession
+    ? []
+    : [
+        {
+          memoryId: `mem-${conversationId}-project-context`,
+          title: 'Project context',
+          summary: `Remember the active project scope for ${projectId}.`,
+          kind: 'project',
+          scope: 'project',
+          ownerRef: `project:${projectId}`,
+          sourceRunId: `source-${runId}`,
+          freshnessState: 'fresh',
+          lastValidatedAt: 1,
+        },
+      ]
   const memorySelectionSummary = {
     totalCandidateCount: selectedMemory.length,
     selectedCount: selectedMemory.length,
@@ -285,7 +288,7 @@ export function createSessionDetail(
     title: 'User feedback preference',
     summary: 'Capture the latest feedback so future turns can reuse it.',
     kind: 'feedback',
-    scope: 'project',
+    scope: isHomeSession ? 'user' : 'project',
     proposalState: 'pending',
     proposalReason: 'user-feedback',
   }
@@ -312,7 +315,7 @@ export function createSessionDetail(
       lastMessagePreview: undefined,
       configSnapshotId: 'cfgsnap-fixture',
       effectiveConfigHash: 'cfg-hash-fixture',
-      startedFromScopeSet: ['project'],
+      startedFromScopeSet: isHomeSession ? ['user', 'workspace'] : ['project'],
       selectedActorRef: resolvedSelectedActorRef,
       manifestRevision: 'manifest-fixture-v2',
       sessionPolicy,
@@ -324,7 +327,9 @@ export function createSessionDetail(
       capabilityPlanSummary: createCapabilityPlanSummary(),
       capabilityStateRef: 'capstate-fixture',
       memorySummary: {
-        summary: '1 durable memory selected with fresh validation.',
+        summary: isHomeSession
+          ? 'No durable memories selected for this home conversation yet.'
+          : '1 durable memory selected with fresh validation.',
         durableMemoryCount: selectedMemory.length,
         selectedMemoryIds: selectedMemory.map(item => item.memoryId),
       },

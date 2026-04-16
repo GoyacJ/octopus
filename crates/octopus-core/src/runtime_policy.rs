@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::{RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE};
+use crate::{
+    RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
+    RUNTIME_PERMISSION_WORKSPACE_WRITE,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -326,6 +329,29 @@ pub fn default_permission_envelope() -> PermissionEnvelope {
         max_mode: RUNTIME_PERMISSION_WORKSPACE_WRITE.into(),
         escalation_allowed: false,
         allowed_resource_scopes: vec!["agent-private".into(), "project-shared".into()],
+    }
+}
+
+#[must_use]
+pub fn runtime_permission_mode_rank(value: &str) -> Option<u8> {
+    match value {
+        RUNTIME_PERMISSION_READ_ONLY => Some(0),
+        RUNTIME_PERMISSION_WORKSPACE_WRITE => Some(1),
+        RUNTIME_PERMISSION_DANGER_FULL_ACCESS => Some(2),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn clamp_runtime_permission_mode(requested: &str, ceiling: &str) -> String {
+    match (
+        runtime_permission_mode_rank(requested),
+        runtime_permission_mode_rank(ceiling),
+    ) {
+        (Some(requested_rank), Some(ceiling_rank)) if requested_rank > ceiling_rank => {
+            ceiling.to_string()
+        }
+        _ => requested.to_string(),
     }
 }
 

@@ -2,15 +2,6 @@ use super::*;
 use octopus_core::RuntimeTargetPolicyDecision;
 use std::collections::BTreeMap;
 
-fn permission_rank(value: &str) -> Option<u8> {
-    match value {
-        RUNTIME_PERMISSION_READ_ONLY => Some(0),
-        RUNTIME_PERMISSION_WORKSPACE_WRITE => Some(1),
-        RUNTIME_PERMISSION_DANGER_FULL_ACCESS => Some(2),
-        _ => None,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompiledSessionPolicy {
@@ -94,6 +85,7 @@ impl RuntimeAdapter {
         execution_permission_mode: &str,
         user_id: &str,
         project_id: Option<&str>,
+        owner_permission_ceiling: Option<&str>,
     ) -> Result<CompiledSessionPolicy, AppError> {
         policy_compiler::compile_session_policy(
             self,
@@ -104,6 +96,7 @@ impl RuntimeAdapter {
             execution_permission_mode,
             user_id,
             project_id,
+            owner_permission_ceiling,
         )
         .await
     }
@@ -123,11 +116,9 @@ impl RuntimeAdapter {
                         "unsupported permission mode: {requested_permission_mode}"
                     ))
                 })?;
-        if permission_rank(normalized_requested)
-            > permission_rank(&session_policy.execution_permission_mode)
-        {
-            return Ok(session_policy.execution_permission_mode.clone());
-        }
-        Ok(normalized_requested.to_string())
+        Ok(octopus_core::clamp_runtime_permission_mode(
+            normalized_requested,
+            &session_policy.execution_permission_mode,
+        ))
     }
 }

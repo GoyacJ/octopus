@@ -81,6 +81,34 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
+  it('creates a pet home runtime session without requiring a project id', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-pet-home',
+      title: 'Pet Home Session',
+      sessionKind: 'pet',
+      selectedActorRef: 'agent:agent-architect',
+      executionPermissionMode: 'readonly',
+    })
+
+    expect(runtime.activeSession?.summary.conversationId).toBe('conv-pet-home')
+    expect(runtime.activeSession?.summary.projectId).toBe('')
+    expect(runtime.activeSession?.summary.sessionKind).toBe('pet')
+
+    await runtime.submitTurn({
+      content: 'Keep this as a home conversation.',
+      permissionMode: 'readonly',
+    })
+
+    await waitFor(() =>
+      runtime.activeRun?.status === 'completed'
+      && runtime.activeMessages.some(message => message.content === 'Keep this as a home conversation.'),
+    )
+
+    runtime.dispose()
+  })
+
   it('shows the user message immediately before the submit request finishes', async () => {
     const { runtime } = await prepareRuntimeStore()
 
