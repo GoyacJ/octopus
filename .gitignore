@@ -10,8 +10,10 @@ dist/
 .vscode/
 .idea/
 .playwright-cli/
+.worktrees/
 .claude
 .clawd-agents
+.worktrees/
 output/
 target/
 crates/rusty-claude-cli/.claw/
