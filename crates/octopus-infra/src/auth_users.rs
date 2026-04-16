@@ -226,7 +226,11 @@ impl InfraWorkspaceService {
         presence: &PetPresenceState,
     ) -> Result<(), AppError> {
         let scope_key = pet_context_key(owner_user_id, project_id);
-        let context_scope = if project_id.is_some() { "project" } else { "home" };
+        let context_scope = if project_id.is_some() {
+            "project"
+        } else {
+            "home"
+        };
         self.state.open_db()?.execute(
             "INSERT OR REPLACE INTO pet_presence (scope_key, owner_user_id, context_scope, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -255,7 +259,11 @@ impl InfraWorkspaceService {
         binding: &PetConversationBinding,
     ) -> Result<(), AppError> {
         let scope_key = pet_context_key(owner_user_id, project_id);
-        let context_scope = if project_id.is_some() { "project" } else { "home" };
+        let context_scope = if project_id.is_some() {
+            "project"
+        } else {
+            "home"
+        };
         self.state.open_db()?.execute(
             "INSERT OR REPLACE INTO pet_conversation_bindings (scope_key, owner_user_id, context_scope, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -664,7 +672,9 @@ impl InfraAuthService {
             let mut member_user_ids = project
                 .member_user_ids
                 .iter()
-                .filter(|member_user_id| member_user_id.as_str() != BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID)
+                .filter(|member_user_id| {
+                    member_user_id.as_str() != BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID
+                })
                 .cloned()
                 .collect::<BTreeSet<_>>();
             member_user_ids.insert(user_id.to_string());
@@ -1315,7 +1325,9 @@ mod tests {
         ResourcePolicyUpsertRequest, RoleBindingUpsertRequest, RoleUpsertRequest,
         DEFAULT_PROJECT_ID,
     };
-    use octopus_platform::{AccessControlService, AuthService, AuthorizationService, WorkspaceService};
+    use octopus_platform::{
+        AccessControlService, AuthService, AuthorizationService, WorkspaceService,
+    };
 
     fn avatar_payload() -> AvatarUploadPayload {
         AvatarUploadPayload {
@@ -1398,8 +1410,14 @@ mod tests {
                 .expect("default project");
 
             assert_eq!(project.owner_user_id, session.user_id);
-            assert!(project.member_user_ids.iter().any(|user_id| user_id == &session.user_id));
-            assert!(!project.member_user_ids.iter().any(|user_id| user_id == "user-owner"));
+            assert!(project
+                .member_user_ids
+                .iter()
+                .any(|user_id| user_id == &session.user_id));
+            assert!(!project
+                .member_user_ids
+                .iter()
+                .any(|user_id| user_id == "user-owner"));
         });
     }
 

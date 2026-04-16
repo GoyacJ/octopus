@@ -2995,8 +2995,8 @@ mod tests {
     use octopus_core::{
         AccessUserUpsertRequest, ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy,
         DefaultModelStrategy, DelegationPolicy, LoginRequest, MailboxPolicy, MemoryPolicy,
-        OutputContract, PermissionEnvelope, RegisterBootstrapAdminRequest,
-        SharedCapabilityPolicy, SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
+        OutputContract, PermissionEnvelope, RegisterBootstrapAdminRequest, SharedCapabilityPolicy,
+        SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
     };
     use octopus_platform::{AccessControlService, AuthService};
 
@@ -3033,15 +3033,19 @@ mod tests {
 
     fn bootstrap_admin_session(bundle: &crate::InfraBundle) -> SessionRecord {
         runtime()
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin")
             .session
     }
@@ -3204,10 +3208,18 @@ mod tests {
         let analyst_session = create_user_session(&bundle, "analyst", "Analyst");
 
         let owner_snapshot = runtime()
-            .block_on(bundle.workspace.get_workspace_pet_snapshot(&owner_session.user_id))
+            .block_on(
+                bundle
+                    .workspace
+                    .get_workspace_pet_snapshot(&owner_session.user_id),
+            )
             .expect("owner pet snapshot");
         let analyst_snapshot = runtime()
-            .block_on(bundle.workspace.get_workspace_pet_snapshot(&analyst_session.user_id))
+            .block_on(
+                bundle
+                    .workspace
+                    .get_workspace_pet_snapshot(&analyst_session.user_id),
+            )
             .expect("analyst pet snapshot");
 
         assert_eq!(owner_snapshot.owner_user_id, owner_session.user_id);
@@ -3227,10 +3239,18 @@ mod tests {
             .expect("bind owner pet");
 
         let refreshed_owner = runtime()
-            .block_on(bundle.workspace.get_workspace_pet_snapshot(&owner_session.user_id))
+            .block_on(
+                bundle
+                    .workspace
+                    .get_workspace_pet_snapshot(&owner_session.user_id),
+            )
             .expect("refreshed owner pet");
         let refreshed_analyst = runtime()
-            .block_on(bundle.workspace.get_workspace_pet_snapshot(&analyst_session.user_id))
+            .block_on(
+                bundle
+                    .workspace
+                    .get_workspace_pet_snapshot(&analyst_session.user_id),
+            )
             .expect("refreshed analyst pet");
 
         assert_eq!(
@@ -3267,33 +3287,28 @@ mod tests {
             agents.iter().all(|record| record.asset_role != "pet"),
             "pet agents must be hidden from the generic catalog"
         );
-        assert!(
-            bundle
-                .workspace
-                .state
-                .agents
-                .lock()
-                .expect("agents")
-                .iter()
-                .any(|record| {
-                    record.asset_role == "pet"
-                        && record.owner_user_id.as_deref() == Some(owner_session.user_id.as_str())
-                })
-        );
-        assert!(
-            bundle
-                .workspace
-                .state
-                .agents
-                .lock()
-                .expect("agents")
-                .iter()
-                .any(|record| {
-                    record.asset_role == "pet"
-                        && record.owner_user_id.as_deref()
-                            == Some(analyst_session.user_id.as_str())
-                })
-        );
+        assert!(bundle
+            .workspace
+            .state
+            .agents
+            .lock()
+            .expect("agents")
+            .iter()
+            .any(|record| {
+                record.asset_role == "pet"
+                    && record.owner_user_id.as_deref() == Some(owner_session.user_id.as_str())
+            }));
+        assert!(bundle
+            .workspace
+            .state
+            .agents
+            .lock()
+            .expect("agents")
+            .iter()
+            .any(|record| {
+                record.asset_role == "pet"
+                    && record.owner_user_id.as_deref() == Some(analyst_session.user_id.as_str())
+            }));
     }
 
     #[test]

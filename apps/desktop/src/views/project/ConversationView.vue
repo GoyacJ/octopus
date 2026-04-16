@@ -244,6 +244,24 @@ function resolveConfiguredPermissionMode(value: unknown): PermissionMode | null 
   return null
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function resolveProjectDefaultPermissionMode(): PermissionMode | null {
+  const effectiveConfig = workspaceStore.activeProjectRuntimeConfig?.effectiveConfig
+  if (!isObjectRecord(effectiveConfig)) {
+    return null
+  }
+
+  const permissions = effectiveConfig.permissions
+  if (!isObjectRecord(permissions)) {
+    return null
+  }
+
+  return resolveConfiguredPermissionMode(permissions.defaultMode)
+}
+
 function createConversationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `conversation-${crypto.randomUUID()}`
@@ -266,9 +284,7 @@ async function ensureConversationProjectContext(connectionId: string, nextProjec
     artifactStore.loadWorkspaceArtifacts(connectionId),
   ])
   if (lastPermissionSeedKey !== projectContextKey) {
-    const configuredDefaultMode = resolveConfiguredPermissionMode(
-      workspaceStore.activeProjectRuntimeConfig?.effectiveConfig?.permissions?.defaultMode,
-    )
+    const configuredDefaultMode = resolveProjectDefaultPermissionMode()
     if (configuredDefaultMode) {
       selectedPermissionMode.value = configuredDefaultMode
     }

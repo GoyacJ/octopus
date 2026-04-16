@@ -16,10 +16,9 @@ use octopus_core::{
     default_approval_preference, default_artifact_handoff_policy, default_asset_import_metadata,
     default_asset_trust_metadata, default_mailbox_policy, default_output_contract,
     default_permission_envelope, default_shared_memory_policy, default_team_delegation_policy,
-    default_team_memory_policy, default_team_shared_capability_policy,
-    normalize_task_domains, team_topology_from_refs, workflow_affordance_from_task_domains,
-    AgentRecord, AppError, TeamRecord, WorkspaceDirectoryUploadEntry,
-    ASSET_MANIFEST_REVISION_V2,
+    default_team_memory_policy, default_team_shared_capability_policy, normalize_task_domains,
+    team_topology_from_refs, workflow_affordance_from_task_domains, AgentRecord, AppError,
+    TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
 };
 
 static BUILTIN_BUNDLE_ASSET_DIR: include_dir::Dir<'_> =
