@@ -710,27 +710,35 @@ impl WorkspaceService for InfraWorkspaceService {
             .collect())
     }
 
-    async fn get_workspace_pet_snapshot(&self) -> Result<PetWorkspaceSnapshot, AppError> {
-        self.workspace_pet_snapshot()
+    async fn get_workspace_pet_snapshot(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<PetWorkspaceSnapshot, AppError> {
+        self.workspace_pet_snapshot(owner_user_id)
     }
 
     async fn get_project_pet_snapshot(
         &self,
+        owner_user_id: &str,
         project_id: &str,
     ) -> Result<PetWorkspaceSnapshot, AppError> {
-        self.project_pet_snapshot(project_id)
+        self.project_pet_snapshot(owner_user_id, project_id)
     }
 
     async fn save_workspace_pet_presence(
         &self,
+        owner_user_id: &str,
         input: SavePetPresenceInput,
     ) -> Result<PetPresenceState, AppError> {
+        let snapshot = self.workspace_pet_snapshot(owner_user_id)?;
         let mut presence = self
             .state
-            .workspace_pet_presence
+            .pet_presences
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet presence mutex poisoned"))?
-            .clone();
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .get(&pet_context_key(owner_user_id, None))
+            .cloned()
+            .unwrap_or(snapshot.presence);
         if !input.pet_id.trim().is_empty() {
             presence.pet_id = input.pet_id;
         }
@@ -752,32 +760,31 @@ impl WorkspaceService for InfraWorkspaceService {
         if let Some(value) = input.position {
             presence.position = value;
         }
-        self.persist_pet_presence(None, &presence)?;
-        *self
-            .state
-            .workspace_pet_presence
+        self.persist_pet_presence(owner_user_id, None, &presence)?;
+        self.state
+            .pet_presences
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet presence mutex poisoned"))? =
-            presence.clone();
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .insert(pet_context_key(owner_user_id, None), presence.clone());
         Ok(presence)
     }
 
     async fn save_project_pet_presence(
         &self,
+        owner_user_id: &str,
         project_id: &str,
         input: SavePetPresenceInput,
     ) -> Result<PetPresenceState, AppError> {
         self.ensure_project_exists(project_id)?;
-        let mut presences = self
+        let snapshot = self.project_pet_snapshot(owner_user_id, project_id)?;
+        let mut presence = self
             .state
-            .project_pet_presences
+            .pet_presences
             .lock()
-            .map_err(|_| AppError::runtime("project pet presences mutex poisoned"))?;
-        let mut presence = presences
-            .iter()
-            .find(|(id, _)| id == project_id)
-            .map(|(_, presence)| presence.clone())
-            .unwrap_or_else(default_workspace_pet_presence);
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .get(&pet_context_key(owner_user_id, Some(project_id)))
+            .cloned()
+            .unwrap_or(snapshot.presence);
         if !input.pet_id.trim().is_empty() {
             presence.pet_id = input.pet_id;
         }
@@ -799,70 +806,78 @@ impl WorkspaceService for InfraWorkspaceService {
         if let Some(value) = input.position {
             presence.position = value;
         }
-        self.persist_pet_presence(Some(project_id), &presence)?;
-        Self::replace_or_push(
-            &mut presences,
-            (project_id.to_string(), presence.clone()),
-            |item| item.0 == project_id,
-        );
+        self.persist_pet_presence(owner_user_id, Some(project_id), &presence)?;
+        self.state
+            .pet_presences
+            .lock()
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .insert(
+                pet_context_key(owner_user_id, Some(project_id)),
+                presence.clone(),
+            );
         Ok(presence)
     }
 
     async fn bind_workspace_pet_conversation(
         &self,
+        owner_user_id: &str,
         input: BindPetConversationInput,
     ) -> Result<PetConversationBinding, AppError> {
+        let snapshot = self.workspace_pet_snapshot(owner_user_id)?;
         let binding = PetConversationBinding {
             pet_id: if input.pet_id.trim().is_empty() {
-                "pet-octopus".into()
+                snapshot.profile.id
             } else {
                 input.pet_id
             },
             workspace_id: self.state.workspace_id()?,
-            project_id: String::new(),
+            owner_user_id: owner_user_id.into(),
+            context_scope: "home".into(),
+            project_id: None,
             conversation_id: input.conversation_id,
             session_id: input.session_id,
             updated_at: Self::now(),
         };
-        self.persist_pet_binding(None, &binding)?;
-        *self
-            .state
-            .workspace_pet_binding
+        self.persist_pet_binding(owner_user_id, None, &binding)?;
+        self.state
+            .pet_bindings
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet binding mutex poisoned"))? =
-            Some(binding.clone());
+            .map_err(|_| AppError::runtime("pet bindings mutex poisoned"))?
+            .insert(pet_context_key(owner_user_id, None), binding.clone());
         Ok(binding)
     }
 
     async fn bind_project_pet_conversation(
         &self,
+        owner_user_id: &str,
         project_id: &str,
         input: BindPetConversationInput,
     ) -> Result<PetConversationBinding, AppError> {
         self.ensure_project_exists(project_id)?;
+        let snapshot = self.project_pet_snapshot(owner_user_id, project_id)?;
         let binding = PetConversationBinding {
             pet_id: if input.pet_id.trim().is_empty() {
-                "pet-octopus".into()
+                snapshot.profile.id
             } else {
                 input.pet_id
             },
             workspace_id: self.state.workspace_id()?,
-            project_id: project_id.into(),
+            owner_user_id: owner_user_id.into(),
+            context_scope: "project".into(),
+            project_id: Some(project_id.into()),
             conversation_id: input.conversation_id,
             session_id: input.session_id,
             updated_at: Self::now(),
         };
-        self.persist_pet_binding(Some(project_id), &binding)?;
-        let mut bindings = self
-            .state
-            .project_pet_bindings
+        self.persist_pet_binding(owner_user_id, Some(project_id), &binding)?;
+        self.state
+            .pet_bindings
             .lock()
-            .map_err(|_| AppError::runtime("project pet bindings mutex poisoned"))?;
-        Self::replace_or_push(
-            &mut bindings,
-            (project_id.to_string(), binding.clone()),
-            |item| item.0 == project_id,
-        );
+            .map_err(|_| AppError::runtime("pet bindings mutex poisoned"))?
+            .insert(
+                pet_context_key(owner_user_id, Some(project_id)),
+                binding.clone(),
+            );
         Ok(binding)
     }
 
@@ -873,7 +888,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .agents
             .lock()
             .map_err(|_| AppError::runtime("agents mutex poisoned"))?
-            .clone();
+            .iter()
+            .filter(|record| record.asset_role != "pet")
+            .cloned()
+            .collect::<Vec<_>>();
         agents.extend(crate::agent_bundle::list_builtin_agent_templates(
             &workspace_id,
         )?);
@@ -2975,10 +2993,12 @@ impl InfraWorkspaceService {
 mod tests {
     use super::*;
     use octopus_core::{
-        ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy, DefaultModelStrategy,
-        DelegationPolicy, MailboxPolicy, MemoryPolicy, OutputContract, PermissionEnvelope,
+        AccessUserUpsertRequest, ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy,
+        DefaultModelStrategy, DelegationPolicy, LoginRequest, MailboxPolicy, MemoryPolicy,
+        OutputContract, PermissionEnvelope, RegisterBootstrapAdminRequest,
         SharedCapabilityPolicy, SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
     };
+    use octopus_platform::{AccessControlService, AuthService};
 
     fn runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Runtime::new().expect("runtime")
@@ -3000,6 +3020,63 @@ mod tests {
             data_base64: BASE64_STANDARD.encode(content.as_bytes()),
             byte_size: content.len() as u64,
         }
+    }
+
+    fn avatar_payload() -> octopus_core::AvatarUploadPayload {
+        octopus_core::AvatarUploadPayload {
+            content_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            file_name: "avatar.png".into(),
+            byte_size: 8,
+        }
+    }
+
+    fn bootstrap_admin_session(bundle: &crate::InfraBundle) -> SessionRecord {
+        runtime()
+            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                display_name: "Owner".into(),
+                password: "password123".into(),
+                confirm_password: "password123".into(),
+                avatar: avatar_payload(),
+                workspace_id: Some("ws-local".into()),
+            }))
+            .expect("bootstrap admin")
+            .session
+    }
+
+    fn create_user_session(
+        bundle: &crate::InfraBundle,
+        username: &str,
+        display_name: &str,
+    ) -> SessionRecord {
+        runtime().block_on(async {
+            bundle
+                .access_control
+                .create_user(AccessUserUpsertRequest {
+                    username: username.into(),
+                    display_name: display_name.into(),
+                    status: "active".into(),
+                    password: Some("password123".into()),
+                    confirm_password: Some("password123".into()),
+                    reset_password: Some(false),
+                })
+                .await
+                .expect("create user");
+
+            bundle
+                .auth
+                .login(LoginRequest {
+                    client_app_id: "octopus-desktop".into(),
+                    username: username.into(),
+                    password: "password123".into(),
+                    workspace_id: Some("ws-local".into()),
+                })
+                .await
+                .expect("login user")
+                .session
+        })
     }
 
     #[test]
@@ -3116,6 +3193,107 @@ mod tests {
         assert_eq!(reloaded.import_metadata.translation_status, "native");
         assert_eq!(reloaded.trust_metadata.trust_level, "trusted");
         assert!(reloaded.dependency_resolution.is_empty());
+    }
+
+    #[test]
+    fn personal_pet_snapshots_and_bindings_are_scoped_by_owner_user() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let owner_session = bootstrap_admin_session(&bundle);
+        let analyst_session = create_user_session(&bundle, "analyst", "Analyst");
+
+        let owner_snapshot = runtime()
+            .block_on(bundle.workspace.get_workspace_pet_snapshot(&owner_session.user_id))
+            .expect("owner pet snapshot");
+        let analyst_snapshot = runtime()
+            .block_on(bundle.workspace.get_workspace_pet_snapshot(&analyst_session.user_id))
+            .expect("analyst pet snapshot");
+
+        assert_eq!(owner_snapshot.owner_user_id, owner_session.user_id);
+        assert_eq!(owner_snapshot.context_scope, "home");
+        assert_eq!(analyst_snapshot.owner_user_id, analyst_session.user_id);
+        assert_ne!(owner_snapshot.profile.id, analyst_snapshot.profile.id);
+
+        let owner_binding = runtime()
+            .block_on(bundle.workspace.bind_workspace_pet_conversation(
+                &owner_session.user_id,
+                BindPetConversationInput {
+                    pet_id: owner_snapshot.profile.id.clone(),
+                    conversation_id: "conversation-owner".into(),
+                    session_id: Some("session-owner".into()),
+                },
+            ))
+            .expect("bind owner pet");
+
+        let refreshed_owner = runtime()
+            .block_on(bundle.workspace.get_workspace_pet_snapshot(&owner_session.user_id))
+            .expect("refreshed owner pet");
+        let refreshed_analyst = runtime()
+            .block_on(bundle.workspace.get_workspace_pet_snapshot(&analyst_session.user_id))
+            .expect("refreshed analyst pet");
+
+        assert_eq!(
+            refreshed_owner
+                .binding
+                .as_ref()
+                .map(|binding| binding.conversation_id.as_str()),
+            Some("conversation-owner")
+        );
+        assert_eq!(
+            refreshed_owner
+                .binding
+                .as_ref()
+                .map(|binding| binding.owner_user_id.as_str()),
+            Some(owner_session.user_id.as_str())
+        );
+        assert_eq!(owner_binding.context_scope, "home");
+        assert!(refreshed_analyst.binding.is_none());
+    }
+
+    #[test]
+    fn generic_agent_listing_excludes_personal_pet_agents() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let owner_session = bootstrap_admin_session(&bundle);
+        let analyst_session = create_user_session(&bundle, "analyst", "Analyst");
+
+        let agents = runtime()
+            .block_on(bundle.workspace.list_agents())
+            .expect("list agents");
+
+        assert!(
+            agents.iter().all(|record| record.asset_role != "pet"),
+            "pet agents must be hidden from the generic catalog"
+        );
+        assert!(
+            bundle
+                .workspace
+                .state
+                .agents
+                .lock()
+                .expect("agents")
+                .iter()
+                .any(|record| {
+                    record.asset_role == "pet"
+                        && record.owner_user_id.as_deref() == Some(owner_session.user_id.as_str())
+                })
+        );
+        assert!(
+            bundle
+                .workspace
+                .state
+                .agents
+                .lock()
+                .expect("agents")
+                .iter()
+                .any(|record| {
+                    record.asset_role == "pet"
+                        && record.owner_user_id.as_deref()
+                            == Some(analyst_session.user_id.as_str())
+                })
+        );
     }
 
     #[test]

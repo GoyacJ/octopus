@@ -1,7 +1,32 @@
 use super::*;
-use octopus_core::{BundleAssetDescriptorRecord, ProjectModelAssignments};
+use octopus_core::{default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
 const BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID: &str = "user-owner";
+const PERSONAL_PET_ASSET_ROLE: &str = "pet";
+const PET_CONTEXT_SCOPE_HOME: &str = "home";
+const PET_CONTEXT_SCOPE_PROJECT: &str = "project";
+const PERSONAL_PET_SPECIES_REGISTRY: &[&str] = &[
+    "duck",
+    "goose",
+    "blob",
+    "cat",
+    "dragon",
+    "octopus",
+    "owl",
+    "penguin",
+    "turtle",
+    "snail",
+    "ghost",
+    "axolotl",
+    "capybara",
+    "cactus",
+    "robot",
+    "rabbit",
+    "mushroom",
+    "chonk",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct WorkspaceConfigFile {
@@ -95,6 +120,25 @@ pub(super) struct StoredUser {
     pub(super) password_hash: String,
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct PetAgentExtensionRecord {
+    pub(super) pet_id: String,
+    pub(super) workspace_id: String,
+    pub(super) owner_user_id: String,
+    pub(super) species: String,
+    pub(super) display_name: String,
+    pub(super) avatar_label: String,
+    pub(super) summary: String,
+    pub(super) greeting: String,
+    pub(super) mood: String,
+    pub(super) favorite_snack: String,
+    pub(super) prompt_hints: Vec<String>,
+    pub(super) fallback_asset: String,
+    pub(super) rive_asset: Option<String>,
+    pub(super) state_machine: Option<String>,
+    pub(super) updated_at: u64,
+}
+
 #[derive(Debug)]
 pub(super) struct InfraState {
     pub(super) paths: WorkspacePaths,
@@ -119,10 +163,9 @@ pub(super) struct InfraState {
     pub(super) trace_events: Mutex<Vec<TraceEventRecord>>,
     pub(super) audit_records: Mutex<Vec<AuditRecord>>,
     pub(super) cost_entries: Mutex<Vec<CostLedgerEntry>>,
-    pub(super) workspace_pet_presence: Mutex<PetPresenceState>,
-    pub(super) project_pet_presences: Mutex<Vec<(String, PetPresenceState)>>,
-    pub(super) workspace_pet_binding: Mutex<Option<PetConversationBinding>>,
-    pub(super) project_pet_bindings: Mutex<Vec<(String, PetConversationBinding)>>,
+    pub(super) pet_extensions: Mutex<HashMap<String, PetAgentExtensionRecord>>,
+    pub(super) pet_presences: Mutex<HashMap<String, PetPresenceState>>,
+    pub(super) pet_bindings: Mutex<HashMap<String, PetConversationBinding>>,
 }
 
 impl InfraState {
@@ -618,6 +661,8 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
             );
             CREATE TABLE IF NOT EXISTS pet_presence (
               scope_key TEXT PRIMARY KEY,
+              owner_user_id TEXT,
+              context_scope TEXT NOT NULL DEFAULT 'home',
               project_id TEXT,
               pet_id TEXT NOT NULL,
               is_visible INTEGER NOT NULL,
@@ -630,12 +675,32 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
             );
             CREATE TABLE IF NOT EXISTS pet_conversation_bindings (
               scope_key TEXT PRIMARY KEY,
+              owner_user_id TEXT,
+              context_scope TEXT NOT NULL DEFAULT 'home',
               project_id TEXT,
               pet_id TEXT NOT NULL,
               workspace_id TEXT NOT NULL,
               conversation_id TEXT NOT NULL,
               session_id TEXT,
               updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS pet_agent_extensions (
+              pet_id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              owner_user_id TEXT NOT NULL,
+              species TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              avatar_label TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              greeting TEXT NOT NULL,
+              mood TEXT NOT NULL,
+              favorite_snack TEXT NOT NULL,
+              prompt_hints_json TEXT NOT NULL DEFAULT '[]',
+              fallback_asset TEXT NOT NULL,
+              rive_asset TEXT,
+              state_machine TEXT,
+              updated_at INTEGER NOT NULL,
+              UNIQUE(workspace_id, owner_user_id)
             );
             CREATE TABLE IF NOT EXISTS runtime_run_projections (
               id TEXT PRIMARY KEY,
@@ -813,6 +878,8 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
 
     ensure_user_avatar_columns(&connection)?;
     ensure_agent_record_columns(&connection)?;
+    ensure_pet_agent_extension_columns(&connection)?;
+    ensure_pet_projection_columns(&connection)?;
     ensure_team_record_columns(&connection)?;
     ensure_bundle_asset_descriptor_columns(&connection)?;
     ensure_project_assignment_columns(&connection)?;
@@ -1167,6 +1234,11 @@ pub(super) fn ensure_agent_record_columns(connection: &Connection) -> Result<(),
         connection,
         "agents",
         &[
+            ("owner_user_id", "TEXT"),
+            (
+                "asset_role",
+                "TEXT NOT NULL DEFAULT 'default'",
+            ),
             ("avatar_path", "TEXT"),
             ("personality", "TEXT NOT NULL DEFAULT ''"),
             ("tags", "TEXT NOT NULL DEFAULT '[]'"),
@@ -1194,6 +1266,87 @@ pub(super) fn ensure_agent_record_columns(connection: &Connection) -> Result<(),
             ("trust_metadata_json", "TEXT NOT NULL DEFAULT '{}'"),
             ("dependency_resolution_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("import_metadata_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )
+}
+
+pub(super) fn ensure_pet_agent_extension_columns(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS pet_agent_extensions (
+                pet_id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                owner_user_id TEXT NOT NULL,
+                species TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                avatar_label TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                greeting TEXT NOT NULL,
+                mood TEXT NOT NULL,
+                favorite_snack TEXT NOT NULL,
+                prompt_hints_json TEXT NOT NULL DEFAULT '[]',
+                fallback_asset TEXT NOT NULL,
+                rive_asset TEXT,
+                state_machine TEXT,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(workspace_id, owner_user_id)
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "pet_agent_extensions",
+        &[
+            ("workspace_id", "TEXT NOT NULL DEFAULT ''"),
+            ("owner_user_id", "TEXT NOT NULL DEFAULT 'user-owner'"),
+            ("species", "TEXT NOT NULL DEFAULT 'octopus'"),
+            ("display_name", "TEXT NOT NULL DEFAULT '小章'"),
+            ("avatar_label", "TEXT NOT NULL DEFAULT 'Octopus mascot'"),
+            (
+                "summary",
+                "TEXT NOT NULL DEFAULT 'Octopus 首席吉祥物，负责卖萌和加油。'",
+            ),
+            (
+                "greeting",
+                "TEXT NOT NULL DEFAULT '嗨！我是小章，今天也要加油哦！'",
+            ),
+            ("mood", "TEXT NOT NULL DEFAULT 'happy'"),
+            ("favorite_snack", "TEXT NOT NULL DEFAULT '新鲜小虾'"),
+            ("prompt_hints_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("fallback_asset", "TEXT NOT NULL DEFAULT 'octopus'"),
+            ("rive_asset", "TEXT"),
+            ("state_machine", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+        ],
+    )?;
+    connection
+        .execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_pet_agent_extensions_workspace_owner
+             ON pet_agent_extensions (workspace_id, owner_user_id)",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
+}
+
+fn ensure_pet_projection_columns(connection: &Connection) -> Result<(), AppError> {
+    ensure_columns(
+        connection,
+        "pet_presence",
+        &[
+            ("owner_user_id", "TEXT"),
+            ("context_scope", "TEXT NOT NULL DEFAULT 'home'"),
+            ("project_id", "TEXT"),
+        ],
+    )?;
+    ensure_columns(
+        connection,
+        "pet_conversation_bindings",
+        &[
+            ("owner_user_id", "TEXT"),
+            ("context_scope", "TEXT NOT NULL DEFAULT 'home'"),
+            ("project_id", "TEXT"),
         ],
     )
 }
@@ -1325,7 +1478,7 @@ pub(super) fn write_agent_record(
 
     let sql = format!(
         "{verb} INTO agents (
-            id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
+            id, workspace_id, project_id, scope, owner_user_id, asset_role, name, avatar_path, personality, tags, prompt,
             builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
             default_model_strategy_json, capability_policy_json, permission_envelope_json,
             memory_policy_json, delegation_policy_json, approval_preference_json,
@@ -1333,13 +1486,13 @@ pub(super) fn write_agent_record(
             trust_metadata_json, dependency_resolution_json, import_metadata_json,
             description, status, updated_at
         ) VALUES (
-            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
-            ?10, ?11, ?12, ?13, ?14,
-            ?15, ?16, ?17,
-            ?18, ?19, ?20,
-            ?21, ?22, ?23,
-            ?24, ?25, ?26,
-            ?27, ?28, ?29
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+            ?12, ?13, ?14, ?15, ?16,
+            ?17, ?18, ?19,
+            ?20, ?21, ?22,
+            ?23, ?24, ?25,
+            ?26, ?27, ?28,
+            ?29, ?30, ?31
         )"
     );
 
@@ -1351,6 +1504,8 @@ pub(super) fn write_agent_record(
                 record.workspace_id,
                 record.project_id,
                 record.scope,
+                record.owner_user_id,
+                record.asset_role,
                 record.name,
                 record.avatar_path,
                 record.personality,
@@ -2830,6 +2985,9 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         bootstrap::save_workspace_config_file(&paths.workspace_config, &workspace)?;
     }
     backfill_project_governance(&connection, workspace.owner_user_id.as_deref())?;
+    for user in &users {
+        ensure_personal_pet_for_user(&connection, &workspace.id, &user.record.id)?;
+    }
     let projects = load_projects(&connection)?;
     let project_promotion_requests = load_project_promotion_requests(&connection)?;
     let sessions = load_sessions(&connection)?;
@@ -2846,11 +3004,9 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let trace_events = load_trace_events(&connection)?;
     let audit_records = load_audit_records(&connection)?;
     let cost_entries = load_cost_entries(&connection)?;
-    let workspace_pet_presence =
-        load_pet_presence(&connection, "workspace")?.unwrap_or_else(default_workspace_pet_presence);
-    let project_pet_presences = load_all_project_pet_presences(&connection)?;
-    let workspace_pet_binding = load_pet_binding(&connection, "workspace")?;
-    let project_pet_bindings = load_all_project_pet_bindings(&connection)?;
+    let pet_extensions = load_pet_agent_extensions(&connection)?;
+    let pet_presences = load_pet_presences(&connection)?;
+    let pet_bindings = load_pet_bindings(&connection)?;
 
     Ok(InfraState {
         paths,
@@ -2875,10 +3031,9 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         trace_events: Mutex::new(trace_events),
         audit_records: Mutex::new(audit_records),
         cost_entries: Mutex::new(cost_entries),
-        workspace_pet_presence: Mutex::new(workspace_pet_presence),
-        project_pet_presences: Mutex::new(project_pet_presences),
-        workspace_pet_binding: Mutex::new(workspace_pet_binding),
-        project_pet_bindings: Mutex::new(project_pet_bindings),
+        pet_extensions: Mutex::new(pet_extensions),
+        pet_presences: Mutex::new(pet_presences),
+        pet_bindings: Mutex::new(pet_bindings),
     })
 }
 
@@ -3087,31 +3242,88 @@ pub(super) fn load_project_promotion_requests(
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-pub(super) fn default_pet_profile() -> PetProfile {
-    PetProfile {
-        id: "pet-octopus".into(),
-        species: "octopus".into(),
-        display_name: "小章".into(),
-        owner_user_id: "user-owner".into(),
-        avatar_label: "Octopus mascot".into(),
-        summary: "Octopus 首席吉祥物，负责卖萌和加油。".into(),
-        greeting: "嗨！我是小章，今天也要加油哦！".into(),
+fn personal_pet_defaults(
+    workspace_id: &str,
+    owner_user_id: &str,
+) -> (String, PetAgentExtensionRecord) {
+    let mut hasher = Sha256::new();
+    hasher.update(workspace_id.as_bytes());
+    hasher.update(b":");
+    hasher.update(owner_user_id.as_bytes());
+    let digest = hasher.finalize();
+    let species = PERSONAL_PET_SPECIES_REGISTRY[(digest[0] as usize) % PERSONAL_PET_SPECIES_REGISTRY.len()];
+    let pet_id = format!("pet-{owner_user_id}");
+    let display_name = format!("{}伙伴", species);
+    let summary = format!("{display_name} 会陪着主人一起完成日常工作。");
+    let greeting = format!("嗨，我是 {display_name}，今天一起推进事情吧。");
+    let favorite_snack = match species {
+        "duck" | "goose" => "玉米粒",
+        "cat" | "dragon" | "octopus" => "新鲜小虾",
+        "owl" | "ghost" => "夜宵",
+        "penguin" | "turtle" | "snail" => "海藻沙拉",
+        "axolotl" | "capybara" => "蔬果拼盘",
+        "cactus" | "robot" => "阳光和电量",
+        "rabbit" | "mushroom" | "chonk" | "blob" => "胡萝卜饼干",
+        _ => "零食",
+    };
+    let extension = PetAgentExtensionRecord {
+        pet_id: pet_id.clone(),
+        workspace_id: workspace_id.into(),
+        owner_user_id: owner_user_id.into(),
+        species: species.into(),
+        display_name,
+        avatar_label: format!("{species} mascot"),
+        summary,
+        greeting,
         mood: "happy".into(),
-        favorite_snack: "新鲜小虾".into(),
+        favorite_snack: favorite_snack.into(),
         prompt_hints: vec![
-            "最近有什么好消息？".into(),
-            "给我讲个冷笑话".into(),
-            "我们要加油呀！".into(),
+            "帮我整理一下今天的重点".into(),
+            "我们接下来先做什么？".into(),
+            "给我一句鼓励的话".into(),
         ],
-        fallback_asset: "octopus".into(),
+        fallback_asset: species.into(),
         rive_asset: None,
         state_machine: None,
+        updated_at: timestamp_now(),
+    };
+    (pet_id, extension)
+}
+
+pub(super) fn pet_context_key(owner_user_id: &str, project_id: Option<&str>) -> String {
+    match project_id {
+        Some(project_id) if !project_id.trim().is_empty() => {
+            format!("{owner_user_id}::{PET_CONTEXT_SCOPE_PROJECT}::{project_id}")
+        }
+        _ => format!("{owner_user_id}::{PET_CONTEXT_SCOPE_HOME}"),
     }
 }
 
-pub(super) fn default_workspace_pet_presence() -> PetPresenceState {
+pub(super) fn default_pet_profile(
+    pet_id: &str,
+    owner_user_id: &str,
+    extension: &PetAgentExtensionRecord,
+) -> PetProfile {
+    PetProfile {
+        id: pet_id.into(),
+        species: extension.species.clone(),
+        display_name: extension.display_name.clone(),
+        owner_user_id: owner_user_id.into(),
+        avatar_label: extension.avatar_label.clone(),
+        summary: extension.summary.clone(),
+        greeting: extension.greeting.clone(),
+        mood: extension.mood.clone(),
+        favorite_snack: extension.favorite_snack.clone(),
+        prompt_hints: extension.prompt_hints.clone(),
+        fallback_asset: extension.fallback_asset.clone(),
+        rive_asset: extension.rive_asset.clone(),
+        state_machine: extension.state_machine.clone(),
+    }
+}
+
+pub(super) fn default_workspace_pet_presence_for(pet_id: &str) -> PetPresenceState {
     PetPresenceState {
-        pet_id: "pet-octopus".into(),
+        pet_id: pet_id.into(),
         is_visible: true,
         chat_open: false,
         motion_state: "idle".into(),
@@ -3161,48 +3373,36 @@ pub(super) fn load_runtime_messages_for_conversation(
 
 pub(super) fn row_to_pet_presence(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetPresenceState> {
     Ok(PetPresenceState {
-        pet_id: row.get(2)?,
-        is_visible: row.get::<_, i64>(3)? != 0,
-        chat_open: row.get::<_, i64>(4)? != 0,
-        motion_state: row.get(5)?,
-        unread_count: row.get::<_, i64>(6)? as u64,
-        last_interaction_at: row.get::<_, i64>(7)? as u64,
+        pet_id: row.get(4)?,
+        is_visible: row.get::<_, i64>(5)? != 0,
+        chat_open: row.get::<_, i64>(6)? != 0,
+        motion_state: row.get(7)?,
+        unread_count: row.get::<_, i64>(8)? as u64,
+        last_interaction_at: row.get::<_, i64>(9)? as u64,
         position: PetPosition {
-            x: row.get(8)?,
-            y: row.get(9)?,
+            x: row.get(10)?,
+            y: row.get(11)?,
         },
     })
 }
 
-pub(super) fn load_pet_presence(
+pub(super) fn load_pet_presences(
     connection: &Connection,
-    scope_key: &str,
-) -> Result<Option<PetPresenceState>, AppError> {
-    connection
-        .query_row(
-            "SELECT scope_key, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y FROM pet_presence WHERE scope_key = ?1",
-            params![scope_key],
-            row_to_pet_presence,
-        )
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
-pub(super) fn load_all_project_pet_presences(
-    connection: &Connection,
-) -> Result<Vec<(String, PetPresenceState)>, AppError> {
+) -> Result<HashMap<String, PetPresenceState>, AppError> {
     let mut stmt = connection
-        .prepare("SELECT scope_key, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y FROM pet_presence WHERE project_id IS NOT NULL")
+        .prepare(
+            "SELECT scope_key, owner_user_id, context_scope, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y FROM pet_presence",
+        )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
-                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row.get::<_, String>(0)?,
                 row_to_pet_presence(row)?,
             ))
         })
         .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
+    rows.collect::<Result<HashMap<_, _>, _>>()
         .map_err(|error| AppError::database(error.to_string()))
 }
 
@@ -3210,45 +3410,168 @@ pub(super) fn row_to_pet_binding(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<PetConversationBinding> {
     Ok(PetConversationBinding {
-        pet_id: row.get(2)?,
-        workspace_id: row.get(3)?,
-        project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-        conversation_id: row.get(4)?,
-        session_id: row.get(5)?,
-        updated_at: row.get::<_, i64>(6)? as u64,
+        pet_id: row.get(4)?,
+        workspace_id: row.get(5)?,
+        owner_user_id: row
+            .get::<_, Option<String>>(1)?
+            .unwrap_or_else(|| BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID.into()),
+        context_scope: row
+            .get::<_, Option<String>>(2)?
+            .unwrap_or_else(|| PET_CONTEXT_SCOPE_HOME.into()),
+        project_id: row.get(3)?,
+        conversation_id: row.get(6)?,
+        session_id: row.get(7)?,
+        updated_at: row.get::<_, i64>(8)? as u64,
     })
 }
 
-pub(super) fn load_pet_binding(
+pub(super) fn load_pet_bindings(
     connection: &Connection,
-    scope_key: &str,
-) -> Result<Option<PetConversationBinding>, AppError> {
-    connection
-        .query_row(
-            "SELECT scope_key, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at FROM pet_conversation_bindings WHERE scope_key = ?1",
-            params![scope_key],
-            row_to_pet_binding,
-        )
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
-pub(super) fn load_all_project_pet_bindings(
-    connection: &Connection,
-) -> Result<Vec<(String, PetConversationBinding)>, AppError> {
+) -> Result<HashMap<String, PetConversationBinding>, AppError> {
     let mut stmt = connection
-        .prepare("SELECT scope_key, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at FROM pet_conversation_bindings WHERE project_id IS NOT NULL")
+        .prepare(
+            "SELECT scope_key, owner_user_id, context_scope, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at FROM pet_conversation_bindings",
+        )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
-                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row.get::<_, String>(0)?,
                 row_to_pet_binding(row)?,
             ))
         })
         .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
+    rows.collect::<Result<HashMap<_, _>, _>>()
         .map_err(|error| AppError::database(error.to_string()))
+}
+
+pub(super) fn load_pet_agent_extensions(
+    connection: &Connection,
+) -> Result<HashMap<String, PetAgentExtensionRecord>, AppError> {
+    let mut stmt = connection
+        .prepare(
+            "SELECT pet_id, workspace_id, owner_user_id, species, display_name, avatar_label,
+                    summary, greeting, mood, favorite_snack, prompt_hints_json, fallback_asset,
+                    rive_asset, state_machine, updated_at
+             FROM pet_agent_extensions",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let prompt_hints_raw: String = row.get(10)?;
+            Ok((
+                row.get::<_, String>(2)?,
+                PetAgentExtensionRecord {
+                    pet_id: row.get(0)?,
+                    workspace_id: row.get(1)?,
+                    owner_user_id: row.get(2)?,
+                    species: row.get(3)?,
+                    display_name: row.get(4)?,
+                    avatar_label: row.get(5)?,
+                    summary: row.get(6)?,
+                    greeting: row.get(7)?,
+                    mood: row.get(8)?,
+                    favorite_snack: row.get(9)?,
+                    prompt_hints: serde_json::from_str(&prompt_hints_raw).unwrap_or_default(),
+                    fallback_asset: row.get(11)?,
+                    rive_asset: row.get(12)?,
+                    state_machine: row.get(13)?,
+                    updated_at: row.get::<_, i64>(14)? as u64,
+                },
+            ))
+        })
+        .map_err(|error| AppError::database(error.to_string()))?;
+    rows.collect::<Result<HashMap<_, _>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+pub(super) fn ensure_personal_pet_for_user(
+    connection: &Connection,
+    workspace_id: &str,
+    owner_user_id: &str,
+) -> Result<(), AppError> {
+    let existing_pet_id: Option<String> = connection
+        .query_row(
+            "SELECT pet_id FROM pet_agent_extensions WHERE workspace_id = ?1 AND owner_user_id = ?2",
+            params![workspace_id, owner_user_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| AppError::database(error.to_string()))?;
+    if existing_pet_id.is_some() {
+        return Ok(());
+    }
+
+    let (pet_id, extension) = personal_pet_defaults(workspace_id, owner_user_id);
+    let pet_record = AgentRecord {
+        id: pet_id.clone(),
+        workspace_id: workspace_id.into(),
+        project_id: None,
+        scope: "personal".into(),
+        owner_user_id: Some(owner_user_id.into()),
+        asset_role: PERSONAL_PET_ASSET_ROLE.into(),
+        name: extension.display_name.clone(),
+        avatar_path: None,
+        avatar: None,
+        personality: extension.summary.clone(),
+        tags: vec!["pet".into(), extension.species.clone()],
+        prompt: format!(
+            "{} 你是 {} 的个人宠物伙伴，保持亲切、轻量、鼓励式的交流。",
+            extension.greeting, owner_user_id
+        ),
+        builtin_tool_keys: Vec::new(),
+        skill_ids: Vec::new(),
+        mcp_server_names: Vec::new(),
+        task_domains: normalize_task_domains(Vec::new()),
+        manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+        default_model_strategy: default_model_strategy(),
+        capability_policy: capability_policy_from_sources(&[], &[], &[]),
+        permission_envelope: default_permission_envelope(),
+        memory_policy: default_agent_memory_policy(),
+        delegation_policy: default_agent_delegation_policy(),
+        approval_preference: default_approval_preference(),
+        output_contract: default_output_contract(),
+        shared_capability_policy: default_agent_shared_capability_policy(),
+        integration_source: None,
+        trust_metadata: default_asset_trust_metadata(),
+        dependency_resolution: Vec::new(),
+        import_metadata: default_asset_import_metadata(),
+        description: extension.summary.clone(),
+        status: "active".into(),
+        updated_at: extension.updated_at,
+    };
+    write_agent_record(connection, &pet_record, false)?;
+    connection
+        .execute(
+            "INSERT INTO pet_agent_extensions (
+                pet_id, workspace_id, owner_user_id, species, display_name, avatar_label,
+                summary, greeting, mood, favorite_snack, prompt_hints_json, fallback_asset,
+                rive_asset, state_machine, updated_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6,
+                ?7, ?8, ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15
+            )",
+            params![
+                extension.pet_id,
+                extension.workspace_id,
+                extension.owner_user_id,
+                extension.species,
+                extension.display_name,
+                extension.avatar_label,
+                extension.summary,
+                extension.greeting,
+                extension.mood,
+                extension.favorite_snack,
+                json_string(&extension.prompt_hints)?,
+                extension.fallback_asset,
+                extension.rive_asset,
+                extension.state_machine,
+                extension.updated_at as i64,
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
 }
 
 pub(super) fn load_resources(
@@ -3377,7 +3700,7 @@ pub(super) fn load_agents(connection: &Connection) -> Result<Vec<AgentRecord>, A
     let mut stmt = connection
         .prepare(
             "SELECT
-                id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
+                id, workspace_id, project_id, scope, owner_user_id, asset_role, name, avatar_path, personality, tags, prompt,
                 builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
                 default_model_strategy_json, capability_policy_json, permission_envelope_json,
                 memory_policy_json, delegation_policy_json, approval_preference_json,
@@ -3389,48 +3712,52 @@ pub(super) fn load_agents(connection: &Connection) -> Result<Vec<AgentRecord>, A
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let avatar_path: Option<String> = row.get(5)?;
+            let avatar_path: Option<String> = row.get(7)?;
             let avatar = agent_avatar(&paths, avatar_path.as_deref());
-            let tags_raw: String = row.get(7)?;
-            let builtin_tool_keys_raw: String = row.get(9)?;
-            let skill_ids_raw: String = row.get(10)?;
-            let mcp_server_names_raw: String = row.get(11)?;
-            let task_domains_raw: String = row.get(12)?;
+            let tags_raw: String = row.get(9)?;
+            let builtin_tool_keys_raw: String = row.get(11)?;
+            let skill_ids_raw: String = row.get(12)?;
+            let mcp_server_names_raw: String = row.get(13)?;
+            let task_domains_raw: String = row.get(14)?;
             let builtin_tool_keys: Vec<String> =
                 serde_json::from_str(&builtin_tool_keys_raw).unwrap_or_default();
             let skill_ids: Vec<String> = serde_json::from_str(&skill_ids_raw).unwrap_or_default();
             let mcp_server_names: Vec<String> =
                 serde_json::from_str(&mcp_server_names_raw).unwrap_or_default();
-            let default_model_strategy_raw: String = row.get(14)?;
-            let capability_policy_raw: String = row.get(15)?;
-            let permission_envelope_raw: String = row.get(16)?;
-            let memory_policy_raw: String = row.get(17)?;
-            let delegation_policy_raw: String = row.get(18)?;
-            let approval_preference_raw: String = row.get(19)?;
-            let output_contract_raw: String = row.get(20)?;
-            let shared_capability_policy_raw: String = row.get(21)?;
-            let integration_source_raw: Option<String> = row.get(22)?;
-            let trust_metadata_raw: String = row.get(23)?;
-            let dependency_resolution_raw: String = row.get(24)?;
-            let import_metadata_raw: String = row.get(25)?;
+            let default_model_strategy_raw: String = row.get(16)?;
+            let capability_policy_raw: String = row.get(17)?;
+            let permission_envelope_raw: String = row.get(18)?;
+            let memory_policy_raw: String = row.get(19)?;
+            let delegation_policy_raw: String = row.get(20)?;
+            let approval_preference_raw: String = row.get(21)?;
+            let output_contract_raw: String = row.get(22)?;
+            let shared_capability_policy_raw: String = row.get(23)?;
+            let integration_source_raw: Option<String> = row.get(24)?;
+            let trust_metadata_raw: String = row.get(25)?;
+            let dependency_resolution_raw: String = row.get(26)?;
+            let import_metadata_raw: String = row.get(27)?;
             Ok(AgentRecord {
                 id: row.get(0)?,
                 workspace_id: row.get(1)?,
                 project_id: row.get(2)?,
                 scope: row.get(3)?,
-                name: row.get(4)?,
+                owner_user_id: row.get(4)?,
+                asset_role: row
+                    .get::<_, Option<String>>(5)?
+                    .unwrap_or_else(octopus_core::default_agent_asset_role),
+                name: row.get(6)?,
                 avatar_path,
                 avatar,
-                personality: row.get(6)?,
+                personality: row.get(8)?,
                 tags: serde_json::from_str(&tags_raw).unwrap_or_default(),
-                prompt: row.get(8)?,
+                prompt: row.get(10)?,
                 builtin_tool_keys: builtin_tool_keys.clone(),
                 skill_ids: skill_ids.clone(),
                 mcp_server_names: mcp_server_names.clone(),
                 task_domains: parse_json_or_default(&task_domains_raw, || {
                     normalize_task_domains(Vec::new())
                 }),
-                manifest_revision: row.get(13)?,
+                manifest_revision: row.get(15)?,
                 default_model_strategy: parse_json_or_default(
                     &default_model_strategy_raw,
                     default_model_strategy,
@@ -3478,9 +3805,9 @@ pub(super) fn load_agents(connection: &Connection) -> Result<Vec<AgentRecord>, A
                     &import_metadata_raw,
                     default_asset_import_metadata,
                 ),
-                description: row.get(26)?,
-                status: row.get(27)?,
-                updated_at: row.get::<_, i64>(28)? as u64,
+                description: row.get(28)?,
+                status: row.get(29)?,
+                updated_at: row.get::<_, i64>(30)? as u64,
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -4031,6 +4358,8 @@ pub(super) fn default_agent_records() -> Vec<AgentRecord> {
             workspace_id: DEFAULT_WORKSPACE_ID.into(),
             project_id: None,
             scope: "workspace".into(),
+            owner_user_id: None,
+            asset_role: default_agent_asset_role(),
             name: "Workspace Orchestrator".into(),
             avatar_path: None,
             avatar: None,
@@ -4063,6 +4392,8 @@ pub(super) fn default_agent_records() -> Vec<AgentRecord> {
             workspace_id: DEFAULT_WORKSPACE_ID.into(),
             project_id: Some(DEFAULT_PROJECT_ID.into()),
             scope: "project".into(),
+            owner_user_id: None,
+            asset_role: default_agent_asset_role(),
             name: "Project Delivery Agent".into(),
             avatar_path: None,
             avatar: None,

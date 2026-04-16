@@ -137,26 +137,34 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         project_id: &str,
     ) -> Result<Vec<KnowledgeRecord>, AppError>;
-    async fn get_workspace_pet_snapshot(&self) -> Result<PetWorkspaceSnapshot, AppError>;
+    async fn get_workspace_pet_snapshot(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<PetWorkspaceSnapshot, AppError>;
     async fn get_project_pet_snapshot(
         &self,
+        owner_user_id: &str,
         project_id: &str,
     ) -> Result<PetWorkspaceSnapshot, AppError>;
     async fn save_workspace_pet_presence(
         &self,
+        owner_user_id: &str,
         input: SavePetPresenceInput,
     ) -> Result<PetPresenceState, AppError>;
     async fn save_project_pet_presence(
         &self,
+        owner_user_id: &str,
         project_id: &str,
         input: SavePetPresenceInput,
     ) -> Result<PetPresenceState, AppError>;
     async fn bind_workspace_pet_conversation(
         &self,
+        owner_user_id: &str,
         input: BindPetConversationInput,
     ) -> Result<PetConversationBinding, AppError>;
     async fn bind_project_pet_conversation(
         &self,
+        owner_user_id: &str,
         project_id: &str,
         input: BindPetConversationInput,
     ) -> Result<PetConversationBinding, AppError>;

@@ -1,11 +1,11 @@
 use octopus_core::AppError;
 #[cfg(test)]
 use octopus_core::{
-    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
-    default_agent_shared_capability_policy, default_approval_preference,
-    default_asset_import_metadata, default_asset_trust_metadata, default_model_strategy,
-    default_output_contract, default_permission_envelope, normalize_task_domains, timestamp_now,
-    AgentRecord, ASSET_MANIFEST_REVISION_V2,
+    capability_policy_from_sources, default_agent_asset_role, default_agent_delegation_policy,
+    default_agent_memory_policy, default_agent_shared_capability_policy,
+    default_approval_preference, default_asset_import_metadata, default_asset_trust_metadata,
+    default_model_strategy, default_output_contract, default_permission_envelope,
+    normalize_task_domains, timestamp_now, AgentRecord, ASSET_MANIFEST_REVISION_V2,
 };
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
@@ -89,6 +89,8 @@ pub(crate) fn build_imported_agent_record(
         workspace_id: workspace_id.to_string(),
         project_id: None,
         scope: "workspace".into(),
+        owner_user_id: None,
+        asset_role: default_agent_asset_role(),
         name: name.trim().to_string(),
         avatar_path: None,
         avatar: None,

@@ -1,5 +1,5 @@
 use super::*;
-use octopus_core::{AuthorizationRequest, DataPolicyRecord};
+use octopus_core::{default_agent_asset_role, AuthorizationRequest, DataPolicyRecord};
 use std::collections::BTreeSet;
 
 const BOOTSTRAP_OWNER_PLACEHOLDER_USER_ID: &str = "user-owner";
@@ -93,24 +93,66 @@ impl InfraWorkspaceService {
         }
     }
 
-    pub(super) fn pet_scope_key(project_id: Option<&str>) -> String {
-        project_id.unwrap_or("workspace").to_string()
+    fn ensure_personal_pet_loaded(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<PetAgentExtensionRecord, AppError> {
+        if let Some(extension) = self
+            .state
+            .pet_extensions
+            .lock()
+            .map_err(|_| AppError::runtime("pet extensions mutex poisoned"))?
+            .get(owner_user_id)
+            .cloned()
+        {
+            return Ok(extension);
+        }
+
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        ensure_personal_pet_for_user(&connection, &workspace_id, owner_user_id)?;
+        let agents = load_agents(&connection)?;
+        let pet_extensions = load_pet_agent_extensions(&connection)?;
+        let extension = pet_extensions
+            .get(owner_user_id)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("personal pet"))?;
+
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = agents;
+        *self
+            .state
+            .pet_extensions
+            .lock()
+            .map_err(|_| AppError::runtime("pet extensions mutex poisoned"))? = pet_extensions;
+        Ok(extension)
     }
 
-    pub(super) fn workspace_pet_snapshot(&self) -> Result<PetWorkspaceSnapshot, AppError> {
-        let profile = default_pet_profile();
+    pub(super) fn workspace_pet_snapshot(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<PetWorkspaceSnapshot, AppError> {
+        let extension = self.ensure_personal_pet_loaded(owner_user_id)?;
+        let profile = default_pet_profile(&extension.pet_id, owner_user_id, &extension);
+        let context_key = pet_context_key(owner_user_id, None);
         let presence = self
             .state
-            .workspace_pet_presence
+            .pet_presences
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet presence mutex poisoned"))?
-            .clone();
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .get(&context_key)
+            .cloned()
+            .unwrap_or_else(|| default_workspace_pet_presence_for(&profile.id));
         let binding = self
             .state
-            .workspace_pet_binding
+            .pet_bindings
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet binding mutex poisoned"))?
-            .clone();
+            .map_err(|_| AppError::runtime("pet bindings mutex poisoned"))?
+            .get(&context_key)
+            .cloned();
         let messages = if let Some(binding) = binding.as_ref() {
             load_runtime_messages_for_conversation(
                 &self.state.open_db()?,
@@ -121,6 +163,10 @@ impl InfraWorkspaceService {
             vec![]
         };
         Ok(PetWorkspaceSnapshot {
+            workspace_id: self.state.workspace_id()?,
+            owner_user_id: owner_user_id.into(),
+            context_scope: "home".into(),
+            project_id: None,
             profile,
             presence,
             binding,
@@ -130,27 +176,28 @@ impl InfraWorkspaceService {
 
     pub(super) fn project_pet_snapshot(
         &self,
+        owner_user_id: &str,
         project_id: &str,
     ) -> Result<PetWorkspaceSnapshot, AppError> {
         self.ensure_project_exists(project_id)?;
-        let profile = default_pet_profile();
+        let extension = self.ensure_personal_pet_loaded(owner_user_id)?;
+        let profile = default_pet_profile(&extension.pet_id, owner_user_id, &extension);
+        let context_key = pet_context_key(owner_user_id, Some(project_id));
         let presence = self
             .state
-            .project_pet_presences
+            .pet_presences
             .lock()
-            .map_err(|_| AppError::runtime("project pet presences mutex poisoned"))?
-            .iter()
-            .find(|(id, _)| id == project_id)
-            .map(|(_, presence)| presence.clone())
-            .unwrap_or_else(default_workspace_pet_presence);
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))?
+            .get(&context_key)
+            .cloned()
+            .unwrap_or_else(|| default_workspace_pet_presence_for(&profile.id));
         let binding = self
             .state
-            .project_pet_bindings
+            .pet_bindings
             .lock()
-            .map_err(|_| AppError::runtime("project pet bindings mutex poisoned"))?
-            .iter()
-            .find(|(id, _)| id == project_id)
-            .map(|(_, binding)| binding.clone());
+            .map_err(|_| AppError::runtime("pet bindings mutex poisoned"))?
+            .get(&context_key)
+            .cloned();
         let messages = if let Some(binding) = binding.as_ref() {
             load_runtime_messages_for_conversation(
                 &self.state.open_db()?,
@@ -161,6 +208,10 @@ impl InfraWorkspaceService {
             vec![]
         };
         Ok(PetWorkspaceSnapshot {
+            workspace_id: self.state.workspace_id()?,
+            owner_user_id: owner_user_id.into(),
+            context_scope: "project".into(),
+            project_id: Some(project_id.into()),
             profile,
             presence,
             binding,
@@ -170,15 +221,19 @@ impl InfraWorkspaceService {
 
     pub(super) fn persist_pet_presence(
         &self,
+        owner_user_id: &str,
         project_id: Option<&str>,
         presence: &PetPresenceState,
     ) -> Result<(), AppError> {
-        let scope_key = Self::pet_scope_key(project_id);
+        let scope_key = pet_context_key(owner_user_id, project_id);
+        let context_scope = if project_id.is_some() { "project" } else { "home" };
         self.state.open_db()?.execute(
-            "INSERT OR REPLACE INTO pet_presence (scope_key, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT OR REPLACE INTO pet_presence (scope_key, owner_user_id, context_scope, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 scope_key,
+                owner_user_id,
+                context_scope,
                 project_id,
                 presence.pet_id,
                 if presence.is_visible { 1 } else { 0 },
@@ -195,15 +250,19 @@ impl InfraWorkspaceService {
 
     pub(super) fn persist_pet_binding(
         &self,
+        owner_user_id: &str,
         project_id: Option<&str>,
         binding: &PetConversationBinding,
     ) -> Result<(), AppError> {
-        let scope_key = Self::pet_scope_key(project_id);
+        let scope_key = pet_context_key(owner_user_id, project_id);
+        let context_scope = if project_id.is_some() { "project" } else { "home" };
         self.state.open_db()?.execute(
-            "INSERT OR REPLACE INTO pet_conversation_bindings (scope_key, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR REPLACE INTO pet_conversation_bindings (scope_key, owner_user_id, context_scope, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 scope_key,
+                owner_user_id,
+                context_scope,
                 project_id,
                 binding.pet_id,
                 binding.workspace_id,
@@ -369,6 +428,10 @@ impl InfraWorkspaceService {
             },
             project_id,
             scope,
+            owner_user_id: current.and_then(|record| record.owner_user_id.clone()),
+            asset_role: current
+                .map(|record| record.asset_role.clone())
+                .unwrap_or_else(default_agent_asset_role),
             name: name.trim().into(),
             avatar_path: next_avatar_path,
             avatar,
@@ -854,6 +917,18 @@ impl AuthService for InfraAuthService {
             .lock()
             .map_err(|_| AppError::runtime("users mutex poisoned"))?
             .push(stored_user.clone());
+        ensure_personal_pet_for_user(&db, &workspace.id, &user_id)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = load_agents(&db)?;
+        *self
+            .state
+            .pet_extensions
+            .lock()
+            .map_err(|_| AppError::runtime("pet extensions mutex poisoned"))? =
+            load_pet_agent_extensions(&db)?;
 
         let session = self.persist_session(&stored_user, request.client_app_id)?;
 

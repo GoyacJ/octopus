@@ -7,6 +7,10 @@ use crate::{
     SharedCapabilityPolicy, SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
 };
 
+pub fn default_agent_asset_role() -> String {
+    "default".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRecord {
@@ -14,6 +18,10 @@ pub struct AgentRecord {
     pub workspace_id: String,
     pub project_id: Option<String>,
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_user_id: Option<String>,
+    #[serde(default = "default_agent_asset_role")]
+    pub asset_role: String,
     pub name: String,
     pub avatar_path: Option<String>,
     pub avatar: Option<String>,

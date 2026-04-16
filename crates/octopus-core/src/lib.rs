@@ -775,12 +775,25 @@ pub struct SavePetPresenceInput {
     pub position: Option<PetPosition>,
 }
 
+fn default_pet_context_scope() -> String {
+    "home".into()
+}
+
+fn default_pet_owner_user_id() -> String {
+    "user-owner".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PetConversationBinding {
     pub pet_id: String,
     pub workspace_id: String,
-    pub project_id: String,
+    #[serde(default = "default_pet_owner_user_id")]
+    pub owner_user_id: String,
+    #[serde(default = "default_pet_context_scope")]
+    pub context_scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
     pub conversation_id: String,
     pub session_id: Option<String>,
     pub updated_at: u64,
@@ -797,10 +810,32 @@ pub struct BindPetConversationInput {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PetWorkspaceSnapshot {
+    pub workspace_id: String,
+    pub owner_user_id: String,
+    pub context_scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
     pub profile: PetProfile,
     pub presence: PetPresenceState,
     pub binding: Option<PetConversationBinding>,
     pub messages: Vec<PetMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDashboardSummary {
+    pub pet_id: String,
+    pub workspace_id: String,
+    pub owner_user_id: String,
+    pub species: String,
+    pub mood: String,
+    pub active_conversation_count: u64,
+    pub knowledge_count: u64,
+    pub memory_count: u64,
+    pub reminder_count: u64,
+    pub resource_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_interaction_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

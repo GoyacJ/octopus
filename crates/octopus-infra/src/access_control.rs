@@ -696,6 +696,18 @@ impl AccessControlService for InfraAccessControlService {
                 now as i64,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
+        ensure_personal_pet_for_user(&connection, &self.state.workspace_id()?, &user_id)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = load_agents(&connection)?;
+        *self
+            .state
+            .pet_extensions
+            .lock()
+            .map_err(|_| AppError::runtime("pet extensions mutex poisoned"))? =
+            load_pet_agent_extensions(&connection)?;
 
         users.push(stored_user);
         let created = users

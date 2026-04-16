@@ -11,14 +11,15 @@ use crate::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use include_dir::{Dir, DirEntry};
 use octopus_core::{
-    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
-    default_agent_shared_capability_policy, default_approval_preference,
-    default_artifact_handoff_policy, default_asset_import_metadata, default_asset_trust_metadata,
-    default_mailbox_policy, default_output_contract, default_permission_envelope,
-    default_shared_memory_policy, default_team_delegation_policy, default_team_memory_policy,
-    default_team_shared_capability_policy, normalize_task_domains, team_topology_from_refs,
-    workflow_affordance_from_task_domains, AgentRecord, AppError, TeamRecord,
-    WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
+    capability_policy_from_sources, default_agent_asset_role, default_agent_delegation_policy,
+    default_agent_memory_policy, default_agent_shared_capability_policy,
+    default_approval_preference, default_artifact_handoff_policy, default_asset_import_metadata,
+    default_asset_trust_metadata, default_mailbox_policy, default_output_contract,
+    default_permission_envelope, default_shared_memory_policy, default_team_delegation_policy,
+    default_team_memory_policy, default_team_shared_capability_policy,
+    normalize_task_domains, team_topology_from_refs, workflow_affordance_from_task_domains,
+    AgentRecord, AppError, TeamRecord, WorkspaceDirectoryUploadEntry,
+    ASSET_MANIFEST_REVISION_V2,
 };
 
 static BUILTIN_BUNDLE_ASSET_DIR: include_dir::Dir<'_> =
@@ -289,6 +290,8 @@ fn build_builtin_agent_record(
         workspace_id: workspace_id.to_string(),
         project_id: None,
         scope: "workspace".into(),
+        owner_user_id: None,
+        asset_role: default_agent_asset_role(),
         name: source.name,
         avatar_path: None,
         avatar: source.avatar_data_url,

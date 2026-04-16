@@ -206,6 +206,10 @@ fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourc
     }
 }
 
+fn agent_visible_in_generic_catalog(record: &AgentRecord) -> bool {
+    record.asset_role != "pet"
+}
+
 async fn ensure_visible_resource(
     state: &ServerState,
     headers: &HeaderMap,
@@ -269,8 +273,8 @@ async fn agent_authorization_request(
             project_id: record.project_id.clone(),
             tags: record.tags.clone(),
             classification: "internal".into(),
-            owner_subject_type: None,
-            owner_subject_id: None,
+            owner_subject_type: record.owner_user_id.as_ref().map(|_| "user".into()),
+            owner_subject_id: record.owner_user_id.clone(),
         },
         protected_resource_metadata(state, "agent", &record.id)
             .await?
@@ -755,8 +759,9 @@ pub(crate) async fn project_dashboard(
     let agents = all_agents
         .into_iter()
         .filter(|record| {
-            record.project_id.as_deref() == Some(project_id.as_str())
-                || project_agent_ids.contains(&record.id)
+            agent_visible_in_generic_catalog(record)
+                && (record.project_id.as_deref() == Some(project_id.as_str())
+                    || project_agent_ids.contains(&record.id))
         })
         .collect::<Vec<_>>();
     let team_links = state
@@ -1429,12 +1434,13 @@ pub(crate) async fn workspace_pet_snapshot(
     State(state): State<ServerState>,
     headers: HeaderMap,
 ) -> Result<Json<PetWorkspaceSnapshot>, ApiError> {
-    ensure_capability_session(&state, &headers, "pet.view", None, Some("pet"), None).await?;
+    let session =
+        ensure_capability_session(&state, &headers, "pet.view", None, Some("pet"), None).await?;
     Ok(Json(
         state
             .services
             .workspace
-            .get_workspace_pet_snapshot()
+            .get_workspace_pet_snapshot(&session.user_id)
             .await?,
     ))
 }
@@ -1444,7 +1450,7 @@ pub(crate) async fn project_pet_snapshot(
     headers: HeaderMap,
     Path(project_id): Path<String>,
 ) -> Result<Json<PetWorkspaceSnapshot>, ApiError> {
-    ensure_capability_session(
+    let session = ensure_capability_session(
         &state,
         &headers,
         "pet.view",
@@ -1457,7 +1463,7 @@ pub(crate) async fn project_pet_snapshot(
         state
             .services
             .workspace
-            .get_project_pet_snapshot(&project_id)
+            .get_project_pet_snapshot(&session.user_id, &project_id)
             .await?,
     ))
 }
@@ -1467,12 +1473,14 @@ pub(crate) async fn save_workspace_pet_presence(
     headers: HeaderMap,
     Json(input): Json<SavePetPresenceInput>,
 ) -> Result<Json<PetPresenceState>, ApiError> {
-    ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None).await?;
+    let session =
+        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None)
+            .await?;
     Ok(Json(
         state
             .services
             .workspace
-            .save_workspace_pet_presence(input)
+            .save_workspace_pet_presence(&session.user_id, input)
             .await?,
     ))
 }
@@ -1483,7 +1491,7 @@ pub(crate) async fn save_project_pet_presence(
     Path(project_id): Path<String>,
     Json(input): Json<SavePetPresenceInput>,
 ) -> Result<Json<PetPresenceState>, ApiError> {
-    ensure_capability_session(
+    let session = ensure_capability_session(
         &state,
         &headers,
         "pet.manage",
@@ -1496,7 +1504,7 @@ pub(crate) async fn save_project_pet_presence(
         state
             .services
             .workspace
-            .save_project_pet_presence(&project_id, input)
+            .save_project_pet_presence(&session.user_id, &project_id, input)
             .await?,
     ))
 }
@@ -1506,12 +1514,14 @@ pub(crate) async fn bind_workspace_pet_conversation(
     headers: HeaderMap,
     Json(input): Json<octopus_core::BindPetConversationInput>,
 ) -> Result<Json<PetConversationBinding>, ApiError> {
-    ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None).await?;
+    let session =
+        ensure_capability_session(&state, &headers, "pet.manage", None, Some("pet"), None)
+            .await?;
     Ok(Json(
         state
             .services
             .workspace
-            .bind_workspace_pet_conversation(input)
+            .bind_workspace_pet_conversation(&session.user_id, input)
             .await?,
     ))
 }
@@ -1522,7 +1532,7 @@ pub(crate) async fn bind_project_pet_conversation(
     Path(project_id): Path<String>,
     Json(input): Json<octopus_core::BindPetConversationInput>,
 ) -> Result<Json<PetConversationBinding>, ApiError> {
-    ensure_capability_session(
+    let session = ensure_capability_session(
         &state,
         &headers,
         "pet.manage",
@@ -1535,7 +1545,7 @@ pub(crate) async fn bind_project_pet_conversation(
         state
             .services
             .workspace
-            .bind_project_pet_conversation(&project_id, input)
+            .bind_project_pet_conversation(&session.user_id, &project_id, input)
             .await?,
     ))
 }
@@ -1564,6 +1574,9 @@ pub(crate) async fn list_agents(
     let agents = state.services.workspace.list_agents().await?;
     let mut visible = Vec::new();
     for record in agents {
+        if !agent_visible_in_generic_catalog(&record) {
+            continue;
+        }
         if authorize_request(
             &state,
             &session,
@@ -4106,6 +4119,47 @@ mod tests {
         }
     }
 
+    fn sample_agent(asset_role: &str, owner_user_id: Option<&str>) -> AgentRecord {
+        AgentRecord {
+            id: format!("agent-{asset_role}"),
+            workspace_id: "ws-local".into(),
+            project_id: None,
+            scope: if asset_role == "pet" {
+                "personal".into()
+            } else {
+                "workspace".into()
+            },
+            owner_user_id: owner_user_id.map(str::to_string),
+            asset_role: asset_role.into(),
+            name: format!("{asset_role} agent"),
+            avatar_path: None,
+            avatar: None,
+            personality: "Helpful".into(),
+            tags: Vec::new(),
+            prompt: "Assist the workspace.".into(),
+            builtin_tool_keys: Vec::new(),
+            skill_ids: Vec::new(),
+            mcp_server_names: Vec::new(),
+            task_domains: Vec::new(),
+            manifest_revision: "asset-manifest/v2".into(),
+            default_model_strategy: octopus_core::default_model_strategy(),
+            capability_policy: octopus_core::capability_policy_from_sources(&[], &[], &[]),
+            permission_envelope: octopus_core::default_permission_envelope(),
+            memory_policy: octopus_core::default_agent_memory_policy(),
+            delegation_policy: octopus_core::default_agent_delegation_policy(),
+            approval_preference: octopus_core::default_approval_preference(),
+            output_contract: octopus_core::default_output_contract(),
+            shared_capability_policy: octopus_core::default_agent_shared_capability_policy(),
+            integration_source: None,
+            trust_metadata: octopus_core::default_asset_trust_metadata(),
+            dependency_resolution: Vec::new(),
+            import_metadata: octopus_core::default_asset_import_metadata(),
+            description: "Test agent".into(),
+            status: "active".into(),
+            updated_at: 1,
+        }
+    }
+
     fn sample_runtime_run_snapshot() -> octopus_core::RuntimeRunSnapshot {
         octopus_core::RuntimeRunSnapshot {
             id: "run-1".into(),
@@ -4381,6 +4435,20 @@ mod tests {
             assignments: None,
         })
         .is_err());
+    }
+
+    #[test]
+    fn generic_agent_catalog_filter_excludes_pet_records() {
+        let visible = vec![
+            sample_agent("default", None),
+            sample_agent("pet", Some("user-owner")),
+        ]
+        .into_iter()
+        .filter(agent_visible_in_generic_catalog)
+        .collect::<Vec<_>>();
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].asset_role, "default");
     }
 
     fn sample_runtime_event() -> octopus_core::RuntimeEventEnvelope {

@@ -427,6 +427,8 @@ mod tests {
                 workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
                 project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
                 scope: "project".into(),
+                owner_user_id: None,
+                asset_role: octopus_core::default_agent_asset_role(),
                 name: "Agent".into(),
                 avatar_path: None,
                 avatar: None,

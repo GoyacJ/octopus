@@ -272,6 +272,8 @@ fn fallback_builtin_agent_record(agent_id: &str) -> Option<AgentRecord> {
             workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
             project_id: None,
             scope: "workspace".into(),
+            owner_user_id: None,
+            asset_role: octopus_core::default_agent_asset_role(),
             name: "Workspace Orchestrator".into(),
             avatar_path: None,
             avatar: None,
@@ -307,6 +309,8 @@ fn fallback_builtin_agent_record(agent_id: &str) -> Option<AgentRecord> {
             workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
             project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
             scope: "project".into(),
+            owner_user_id: None,
+            asset_role: octopus_core::default_agent_asset_role(),
             name: "Project Delivery Agent".into(),
             avatar_path: None,
             avatar: None,
@@ -457,7 +461,7 @@ impl RuntimeAdapter {
         connection
             .query_row(
                 "SELECT
-                    id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
+                    id, workspace_id, project_id, scope, owner_user_id, asset_role, name, avatar_path, personality, tags, prompt,
                     builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
                     default_model_strategy_json, capability_policy_json, permission_envelope_json,
                     memory_policy_json, delegation_policy_json, approval_preference_json,
@@ -466,19 +470,19 @@ impl RuntimeAdapter {
                  WHERE id = ?1",
                 [agent_id],
                 |row| {
-                    let tags_raw: String = row.get(7)?;
-                    let builtin_tool_keys_raw: String = row.get(9)?;
-                    let skill_ids_raw: String = row.get(10)?;
-                    let mcp_server_names_raw: String = row.get(11)?;
-                    let task_domains_raw: String = row.get(12)?;
-                    let default_model_strategy_raw: String = row.get(14)?;
-                    let capability_policy_raw: String = row.get(15)?;
-                    let permission_envelope_raw: String = row.get(16)?;
-                    let memory_policy_raw: String = row.get(17)?;
-                    let delegation_policy_raw: String = row.get(18)?;
-                    let approval_preference_raw: String = row.get(19)?;
-                    let output_contract_raw: String = row.get(20)?;
-                    let shared_capability_policy_raw: String = row.get(21)?;
+                    let tags_raw: String = row.get(9)?;
+                    let builtin_tool_keys_raw: String = row.get(11)?;
+                    let skill_ids_raw: String = row.get(12)?;
+                    let mcp_server_names_raw: String = row.get(13)?;
+                    let task_domains_raw: String = row.get(14)?;
+                    let default_model_strategy_raw: String = row.get(16)?;
+                    let capability_policy_raw: String = row.get(17)?;
+                    let permission_envelope_raw: String = row.get(18)?;
+                    let memory_policy_raw: String = row.get(19)?;
+                    let delegation_policy_raw: String = row.get(20)?;
+                    let approval_preference_raw: String = row.get(21)?;
+                    let output_contract_raw: String = row.get(22)?;
+                    let shared_capability_policy_raw: String = row.get(23)?;
                     let builtin_tool_keys: Vec<String> =
                         serde_json::from_str(&builtin_tool_keys_raw).unwrap_or_default();
                     let skill_ids: Vec<String> =
@@ -490,19 +494,23 @@ impl RuntimeAdapter {
                         workspace_id: row.get(1)?,
                         project_id: row.get(2)?,
                         scope: row.get(3)?,
-                        name: row.get(4)?,
-                        avatar_path: row.get(5)?,
+                        owner_user_id: row.get(4)?,
+                        asset_role: row
+                            .get::<_, Option<String>>(5)?
+                            .unwrap_or_else(octopus_core::default_agent_asset_role),
+                        name: row.get(6)?,
+                        avatar_path: row.get(7)?,
                         avatar: None,
-                        personality: row.get(6)?,
+                        personality: row.get(8)?,
                         tags: serde_json::from_str(&tags_raw).unwrap_or_default(),
-                        prompt: row.get(8)?,
+                        prompt: row.get(10)?,
                         builtin_tool_keys: builtin_tool_keys.clone(),
                         skill_ids: skill_ids.clone(),
                         mcp_server_names: mcp_server_names.clone(),
                         task_domains: parse_json_or_default(&task_domains_raw, || {
                             octopus_core::normalize_task_domains(Vec::new())
                         }),
-                        manifest_revision: row.get(13)?,
+                        manifest_revision: row.get(15)?,
                         default_model_strategy: parse_json_or_default(
                             &default_model_strategy_raw,
                             octopus_core::default_model_strategy,
@@ -542,9 +550,9 @@ impl RuntimeAdapter {
                         trust_metadata: octopus_core::default_asset_trust_metadata(),
                         dependency_resolution: Vec::new(),
                         import_metadata: octopus_core::default_asset_import_metadata(),
-                        description: row.get(22)?,
-                        status: row.get(23)?,
-                        updated_at: row.get::<_, i64>(24)? as u64,
+                        description: row.get(24)?,
+                        status: row.get(25)?,
+                        updated_at: row.get::<_, i64>(26)? as u64,
                     })
                 },
             )

@@ -7,8 +7,9 @@ use std::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use include_dir::{include_dir, Dir, DirEntry};
 use octopus_core::{
-    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
-    default_agent_shared_capability_policy, default_approval_preference,
+    capability_policy_from_sources, default_agent_asset_role, default_agent_delegation_policy,
+    default_agent_memory_policy, default_agent_shared_capability_policy,
+    default_approval_preference,
     default_artifact_handoff_policy, default_asset_import_metadata, default_asset_trust_metadata,
     default_mailbox_policy, default_model_strategy, default_output_contract,
     default_permission_envelope, default_shared_memory_policy, default_team_delegation_policy,
@@ -2063,6 +2064,8 @@ pub(crate) fn build_agent_record(
         workspace_id: workspace_id.to_string(),
         project_id: target.project_id().map(ToOwned::to_owned),
         scope: target.scope_label().into(),
+        owner_user_id: None,
+        asset_role: default_agent_asset_role(),
         name: name.trim().to_string(),
         avatar_path: avatar_path.clone(),
         avatar: agent_avatar(paths, avatar_path.as_deref()),
@@ -3440,15 +3443,17 @@ fn export_avatar_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::build_infra_bundle;
     use crate::catalog_hash_id;
     use crate::infra_state::{
         ensure_agent_record_columns, ensure_bundle_asset_descriptor_columns,
-        ensure_team_record_columns,
+        ensure_pet_agent_extension_columns, ensure_team_record_columns,
     };
     use octopus_core::{
         ExportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundleInput,
         ImportWorkspaceAgentBundlePreviewInput,
     };
+    use octopus_platform::AuthService;
 
     fn encoded_file(relative_path: &str, content: &str) -> WorkspaceDirectoryUploadEntry {
         WorkspaceDirectoryUploadEntry {
@@ -3549,6 +3554,7 @@ mod tests {
         ensure_bundle_asset_descriptor_columns(connection).expect("descriptor columns");
         crate::agent_bundle::shared::ensure_import_source_tables(connection)
             .expect("import source tables");
+        ensure_pet_agent_extension_columns(connection).expect("pet extension columns");
     }
 
     fn test_agent_record(
@@ -3571,6 +3577,8 @@ mod tests {
             workspace_id: workspace_id.into(),
             project_id: project_id.map(str::to_string),
             scope: scope.into(),
+            owner_user_id: None,
+            asset_role: "default".into(),
             name: name.into(),
             avatar_path: None,
             avatar: None,
@@ -3601,6 +3609,15 @@ mod tests {
             description: description.into(),
             status: "active".into(),
             updated_at: timestamp_now(),
+        }
+    }
+
+    fn avatar_payload() -> octopus_core::AvatarUploadPayload {
+        octopus_core::AvatarUploadPayload {
+            content_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            file_name: "avatar.png".into(),
+            byte_size: 8,
         }
     }
 
@@ -3702,6 +3719,194 @@ mod tests {
     #[test]
     fn content_type_for_export_returns_svg_mime_type() {
         assert_eq!(content_type_for_export("avatar.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn agent_record_roundtrips_personal_owner_metadata_and_role() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        ensure_test_tables(&connection);
+
+        let mut record = test_agent_record(
+            "pet-user-analyst",
+            "ws-local",
+            None,
+            "personal",
+            "Analyst Pet",
+            "Curious companion",
+            vec!["pet".into()],
+            "Keep the owner company.",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "Personal pet agent",
+        );
+        record.owner_user_id = Some("user-analyst".into());
+        record.asset_role = "pet".into();
+
+        write_agent_record(&connection, &record, false).expect("write agent");
+
+        let reloaded = load_agents(&connection)
+            .expect("load agents")
+            .into_iter()
+            .find(|agent| agent.id == record.id)
+            .expect("reloaded pet");
+
+        assert_eq!(reloaded.scope, "personal");
+        assert_eq!(reloaded.owner_user_id.as_deref(), Some("user-analyst"));
+        assert_eq!(reloaded.asset_role, "pet");
+    }
+
+    #[test]
+    fn pet_extension_enforces_single_pet_per_workspace_owner() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        ensure_test_tables(&connection);
+
+        connection
+            .execute(
+                "INSERT INTO pet_agent_extensions (
+                    pet_id, workspace_id, owner_user_id, species, display_name, avatar_label,
+                    summary, greeting, mood, favorite_snack, prompt_hints_json, fallback_asset,
+                    rive_asset, state_machine, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6,
+                    ?7, ?8, ?9, ?10, ?11, ?12,
+                    ?13, ?14, ?15
+                )",
+                params![
+                    "pet-user-owner",
+                    "ws-local",
+                    "user-owner",
+                    "octopus",
+                    "小章",
+                    "Octopus mascot",
+                    "First pet",
+                    "Hello",
+                    "happy",
+                    "虾",
+                    serde_json::to_string(&vec!["打个招呼"]).expect("prompt hints"),
+                    "octopus",
+                    Option::<String>::None,
+                    Option::<String>::None,
+                    1_i64,
+                ],
+            )
+            .expect("insert first pet extension");
+
+        let duplicate = connection.execute(
+            "INSERT INTO pet_agent_extensions (
+                pet_id, workspace_id, owner_user_id, species, display_name, avatar_label,
+                summary, greeting, mood, favorite_snack, prompt_hints_json, fallback_asset,
+                rive_asset, state_machine, updated_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6,
+                ?7, ?8, ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15
+            )",
+            params![
+                "pet-user-owner-duplicate",
+                "ws-local",
+                "user-owner",
+                "duck",
+                "小鸭",
+                "Duck mascot",
+                "Duplicate pet",
+                "Hi",
+                "happy",
+                "玉米",
+                serde_json::to_string(&vec!["去散步"]).expect("prompt hints"),
+                "duck",
+                Option::<String>::None,
+                Option::<String>::None,
+                2_i64,
+            ],
+        );
+
+        assert!(duplicate.is_err(), "duplicate pet extension should fail");
+    }
+
+    #[test]
+    fn reload_backfills_missing_personal_pet_for_existing_user_once() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime
+            .block_on(bundle.auth.register_bootstrap_admin(
+                octopus_core::RegisterBootstrapAdminRequest {
+                    client_app_id: "octopus-desktop".into(),
+                    username: "owner".into(),
+                    display_name: "Owner".into(),
+                    password: "password123".into(),
+                    confirm_password: "password123".into(),
+                    avatar: avatar_payload(),
+                    workspace_id: Some("ws-local".into()),
+                },
+            ))
+            .expect("bootstrap owner");
+
+        let connection = Connection::open(bundle.paths.db_path.clone()).expect("db");
+        connection
+            .execute(
+                "INSERT INTO users (
+                    id, username, display_name, avatar_path, avatar_content_type, avatar_byte_size,
+                    avatar_content_hash, status, password_hash, password_state, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, NULL, NULL, NULL,
+                    NULL, 'active', ?4, 'set', ?5, ?6
+                )",
+                params![
+                    "user-existing",
+                    "existing",
+                    "Existing User",
+                    "plain::password123",
+                    10_i64,
+                    10_i64,
+                ],
+            )
+            .expect("insert existing user");
+
+        drop(bundle);
+
+        let reloaded = build_infra_bundle(temp.path()).expect("reloaded infra bundle");
+        let first_pet = reloaded
+            .workspace
+            .state
+            .agents
+            .lock()
+            .expect("agents")
+            .iter()
+            .find(|record| {
+                record.asset_role == "pet"
+                    && record.owner_user_id.as_deref() == Some("user-existing")
+            })
+            .cloned()
+            .expect("backfilled pet");
+
+        drop(reloaded);
+
+        let reloaded_again = build_infra_bundle(temp.path()).expect("reloaded again");
+        let matching_pets = reloaded_again
+            .workspace
+            .state
+            .agents
+            .lock()
+            .expect("agents")
+            .iter()
+            .filter(|record| {
+                record.asset_role == "pet"
+                    && record.owner_user_id.as_deref() == Some("user-existing")
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert_eq!(matching_pets.len(), 1);
+        assert_eq!(matching_pets[0].id, first_pet.id);
     }
 
     #[test]

@@ -9937,3 +9937,66 @@ async fn quota_enabled_models_require_provider_token_usage_metadata() {
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
+
+#[tokio::test]
+async fn compile_actor_manifest_preserves_personal_pet_metadata() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT INTO agents (
+                id, workspace_id, project_id, scope, owner_user_id, asset_role, name, avatar_path,
+                personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names,
+                description, status, updated_at
+            ) VALUES (
+                ?1, ?2, NULL, ?3, ?4, ?5, ?6, NULL,
+                ?7, ?8, ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15
+            )",
+            params![
+                "pet-user-owner",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                "personal",
+                "user-owner",
+                "pet",
+                "Owner Pet",
+                "Personal companion",
+                "[]",
+                "Stay close to the owner.",
+                "[]",
+                "[]",
+                "[]",
+                "Personal pet actor",
+                "active",
+                1_i64,
+            ],
+        )
+        .expect("insert pet agent");
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(FixedTokenRuntimeModelDriver {
+            total_tokens: Some(32),
+        }),
+    );
+
+    let manifest = adapter
+        .compile_actor_manifest("agent:pet-user-owner")
+        .expect("compile pet actor manifest");
+    let actor_manifest::CompiledActorManifest::Agent(agent_manifest) = manifest else {
+        panic!("expected agent manifest");
+    };
+
+    assert_eq!(agent_manifest.record.scope, "personal");
+    assert_eq!(
+        agent_manifest.record.owner_user_id.as_deref(),
+        Some("user-owner")
+    );
+    assert_eq!(agent_manifest.record.asset_role, "pet");
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
