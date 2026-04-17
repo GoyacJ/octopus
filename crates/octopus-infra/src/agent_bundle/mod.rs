@@ -88,10 +88,24 @@ pub(crate) fn list_builtin_agent_templates(
     builtin::list_builtin_agent_templates(workspace_id)
 }
 
+pub(crate) fn find_builtin_agent_template_record(
+    workspace_id: &str,
+    agent_id: &str,
+) -> Result<Option<octopus_core::AgentRecord>, AppError> {
+    builtin::find_builtin_agent_template_record(workspace_id, agent_id)
+}
+
 pub(crate) fn list_builtin_team_templates(
     workspace_id: &str,
 ) -> Result<Vec<octopus_core::TeamRecord>, AppError> {
     builtin::list_builtin_team_templates(workspace_id)
+}
+
+pub(crate) fn find_builtin_team_template_record(
+    workspace_id: &str,
+    team_id: &str,
+) -> Result<Option<octopus_core::TeamRecord>, AppError> {
+    builtin::find_builtin_team_template_record(workspace_id, team_id)
 }
 
 pub(crate) fn list_builtin_mcp_assets() -> Result<Vec<agent_assets::BuiltinMcpAsset>, AppError> {

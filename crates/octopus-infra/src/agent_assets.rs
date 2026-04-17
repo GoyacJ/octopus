@@ -2120,7 +2120,11 @@ pub(crate) fn build_team_record(
     let mcp_server_names = mcp_server_names.to_vec();
     let task_domains = normalize_task_domains(tags.to_vec());
     let delegation_policy = default_team_delegation_policy();
-    let leader_ref = leader_agent_id.clone().unwrap_or_default();
+    let leader_ref = leader_agent_id
+        .as_deref()
+        .map(crate::canonical_agent_ref)
+        .unwrap_or_default();
+    let member_refs = crate::canonical_agent_refs(&member_agent_ids);
     TeamRecord {
         id: team_id.to_string(),
         workspace_id: workspace_id.to_string(),
@@ -2152,8 +2156,8 @@ pub(crate) fn build_team_record(
         leader_agent_id,
         member_agent_ids: member_agent_ids.clone(),
         leader_ref: leader_ref.clone(),
-        member_refs: member_agent_ids.clone(),
-        team_topology: team_topology_from_refs(Some(leader_ref), member_agent_ids.clone()),
+        member_refs: member_refs.clone(),
+        team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),
         shared_memory_policy: default_shared_memory_policy(),
         mailbox_policy: default_mailbox_policy(),
         artifact_handoff_policy: default_artifact_handoff_policy(),
@@ -3635,7 +3639,11 @@ mod tests {
     ) -> TeamRecord {
         let task_domains = normalize_task_domains(tags.clone());
         let delegation_policy = default_team_delegation_policy();
-        let leader_ref = leader_agent_id.clone().unwrap_or_default();
+        let leader_ref = leader_agent_id
+            .as_deref()
+            .map(crate::canonical_agent_ref)
+            .unwrap_or_default();
+        let member_refs = crate::canonical_agent_refs(&member_agent_ids);
         TeamRecord {
             id: id.into(),
             workspace_id: workspace_id.into(),
@@ -3663,8 +3671,8 @@ mod tests {
             leader_agent_id,
             member_agent_ids: member_agent_ids.clone(),
             leader_ref: leader_ref.clone(),
-            member_refs: member_agent_ids.clone(),
-            team_topology: team_topology_from_refs(Some(leader_ref), member_agent_ids.clone()),
+            member_refs: member_refs.clone(),
+            team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),
             shared_memory_policy: default_shared_memory_policy(),
             mailbox_policy: default_mailbox_policy(),
             artifact_handoff_policy: default_artifact_handoff_policy(),

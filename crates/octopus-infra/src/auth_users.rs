@@ -529,14 +529,14 @@ impl InfraWorkspaceService {
 
         let member_agent_ids = input_member_agent_ids;
         let member_refs = if input_member_refs.is_empty() {
-            member_agent_ids.clone()
+            crate::canonical_agent_refs(&member_agent_ids)
         } else {
             input_member_refs
         };
         let leader_agent_id = input_leader_agent_id.filter(|value| !value.trim().is_empty());
         let leader_ref = input_leader_ref
             .filter(|value| !value.trim().is_empty())
-            .or_else(|| leader_agent_id.clone())
+            .or_else(|| leader_agent_id.clone().map(|value| crate::canonical_agent_ref(&value)))
             .unwrap_or_default();
         let task_domains = normalize_task_domains(task_domains);
         let delegation_policy =

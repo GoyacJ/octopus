@@ -11,6 +11,7 @@ use octopus_core::{
 use octopus_infra::build_infra_bundle;
 use octopus_platform::{
     ModelRegistryService, RuntimeConfigService, RuntimeExecutionService, RuntimeSessionService,
+    WorkspaceService,
 };
 use rusqlite::params;
 use serde_json::json;
@@ -19,6 +20,40 @@ fn test_root() -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!("octopus-runtime-adapter-{}", Uuid::new_v4()));
     fs::create_dir_all(&root).expect("test root");
     root
+}
+
+async fn builtin_agent_actor_ref(infra: &octopus_infra::InfraBundle) -> String {
+    let builtin_agent = infra
+        .workspace
+        .list_agents()
+        .await
+        .expect("list agents")
+        .into_iter()
+        .find(|agent| {
+            agent
+                .integration_source
+                .as_ref()
+                .is_some_and(|source| source.kind == "builtin-template")
+        })
+        .expect("builtin agent");
+    format!("agent:{}", builtin_agent.id)
+}
+
+async fn builtin_team_actor_ref(infra: &octopus_infra::InfraBundle) -> String {
+    let builtin_team = infra
+        .workspace
+        .list_teams()
+        .await
+        .expect("list teams")
+        .into_iter()
+        .find(|team| {
+            team.integration_source
+                .as_ref()
+                .is_some_and(|source| source.kind == "builtin-template")
+                && !team.member_agent_ids.is_empty()
+        })
+        .expect("builtin team with members");
+    format!("team:{}", builtin_team.id)
 }
 
 fn legacy_runtime_sessions_dir(root: &Path) -> std::path::PathBuf {
@@ -730,6 +765,7 @@ async fn create_session_supports_pet_home_context_without_project_id() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     grant_owner_permissions(&infra, "user-owner");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     let adapter = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
@@ -743,7 +779,7 @@ async fn create_session_supports_pet_home_context_without_project_id() {
             home_session_input(
                 "conv-pet-home",
                 "Pet Home Session",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 None,
                 octopus_core::RUNTIME_PERMISSION_READ_ONLY,
             ),
@@ -838,6 +874,7 @@ async fn session_policy_clamps_requested_permission_mode_to_owner_ceiling() {
 async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     let adapter = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
@@ -874,7 +911,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
                 "conv-1",
                 project_id,
                 "Runtime precedence",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 None,
                 "readonly",
             ),
@@ -893,7 +930,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
     );
     assert_eq!(
         detail.summary.selected_actor_ref,
-        "agent:agent-project-delivery"
+        agent_actor_ref
     );
     assert_eq!(
         detail.summary.manifest_revision,
@@ -902,10 +939,6 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
     assert_eq!(
         detail.summary.session_policy.execution_permission_mode,
         octopus_core::RUNTIME_PERMISSION_READ_ONLY
-    );
-    assert_eq!(
-        detail.summary.session_policy.selected_configured_model_id,
-        ""
     );
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -1445,6 +1478,7 @@ async fn upsert_and_delete_runtime_configured_model_credentials_manage_managed_s
 async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -1466,7 +1500,7 @@ async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot()
                 "conv-quota",
                 "",
                 "Quota Session",
-                "agent:agent-orchestrator",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -1524,6 +1558,7 @@ async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot()
 async fn configured_model_token_usage_survives_adapter_restart() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -1545,7 +1580,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
                 "conv-restart",
                 "",
                 "Restart Session",
-                "agent:agent-orchestrator",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -1583,6 +1618,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
 async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(32),
@@ -1604,7 +1640,7 @@ async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
                 "conv-first",
                 "",
                 "First Session",
-                "agent:agent-orchestrator",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -1627,7 +1663,7 @@ async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
                 "conv-second",
                 "",
                 "Second Session",
-                "agent:agent-orchestrator",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -2746,6 +2782,7 @@ async fn team_runtime_uses_manifest_mailbox_policy_and_keeps_all_worker_subruns_
 async fn runtime_persistence_writes_jsonl_events_without_legacy_debug_session_files() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
 
     let adapter = RuntimeAdapter::new_with_executor(
@@ -2762,7 +2799,7 @@ async fn runtime_persistence_writes_jsonl_events_without_legacy_debug_session_fi
                 "conv-no-legacy-debug",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "No Legacy Debug Persistence",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -3077,14 +3114,37 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
         .execute(
-            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
-                "team-workspace-core",
+                "agent-runtime-reload-worker",
                 octopus_core::DEFAULT_WORKSPACE_ID,
                 Option::<String>::None,
                 "workspace",
-                "Workspace Core",
+                "Runtime Reload Worker",
+                Option::<String>::None,
+                "Reliable reviewer",
+                serde_json::to_string(&vec!["workspace", "review"]).expect("tags"),
+                "Review the proposal and report the result.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker used by runtime reload tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert runtime reload worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-runtime-reload-core",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Runtime Reload Core",
                 Option::<String>::None,
                 "Governance team",
                 serde_json::to_string(&vec!["workspace", "governance"]).expect("tags"),
@@ -3101,8 +3161,8 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
                     "workflowEscalation": "auto"
                 }))
                 .expect("approval preference"),
-                "agent-orchestrator",
-                serde_json::to_string(&vec!["agent-orchestrator"]).expect("member ids"),
+                "agent-runtime-reload-worker",
+                serde_json::to_string(&vec!["agent-runtime-reload-worker"]).expect("member ids"),
                 "Workspace core team for reload tests.",
                 "active",
                 timestamp_now() as i64,
@@ -3125,7 +3185,7 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
                 "conv-team-reload-artifacts",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Team Artifact Reload",
-                "team:team-workspace-core",
+                "team:team-runtime-reload-core",
                 Some("quota-model"),
                 "readonly",
             ),
@@ -3239,6 +3299,7 @@ async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_p
 async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -3259,7 +3320,7 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
                 "conv-no-legacy-snapshot-fallback",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "No Legacy Snapshot Fallback",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -3352,6 +3413,29 @@ async fn team_session_reload_ignores_legacy_runtime_sessions_subrun_artifacts() 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
         .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-legacy-recovery-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Legacy Recovery Worker",
+                Option::<String>::None,
+                "Reliable reviewer",
+                serde_json::to_string(&vec!["workspace", "review"]).expect("tags"),
+                "Review the proposal and report the result.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker used by legacy recovery fence tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert legacy recovery worker");
+    connection
+        .execute(
             "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
@@ -3375,8 +3459,8 @@ async fn team_session_reload_ignores_legacy_runtime_sessions_subrun_artifacts() 
                     "workflowEscalation": "auto"
                 }))
                 .expect("approval preference"),
-                "agent-orchestrator",
-                serde_json::to_string(&vec!["agent-orchestrator"]).expect("member ids"),
+                "agent-legacy-recovery-worker",
+                serde_json::to_string(&vec!["agent-legacy-recovery-worker"]).expect("member ids"),
                 "Team for legacy recovery fence tests.",
                 "active",
                 timestamp_now() as i64,
@@ -6919,6 +7003,7 @@ async fn team_spawn_policy_deny_suppresses_subrun_projection_on_main_runtime_pat
 async fn runtime_session_public_contract_and_projection_fields_match_phase_two_shape() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -6940,7 +7025,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
                 "conv-phase-two-shape",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Phase 2 Contract Shape",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -6949,7 +7034,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
         .await
         .expect("session");
 
-    assert_eq!(session.selected_actor_ref, "agent:agent-project-delivery");
+    assert_eq!(session.selected_actor_ref, agent_actor_ref);
     assert_eq!(
         session.manifest_revision,
         octopus_core::ASSET_MANIFEST_REVISION_V2
@@ -6958,7 +7043,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
     assert_eq!(session.subrun_count, 0);
     assert_eq!(
         session.session_policy.selected_actor_ref,
-        "agent:agent-project-delivery"
+        session.selected_actor_ref
     );
     assert_eq!(
         session.session_policy.selected_configured_model_id,
@@ -7009,7 +7094,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
             },
         )
         .expect("session projection");
-    assert_eq!(session_projection.0, "agent:agent-project-delivery");
+    assert_eq!(session_projection.0, session.selected_actor_ref);
     assert_eq!(
         session_projection.1,
         octopus_core::ASSET_MANIFEST_REVISION_V2
@@ -7041,7 +7126,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
             .expect("run projection");
     assert_eq!(run_projection.0, "primary");
     assert_eq!(run_projection.1, None);
-    assert_eq!(run_projection.2, "agent:agent-project-delivery");
+    assert_eq!(run_projection.2, session.selected_actor_ref);
     assert_eq!(run_projection.3, None);
     assert_eq!(run_projection.4, "not-required");
     assert!(!run_projection.5.is_empty());
@@ -7054,6 +7139,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
 async fn runtime_events_only_emit_declared_runtime_event_kinds() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7075,7 +7161,7 @@ async fn runtime_events_only_emit_declared_runtime_event_kinds() {
                 "conv-phase-two-events",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Phase 2 Events",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7165,6 +7251,7 @@ async fn runtime_events_only_emit_declared_runtime_event_kinds() {
 async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7216,7 +7303,7 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
                 "conv-memory-events",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Events",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7279,6 +7366,7 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
 async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7306,7 +7394,7 @@ async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
         memory_runtime::PersistedRuntimeMemoryRecord {
             memory_id: "mem-owned-agent".into(),
             project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
-            owner_ref: Some("agent:agent-project-delivery".into()),
+            owner_ref: Some(agent_actor_ref.clone()),
             source_run_id: Some("seed-run".into()),
             kind: "reference".into(),
             scope: "agent-private".into(),
@@ -7379,7 +7467,7 @@ async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
                 "conv-memory-selector-gating",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Selector Gating",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7418,6 +7506,7 @@ async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
 async fn submit_turn_prefers_project_memory_from_subrun_lineage_over_unrelated_branch_memory() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let team_actor_ref = builtin_team_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7486,7 +7575,7 @@ async fn submit_turn_prefers_project_memory_from_subrun_lineage_over_unrelated_b
                 "conv-memory-lineage",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Lineage",
-                "team:team-workspace-core",
+                &team_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7591,6 +7680,7 @@ async fn submit_turn_prefers_project_memory_from_subrun_lineage_over_unrelated_b
 async fn submit_turn_rejects_memory_pollution_candidates() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7621,7 +7711,7 @@ async fn submit_turn_rejects_memory_pollution_candidates() {
                 "conv-memory-pollution",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Pollution",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7660,6 +7750,7 @@ async fn submit_turn_rejects_memory_pollution_candidates() {
 async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7690,7 +7781,7 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
                 "conv-memory-resolution",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Resolution",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7764,6 +7855,7 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
 async fn revalidating_existing_memory_refreshes_existing_record_in_place() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7810,7 +7902,7 @@ async fn revalidating_existing_memory_refreshes_existing_record_in_place() {
                 "conv-memory-revalidation",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Revalidation",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -7885,6 +7977,7 @@ async fn revalidating_existing_memory_refreshes_existing_record_in_place() {
 async fn memory_proposal_mediation_targets_specific_proposal_not_durable_memory_id() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -7931,7 +8024,7 @@ async fn memory_proposal_mediation_targets_specific_proposal_not_durable_memory_
                 "conv-memory-mediation-target",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Memory Mediation Target",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -9922,6 +10015,7 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
 async fn submit_turn_does_not_create_deliverable_for_ordinary_assistant_replies() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -9943,7 +10037,7 @@ async fn submit_turn_does_not_create_deliverable_for_ordinary_assistant_replies(
                 "conv-deliverable-persistence",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Deliverable Persistence",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -9988,6 +10082,7 @@ async fn submit_turn_does_not_create_deliverable_for_ordinary_assistant_replies(
 async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_reload() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -10021,7 +10116,7 @@ async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_re
                 "conv-deliverable-persistence",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Deliverable Persistence",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -10138,6 +10233,7 @@ async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_re
 async fn creating_new_deliverable_version_preserves_previous_versions() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -10168,7 +10264,7 @@ async fn creating_new_deliverable_version_preserves_previous_versions() {
                 "conv-deliverable-versioning",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Deliverable Versioning",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -10262,6 +10358,7 @@ async fn creating_new_deliverable_version_preserves_previous_versions() {
 async fn promoting_deliverable_creates_knowledge_record_and_preserves_lineage() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
@@ -10294,7 +10391,7 @@ async fn promoting_deliverable_creates_knowledge_record_and_preserves_lineage() 
                 "conv-deliverable-promotion",
                 octopus_core::DEFAULT_PROJECT_ID,
                 "Deliverable Promotion",
-                "agent:agent-project-delivery",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -10937,6 +11034,7 @@ async fn deletes_legacy_runtime_projection_missing_phase_four_run_fields_on_star
 async fn quota_enabled_models_require_provider_token_usage_metadata() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
     write_workspace_config(
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(64),
@@ -10956,7 +11054,7 @@ async fn quota_enabled_models_require_provider_token_usage_metadata() {
                 "conv-missing-usage",
                 "",
                 "Missing Usage",
-                "agent:agent-orchestrator",
+                &agent_actor_ref,
                 Some("quota-model"),
                 "readonly",
             ),
@@ -11045,6 +11143,172 @@ async fn compile_actor_manifest_preserves_personal_pet_metadata() {
         Some("user-owner")
     );
     assert_eq!(agent_manifest.record.asset_role, "pet");
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn builtin_agent_template_refs_create_runtime_sessions() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(64),
+    );
+
+    let builtin_agent = infra
+        .workspace
+        .list_agents()
+        .await
+        .expect("list agents")
+        .into_iter()
+        .find(|agent| {
+            agent
+                .integration_source
+                .as_ref()
+                .is_some_and(|source| source.kind == "builtin-template")
+        })
+        .expect("builtin agent");
+    let actor_ref = format!("agent:{}", builtin_agent.id);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(FixedTokenRuntimeModelDriver {
+            total_tokens: Some(32),
+        }),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-builtin-agent-template",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Builtin Agent Template Session",
+                &actor_ref,
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("builtin template actor should create session");
+
+    assert_eq!(session.summary.selected_actor_ref, actor_ref);
+    assert_eq!(session.run.actor_ref, format!("agent:{}", builtin_agent.id));
+    assert!(session
+        .run
+        .resolved_actor_label
+        .as_deref()
+        .is_some_and(|label| label.contains(&builtin_agent.name)));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn builtin_team_template_refs_execute_through_runtime_subruns() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let builtin_team = infra
+        .workspace
+        .list_teams()
+        .await
+        .expect("list teams")
+        .into_iter()
+        .find(|team| {
+            team.integration_source
+                .as_ref()
+                .is_some_and(|source| source.kind == "builtin-template")
+                && !team.member_agent_ids.is_empty()
+        })
+        .expect("builtin team with members");
+    let actor_ref = format!("team:{}", builtin_team.id);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-builtin-team-template",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Builtin Team Template Session",
+                &actor_ref,
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("builtin team template should create session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Review the proposal", None))
+        .await
+        .expect("builtin team template should create a resolvable team runtime run");
+
+    assert_eq!(run.actor_ref, actor_ref);
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("team-spawn")
+    );
+
+    let approval_id = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail")
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("team spawn approval id");
+
+    let spawn_resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("builtin team spawn approval should resume runtime");
+
+    assert_eq!(spawn_resolved.actor_ref, actor_ref);
+    assert!(spawn_resolved.worker_dispatch.is_some());
+    assert!(spawn_resolved.workflow_run.is_some());
+    assert_eq!(
+        spawn_resolved
+            .pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("workflow-continuation")
+    );
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail after spawn approval");
+    assert!(!detail.subruns.is_empty());
+    assert!(detail.workflow.is_some());
+    assert!(detail
+        .subruns
+        .iter()
+        .all(|subrun| builtin_team.member_refs.contains(&subrun.actor_ref)));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

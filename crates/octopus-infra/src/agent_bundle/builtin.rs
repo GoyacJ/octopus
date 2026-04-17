@@ -116,6 +116,19 @@ pub(crate) fn list_builtin_agent_templates(
     Ok(records)
 }
 
+pub(crate) fn find_builtin_agent_template_record(
+    workspace_id: &str,
+    agent_id: &str,
+) -> Result<Option<AgentRecord>, AppError> {
+    let catalog = load_builtin_catalog_sources()?;
+    let skill_id_by_source = build_builtin_skill_id_by_source_id(&catalog.skill_sources);
+    Ok(catalog
+        .agent_sources
+        .into_iter()
+        .find(|source| catalog_hash_id("builtin-agent", &source.source_id) == agent_id)
+        .map(|source| build_builtin_agent_record(workspace_id, &skill_id_by_source, source)))
+}
+
 pub(crate) fn list_builtin_team_templates(workspace_id: &str) -> Result<Vec<TeamRecord>, AppError> {
     let catalog = load_builtin_catalog_sources()?;
     let skill_id_by_source = build_builtin_skill_id_by_source_id(&catalog.skill_sources);
@@ -126,6 +139,19 @@ pub(crate) fn list_builtin_team_templates(workspace_id: &str) -> Result<Vec<Team
         .collect::<Vec<_>>();
     records.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
     Ok(records)
+}
+
+pub(crate) fn find_builtin_team_template_record(
+    workspace_id: &str,
+    team_id: &str,
+) -> Result<Option<TeamRecord>, AppError> {
+    let catalog = load_builtin_catalog_sources()?;
+    let skill_id_by_source = build_builtin_skill_id_by_source_id(&catalog.skill_sources);
+    Ok(catalog
+        .team_sources
+        .into_iter()
+        .find(|source| catalog_hash_id("builtin-team", &source.source_id) == team_id)
+        .map(|source| build_builtin_team_record(workspace_id, &skill_id_by_source, source)))
 }
 
 pub(crate) fn find_builtin_agent_template_root(agent_id: &str) -> Result<Option<String>, AppError> {
@@ -351,7 +377,11 @@ fn build_builtin_team_record(
         .iter()
         .map(|source_id| catalog_hash_id("builtin-agent", source_id))
         .collect::<Vec<_>>();
-    let leader_ref = leader_agent_id.clone().unwrap_or_default();
+    let leader_ref = leader_agent_id
+        .as_deref()
+        .map(crate::canonical_agent_ref)
+        .unwrap_or_default();
+    let member_refs = crate::canonical_agent_refs(&member_agent_ids);
 
     TeamRecord {
         id: catalog_hash_id("builtin-team", &source.source_id),
@@ -386,8 +416,8 @@ fn build_builtin_team_record(
         leader_agent_id,
         member_agent_ids: member_agent_ids.clone(),
         leader_ref: leader_ref.clone(),
-        member_refs: member_agent_ids.clone(),
-        team_topology: team_topology_from_refs(Some(leader_ref), member_agent_ids.clone()),
+        member_refs: member_refs.clone(),
+        team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),
         shared_memory_policy: default_shared_memory_policy(),
         mailbox_policy: default_mailbox_policy(),
         artifact_handoff_policy: default_artifact_handoff_policy(),
@@ -590,11 +620,21 @@ mod tests {
                 builtin_agent_ids.contains(leader_agent_id),
                 "builtin team leader should resolve to a builtin agent id",
             );
+            assert_eq!(
+                team_with_members.leader_ref,
+                format!("agent:{leader_agent_id}"),
+                "builtin team leader ref should be a canonical actor ref",
+            );
         }
 
         assert_eq!(
-            team_with_members.member_refs, team_with_members.member_agent_ids,
-            "builtin team member refs should stay aligned with member agent ids",
+            team_with_members.member_refs,
+            team_with_members
+                .member_agent_ids
+                .iter()
+                .map(|agent_id| format!("agent:{agent_id}"))
+                .collect::<Vec<_>>(),
+            "builtin team member refs should be canonical actor refs",
         );
     }
 }

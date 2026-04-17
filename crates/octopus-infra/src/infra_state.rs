@@ -5,7 +5,7 @@ use crate::project_tasks::{
 };
 use octopus_core::ArtifactVersionReference;
 use octopus_core::{
-    default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments,
+    BundleAssetDescriptorRecord, ProjectModelAssignments,
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -4611,134 +4611,6 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
     ]
 }
 
-#[allow(dead_code)]
-pub(super) fn default_agent_records() -> Vec<AgentRecord> {
-    let now = timestamp_now();
-    vec![
-        AgentRecord {
-            id: "agent-orchestrator".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            project_id: None,
-            scope: "workspace".into(),
-            owner_user_id: None,
-            asset_role: default_agent_asset_role(),
-            name: "Workspace Orchestrator".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "System coordinator".into(),
-            tags: vec!["workspace".into(), "orchestration".into()],
-            prompt: "Coordinate work across the workspace and keep execution aligned.".into(),
-            builtin_tool_keys: vec![],
-            skill_ids: vec![],
-            mcp_server_names: vec![],
-            task_domains: normalize_task_domains(vec!["workspace".into(), "orchestration".into()]),
-            manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
-            default_model_strategy: default_model_strategy(),
-            capability_policy: capability_policy_from_sources(&[], &[], &[]),
-            permission_envelope: default_permission_envelope(),
-            memory_policy: default_agent_memory_policy(),
-            delegation_policy: default_agent_delegation_policy(),
-            approval_preference: default_approval_preference(),
-            output_contract: default_output_contract(),
-            shared_capability_policy: default_agent_shared_capability_policy(),
-            integration_source: None,
-            trust_metadata: default_asset_trust_metadata(),
-            dependency_resolution: Vec::new(),
-            import_metadata: default_asset_import_metadata(),
-            description: "Coordinates projects, approvals, and execution policies.".into(),
-            status: "active".into(),
-            updated_at: now,
-        },
-        AgentRecord {
-            id: "agent-project-delivery".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            project_id: Some(DEFAULT_PROJECT_ID.into()),
-            scope: "project".into(),
-            owner_user_id: None,
-            asset_role: default_agent_asset_role(),
-            name: "Project Delivery Agent".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "Delivery lead".into(),
-            tags: vec!["project".into(), "delivery".into()],
-            prompt: "Track project work, runtime sessions, and follow-up actions.".into(),
-            builtin_tool_keys: vec![],
-            skill_ids: vec![],
-            mcp_server_names: vec![],
-            task_domains: normalize_task_domains(vec!["project".into(), "delivery".into()]),
-            manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
-            default_model_strategy: default_model_strategy(),
-            capability_policy: capability_policy_from_sources(&[], &[], &[]),
-            permission_envelope: default_permission_envelope(),
-            memory_policy: default_agent_memory_policy(),
-            delegation_policy: default_agent_delegation_policy(),
-            approval_preference: default_approval_preference(),
-            output_contract: default_output_contract(),
-            shared_capability_policy: default_agent_shared_capability_policy(),
-            integration_source: None,
-            trust_metadata: default_asset_trust_metadata(),
-            dependency_resolution: Vec::new(),
-            import_metadata: default_asset_import_metadata(),
-            description: "Tracks project work, runtime sessions, and follow-up actions.".into(),
-            status: "active".into(),
-            updated_at: now,
-        },
-    ]
-}
-
-#[allow(dead_code)]
-pub(super) fn default_team_records() -> Vec<TeamRecord> {
-    let now = timestamp_now();
-    vec![TeamRecord {
-        id: "team-workspace-core".into(),
-        workspace_id: DEFAULT_WORKSPACE_ID.into(),
-        project_id: None,
-        scope: "workspace".into(),
-        name: "Workspace Core".into(),
-        avatar_path: None,
-        avatar: None,
-        personality: "Governance team".into(),
-        tags: vec!["workspace".into(), "governance".into()],
-        prompt: "Maintain workspace-wide standards and governance.".into(),
-        builtin_tool_keys: vec![],
-        skill_ids: vec![],
-        mcp_server_names: vec![],
-        task_domains: normalize_task_domains(vec!["workspace".into(), "governance".into()]),
-        manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
-        default_model_strategy: default_model_strategy(),
-        capability_policy: capability_policy_from_sources(&[], &[], &[]),
-        permission_envelope: default_permission_envelope(),
-        memory_policy: default_team_memory_policy(),
-        delegation_policy: default_team_delegation_policy(),
-        approval_preference: default_approval_preference(),
-        output_contract: default_output_contract(),
-        shared_capability_policy: default_team_shared_capability_policy(),
-        leader_agent_id: Some("agent-orchestrator".into()),
-        member_agent_ids: vec!["agent-orchestrator".into()],
-        leader_ref: "agent-orchestrator".into(),
-        member_refs: vec!["agent-orchestrator".into()],
-        team_topology: team_topology_from_refs(
-            Some("agent-orchestrator".into()),
-            vec!["agent-orchestrator".into()],
-        ),
-        shared_memory_policy: default_shared_memory_policy(),
-        mailbox_policy: default_mailbox_policy(),
-        artifact_handoff_policy: default_artifact_handoff_policy(),
-        workflow_affordance: workflow_affordance_from_task_domains(
-            &normalize_task_domains(vec!["workspace".into(), "governance".into()]),
-            true,
-            true,
-        ),
-        worker_concurrency_limit: default_team_delegation_policy().max_worker_count,
-        integration_source: None,
-        trust_metadata: default_asset_trust_metadata(),
-        dependency_resolution: Vec::new(),
-        import_metadata: default_asset_import_metadata(),
-        description: "Maintains workspace-wide operating standards and governance.".into(),
-        status: "active".into(),
-        updated_at: now,
-    }]
-}
 
 pub(super) fn default_model_catalog() -> Vec<ModelCatalogRecord> {
     vec![

@@ -81,6 +81,39 @@ use resources_skills::*;
 pub use bootstrap::{build_infra_bundle, initialize_workspace};
 pub use workspace_paths::WorkspacePaths;
 
+pub fn find_builtin_agent_template_record(
+    workspace_id: &str,
+    agent_id: &str,
+) -> Result<Option<AgentRecord>, AppError> {
+    agent_bundle::find_builtin_agent_template_record(workspace_id, agent_id)
+}
+
+pub fn find_builtin_team_template_record(
+    workspace_id: &str,
+    team_id: &str,
+) -> Result<Option<TeamRecord>, AppError> {
+    agent_bundle::find_builtin_team_template_record(workspace_id, team_id)
+}
+
+pub(crate) fn canonical_agent_ref(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else if trimmed.contains(':') {
+        trimmed.to_string()
+    } else {
+        format!("agent:{trimmed}")
+    }
+}
+
+pub(crate) fn canonical_agent_refs(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| canonical_agent_ref(value))
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
 #[derive(Clone)]
 pub struct InfraWorkspaceService {
     state: Arc<InfraState>,

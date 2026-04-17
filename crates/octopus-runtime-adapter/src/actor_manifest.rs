@@ -264,146 +264,6 @@ fn build_team_system_prompt(record: &TeamRecord) -> String {
     .unwrap_or_default()
 }
 
-fn fallback_builtin_agent_record(agent_id: &str) -> Option<AgentRecord> {
-    let now = timestamp_now();
-    match agent_id {
-        "agent-orchestrator" => Some(AgentRecord {
-            id: "agent-orchestrator".into(),
-            workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
-            project_id: None,
-            scope: "workspace".into(),
-            owner_user_id: None,
-            asset_role: octopus_core::default_agent_asset_role(),
-            name: "Workspace Orchestrator".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "System coordinator".into(),
-            tags: vec!["workspace".into(), "orchestration".into()],
-            prompt: "Coordinate work across the workspace and keep execution aligned.".into(),
-            builtin_tool_keys: Vec::new(),
-            skill_ids: Vec::new(),
-            mcp_server_names: Vec::new(),
-            task_domains: octopus_core::normalize_task_domains(vec![
-                "workspace".into(),
-                "orchestration".into(),
-            ]),
-            manifest_revision: octopus_core::ASSET_MANIFEST_REVISION_V2.into(),
-            default_model_strategy: octopus_core::default_model_strategy(),
-            capability_policy: octopus_core::capability_policy_from_sources(&[], &[], &[]),
-            permission_envelope: octopus_core::default_permission_envelope(),
-            memory_policy: octopus_core::default_agent_memory_policy(),
-            delegation_policy: octopus_core::default_agent_delegation_policy(),
-            approval_preference: octopus_core::default_approval_preference(),
-            output_contract: octopus_core::default_output_contract(),
-            shared_capability_policy: octopus_core::default_agent_shared_capability_policy(),
-            integration_source: None,
-            trust_metadata: octopus_core::default_asset_trust_metadata(),
-            dependency_resolution: Vec::new(),
-            import_metadata: octopus_core::default_asset_import_metadata(),
-            description: "Coordinates projects, approvals, and execution policies.".into(),
-            status: "active".into(),
-            updated_at: now,
-        }),
-        "agent-project-delivery" => Some(AgentRecord {
-            id: "agent-project-delivery".into(),
-            workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
-            project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
-            scope: "project".into(),
-            owner_user_id: None,
-            asset_role: octopus_core::default_agent_asset_role(),
-            name: "Project Delivery Agent".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "Delivery lead".into(),
-            tags: vec!["project".into(), "delivery".into()],
-            prompt: "Track project work, runtime sessions, and follow-up actions.".into(),
-            builtin_tool_keys: Vec::new(),
-            skill_ids: Vec::new(),
-            mcp_server_names: Vec::new(),
-            task_domains: octopus_core::normalize_task_domains(vec![
-                "project".into(),
-                "delivery".into(),
-            ]),
-            manifest_revision: octopus_core::ASSET_MANIFEST_REVISION_V2.into(),
-            default_model_strategy: octopus_core::default_model_strategy(),
-            capability_policy: octopus_core::capability_policy_from_sources(&[], &[], &[]),
-            permission_envelope: octopus_core::default_permission_envelope(),
-            memory_policy: octopus_core::default_agent_memory_policy(),
-            delegation_policy: octopus_core::default_agent_delegation_policy(),
-            approval_preference: octopus_core::default_approval_preference(),
-            output_contract: octopus_core::default_output_contract(),
-            shared_capability_policy: octopus_core::default_agent_shared_capability_policy(),
-            integration_source: None,
-            trust_metadata: octopus_core::default_asset_trust_metadata(),
-            dependency_resolution: Vec::new(),
-            import_metadata: octopus_core::default_asset_import_metadata(),
-            description: "Tracks project work, runtime sessions, and follow-up actions.".into(),
-            status: "active".into(),
-            updated_at: now,
-        }),
-        _ => None,
-    }
-}
-
-fn fallback_builtin_team_record(team_id: &str) -> Option<TeamRecord> {
-    if team_id != "team-workspace-core" {
-        return None;
-    }
-    let now = timestamp_now();
-    Some(TeamRecord {
-        id: "team-workspace-core".into(),
-        workspace_id: octopus_core::DEFAULT_WORKSPACE_ID.into(),
-        project_id: None,
-        scope: "workspace".into(),
-        name: "Workspace Core".into(),
-        avatar_path: None,
-        avatar: None,
-        personality: "Governance team".into(),
-        tags: vec!["workspace".into(), "governance".into()],
-        prompt: "Maintain workspace-wide standards and governance.".into(),
-        builtin_tool_keys: Vec::new(),
-        skill_ids: Vec::new(),
-        mcp_server_names: Vec::new(),
-        task_domains: octopus_core::normalize_task_domains(vec![
-            "workspace".into(),
-            "governance".into(),
-        ]),
-        manifest_revision: octopus_core::ASSET_MANIFEST_REVISION_V2.into(),
-        default_model_strategy: octopus_core::default_model_strategy(),
-        capability_policy: octopus_core::capability_policy_from_sources(&[], &[], &[]),
-        permission_envelope: octopus_core::default_permission_envelope(),
-        memory_policy: octopus_core::default_team_memory_policy(),
-        delegation_policy: octopus_core::default_team_delegation_policy(),
-        approval_preference: octopus_core::default_approval_preference(),
-        output_contract: octopus_core::default_output_contract(),
-        shared_capability_policy: octopus_core::default_team_shared_capability_policy(),
-        leader_agent_id: Some("agent-orchestrator".into()),
-        member_agent_ids: vec!["agent-orchestrator".into()],
-        leader_ref: "agent:agent-orchestrator".into(),
-        member_refs: vec!["agent:agent-orchestrator".into()],
-        team_topology: octopus_core::team_topology_from_refs(
-            Some("agent:agent-orchestrator".into()),
-            vec!["agent:agent-orchestrator".into()],
-        ),
-        shared_memory_policy: octopus_core::default_shared_memory_policy(),
-        mailbox_policy: octopus_core::default_mailbox_policy(),
-        artifact_handoff_policy: octopus_core::default_artifact_handoff_policy(),
-        workflow_affordance: octopus_core::workflow_affordance_from_task_domains(
-            &octopus_core::normalize_task_domains(vec!["workspace".into(), "governance".into()]),
-            true,
-            true,
-        ),
-        worker_concurrency_limit: octopus_core::default_team_delegation_policy().max_worker_count,
-        integration_source: None,
-        trust_metadata: octopus_core::default_asset_trust_metadata(),
-        dependency_resolution: Vec::new(),
-        import_metadata: octopus_core::default_asset_import_metadata(),
-        description: "Maintains workspace-wide operating standards and governance.".into(),
-        status: "active".into(),
-        updated_at: now,
-    })
-}
-
 impl RuntimeAdapter {
     pub(crate) fn manifest_snapshot_path(&self, manifest_snapshot_ref: &str) -> PathBuf {
         self.state
@@ -565,8 +425,11 @@ impl RuntimeAdapter {
             })
             .or_else(|error| {
                 if matches!(error, AppError::NotFound(_)) {
-                    fallback_builtin_agent_record(agent_id)
-                        .ok_or_else(|| AppError::not_found("agent"))
+                    octopus_infra::find_builtin_agent_template_record(
+                        &self.state.workspace_id,
+                        agent_id,
+                    )?
+                    .ok_or_else(|| AppError::not_found("agent"))
                 } else {
                     Err(error)
                 }
@@ -766,8 +629,11 @@ impl RuntimeAdapter {
             })
             .or_else(|error| {
                 if matches!(error, AppError::NotFound(_)) {
-                    fallback_builtin_team_record(team_id)
-                        .ok_or_else(|| AppError::not_found("team"))
+                    octopus_infra::find_builtin_team_template_record(
+                        &self.state.workspace_id,
+                        team_id,
+                    )?
+                    .ok_or_else(|| AppError::not_found("team"))
                 } else {
                     Err(error)
                 }
