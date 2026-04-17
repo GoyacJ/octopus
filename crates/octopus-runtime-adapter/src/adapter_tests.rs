@@ -2367,6 +2367,43 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
             .expect("original handoff summary")
             .artifact_refs
     );
+    let corrupted_handoff_envelope_path = root.join(
+        handoff_projection_rows
+            .first()
+            .and_then(|row| row.8.clone())
+            .expect("handoff envelope path"),
+    );
+    fs::write(&corrupted_handoff_envelope_path, b"{invalid-handoff-envelope")
+        .expect("corrupt handoff envelope json");
+    let reloaded_from_corrupt_handoff_envelope = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+    let corrupt_handoff_envelope_detail = reloaded_from_corrupt_handoff_envelope
+        .get_session(&session.summary.id)
+        .await
+        .expect("reload detail from handoff projection fallback");
+    assert_eq!(
+        corrupt_handoff_envelope_detail.handoffs.len(),
+        detail.handoffs.len()
+    );
+    assert_eq!(
+        corrupt_handoff_envelope_detail
+            .handoffs
+            .iter()
+            .find(|handoff| handoff.handoff_ref == corrupted_handoff_ref)
+            .expect("corrupt handoff reloaded from projection row")
+            .artifact_refs,
+        detail
+            .handoffs
+            .iter()
+            .find(|handoff| handoff.handoff_ref == corrupted_handoff_ref)
+            .expect("original handoff summary")
+            .artifact_refs
+    );
     let artifact_refs = detail
         .handoffs
         .iter()

@@ -41,7 +41,6 @@ struct PersistedMailboxHandoffRecord {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PersistedHandoffEnvelope {
-    #[serde(default)]
     handoff_ref: String,
     session_id: String,
     run_id: String,
@@ -57,13 +56,9 @@ struct PersistedHandoffEnvelope {
 }
 
 impl PersistedHandoffEnvelope {
-    fn into_summary(self, fallback_handoff_ref: &str) -> RuntimeHandoffSummary {
+    fn into_summary(self) -> RuntimeHandoffSummary {
         RuntimeHandoffSummary {
-            handoff_ref: if self.handoff_ref.trim().is_empty() {
-                fallback_handoff_ref.to_string()
-            } else {
-                self.handoff_ref
-            },
+            handoff_ref: self.handoff_ref,
             mailbox_ref: self.mailbox_ref,
             sender_actor_ref: self.sender_actor_ref,
             receiver_actor_ref: self.receiver_actor_ref,
@@ -1291,11 +1286,19 @@ impl RuntimeAdapter {
                 handoffs.push(summary);
                 continue;
             }
-            if let Some(envelope) = self.load_runtime_artifact::<PersistedHandoffEnvelope>(
-                envelope_storage_path.as_deref(),
-            )? {
-                handoffs.push(envelope.into_summary(&handoff_ref));
-                continue;
+            if let Some(storage_path) = envelope_storage_path.as_deref() {
+                match self.load_runtime_artifact::<PersistedHandoffEnvelope>(Some(storage_path)) {
+                    Ok(Some(envelope)) => {
+                        handoffs.push(envelope.into_summary());
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        eprintln!(
+                            "ignoring invalid runtime handoff envelope {storage_path}: {error}"
+                        );
+                    }
+                }
             }
             let artifact_refs =
                 serde_json::from_str::<Vec<String>>(&artifact_refs_json).unwrap_or_default();

@@ -245,3 +245,12 @@ fn split_execution_events_module_derives_usage_cost_shape() {
         ("turns", 1_i64, "count")
     );
 }
+
+#[test]
+fn split_execution_events_module_uses_run_trace_event_taxonomy() {
+    let source = include_str!("execution_events.rs");
+    let legacy_submitted = ["turn", "submitted"].join("_");
+    let legacy_executed = ["turn", "executed"].join("_");
+    assert!(!source.contains(&legacy_submitted));
+    assert!(!source.contains(&legacy_executed));
+}
