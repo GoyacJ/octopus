@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<{
   <div
     :data-testid="props.testId || undefined"
     :class="cn(
-      'flex flex-col gap-3 rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs',
+      'flex flex-col gap-3 rounded-[var(--radius-m)] border border-border bg-surface p-3 shadow-xs',
       props.class,
     )"
   >

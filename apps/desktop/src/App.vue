@@ -242,35 +242,47 @@ watch(
   <div
     v-if="showHostUnavailable"
     data-testid="desktop-backend-guard"
-    class="flex min-h-screen items-center justify-center bg-background px-6"
+    class="flex min-h-screen items-center justify-center bg-background px-6 py-10"
   >
-    <div class="w-full max-w-xl rounded-[var(--radius-xl)] border border-border bg-card p-8 shadow-lg">
-      <div class="space-y-2">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">
-          {{ t('app.hostUnavailable.eyebrow') }}
-        </p>
-        <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
-          {{ t('app.hostUnavailable.title') }}
-        </h1>
-        <p class="text-sm leading-6 text-text-secondary">
-          {{ hostUnavailableDescription }}
-        </p>
+    <div
+      data-testid="desktop-backend-guard-shell"
+      class="w-full max-w-2xl overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface shadow-sm"
+    >
+      <div
+        data-testid="desktop-backend-guard-header"
+        class="border-b border-border bg-subtle px-8 py-7"
+      >
+        <div class="space-y-2">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">
+            {{ t('app.hostUnavailable.eyebrow') }}
+          </p>
+          <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
+            {{ t('app.hostUnavailable.title') }}
+          </h1>
+          <p class="text-sm leading-6 text-text-secondary">
+            {{ hostUnavailableDescription }}
+          </p>
+        </div>
       </div>
 
-      <UiStatusCallout
-        tone="warning"
-        class="mt-5"
-        :description="t('app.hostUnavailable.description')"
-      />
+      <div class="space-y-5 px-8 py-6">
+        <UiStatusCallout
+          tone="warning"
+          :description="t('app.hostUnavailable.description')"
+        />
+      </div>
 
-      <div class="mt-6 flex flex-wrap gap-3">
+      <div
+        data-testid="desktop-backend-guard-actions"
+        class="flex flex-wrap gap-3 border-t border-border bg-subtle px-8 py-4"
+      >
         <UiButton data-testid="desktop-backend-retry" @click="bootstrapShell">
           {{ t('app.hostUnavailable.retry') }}
         </UiButton>
         <UiButton
           v-if="shell.canRestartBackend"
           data-testid="desktop-backend-restart"
-          variant="ghost"
+          variant="outline"
           @click="shell.restartBackend"
         >
           {{ t('app.hostUnavailable.restart') }}

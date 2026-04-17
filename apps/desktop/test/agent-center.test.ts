@@ -92,7 +92,12 @@ describe('workspace and project agents pages', () => {
     expect(mounted.container.querySelector('[data-testid="workspace-console-view"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="workspace-console-tabs"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-embedded"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-tabs-shell"]')).not.toBeNull()
+    const tabsShell = mounted.container.querySelector<HTMLElement>('[data-testid="agent-center-tabs-shell"]')
+    expect(tabsShell).not.toBeNull()
+    expect(tabsShell?.className).toContain('border-b')
+    expect(tabsShell?.className).toContain('border-border')
+    expect(tabsShell?.className).not.toContain('bg-subtle')
+    expect(tabsShell?.className).not.toContain('rounded')
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
     expect(mounted.container.textContent).toContain('Finance Planner Template')
@@ -121,6 +126,36 @@ describe('workspace and project agents pages', () => {
     expect(mounted.container.textContent).toContain('Studio Direction Team')
     expect(mounted.container.textContent).toContain('工作区')
     expect(mounted.container.textContent).toContain('Local Workspace')
+
+    mounted.destroy()
+  })
+
+  it('keeps agent and team cards on neutral hover states instead of accent border flashes', async () => {
+    await router.push('/workspaces/ws-local/agents')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitForText(mounted.container, 'Architect Agent')
+
+    const agentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-architect"]') as HTMLButtonElement | null
+    const agentCard = agentOpenButton?.closest<HTMLElement>('[role="button"]')
+    expect(agentCard).not.toBeNull()
+    expect(agentCard?.className).toContain('hover:border-border-strong')
+    expect(agentCard?.className).toContain('hover:bg-subtle')
+    expect(agentCard?.className).not.toContain('hover:border-primary/30')
+
+    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(teamTab).not.toBeNull()
+    teamTab?.click()
+    await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
+    await waitForText(mounted.container, 'Studio Direction Team')
+
+    const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
+    const teamCard = teamOpenButton?.closest<HTMLElement>('[role="button"]')
+    expect(teamCard).not.toBeNull()
+    expect(teamCard?.className).toContain('hover:border-border-strong')
+    expect(teamCard?.className).toContain('hover:bg-subtle')
+    expect(teamCard?.className).not.toContain('hover:border-primary/30')
 
     mounted.destroy()
   })

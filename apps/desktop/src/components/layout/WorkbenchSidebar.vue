@@ -318,6 +318,46 @@ function isProjectExpanded(projectId: string) {
   return currentProjectId.value === projectId
 }
 
+function projectGroupClasses(projectId: string) {
+  return [
+    'group rounded-[var(--radius-l)] border p-2 transition-colors',
+    isProjectExpanded(projectId)
+      ? 'border-border bg-surface/80'
+      : 'border-transparent bg-transparent',
+  ].join(' ')
+}
+
+function projectSummaryClasses(projectId: string) {
+  return [
+    'ui-focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-m)] px-2 py-2 text-left transition-colors',
+    isProjectExpanded(projectId)
+      ? 'cursor-default'
+      : 'cursor-pointer text-text-secondary hover:bg-subtle hover:text-text-primary',
+  ].join(' ')
+}
+
+function workspaceTriggerClasses() {
+  return [
+    'ui-focus-ring group flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-l)] border p-2 text-left transition-colors',
+    workspaceMenuOpen.value
+      ? 'border-border-strong bg-accent'
+      : 'border-transparent hover:border-border hover:bg-subtle',
+  ].join(' ')
+}
+
+function workspaceTriggerIconClasses() {
+  return [
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-m)] bg-primary/10 text-primary transition-colors',
+    workspaceMenuOpen.value ? 'bg-surface' : '',
+  ].join(' ').trim()
+}
+
+function workspaceTriggerCaretClasses() {
+  return workspaceMenuOpen.value
+    ? 'text-text-secondary'
+    : 'text-text-tertiary transition-colors group-hover:text-text-secondary'
+}
+
 function closeWorkspaceMenu() {
   workspaceMenuOpen.value = false
 }
@@ -452,7 +492,12 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
         <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {{ t('sidebar.projectTree.title') }}
         </div>
-        <UiPopover v-model:open="quickCreateOpen" align="end" side="bottom" class="w-[300px] p-0">
+        <UiPopover
+          v-model:open="quickCreateOpen"
+          align="end"
+          side="bottom"
+          class="w-[320px] overflow-hidden p-0"
+        >
           <template #trigger>
             <UiButton
               variant="ghost"
@@ -467,43 +512,51 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
 
           <form
             data-testid="sidebar-project-create-popover"
-            class="space-y-4 p-4"
+            class="flex flex-col"
             @submit.prevent="submitQuickCreateProject"
           >
-            <div class="space-y-1">
+            <div
+              data-testid="sidebar-project-create-intro"
+              class="space-y-1 border-b border-border bg-subtle px-4 py-3"
+            >
               <h3 class="text-sm font-semibold text-text-primary">{{ t('sidebar.projectTree.dialogTitle') }}</h3>
               <p class="text-xs leading-5 text-text-secondary">{{ t('sidebar.projectTree.dialogDescription') }}</p>
             </div>
 
-            <UiField :label="t('projects.fields.name')">
-              <UiInput
-                v-model="quickCreateForm.name"
-                data-testid="sidebar-project-create-name-input"
-                :placeholder="t('sidebar.projectTree.inputPlaceholder')"
+            <div class="space-y-4 px-4 py-4">
+              <UiField :label="t('projects.fields.name')">
+                <UiInput
+                  v-model="quickCreateForm.name"
+                  data-testid="sidebar-project-create-name-input"
+                  :placeholder="t('sidebar.projectTree.inputPlaceholder')"
+                />
+              </UiField>
+
+              <UiField :label="t('projects.fields.description')">
+                <UiTextarea
+                  v-model="quickCreateForm.description"
+                  data-testid="sidebar-project-create-description-input"
+                  :rows="4"
+                />
+              </UiField>
+
+              <ProjectResourceDirectoryField
+                v-model="quickCreateForm.resourceDirectory"
+                path-test-id="sidebar-project-create-resource-directory-path"
+                pick-test-id="sidebar-project-create-resource-directory-pick"
               />
-            </UiField>
 
-            <UiField :label="t('projects.fields.description')">
-              <UiTextarea
-                v-model="quickCreateForm.description"
-                data-testid="sidebar-project-create-description-input"
-                :rows="4"
+              <UiStatusCallout
+                v-if="workspaceStore.error"
+                tone="error"
+                :description="workspaceStore.error"
               />
-            </UiField>
+            </div>
 
-            <ProjectResourceDirectoryField
-              v-model="quickCreateForm.resourceDirectory"
-              path-test-id="sidebar-project-create-resource-directory-path"
-              pick-test-id="sidebar-project-create-resource-directory-pick"
-            />
-
-            <UiStatusCallout
-              v-if="workspaceStore.error"
-              tone="error"
-              :description="workspaceStore.error"
-            />
-
-            <div class="flex justify-end gap-2">
+            <div
+              data-testid="sidebar-project-create-actions"
+              class="flex justify-end gap-2 border-t border-border bg-subtle px-4 py-3"
+            >
               <UiButton
                 type="button"
                 variant="ghost"
@@ -527,14 +580,13 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           v-for="project in activeProjects"
           :key="project.id"
           :data-testid="`sidebar-project-${project.id}`"
-          class="group rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-colors"
+          :class="projectGroupClasses(project.id)"
         >
           <div class="flex items-center gap-2">
             <button
               type="button"
               :data-testid="`sidebar-project-summary-${project.id}`"
-              class="flex min-w-0 flex-1 items-center gap-2 text-left transition-transform duration-200"
-              :class="!isProjectExpanded(project.id) ? 'group-hover:-translate-x-1 cursor-pointer' : 'cursor-default'"
+              :class="projectSummaryClasses(project.id)"
               @click="handleProjectSummaryClick(project.id)"
             >
               <FolderKanban :size="16" class="shrink-0 text-text-tertiary" />
@@ -564,8 +616,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               :key="item.id"
               :to="item.to"
               :data-testid="item.testId"
-              class="flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 text-[12px]"
-              :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-accent text-text-primary' : 'text-text-secondary hover:bg-accent'"
+              class="flex items-center gap-2 rounded-[var(--radius-xs)] border border-transparent px-2 py-1.5 text-[12px] transition-colors"
+              :class="isProjectModuleActive(project.id, item.routeNames) ? 'border-border-strong bg-accent text-text-primary' : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary'"
             >
               <component :is="item.icon" :size="14" />
               <span class="truncate">{{ item.label }}</span>
@@ -576,17 +628,21 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
     </div>
 
     <div class="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-border pt-4">
-      <UiPopover v-model:open="workspaceMenuOpen" align="start" side="top" class="min-w-0 w-[256px] p-2">
+      <UiPopover
+        v-model:open="workspaceMenuOpen"
+        align="start"
+        side="top"
+        class="min-w-0 w-[272px] overflow-hidden p-0"
+      >
         <template #trigger>
           <button
             type="button"
             data-testid="sidebar-workspace-menu-trigger"
-            class="workspace-menu-trigger group flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-l)] border border-transparent p-2 text-left transition-colors"
-            :class="{ 'workspace-menu-trigger--open shadow-xs': workspaceMenuOpen }"
+            :class="workspaceTriggerClasses()"
           >
             <div
               data-testid="sidebar-workspace-menu-trigger-icon"
-              class="workspace-menu-trigger__icon flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-m)] shadow-xs"
+              :class="workspaceTriggerIconClasses()"
             >
               <LayoutDashboard :size="18" />
             </div>
@@ -598,89 +654,106 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
                 {{ t('sidebar.workspace.label') }}
               </div>
             </div>
-            <ChevronsUpDown :size="14" class="shrink-0 text-text-tertiary transition-colors group-hover:text-text-secondary" />
+            <ChevronsUpDown :size="14" class="shrink-0" :class="workspaceTriggerCaretClasses()" />
           </button>
         </template>
 
-        <div class="flex flex-col gap-2">
-          <div class="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            {{ t('sidebar.workspaceMenu.title') }}
+        <div class="flex flex-col">
+          <div
+            data-testid="sidebar-workspace-menu-intro"
+            class="border-b border-border bg-subtle px-3 py-3"
+          >
+            <div class="truncate text-sm font-semibold text-text-primary">
+              {{ workspaceLabel }}
+            </div>
+            <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
+              {{ t('sidebar.workspaceMenu.title') }}
+            </div>
           </div>
-          <div data-testid="sidebar-workspace-navigation-menu" class="flex flex-col gap-1">
-            <RouterLink
-              v-for="item in workspaceNavigation"
-              :key="item.id"
-              :data-testid="`sidebar-workspace-nav-${item.id}`"
-              :to="item.to"
-              class="flex items-center gap-3 rounded-[var(--radius-m)] px-3 py-2 text-[13px] transition-colors"
-              :class="isRouteActive(item.routeNames) ? 'bg-accent text-text-primary font-medium' : 'text-text-secondary hover:bg-accent hover:text-text-primary'"
-              @click="closeWorkspaceMenu"
-            >
-              <component :is="item.icon" :size="16" />
-              <span class="truncate">{{ item.label }}</span>
-            </RouterLink>
-          </div>
+          <div class="flex flex-col gap-3 px-2 py-2">
+            <div>
+              <div data-testid="sidebar-workspace-navigation-menu" class="flex flex-col gap-1">
+                <RouterLink
+                  v-for="item in workspaceNavigation"
+                  :key="item.id"
+                  :data-testid="`sidebar-workspace-nav-${item.id}`"
+                  :to="item.to"
+                  class="flex items-center gap-3 rounded-[var(--radius-m)] border border-transparent px-3 py-2 text-[13px] transition-colors"
+                  :class="isRouteActive(item.routeNames) ? 'border-border-strong bg-accent text-text-primary font-medium' : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary'"
+                  @click="closeWorkspaceMenu"
+                >
+                  <component :is="item.icon" :size="16" />
+                  <span class="truncate">{{ item.label }}</span>
+                </RouterLink>
+              </div>
+            </div>
 
-          <div class="my-1 border-t border-border" />
-
-          <div class="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            {{ t('topbar.workspaceSectionTitle') }}
-          </div>
-          <div data-testid="sidebar-workspace-menu-list" class="flex flex-col gap-1">
-            <div
-              v-for="connection in shell.workspaceConnections"
-              :key="connection.workspaceConnectionId"
-              class="flex items-center gap-2"
-            >
-              <button
-                :data-testid="`sidebar-workspace-menu-item-${connection.workspaceConnectionId}`"
-                type="button"
-                class="flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-m)] border px-3 py-2 text-left transition-colors"
-                :class="connection.workspaceConnectionId === shell.activeWorkspaceConnectionId
-                  ? 'border-border-strong bg-accent text-text-primary shadow-xs'
-                  : 'border-border text-text-secondary hover:bg-accent'"
-                @click="switchWorkspace(connection.workspaceConnectionId, connection.workspaceId)"
-              >
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="truncate text-sm font-semibold">{{ getWorkspaceConnectionLabel(connection) }}</span>
-                    <span
-                      :data-testid="`sidebar-workspace-status-dot-${connection.workspaceConnectionId}`"
-                      class="h-2.5 w-2.5 shrink-0 rounded-full"
-                      :class="getWorkspaceConnectionStatusDotClass(connection.status)"
-                      :aria-label="connection.status"
-                      :title="connection.status"
-                    />
-                  </div>
-                  <div class="truncate text-[11px] text-text-tertiary">
-                    {{ connection.baseUrl }}
-                  </div>
+            <div class="border-t border-border pt-3">
+              <div class="mb-1 px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('topbar.workspaceSectionTitle') }}
+              </div>
+              <div data-testid="sidebar-workspace-menu-list" class="flex flex-col gap-1">
+                <div
+                  v-for="connection in shell.workspaceConnections"
+                  :key="connection.workspaceConnectionId"
+                  class="flex items-center gap-2"
+                >
+                  <button
+                    :data-testid="`sidebar-workspace-menu-item-${connection.workspaceConnectionId}`"
+                    type="button"
+                    class="flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-m)] border px-3 py-2 text-left transition-colors"
+                    :class="connection.workspaceConnectionId === shell.activeWorkspaceConnectionId
+                      ? 'border-border-strong bg-accent text-text-primary'
+                      : 'border-border text-text-secondary hover:border-border-strong hover:bg-subtle'"
+                    @click="switchWorkspace(connection.workspaceConnectionId, connection.workspaceId)"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="truncate text-sm font-semibold">{{ getWorkspaceConnectionLabel(connection) }}</span>
+                        <span
+                          :data-testid="`sidebar-workspace-status-dot-${connection.workspaceConnectionId}`"
+                          class="h-2.5 w-2.5 shrink-0 rounded-full"
+                          :class="getWorkspaceConnectionStatusDotClass(connection.status)"
+                          :aria-label="connection.status"
+                          :title="connection.status"
+                        />
+                      </div>
+                      <div class="truncate text-[11px] text-text-tertiary">
+                        {{ connection.baseUrl }}
+                      </div>
+                    </div>
+                  </button>
+                  <UiButton
+                    v-if="connection.transportSecurity !== 'loopback'"
+                    :data-testid="`sidebar-workspace-delete-${connection.workspaceConnectionId}`"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="h-7 w-7 shrink-0"
+                    :aria-label="t('topbar.removeWorkspace')"
+                    @click="removeWorkspaceConnection(connection.workspaceConnectionId, connection.workspaceId)"
+                  >
+                    <Trash2 :size="14" />
+                  </UiButton>
                 </div>
-              </button>
-              <UiButton
-                v-if="connection.transportSecurity !== 'loopback'"
-                :data-testid="`sidebar-workspace-delete-${connection.workspaceConnectionId}`"
-                type="button"
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 shrink-0"
-                :aria-label="t('topbar.removeWorkspace')"
-                @click="removeWorkspaceConnection(connection.workspaceConnectionId, connection.workspaceId)"
-              >
-                <Trash2 :size="14" />
-              </UiButton>
+              </div>
             </div>
           </div>
 
-          <UiButton
-            data-testid="sidebar-connect-workspace-trigger"
-            variant="ghost"
-            class="w-full justify-start rounded-[var(--radius-m)] px-3 py-2"
-            @click="openConnectWorkspaceDialog"
+          <div
+            data-testid="sidebar-workspace-menu-actions"
+            class="border-t border-border bg-subtle px-2 py-2"
           >
-            <Plus :size="16" class="mr-2" />
-            {{ t('connectWorkspace.actions.trigger') }}
-          </UiButton>
+            <UiButton
+              data-testid="sidebar-connect-workspace-trigger"
+              variant="ghost"
+              class="w-full justify-start rounded-[var(--radius-m)] px-3 py-2"
+              @click="openConnectWorkspaceDialog"
+            >
+              <Plus :size="16" class="mr-2" />
+              {{ t('connectWorkspace.actions.trigger') }}
+            </UiButton>
+          </div>
         </div>
       </UiPopover>
 
@@ -715,16 +788,3 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
     </UiDialog>
   </aside>
 </template>
-
-<style scoped>
-.workspace-menu-trigger:hover,
-.workspace-menu-trigger--open {
-  border-color: color-mix(in srgb, var(--color-status-warning) 28%, var(--border));
-  background: color-mix(in srgb, var(--color-status-warning) 10%, var(--bg-surface));
-}
-
-.workspace-menu-trigger__icon {
-  background: color-mix(in srgb, var(--color-status-warning) 18%, var(--bg-surface));
-  color: var(--color-status-warning);
-}
-</style>

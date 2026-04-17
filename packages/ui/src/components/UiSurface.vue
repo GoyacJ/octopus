@@ -12,7 +12,7 @@ const surfaceVariants = cva(
         raised: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)]',
         overlay: 'bg-popover border border-[color-mix(in_srgb,var(--border)_84%,transparent)] shadow-md rounded-[var(--radius-xl)]',
         panel: 'bg-subtle border border-[color-mix(in_srgb,var(--border)_68%,transparent)] shadow-none rounded-[var(--radius-l)]',
-        interactive: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)] hover:bg-accent hover:border-border-strong',
+        interactive: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)] hover:bg-subtle hover:border-border-strong',
         subtle: 'bg-subtle border border-transparent shadow-none rounded-[var(--radius-l)]',
       },
       padding: {

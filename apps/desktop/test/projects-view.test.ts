@@ -128,6 +128,27 @@ describe('Workspace project management view', () => {
     mounted.destroy()
   })
 
+  it('uses the shared list row grammar for project selection inside the list-detail workspace', async () => {
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]') !== null)
+
+    const shell = mounted.container.querySelector<HTMLElement>('[data-testid="ui-list-detail-shell"]')
+    const projectRow = mounted.container.querySelector<HTMLElement>('[data-testid="projects-select-proj-redesign"]')
+
+    expect(shell).not.toBeNull()
+    expect(shell?.className).toContain('gap-px')
+    expect(projectRow).not.toBeNull()
+
+    projectRow?.click()
+    await nextTick()
+
+    expect(projectRow?.getAttribute('data-ui-state')).toBe('active')
+    expect(projectRow?.className).toContain('bg-accent')
+
+    mounted.destroy()
+  })
+
   it('creates a new active project and persists workspace assignments', async () => {
     vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
       .mockResolvedValue('/workspace/projects/agent-studio/resources')

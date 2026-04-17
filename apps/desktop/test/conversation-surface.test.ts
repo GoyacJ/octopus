@@ -11,6 +11,7 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import * as tauriClient from '@/tauri/client'
 import { useRuntimeStore } from '@/stores/runtime'
+import { useShellStore } from '@/stores/shell'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -114,6 +115,127 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
     expect(mounted.container.textContent).toContain('Completed request')
+
+    mounted.destroy()
+  })
+
+  it('renders active conversation controls as calm selected bands instead of raised chips', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const tabsShell = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-tabs-shell"]')
+    const activeTab = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-tab-conv-redesign"]')
+    expect(tabsShell).not.toBeNull()
+    expect(tabsShell?.className).toContain('border-b')
+    expect(tabsShell?.className).not.toContain('rounded-[var(--radius-l)]')
+    expect(activeTab).not.toBeNull()
+    expect(activeTab?.className).toContain('bg-subtle')
+    expect(activeTab?.className).not.toContain('shadow-xs')
+
+    const activeContextSection = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-section-context"]')
+    expect(activeContextSection).not.toBeNull()
+    expect(activeContextSection?.className).toContain('bg-subtle')
+    expect(activeContextSection?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
+  it('renders context-pane chrome as integrated calm bands in expanded and collapsed states', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+    const shell = useShellStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const header = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-header"]')
+    const collapseButton = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-collapse"]')
+    expect(header).not.toBeNull()
+    expect(header?.className).toContain('bg-subtle')
+    expect(collapseButton).not.toBeNull()
+    expect(collapseButton?.className).toContain('hover:bg-surface')
+    expect(collapseButton?.className).not.toContain('hover:bg-muted/80')
+
+    shell.toggleRightSidebar()
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-context-expand"]') !== null)
+
+    const expandButton = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-expand"]')
+    const activeCollapsedSection = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-section-context"]')
+    expect(expandButton).not.toBeNull()
+    expect(expandButton?.className).toContain('bg-subtle')
+    expect(expandButton?.className).toContain('hover:bg-surface')
+    expect(expandButton?.className).not.toContain('hover:bg-muted/80')
+    expect(activeCollapsedSection).not.toBeNull()
+    expect(activeCollapsedSection?.className).toContain('bg-subtle')
+    expect(activeCollapsedSection?.className).toContain('border-border')
+
+    mounted.destroy()
+  })
+
+  it('renders composer control shells as integrated quiet controls instead of floating pills', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const addTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-add-trigger"]')
+    const modelShell = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-model-shell"]')
+    const permissionShell = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-permission-shell"]')
+    const actorShell = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-actor-shell"]')
+
+    expect(addTrigger).not.toBeNull()
+    expect(addTrigger?.className).toContain('bg-subtle')
+    expect(addTrigger?.className).not.toContain('shadow-xs')
+    expect(addTrigger?.className).not.toContain('rounded-full')
+
+    expect(modelShell).not.toBeNull()
+    expect(modelShell?.className).toContain('bg-subtle')
+    expect(modelShell?.className).not.toContain('shadow-xs')
+    expect(modelShell?.className).not.toContain('rounded-full')
+
+    expect(permissionShell).not.toBeNull()
+    expect(permissionShell?.className).toContain('bg-subtle')
+    expect(permissionShell?.className).not.toContain('shadow-xs')
+    expect(permissionShell?.className).not.toContain('rounded-full')
+
+    expect(actorShell).not.toBeNull()
+    expect(actorShell?.className).toContain('bg-subtle')
+    expect(actorShell?.className).not.toContain('shadow-xs')
+    expect(actorShell?.className).not.toContain('rounded-full')
+
+    mounted.destroy()
+  })
+
+  it('renders message bubbles and the send action as integrated surfaces instead of floating chat controls', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const assistantMessageBubble = Array.from(mounted.container.querySelectorAll<HTMLElement>('article'))
+      .find(node => node.textContent?.includes('建议先把 schema、共享 UI 和工作台布局拆开')) ?? null
+    expect(assistantMessageBubble).not.toBeNull()
+    expect(assistantMessageBubble?.className).toContain('border')
+    expect(assistantMessageBubble?.className).not.toContain('shadow-xs')
+
+    const sendButton = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    expect(sendButton?.className).toContain('bg-primary')
+    expect(sendButton?.className).not.toContain('shadow-sm')
+    expect(sendButton?.className).not.toContain('rounded-full')
 
     mounted.destroy()
   })
@@ -770,6 +892,91 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('renders the context summary as an integrated shell instead of a generic subtle card', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-context-summary"]') !== null)
+
+    const summary = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-summary"]')
+    const header = summary?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const body = summary?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+
+    expect(summary).not.toBeNull()
+    expect(header).not.toBeNull()
+    expect(header?.textContent).toContain(String(i18n.global.t('conversation.detail.summary.title')))
+    expect(body).not.toBeNull()
+    expect(body?.textContent).toContain(String(i18n.global.t('conversation.detail.summary.tokenUsage')))
+
+    mounted.destroy()
+  })
+
+  it('renders freshness and memory proposal blocks as integrated shells instead of generic subtle cards', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-context-freshness"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-memory-proposal"]') !== null)
+
+    const freshness = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-context-freshness"]')
+    const freshnessHeader = freshness?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const freshnessBody = freshness?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+    const memoryProposal = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-memory-proposal"]')
+    const memoryProposalHeader = memoryProposal?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const memoryProposalBody = memoryProposal?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+
+    expect(freshness).not.toBeNull()
+    expect(freshnessHeader).not.toBeNull()
+    expect(freshnessHeader?.textContent).toContain('Freshness')
+    expect(freshnessBody).not.toBeNull()
+
+    expect(memoryProposal).not.toBeNull()
+    expect(memoryProposalHeader).not.toBeNull()
+    expect(memoryProposalHeader?.textContent).toContain('Memory')
+    expect(memoryProposalBody).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('renders tools and timeline blocks as integrated shells instead of generic subtle cards', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=ops')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-ops-tools"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-ops-timeline"]') !== null)
+
+    const tools = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-ops-tools"]')
+    const toolsHeader = tools?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const toolsBody = tools?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+    const timeline = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-ops-timeline"]')
+    const timelineHeader = timeline?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const timelineBody = timeline?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+
+    expect(tools).not.toBeNull()
+    expect(toolsHeader).not.toBeNull()
+    expect(toolsHeader?.textContent).toContain(String(i18n.global.t('conversation.detail.tools.title')))
+    expect(toolsBody).not.toBeNull()
+
+    expect(timeline).not.toBeNull()
+    expect(timelineHeader).not.toBeNull()
+    expect(timelineHeader?.textContent).toContain(String(i18n.global.t('conversation.detail.timeline.title')))
+    expect(timelineBody).not.toBeNull()
+
+    mounted.destroy()
+  })
+
   it('does not request deliverable body content while the context pane stays in context mode', async () => {
     let deliverableContentCalls = 0
 
@@ -833,6 +1040,33 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.querySelector('[data-testid="deliverable-version-list"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Version 3 content for artifact-run-conv-redesign.')
     expect(mounted.container.textContent).toContain('Runtime Delivery Summary v2')
+
+    mounted.destroy()
+  })
+
+  it('renders the deliverable overview as an integrated shell instead of a nested action card', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-deliverable-overview"]') !== null)
+
+    const overview = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-deliverable-overview"]')
+    const header = overview?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-header"]') ?? null
+    const body = overview?.querySelector<HTMLElement>('[data-testid="ui-inspector-panel-body"]') ?? null
+    const actions = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-deliverable-actions"]')
+
+    expect(overview).not.toBeNull()
+    expect(overview?.className).toContain('overflow-hidden')
+    expect(header).not.toBeNull()
+    expect(header?.textContent).toContain('Runtime Delivery Summary')
+    expect(body).not.toBeNull()
+    expect(actions).not.toBeNull()
+    expect(actions?.className).toContain('border-t')
+    expect(actions?.className).not.toContain('rounded-[var(--radius-s)]')
 
     mounted.destroy()
   })

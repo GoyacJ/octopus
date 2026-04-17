@@ -927,14 +927,18 @@ async function rejectMemoryProposal() {
             <div class="mt-3 flex items-end gap-3 pt-2">
               <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <div
+                  data-testid="conversation-add-trigger"
                   aria-hidden="true"
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-xs"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-m)] border border-border bg-subtle text-text-secondary"
                 >
                   <Plus :size="14" />
                 </div>
 
                 <div class="w-full sm:w-[10.5rem]">
-                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
+                  <div
+                    data-testid="conversation-model-shell"
+                    class="flex min-w-0 items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
+                  >
                     <Sparkles :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedModelId"
@@ -947,7 +951,10 @@ async function rejectMemoryProposal() {
                 </div>
 
                 <div class="w-full sm:w-[10rem]">
-                  <div class="flex min-w-[100px] items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
+                  <div
+                    data-testid="conversation-permission-shell"
+                    class="flex min-w-[100px] items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
+                  >
                     <Shield :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedPermissionMode"
@@ -960,7 +967,10 @@ async function rejectMemoryProposal() {
                 </div>
 
                 <div class="w-full sm:w-[9.5rem]">
-                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
+                  <div
+                    data-testid="conversation-actor-shell"
+                    class="flex min-w-0 items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
+                  >
                     <Bot :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedActorValue"
@@ -978,7 +988,7 @@ async function rejectMemoryProposal() {
                 size="icon"
                 :aria-label="t('conversation.composer.send')"
                 :disabled="!canSubmit"
-                class="h-10 w-10 shrink-0 self-end rounded-full bg-primary text-primary-foreground shadow-sm transition-all duration-normal ease-apple hover:bg-primary/90 disabled:bg-muted disabled:text-text-tertiary"
+                class="h-10 w-10 shrink-0 self-end rounded-[var(--radius-m)] bg-primary text-primary-foreground transition-all duration-normal ease-apple hover:bg-primary/90 disabled:bg-muted disabled:text-text-tertiary"
                 @click="submitRuntimeTurn"
               >
                 <ArrowUp :size="18" />

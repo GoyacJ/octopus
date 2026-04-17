@@ -12,16 +12,15 @@ import {
   UiInput,
   UiInspectorPanel,
   UiListDetailShell,
+  UiListRow,
   UiMetricCard,
   UiPageHeader,
   UiPageShell,
-  UiRecordCard,
   UiStatusCallout,
   UiTextarea,
 } from '@octopus/ui'
 
 import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
-import { formatDateTime } from '@/i18n/copy'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useShellStore } from '@/stores/shell'
@@ -359,27 +358,27 @@ function statusLabel(status: ProjectRecord['status']) {
       :description="errorMessage"
     />
 
-    <UiListDetailShell>
+    <UiListDetailShell list-class="p-3" detail-class="p-3">
       <template #list>
         <section class="space-y-3">
-        <UiRecordCard
+        <UiListRow
           v-for="project in projects"
           :key="project.id"
           :data-testid="`projects-select-${project.id}`"
           :title="project.name"
-          :description="project.description"
+          :subtitle="project.description || project.resourceDirectory || t('common.na')"
           interactive
           class="cursor-pointer"
           :active="selectedProjectId === project.id"
           @click="applyProject(project.id)"
         >
-          <template #badges>
+          <div class="flex flex-wrap gap-1.5 pt-1">
             <UiBadge :label="statusLabel(project.status)" subtle />
-          </template>
+          </div>
           <template #meta>
-            <span class="text-xs text-text-tertiary">{{ formatDateTime(Date.now()) }}</span>
+            <span class="line-clamp-1 text-xs text-text-tertiary">{{ project.resourceDirectory }}</span>
           </template>
-        </UiRecordCard>
+        </UiListRow>
         <UiEmptyState
           v-if="!projects.length"
           :title="t('projects.empty.title')"

@@ -185,4 +185,60 @@ describe('App runtime error boundary', () => {
 
     mounted.destroy()
   })
+
+  it('separates recovery actions from diagnostics inside integrated error sections', async () => {
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-tabs"]') !== null)
+
+    dispatchUnhandledRejection(new Error('segmented recovery state'))
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="app-runtime-error-boundary"]') !== null)
+
+    const recoverySection = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-recovery"]')
+    const detailsSection = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-details-section"]')
+    const detailsPanel = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-details"]')
+    const copyButton = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-copy"]')
+
+    expect(recoverySection).not.toBeNull()
+    expect(recoverySection?.className).toContain('border-border')
+    expect(recoverySection?.className).toContain('bg-subtle')
+
+    expect(detailsSection).not.toBeNull()
+    expect(detailsSection?.className).toContain('border-border')
+    expect(detailsSection?.className).toContain('bg-subtle')
+
+    expect(copyButton).not.toBeNull()
+    expect(copyButton?.className).toContain('border-border-subtle')
+    expect(copyButton?.className).toContain('bg-surface')
+    expect(recoverySection?.contains(copyButton ?? null)).toBe(false)
+
+    expect(detailsPanel).not.toBeNull()
+    expect(detailsPanel?.className).toContain('bg-surface')
+    expect(detailsPanel?.className).not.toContain('bg-surface-muted')
+
+    mounted.destroy()
+  })
+
+  it('renders the runtime error boundary with a calm intro band instead of a loose content block', async () => {
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-tabs"]') !== null)
+
+    dispatchUnhandledRejection(new Error('runtime intro band'))
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="app-runtime-error-boundary"]') !== null)
+
+    const boundary = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-boundary"]')
+    const intro = mounted.container.querySelector<HTMLElement>('[data-testid="app-runtime-error-intro"]')
+
+    expect(boundary).not.toBeNull()
+    expect(boundary?.className).toContain('overflow-hidden')
+
+    expect(intro).not.toBeNull()
+    expect(intro?.className).toContain('border-b')
+    expect(intro?.className).toContain('bg-subtle')
+
+    mounted.destroy()
+  })
 })

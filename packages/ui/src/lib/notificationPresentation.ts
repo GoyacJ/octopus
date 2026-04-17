@@ -4,6 +4,7 @@ import { Bell, CheckCircle2, CircleAlert, Info } from 'lucide-vue-next'
 type NotificationPresentation = {
   dotClass: string
   rowClass: string
+  rowHeaderClass: string
   titleClass: string
   toastSurfaceClass: string
   toastIconClass: string
@@ -20,23 +21,26 @@ export const notificationLevelIcons = {
 const notificationPresentations: Record<NotificationLevel, NotificationPresentation> = {
   info: {
     dotClass: 'bg-status-info',
-    rowClass: 'border-l-2 border-l-status-info',
+    rowClass: '',
+    rowHeaderClass: 'bg-[color-mix(in_srgb,var(--color-accent-soft)_74%,var(--surface)_26%)]',
     titleClass: 'text-text-primary',
-    toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-info)_22%,var(--border))]',
+    toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-info)_22%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-info-soft)_34%,var(--bg-popover))]',
     toastIconClass: 'text-status-info',
     toastTitleClass: 'text-text-primary',
   },
   success: {
     dotClass: 'bg-status-success',
-    rowClass: 'border-l-2 border-l-status-success',
+    rowClass: '',
+    rowHeaderClass: 'bg-[var(--color-status-success-soft)]',
     titleClass: 'text-text-primary',
-    toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-success)_22%,var(--border))]',
+    toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-success)_22%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-success-soft)_34%,var(--bg-popover))]',
     toastIconClass: 'text-status-success',
     toastTitleClass: 'text-text-primary',
   },
   warning: {
     dotClass: 'bg-status-warning',
-    rowClass: 'border-l-2 border-l-status-warning bg-[color-mix(in_srgb,var(--color-status-warning-soft)_42%,var(--bg-surface))] hover:bg-[color-mix(in_srgb,var(--color-status-warning-soft)_64%,var(--bg-subtle))]',
+    rowClass: '',
+    rowHeaderClass: 'bg-[var(--color-status-warning-soft)]',
     titleClass: 'text-status-warning',
     toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-warning)_22%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-warning-soft)_48%,var(--bg-popover))]',
     toastIconClass: 'text-status-warning',
@@ -44,7 +48,8 @@ const notificationPresentations: Record<NotificationLevel, NotificationPresentat
   },
   error: {
     dotClass: 'bg-status-error',
-    rowClass: 'border-l-2 border-l-status-error bg-[color-mix(in_srgb,var(--color-status-error-soft)_42%,var(--bg-surface))] hover:bg-[color-mix(in_srgb,var(--color-status-error-soft)_64%,var(--bg-subtle))]',
+    rowClass: '',
+    rowHeaderClass: 'bg-[var(--color-status-error-soft)]',
     titleClass: 'text-status-error',
     toastSurfaceClass: 'border-[color-mix(in_srgb,var(--color-status-error)_22%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-error-soft)_48%,var(--bg-popover))]',
     toastIconClass: 'text-status-error',

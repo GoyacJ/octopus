@@ -29,8 +29,14 @@ const isLoading = computed(() => shell.loading || auth.bootstrapping || !auth.is
 
 <template>
   <div class="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-    <div class="grid w-full max-w-5xl overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface shadow-sm lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-      <section class="border-b border-border bg-muted/35 px-8 py-10 lg:border-b-0 lg:border-r">
+    <div
+      data-testid="browser-auth-shell"
+      class="grid w-full max-w-5xl overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"
+    >
+      <section
+        data-testid="browser-auth-intro"
+        class="border-b border-border bg-subtle px-8 py-10 lg:border-b-0 lg:border-r"
+      >
         <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-tertiary">
           {{ t('authGate.eyebrow') }}
         </p>
@@ -62,14 +68,14 @@ const isLoading = computed(() => shell.loading || auth.bootstrapping || !auth.is
             <div
               v-if="isLoading"
               data-testid="browser-auth-loading"
-              class="rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-6 text-sm text-text-secondary"
+              class="border-t border-border pt-6 text-sm text-text-secondary"
             >
               正在加载登录上下文…
             </div>
             <div
               v-else
               data-testid="browser-auth-login-view"
-              class="rounded-[var(--radius-l)] border border-border bg-card p-6"
+              class="border-t border-border pt-6"
             >
               <AuthGateForm inline />
             </div>

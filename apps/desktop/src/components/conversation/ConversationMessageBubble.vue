@@ -75,7 +75,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
     :class="isUserMessage ? 'justify-end' : 'justify-start'"
   >
     <article
-      class="group relative flex max-w-[90%] gap-3 rounded-[var(--radius-xl)] border px-4 py-3 shadow-xs transition-colors"
+      class="group relative flex max-w-[90%] gap-3 rounded-[var(--radius-xl)] border px-4 py-3 transition-colors"
       :class="[
         isUserMessage
           ? 'flex-row-reverse border-border bg-surface'

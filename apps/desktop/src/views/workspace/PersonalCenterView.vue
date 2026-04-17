@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
+import { UiPageHeader, UiPageShell, UiTabs } from '@octopus/ui'
 
 import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -62,14 +62,17 @@ function handleTabChange(routeName: string) {
       :description="t('personalCenter.header.subtitle')"
     />
 
-    <UiPanelFrame variant="subtle" padding="sm">
+    <div
+      data-testid="personal-center-tabs-shell"
+      class="border-b border-border pb-4"
+    >
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
         data-testid="personal-center-tabs"
         @update:model-value="handleTabChange"
       />
-    </UiPanelFrame>
+    </div>
 
     <main class="min-h-0 flex-1 overflow-y-auto pb-8">
       <RouterView />

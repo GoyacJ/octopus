@@ -25,7 +25,7 @@ const presentation = computed(() => getNotificationPresentation(props.notificati
   <UiSurface
     variant="overlay"
     padding="sm"
-    :class="`w-full shadow-md ${presentation.toastSurfaceClass}`"
+    :class="`w-full shadow-sm ${presentation.toastSurfaceClass}`"
   >
     <div
       class="flex items-start gap-3"
@@ -56,7 +56,7 @@ const presentation = computed(() => getNotificationPresentation(props.notificati
       </div>
       <button
         type="button"
-        class="rounded-[var(--radius-full)] p-1 text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary"
+        class="rounded-[var(--radius-s)] p-1 text-text-tertiary transition-colors hover:bg-subtle hover:text-text-primary"
         :data-testid="`ui-toast-close-${props.notification.id}`"
         @click.stop="emit('close', props.notification.id)"
       >

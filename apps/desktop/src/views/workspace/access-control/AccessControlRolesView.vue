@@ -621,7 +621,7 @@ async function handleBulkDelete() {
                     v-for="module in permissionModuleItems"
                     :key="module.moduleName"
                     :data-testid="`access-control-role-permission-section-${module.moduleName}`"
-                    class="rounded-[var(--radius-l)] border border-border bg-card/80 shadow-xs"
+                    class="rounded-[var(--radius-l)] border border-transparent bg-subtle"
                   >
                     <UiButton
                       :data-testid="`access-control-role-permission-trigger-${module.moduleName}`"
@@ -738,7 +738,7 @@ async function handleBulkDelete() {
                   v-for="module in permissionModuleItems"
                   :key="module.moduleName"
                   :data-testid="`access-control-role-create-permission-section-${module.moduleName}`"
-                  class="rounded-[var(--radius-l)] border border-border bg-card/80 shadow-xs"
+                  class="rounded-[var(--radius-l)] border border-transparent bg-subtle"
                 >
                   <UiButton
                     :data-testid="`access-control-role-create-permission-trigger-${module.moduleName}`"

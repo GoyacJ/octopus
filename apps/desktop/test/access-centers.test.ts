@@ -7,6 +7,7 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { createAppRouter } from '@/router'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -325,6 +326,194 @@ describe('workspace access centers', () => {
     expect(mounted.container.textContent).toContain('菜单')
     expect(mounted.container.textContent).toContain('资源')
     expect(mounted.container.textContent).toContain('会话')
+
+    await mounted.destroy()
+  })
+
+  it('renders enterprise governance detail summaries as calm context bands instead of nested cards', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-enterprise') {
+          return
+        }
+
+        state.menuPolicies = [{
+          menuId: 'menu-workspace-console-projects',
+          enabled: true,
+          order: 110,
+          group: 'Operations',
+          visibility: 'visible',
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-enterprise/access-control/governance')
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-org-shell"]')
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-assignments"]')
+    await flushUi()
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-org-assignment-record-user-owner:org-root"]')
+    clickSelector(mounted.container, '[data-testid="access-control-org-assignment-record-user-owner:org-root"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-org-assignment-summary-positions"]')
+
+    const positionsSummary = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-org-assignment-summary-positions"]')
+    const groupsSummary = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-org-assignment-summary-groups"]')
+
+    expect(positionsSummary?.className).toContain('bg-subtle')
+    expect(positionsSummary?.className).not.toContain('bg-card')
+    expect(groupsSummary?.className).toContain('bg-subtle')
+    expect(groupsSummary?.className).not.toContain('bg-card')
+
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-policies"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-policies-shell"]')
+    clickSelector(mounted.container, '[data-testid="access-control-permission-leaf-access.roles.manage"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-permission-grant-matrix"]')
+
+    const grantMatrix = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-permission-grant-matrix"]')
+    expect(grantMatrix?.className).toContain('bg-subtle')
+    expect(grantMatrix?.className).not.toContain('bg-card')
+
+    await mounted.destroy()
+  })
+
+  it('renders role permission modules as integrated panels instead of raised card islands', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-enterprise') {
+          return
+        }
+
+        state.menuPolicies = [{
+          menuId: 'menu-workspace-console-projects',
+          enabled: true,
+          order: 110,
+          group: 'Operations',
+          visibility: 'visible',
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-enterprise/access-control/governance')
+
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-roles"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-roles-shell"]')
+
+    clickSelector(mounted.container, '[data-testid="access-control-role-record-role-owner"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-role-permission-section-access"]')
+
+    const detailSection = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-role-permission-section-access"]')
+    expect(detailSection?.className).toContain('bg-subtle')
+    expect(detailSection?.className).not.toContain('shadow-xs')
+
+    clickSelector(mounted.container, '[data-testid="access-control-role-create-button"]')
+    await waitForSelector(document.body, '[data-testid="access-control-role-create-permission-section-access"]')
+
+    const createSection = document.body.querySelector<HTMLElement>('[data-testid="access-control-role-create-permission-section-access"]')
+    expect(createSection?.className).toContain('bg-subtle')
+    expect(createSection?.className).not.toContain('shadow-xs')
+
+    await mounted.destroy()
+  })
+
+  it('renders audit detail blocks as calm bands instead of raised cards', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-enterprise') {
+          return
+        }
+
+        state.menuPolicies = [{
+          menuId: 'menu-workspace-console-projects',
+          enabled: true,
+          order: 110,
+          group: 'Operations',
+          visibility: 'visible',
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-enterprise/access-control/governance')
+
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-sessions"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-sessions-shell"]')
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-audit"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-audit-row-0"]')
+    clickSelector(mounted.container, '[data-testid="access-control-audit-row-0"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-audit-detail-actor"]')
+
+    const actorBlock = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-audit-detail-actor"]')
+    const resourceBlock = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-audit-detail-resource"]')
+    const recordIdBlock = mounted.container.querySelector<HTMLElement>('[data-testid="access-control-audit-detail-record-id"]')
+
+    expect(actorBlock?.className).toContain('bg-subtle')
+    expect(actorBlock?.className).not.toContain('bg-card')
+    expect(resourceBlock?.className).toContain('bg-subtle')
+    expect(resourceBlock?.className).not.toContain('bg-card')
+    expect(recordIdBlock?.className).toContain('bg-subtle')
+    expect(recordIdBlock?.className).not.toContain('bg-card')
+
+    await mounted.destroy()
+  })
+
+  it('renders resource policy detail rows as calm bands instead of nested cards', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-enterprise') {
+          return
+        }
+
+        state.menuPolicies = [{
+          menuId: 'menu-workspace-console-projects',
+          enabled: true,
+          order: 110,
+          group: 'Operations',
+          visibility: 'visible',
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-enterprise/access-control/governance')
+    const accessControlStore = useWorkspaceAccessControlStore()
+
+    await accessControlStore.upsertProtectedResource(
+      'agent',
+      'agent-gov',
+      {
+        projectId: 'proj-launch',
+        classification: 'internal',
+        tags: ['launch'],
+      },
+      'conn-enterprise',
+    )
+    const createdPolicy = await accessControlStore.createResourcePolicy({
+      subjectType: 'user',
+      subjectId: 'user-owner',
+      resourceType: 'agent',
+      resourceId: 'agent-gov',
+      action: 'inspect',
+      effect: 'allow',
+    }, 'conn-enterprise')
+
+    await waitForSelector(mounted.container, '[data-testid="access-governance-view"]')
+    await flushUi()
+    expect(accessControlStore.protectedResources.length).toBeGreaterThan(0)
+    expect(accessControlStore.resourcePolicies.some(policy => policy.id === createdPolicy.id)).toBe(true)
+    clickSelector(mounted.container, '[data-testid="ui-tabs-trigger-resources"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-resources-shell"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-resource-select"]')
+    clickSelector(mounted.container, '[data-testid="access-control-resource-select"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-resource-metadata-save"]')
+
+    const detailPolicyTriggers = mounted.container.querySelectorAll<HTMLElement>('[data-testid="ui-tabs-trigger-policies"]')
+    detailPolicyTriggers.item(detailPolicyTriggers.length - 1)?.click()
+    await waitForSelector(mounted.container, `[data-testid="access-control-resource-policy-record-${createdPolicy.id}"]`)
+
+    const policyRecord = mounted.container.querySelector<HTMLElement>(
+      `[data-testid="access-control-resource-policy-record-${createdPolicy.id}"]`,
+    )
+    expect(policyRecord?.className).toContain('bg-subtle')
+    expect(policyRecord?.className).not.toContain('bg-card')
 
     await mounted.destroy()
   })

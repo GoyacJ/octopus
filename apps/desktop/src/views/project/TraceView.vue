@@ -6,9 +6,9 @@ import {
   UiBadge,
   UiButton,
   UiEmptyState,
+  UiInspectorPanel,
   UiPageHeader,
   UiPageShell,
-  UiPanelFrame,
   UiStatTile,
   UiStatusCallout,
   UiTraceBlock,
@@ -117,9 +117,8 @@ async function rejectMemoryProposal() {
     </section>
 
     <section class="grid gap-4 lg:grid-cols-2">
-      <UiPanelFrame
-        variant="panel"
-        padding="md"
+      <UiInspectorPanel
+        data-testid="trace-run-state"
         :title="t('trace.runState.title')"
         :subtitle="t('trace.runState.subtitle')"
       >
@@ -136,11 +135,10 @@ async function rejectMemoryProposal() {
           :title="t('trace.runState.emptyTitle')"
           :description="t('trace.runState.emptyDescription')"
         />
-      </UiPanelFrame>
+      </UiInspectorPanel>
 
-      <UiPanelFrame
-        variant="subtle"
-        padding="md"
+      <UiInspectorPanel
+        data-testid="trace-recovery"
         :title="t('trace.recovery.title')"
         :subtitle="t('trace.recovery.subtitle')"
       >
@@ -177,12 +175,11 @@ async function rejectMemoryProposal() {
           :title="t('trace.recovery.emptyTitle')"
           :description="t('trace.recovery.emptyDescription')"
         />
-      </UiPanelFrame>
+      </UiInspectorPanel>
     </section>
 
-    <UiPanelFrame
-      variant="panel"
-      padding="md"
+    <UiInspectorPanel
+      data-testid="trace-timeline"
       :title="t('trace.timeline.title')"
       :subtitle="t('trace.timeline.subtitle')"
     >
@@ -207,6 +204,6 @@ async function rejectMemoryProposal() {
           :description="t('trace.timeline.emptyDescription')"
         />
       </div>
-    </UiPanelFrame>
+    </UiInspectorPanel>
   </UiPageShell>
 </template>

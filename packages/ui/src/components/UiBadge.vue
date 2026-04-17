@@ -20,7 +20,7 @@ const props = withDefaults(
       props.tone === 'success' ? 'border-transparent bg-[var(--color-status-success-soft)] text-status-success' : '',
       props.tone === 'warning' ? 'border-transparent bg-[var(--color-status-warning-soft)] text-status-warning' : '',
       props.tone === 'error' ? 'border-transparent bg-[var(--color-status-error-soft)] text-status-error' : '',
-      props.tone === 'info' ? 'border-transparent bg-accent text-primary' : '',
+      props.tone === 'info' ? 'border-transparent bg-[var(--color-status-info-soft)] text-status-info' : '',
       props.subtle ? 'border-transparent bg-transparent text-text-tertiary px-1.5 py-0' : ''
     ]"
   >

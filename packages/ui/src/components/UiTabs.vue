@@ -60,7 +60,7 @@ function emitValue(value: string) {
         type="button"
         :class="cn(
           'min-h-[2rem] px-3 text-[13px] font-medium transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-[var(--radius-xs)]',
+          'ui-focus-ring focus-visible:rounded-[var(--radius-xs)]',
           props.variant === 'default' && 'border-b-2 -mb-px pb-1.5',
           props.variant !== 'default' && 'rounded-[var(--radius-xs)]',
           props.variant === 'default' && 'data-[state=active]:border-primary data-[state=active]:text-text-primary data-[state=inactive]:border-transparent',

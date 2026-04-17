@@ -321,6 +321,51 @@ describe('repository governance', () => {
     expect(openApiAgents).toContain('generated.ts')
   })
 
+  it('keeps the desktop design standard aligned with the Calm Intelligence brand system', () => {
+    const designStandard = readRepoFile('docs', 'design', 'DESIGN.md')
+    const frontendGovernance = readRepoFile('scripts', 'check-frontend-governance.mjs')
+
+    expect(designStandard).toContain('Calm Intelligence')
+    expect(designStandard).toContain('primary accent: `#ff6a2a`')
+    expect(designStandard).toContain('primary accent: `#ff8a57`')
+    expect(designStandard).toContain('brand orange reads as identity, not warning')
+    expect(designStandard).toContain('The octopus character remains part of the brand')
+    expect(designStandard).toContain('Complexity expands progressively through information density and permissions')
+
+    expect(designStandard).not.toContain('a single blue accent for interactive priority')
+    expect(designStandard).not.toContain('Accent blue is the only saturated product chrome color.')
+    expect(designStandard).not.toContain('visible blue focus ring')
+    expect(designStandard).not.toContain('primary: blue fill, white text, 4px radius')
+
+    expect(frontendGovernance).toContain('uses deprecated blue hue utilities outside token aliases')
+    expect(frontendGovernance).toContain('uses direct warm hue utilities outside semantic token aliases')
+    expect(frontendGovernance).toContain('(?:blue|sky)-')
+    expect(frontendGovernance).toContain('(?:orange|amber|yellow)-')
+  })
+
+  it('defines canonical desktop tokens around the Octopus coral accent system', () => {
+    const tokens = readRepoFile('packages', 'ui', 'src', 'tokens.css')
+
+    expect(tokens).toContain('--color-accent: #ff6a2a;')
+    expect(tokens).toContain('--color-accent-hover: #e65a1f;')
+    expect(tokens).toContain('--color-accent-soft: #fff1e8;')
+    expect(tokens).toContain('--color-ring: rgba(255, 106, 42, 0.22);')
+    expect(tokens).toContain('--color-status-info: #ff6a2a;')
+    expect(tokens).toContain('--color-status-info-soft: rgba(255, 106, 42, 0.12);')
+
+    expect(tokens).toContain('--color-accent: #ff8a57;')
+    expect(tokens).toContain('--color-accent-hover: #ff9b6e;')
+    expect(tokens).toContain('--color-accent-soft: rgba(255, 138, 87, 0.18);')
+    expect(tokens).toContain('--color-ring: rgba(255, 138, 87, 0.3);')
+    expect(tokens).toContain('--color-status-info: #ff8a57;')
+    expect(tokens).toContain('--color-status-info-soft: rgba(255, 138, 87, 0.18);')
+
+    expect(tokens).not.toContain('--color-accent: #0b6ed0;')
+    expect(tokens).not.toContain('--color-accent-hover: #095fb3;')
+    expect(tokens).not.toContain('--color-accent: #4f9ae6;')
+    expect(tokens).not.toContain('--color-accent-hover: #6aabee;')
+  })
+
   it('extends OpenAPI and generated transport coverage for the next workspace, catalog, and runtime clusters', () => {
     const openApiSpec = readRepoFile('contracts', 'openapi', 'octopus.openapi.yaml')
     const generatedSchema = readRepoFile('packages', 'schema', 'src', 'generated.ts')

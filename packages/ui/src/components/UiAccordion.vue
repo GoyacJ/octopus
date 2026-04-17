@@ -64,7 +64,7 @@ function handleUpdate(value: string | string[] | undefined) {
     >
       <AccordionHeader>
         <AccordionTrigger
-          class="group flex w-full items-center gap-2 py-1.5 text-left text-sm font-medium text-text-primary transition-colors hover:bg-accent rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          class="ui-focus-ring group flex w-full items-center gap-2 rounded px-1 py-1.5 text-left text-sm font-medium text-text-primary transition-colors hover:bg-subtle"
           :data-testid="`ui-accordion-trigger-${item.value}`"
         >
           <ChevronRight

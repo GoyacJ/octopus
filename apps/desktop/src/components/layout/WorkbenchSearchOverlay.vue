@@ -32,6 +32,11 @@ interface SearchResult {
   keywords?: string[]
 }
 
+interface SearchResultGroup {
+  section: string
+  items: Array<SearchResult & { index: number }>
+}
+
 const { t } = useI18n()
 const router = useRouter()
 const shell = useShellStore()
@@ -41,6 +46,9 @@ const artifactStore = useArtifactStore()
 
 const query = ref('')
 const searchInput = ref<{ focus: () => void } | null>(null)
+const activeResultIndex = ref(0)
+
+const SEARCH_RESULTS_LIST_ID = 'workbench-search-overlay-results'
 
 function buildConversationResult(
   conversation: Pick<ConversationRecord, 'sessionId' | 'title' | 'lastMessagePreview' | 'status' | 'workspaceId' | 'projectId' | 'id'>,
@@ -189,6 +197,36 @@ const results = computed<SearchResult[]>(() => {
   )
 })
 
+const groupedResults = computed<SearchResultGroup[]>(() => {
+  const groups = new Map<string, SearchResultGroup>()
+
+  results.value.forEach((item, index) => {
+    const existingGroup = groups.get(item.section)
+    const entry = {
+      ...item,
+      index,
+    }
+
+    if (existingGroup) {
+      existingGroup.items.push(entry)
+      return
+    }
+
+    groups.set(item.section, {
+      section: item.section,
+      items: [entry],
+    })
+  })
+
+  return [...groups.values()]
+})
+
+const activeResult = computed(() => results.value[activeResultIndex.value] ?? null)
+
+watch(query, () => {
+  activeResultIndex.value = 0
+})
+
 watch(
   () => [shell.activeWorkspaceConnectionId, workspaceStore.currentProjectId] as const,
   ([connectionId, projectId]) => {
@@ -201,13 +239,28 @@ watch(
 )
 
 watch(
+  results,
+  (nextResults) => {
+    if (!nextResults.length) {
+      activeResultIndex.value = 0
+      return
+    }
+
+    activeResultIndex.value = Math.min(activeResultIndex.value, nextResults.length - 1)
+  },
+  { immediate: true },
+)
+
+watch(
   () => shell.searchOpen,
   async (open) => {
     if (!open) {
       query.value = ''
+      activeResultIndex.value = 0
       return
     }
 
+    activeResultIndex.value = 0
     if (shell.activeWorkspaceConnectionId) {
       await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId)
     }
@@ -231,6 +284,65 @@ function resultIcon(kind: SearchResultKind) {
   return Waypoints
 }
 
+function resultOptionId(id: string) {
+  return `workbench-search-result-${id.replace(/[^a-z0-9_-]/gi, '-')}`
+}
+
+function setActiveResult(index: number) {
+  if (!results.value.length) {
+    activeResultIndex.value = 0
+    return
+  }
+
+  activeResultIndex.value = Math.min(Math.max(index, 0), results.value.length - 1)
+}
+
+function moveActiveResult(delta: 1 | -1) {
+  if (!results.value.length) {
+    return
+  }
+
+  setActiveResult(activeResultIndex.value + delta)
+}
+
+function resultButtonClasses(active: boolean) {
+  return [
+    'flex h-auto w-full items-center gap-3 rounded-[var(--radius-m)] border px-3 py-3 text-left shadow-none',
+    active
+      ? 'border-border-strong bg-accent text-text-primary hover:bg-accent'
+      : 'border-transparent text-text-primary hover:border-border hover:bg-subtle',
+  ].join(' ')
+}
+
+function resultIconClasses(active: boolean) {
+  return active
+    ? 'mt-0.5 rounded-[var(--radius-s)] bg-surface p-2 text-primary'
+    : 'mt-0.5 rounded-[var(--radius-s)] bg-subtle p-2 text-text-secondary'
+}
+
+function shortcutKeyClasses() {
+  return 'inline-flex items-center rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-primary'
+}
+
+async function handleInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveActiveResult(1)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveActiveResult(-1)
+    return
+  }
+
+  if (event.key === 'Enter' && activeResult.value) {
+    event.preventDefault()
+    await selectResult(activeResult.value)
+  }
+}
+
 async function selectResult(item: SearchResult) {
   await router.push(item.to)
   shell.closeSearch()
@@ -240,49 +352,108 @@ async function selectResult(item: SearchResult) {
 <template>
   <UiDialog
     :open="shell.searchOpen"
-    :title="t('topbar.searchPlaceholder')"
+    :title="t('common.search')"
     :description="t('searchOverlay.emptyDescription')"
     :close-label="t('common.cancel')"
+    content-class="overflow-hidden p-0"
+    body-class="p-0"
     @update:open="(open) => { if (!open) shell.closeSearch() }"
   >
+    <template #header>
+      <div class="flex items-center gap-2 text-[12px] font-semibold text-text-secondary">
+        <Search :size="14" class="text-text-tertiary" />
+        <span>{{ t('common.search') }}</span>
+      </div>
+    </template>
+
     <UiPanelFrame variant="hero" padding="none">
-        <div data-testid="search-overlay-panel" class="space-y-4">
+      <div data-testid="search-overlay-panel" class="bg-popover">
         <div class="border-b border-border px-5 py-4">
-          <div class="flex items-center gap-3 rounded-[var(--radius-l)] border border-border bg-background px-4 py-3">
+          <div class="flex items-center gap-3 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-3">
             <Search :size="18" class="shrink-0 text-text-secondary" />
             <UiInput
               ref="searchInput"
               v-model="query"
               data-testid="search-overlay-input"
               :placeholder="t('searchOverlay.placeholder')"
+              role="combobox"
+              aria-autocomplete="list"
+              :aria-expanded="results.length ? 'true' : 'false'"
+              :aria-controls="SEARCH_RESULTS_LIST_ID"
+              :aria-activedescendant="activeResult ? resultOptionId(activeResult.id) : undefined"
               class="h-auto border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0"
+              @keydown="handleInputKeydown"
             />
           </div>
         </div>
 
-        <div class="px-3 pb-3">
-          <div v-if="results.length" data-testid="search-overlay-results" class="space-y-2">
-            <UiButton
-              v-for="item in results"
-              :key="item.id"
-              variant="ghost"
-              class="flex h-auto w-full items-center justify-between rounded-xl px-3 py-3 text-left"
-              :data-result-id="item.id"
-              @click="selectResult(item)"
+        <div class="px-3 pb-3 pt-3">
+          <div
+            v-if="results.length"
+            :id="SEARCH_RESULTS_LIST_ID"
+            data-testid="search-overlay-results"
+            role="listbox"
+            class="max-h-[26rem] space-y-3 overflow-y-auto"
+          >
+            <section
+              v-for="group in groupedResults"
+              :key="group.section"
+              class="space-y-1.5"
             >
-              <span class="flex min-w-0 items-start gap-3">
-                <span class="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
+              <div class="px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ group.section }}
+              </div>
+              <UiButton
+                v-for="item in group.items"
+                :id="resultOptionId(item.id)"
+                :key="item.id"
+                variant="ghost"
+                :class="resultButtonClasses(item.index === activeResultIndex)"
+                :data-result-id="item.id"
+                :data-active="item.index === activeResultIndex ? 'true' : 'false'"
+                role="option"
+                :aria-selected="item.index === activeResultIndex"
+                @mouseenter="setActiveResult(item.index)"
+                @click="selectResult(item)"
+              >
+                <span :class="resultIconClasses(item.index === activeResultIndex)">
                   <component :is="resultIcon(item.kind)" :size="14" />
                 </span>
-                <span class="min-w-0">
-                  <span class="block truncate text-sm font-semibold text-text-primary">{{ item.title }}</span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-semibold">{{ item.title }}</span>
                   <span class="block truncate text-xs text-text-secondary">{{ item.subtitle }}</span>
                 </span>
-              </span>
-              <span class="shrink-0 text-[11px] uppercase tracking-wider text-text-tertiary">{{ item.section }}</span>
-            </UiButton>
+                <span
+                  v-if="item.index === activeResultIndex"
+                  class="shrink-0 rounded-full border border-border bg-surface px-2 py-1 text-[10px] font-semibold text-text-secondary"
+                >
+                  {{ t('common.open') }}
+                </span>
+              </UiButton>
+            </section>
           </div>
-          <div v-else data-testid="search-overlay-empty" class="py-10 text-center text-sm text-text-secondary">
+          <div
+            v-if="results.length"
+            data-testid="search-overlay-shortcuts"
+            class="mt-3 flex flex-wrap items-center gap-3 border-t border-border bg-subtle px-3 py-3 text-[11px] text-text-secondary"
+          >
+            <span class="inline-flex items-center gap-2">
+              <span class="inline-flex items-center gap-1 rounded-full border border-border bg-subtle px-1.5 py-1">
+                <span :class="shortcutKeyClasses()">Up</span>
+                <span :class="shortcutKeyClasses()">Down</span>
+              </span>
+              <span>{{ t('searchOverlay.shortcuts.navigate') }}</span>
+            </span>
+            <span class="inline-flex items-center gap-2">
+              <span :class="shortcutKeyClasses()">Enter</span>
+              <span>{{ t('searchOverlay.shortcuts.open') }}</span>
+            </span>
+          </div>
+          <div
+            v-else
+            data-testid="search-overlay-empty"
+            class="rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-10 text-center text-sm text-text-secondary"
+          >
             {{ t('searchOverlay.emptyDescription') }}
           </div>
         </div>

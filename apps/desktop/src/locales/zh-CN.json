@@ -234,6 +234,10 @@
       "models": "打开模型页",
       "tools": "打开工具页",
       "settings": "打开设置"
+    },
+    "shortcuts": {
+      "navigate": "切换结果",
+      "open": "打开当前项"
     }
   },
   "sidebar": {

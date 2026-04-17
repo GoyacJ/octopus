@@ -511,13 +511,13 @@ function editorLanguage() {
 
     <div
       data-testid="project-resource-directory"
-      class="flex flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 shadow-xs md:flex-row md:items-center md:justify-between"
+      class="flex flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-3 md:flex-row md:items-center md:justify-between"
     >
       <div class="text-[12px] font-semibold text-text-secondary">
         {{ t('resources.mappingDirectory.label') }}
       </div>
       <code
-        class="truncate rounded-[var(--radius-xs)] bg-subtle px-2 py-1 font-mono text-[12px] text-text-primary"
+        class="truncate rounded-[var(--radius-xs)] border border-border bg-background px-2 py-1 font-mono text-[12px] text-text-primary"
         :title="projectRecord?.resourceDirectory || ''"
       >
         {{ resourceDirectory }}

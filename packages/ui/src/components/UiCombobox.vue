@@ -86,7 +86,8 @@ function handleOpenChange(value: boolean) {
       </ComboboxAnchor>
 
       <ComboboxContent
-        class="mt-1 z-40 w-full overflow-hidden rounded-[var(--radius-l)] border border-border bg-popover shadow-md outline-none"
+        data-testid="ui-combobox-content"
+        class="mt-1 z-40 w-full overflow-hidden rounded-[var(--radius-l)] border border-[color-mix(in_srgb,var(--border)_84%,transparent)] bg-popover shadow-md outline-none"
         :side-offset="4"
         position="popper"
       >
@@ -97,7 +98,7 @@ function handleOpenChange(value: boolean) {
             :value="option.value"
             :text-value="`${option.label} ${(option.keywords ?? []).join(' ')}`"
             :data-testid="`ui-combobox-option-${option.value}`"
-            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-[13px] text-text-primary outline-none transition-colors data-[highlighted]:bg-accent"
+            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-[13px] text-text-primary outline-none transition-colors data-[highlighted]:bg-subtle"
           >
             {{ option.label }}
           </ComboboxItem>

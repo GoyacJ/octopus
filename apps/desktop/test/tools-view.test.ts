@@ -196,6 +196,24 @@ describe('Workspace tools view', () => {
     mounted.destroy()
   })
 
+  it('renders selected tool details as inspector document sections instead of nested detail cards', async () => {
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'bash')
+
+    const detailDocument = mounted.container.querySelector<HTMLElement>('[data-testid="workspace-tools-detail-document"]')
+    const detailMeta = mounted.container.querySelector<HTMLElement>('[data-testid="workspace-tools-detail-meta"]')
+
+    expect(detailDocument).not.toBeNull()
+    expect(detailDocument?.className).toContain('space-y-5')
+
+    expect(detailMeta).not.toBeNull()
+    expect(detailMeta?.className).toContain('border-b')
+    expect(detailMeta?.className).toContain('pb-4')
+
+    mounted.destroy()
+  })
+
   it('shows copy management for external skills without edit and delete actions', async () => {
     const mounted = mountApp()
 

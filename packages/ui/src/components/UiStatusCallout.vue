@@ -18,25 +18,42 @@ const props = withDefaults(defineProps<{
 const toneClass = computed(() => {
   switch (props.tone) {
     case 'success':
-      return 'bg-[var(--color-status-success-soft)] text-status-success'
+      return {
+        container: 'border-[color-mix(in_srgb,var(--color-status-success)_18%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-success-soft)_72%,var(--surface)_28%)]',
+        title: 'text-status-success',
+      }
     case 'warning':
-      return 'bg-[var(--color-status-warning-soft)] text-status-warning'
+      return {
+        container: 'border-[color-mix(in_srgb,var(--color-status-warning)_18%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-warning-soft)_72%,var(--surface)_28%)]',
+        title: 'text-status-warning',
+      }
     case 'error':
-      return 'bg-[var(--color-status-error-soft)] text-status-error'
+      return {
+        container: 'border-[color-mix(in_srgb,var(--color-status-error)_18%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-error-soft)_72%,var(--surface)_28%)]',
+        title: 'text-status-error',
+      }
     default:
-      return 'bg-accent text-primary'
+      return {
+        container: 'border-[color-mix(in_srgb,var(--color-status-info)_18%,var(--border))] bg-[color-mix(in_srgb,var(--color-status-info-soft)_72%,var(--surface)_28%)]',
+        title: 'text-status-info',
+      }
   }
 })
 </script>
 
 <template>
-  <div :class="cn('flex flex-col gap-2 rounded-[var(--radius-l)] border border-transparent p-3', toneClass, props.class)">
-    <div v-if="props.title" class="text-[13px] font-semibold leading-none">
+  <div :class="cn('flex flex-col gap-2 rounded-[var(--radius-l)] border p-3', toneClass.container, props.class)">
+    <div
+      v-if="props.title"
+      :class="cn('text-[13px] font-semibold leading-none', toneClass.title)"
+    >
       {{ props.title }}
     </div>
-    <div v-if="props.description" class="text-[13px] leading-relaxed text-current/85">
+    <div v-if="props.description" class="text-[13px] leading-relaxed text-text-secondary">
       {{ props.description }}
     </div>
-    <slot />
+    <div v-if="$slots.default" class="text-[13px] leading-relaxed text-text-secondary">
+      <slot />
+    </div>
   </div>
 </template>

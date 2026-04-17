@@ -111,8 +111,47 @@ describe('App auth gate', () => {
 
     expect(router.currentRoute.value.name).toBe('auth-login')
     expect(document.body.textContent).toContain(String(i18n.global.t('authGate.login.title')))
+    const loginView = document.body.querySelector<HTMLElement>('[data-testid="browser-auth-login-view"]')
+    expect(loginView?.className).toContain('border-t')
+    expect(loginView?.className).toContain('border-border')
+    expect(loginView?.className).not.toContain('rounded-[var(--radius-l)]')
+    expect(loginView?.className).not.toContain('bg-card')
 
     mounted.destroy()
+  })
+
+  it('renders the browser login route as an integrated auth shell with a calm intro band', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+
+    installWorkspaceApiFixture({
+      localOwnerReady: true,
+      localSetupRequired: false,
+      preloadWorkspaceSessions: false,
+    })
+
+    const mounted = mountApp()
+
+    try {
+      await flushUi()
+      await flushUi()
+
+      const authShell = document.body.querySelector<HTMLElement>('[data-testid="browser-auth-shell"]')
+      const introBand = document.body.querySelector<HTMLElement>('[data-testid="browser-auth-intro"]')
+
+      expect(router.currentRoute.value.name).toBe('auth-login')
+      expect(authShell).not.toBeNull()
+      expect(authShell?.className).toContain('bg-surface')
+      expect(authShell?.className).not.toContain('bg-card')
+      expect(authShell?.className).not.toContain('shadow-sm')
+
+      expect(introBand).not.toBeNull()
+      expect(introBand?.className).toContain('bg-subtle')
+      expect(introBand?.className).not.toContain('bg-muted/35')
+    } finally {
+      mounted.destroy()
+    }
   })
 
   it('redirects an authenticated browser host away from the login route', async () => {

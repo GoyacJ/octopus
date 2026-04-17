@@ -103,6 +103,28 @@ describe('Settings view', () => {
     mounted.destroy()
   })
 
+  it('renders general settings sections as subtle bands instead of inset cards', async () => {
+    const mounted = mountApp()
+
+    await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
+
+    const layoutBand = mounted.container.querySelector<HTMLElement>('[data-testid="settings-layout-band"]')
+    const localeBand = mounted.container.querySelector<HTMLElement>('[data-testid="settings-locale-band"]')
+
+    expect(layoutBand).not.toBeNull()
+    expect(layoutBand?.className).toContain('bg-subtle')
+    expect(layoutBand?.className).not.toContain('bg-surface')
+    expect(layoutBand?.className).not.toContain('p-2')
+    expect(layoutBand?.className).not.toContain('shadow-xs')
+
+    expect(localeBand).not.toBeNull()
+    expect(localeBand?.className).toContain('bg-subtle')
+    expect(localeBand?.className).not.toContain('bg-surface')
+    expect(localeBand?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
   it('does not expose a runtime tab in settings anymore', async () => {
     const mounted = mountApp()
 

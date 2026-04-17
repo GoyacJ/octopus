@@ -140,7 +140,7 @@ function toggleValue(value: string) {
           :key="option.value"
           type="button"
           :data-testid="`ui-searchable-multi-select-option-${option.value}`"
-          class="flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex w-full items-start justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="option.disabled"
           @click="toggleValue(option.value)"
         >

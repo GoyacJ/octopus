@@ -6,7 +6,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { useRoute, useRouter } from 'vue-router'
 
-import { UiButton, UiDialog, UiField, UiInput } from '@octopus/ui'
+import { UiButton, UiDialog, UiField, UiInput, UiStatusCallout } from '@octopus/ui'
 
 import { createWorkspaceOverviewTarget } from '@/i18n/navigation'
 import { useAuthStore } from '@/stores/auth'
@@ -79,35 +79,44 @@ const submit = handleSubmit(async (values) => {
     :description="t('connectWorkspace.description')"
     :close-label="t('common.cancel')"
     content-test-id="connect-workspace-dialog"
-    content-class="max-w-lg"
+    content-class="max-w-lg overflow-hidden p-0"
+    body-class="p-0"
     @update:open="(nextOpen) => emit('update:open', nextOpen)"
   >
-    <form class="space-y-5" data-testid="connect-workspace-form" @submit.prevent="submit">
-      <div class="rounded-[var(--radius-xl)] border border-border bg-subtle px-4 py-3">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-tertiary">
+    <form class="space-y-0" data-testid="connect-workspace-form" @submit.prevent="submit">
+      <div
+        data-testid="connect-workspace-intro"
+        class="border-b border-border bg-subtle px-5 py-4 md:px-6"
+      >
+        <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {{ t('connectWorkspace.eyebrow') }}
         </p>
       </div>
 
-      <div class="grid gap-4">
-        <UiField :label="t('connectWorkspace.fields.baseUrl')" :hint="errors.baseUrl">
-          <UiInput v-model="baseUrl" data-testid="connect-workspace-base-url" :placeholder="t('connectWorkspace.placeholders.baseUrl')" />
-        </UiField>
+      <div class="space-y-5 px-5 py-5 md:px-6 md:py-6">
+        <div class="grid gap-4">
+          <UiField :label="t('connectWorkspace.fields.baseUrl')" :hint="errors.baseUrl">
+            <UiInput v-model="baseUrl" data-testid="connect-workspace-base-url" :placeholder="t('connectWorkspace.placeholders.baseUrl')" />
+          </UiField>
 
-        <UiField :label="t('connectWorkspace.fields.username')" :hint="errors.username">
-          <UiInput v-model="username" data-testid="connect-workspace-username" autocomplete="username" />
-        </UiField>
+          <UiField :label="t('connectWorkspace.fields.username')" :hint="errors.username">
+            <UiInput v-model="username" data-testid="connect-workspace-username" autocomplete="username" />
+          </UiField>
 
-        <UiField :label="t('connectWorkspace.fields.password')" :hint="errors.password">
-          <UiInput v-model="password" data-testid="connect-workspace-password" type="password" autocomplete="current-password" />
-        </UiField>
+          <UiField :label="t('connectWorkspace.fields.password')" :hint="errors.password">
+            <UiInput v-model="password" data-testid="connect-workspace-password" type="password" autocomplete="current-password" />
+          </UiField>
+        </div>
+
+        <UiStatusCallout
+          v-if="activeError"
+          data-testid="connect-workspace-error"
+          tone="error"
+          :description="activeError"
+        />
       </div>
 
-      <p v-if="activeError" class="rounded-[var(--radius-l)] border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-        {{ activeError }}
-      </p>
-
-      <div class="flex items-center justify-end gap-3">
+      <div class="flex items-center justify-end gap-3 border-t border-border bg-subtle px-5 py-4 md:px-6">
         <UiButton
           type="button"
           variant="ghost"

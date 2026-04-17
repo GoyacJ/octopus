@@ -30,16 +30,22 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-background font-sans text-text-primary antialiased">
+  <div
+    data-testid="workbench-shell"
+    class="flex h-screen w-screen overflow-hidden bg-sidebar font-sans text-text-primary antialiased"
+  >
     <WorkbenchSidebar />
 
     <div v-if="shell.leftSidebarCollapsed" data-testid="sidebar-rail" class="hidden" />
 
-    <div class="relative flex min-w-0 flex-1 flex-col bg-background">
+    <div class="relative flex min-w-0 flex-1 flex-col border-l border-border/70 bg-background">
       <WorkbenchTopbar />
 
-      <main class="flex-1 overflow-y-auto min-w-0" data-testid="workbench-main">
-        <div class="w-full h-full">
+      <main
+        class="min-w-0 flex-1 overflow-y-auto bg-[color-mix(in_srgb,var(--background)_92%,var(--sidebar)_8%)]"
+        data-testid="workbench-main"
+      >
+        <div data-testid="workbench-main-canvas" class="flex min-h-full min-w-0 flex-col">
           <slot />
         </div>
       </main>

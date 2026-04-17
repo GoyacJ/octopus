@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import type { InboxItemRecord, NotificationRecord } from '@octopus/schema'
-import { Bell, Check, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
+import { Bell, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
 
-import { UiButton, UiMessageCenter, UiNotificationBadge, UiPopover } from '@octopus/ui'
+import { UiButton, UiMessageCenter, UiNotificationBadge, UiPopover, UiSelectionMenu } from '@octopus/ui'
 
 import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
@@ -87,13 +87,41 @@ const currentUser = computed(() => userProfileStore.currentUser)
 const currentRoleLabel = computed(() => workspaceAccessControlStore.currentRoleNames[0] ?? t('topbar.profileRole'))
 const isSettingsRoute = computed(() => String(route.name ?? '') === 'app-settings')
 
+const themeOptions = ['system', 'light', 'dark'] as const
 const themeIcons = {
   system: Monitor,
   light: SunMedium,
   dark: MoonStar,
 } as const
 
+type ThemeMode = (typeof themeOptions)[number]
 const localeOptions = ['zh-CN', 'en-US'] as const
+type LocaleMode = (typeof localeOptions)[number]
+
+const themeMenuSections = computed(() => [
+  {
+    id: 'themes',
+    items: themeOptions.map(mode => ({
+      id: mode,
+      label: t(`topbar.themeModes.${mode}`),
+      icon: themeIcons[mode],
+      active: shell.preferences.theme === mode,
+      testId: `topbar-theme-option-${mode}`,
+    })),
+  },
+])
+
+const localeMenuSections = computed(() => [
+  {
+    id: 'locales',
+    items: localeOptions.map(locale => ({
+      id: locale,
+      label: t(`topbar.localeModes.${locale}`),
+      active: shell.preferences.locale === locale,
+      testId: `topbar-locale-option-${locale}`,
+    })),
+  },
+])
 
 function closeLegacyMenus() {
   themeMenuOpen.value = false
@@ -110,21 +138,6 @@ function closeMenus() {
   closeMessageCenter()
 }
 
-function handleClickOutside(event: MouseEvent) {
-  const target = event.target as HTMLElement
-  if (!target.closest('.dropdown-trigger') && !target.closest('.dropdown-menu')) {
-    closeLegacyMenus()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
-
 async function selectTheme(theme: 'light' | 'dark' | 'system') {
   await shell.updatePreferences({ theme })
   themeMenuOpen.value = false
@@ -133,6 +146,30 @@ async function selectTheme(theme: 'light' | 'dark' | 'system') {
 async function selectLocale(locale: 'zh-CN' | 'en-US') {
   await shell.updatePreferences({ locale })
   localeMenuOpen.value = false
+}
+
+function isThemeMode(value: string): value is ThemeMode {
+  return themeOptions.some(mode => mode === value)
+}
+
+function isLocaleMode(value: string): value is LocaleMode {
+  return localeOptions.some(locale => locale === value)
+}
+
+function handleThemeMenuSelect(id: string) {
+  if (!isThemeMode(id)) {
+    return
+  }
+
+  void selectTheme(id)
+}
+
+function handleLocaleMenuSelect(id: string) {
+  if (!isLocaleMode(id)) {
+    return
+  }
+
+  void selectLocale(id)
 }
 
 async function openSettings() {
@@ -182,25 +219,88 @@ function handleMessageCenterOpenChange(open: boolean) {
   messageCenter.closeCenter()
 }
 
-function toggleThemeMenu() {
-  closeMessageCenter()
-  localeMenuOpen.value = false
-  accountMenuOpen.value = false
-  themeMenuOpen.value = !themeMenuOpen.value
+function handleThemeMenuOpenChange(open: boolean) {
+  if (open) {
+    closeMessageCenter()
+    localeMenuOpen.value = false
+    accountMenuOpen.value = false
+  }
+
+  themeMenuOpen.value = open
 }
 
-function toggleLocaleMenu() {
-  closeMessageCenter()
-  themeMenuOpen.value = false
-  accountMenuOpen.value = false
-  localeMenuOpen.value = !localeMenuOpen.value
+function handleLocaleMenuOpenChange(open: boolean) {
+  if (open) {
+    closeMessageCenter()
+    themeMenuOpen.value = false
+    accountMenuOpen.value = false
+  }
+
+  localeMenuOpen.value = open
 }
 
-function toggleAccountMenu() {
-  closeMessageCenter()
-  themeMenuOpen.value = false
-  localeMenuOpen.value = false
-  accountMenuOpen.value = !accountMenuOpen.value
+function handleAccountMenuOpenChange(open: boolean) {
+  if (open) {
+    closeMessageCenter()
+    themeMenuOpen.value = false
+    localeMenuOpen.value = false
+  }
+
+  accountMenuOpen.value = open
+}
+
+function shellTriggerStateClasses(active: boolean) {
+  return active
+    ? 'border-border-strong bg-accent text-text-primary'
+    : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary'
+}
+
+function shellTriggerIconButtonClasses(active: boolean) {
+  return `h-8 w-8 border border-transparent ${shellTriggerStateClasses(active)}`.trim()
+}
+
+function shellTriggerButtonClasses(active: boolean) {
+  return `border border-transparent ${shellTriggerStateClasses(active)}`.trim()
+}
+
+function notificationTriggerClasses() {
+  return shellTriggerIconButtonClasses(messageCenter.open)
+}
+
+function settingsButtonClasses() {
+  return `ui-focus-ring rounded-[var(--radius-xs)] px-2.5 py-1.5 text-xs transition-colors ${shellTriggerButtonClasses(isSettingsRoute.value)}`.trim()
+}
+
+function searchTriggerClasses() {
+  return 'ui-focus-ring flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface px-3 py-1.5 text-[13px] text-text-secondary transition-colors hover:border-border-strong hover:bg-subtle hover:text-text-primary'
+}
+
+function profileTriggerClasses() {
+  return shellTriggerButtonClasses(accountMenuOpen.value)
+}
+
+function profileCaretClasses() {
+  return accountMenuOpen.value ? 'text-text-primary' : 'text-text-tertiary'
+}
+
+function notificationIconClasses() {
+  return messageCenter.open ? 'text-text-primary' : 'text-text-secondary'
+}
+
+function searchLabelClasses() {
+  return 'max-w-[11rem] truncate'
+}
+
+function themeToggleButtonClasses() {
+  return shellTriggerIconButtonClasses(themeMenuOpen.value)
+}
+
+function localeToggleButtonClasses() {
+  return shellTriggerIconButtonClasses(localeMenuOpen.value)
+}
+
+function searchHintClasses() {
+  return 'hidden rounded-full border border-border bg-subtle px-1.5 py-0.5 text-[10px] font-semibold text-text-tertiary md:inline-flex'
 }
 
 async function handleNotificationSelect(notification: NotificationRecord) {
@@ -256,57 +356,66 @@ async function handleInboxSelect(item: InboxItemRecord) {
       <button
         type="button"
         data-testid="global-search-trigger"
-        class="flex items-center gap-2 rounded-[var(--radius-xs)] border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
+        :class="searchTriggerClasses()"
         @click="shell.openSearch"
       >
         <Search :size="14" />
-        <span>{{ t('topbar.searchPlaceholder') }}</span>
+        <span :class="searchLabelClasses()">{{ t('topbar.searchPlaceholder') }}</span>
+        <span :class="searchHintClasses()">K</span>
       </button>
 
-      <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="dropdown-trigger h-8 w-8" @click="toggleThemeMenu">
-          <component :is="themeIcons[shell.preferences.theme]" :size="15" />
-        </UiButton>
-        <div v-if="themeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-44 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
-          <button
-            v-for="(icon, key) in themeIcons"
-            :key="key"
-            type="button"
-            class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-            @click="selectTheme(key)"
+      <UiSelectionMenu
+        :open="themeMenuOpen"
+        align="end"
+        side="bottom"
+        class="w-56"
+        :title="t('topbar.theme')"
+        :description="t('topbar.themeMenuLabel')"
+        :sections="themeMenuSections"
+        test-id="topbar-theme-menu"
+        @update:open="handleThemeMenuOpenChange"
+        @select="handleThemeMenuSelect"
+      >
+        <template #trigger>
+          <UiButton
+            variant="ghost"
+            size="icon"
+            data-testid="topbar-theme-toggle"
+            :class="themeToggleButtonClasses()"
           >
-            <span class="flex items-center gap-2">
-              <component :is="icon" :size="14" />
-              {{ t(`topbar.themeModes.${key}`) }}
-            </span>
-            <Check v-if="shell.preferences.theme === key" :size="14" class="text-primary" />
-          </button>
-        </div>
-      </div>
+            <component :is="themeIcons[shell.preferences.theme]" :size="15" />
+          </UiButton>
+        </template>
+      </UiSelectionMenu>
 
-      <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="dropdown-trigger h-8 w-8" @click="toggleLocaleMenu">
-          <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
-        </UiButton>
-        <div v-if="localeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-40 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
-          <button
-            v-for="locale in localeOptions"
-            :key="locale"
-            type="button"
-            class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-            @click="selectLocale(locale)"
+      <UiSelectionMenu
+        :open="localeMenuOpen"
+        align="end"
+        side="bottom"
+        class="w-56"
+        :title="t('topbar.locale')"
+        :description="t('topbar.localeMenuLabel')"
+        :sections="localeMenuSections"
+        test-id="topbar-locale-menu"
+        @update:open="handleLocaleMenuOpenChange"
+        @select="handleLocaleMenuSelect"
+      >
+        <template #trigger>
+          <UiButton
+            variant="ghost"
+            size="icon"
+            data-testid="topbar-locale-toggle"
+            :class="localeToggleButtonClasses()"
           >
-            <span>{{ t(`topbar.localeModes.${locale}`) }}</span>
-            <Check v-if="shell.preferences.locale === locale" :size="14" class="text-primary" />
-          </button>
-        </div>
-      </div>
+            <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
+          </UiButton>
+        </template>
+      </UiSelectionMenu>
 
       <button
         type="button"
         data-testid="topbar-settings-button"
-        class="rounded-[var(--radius-xs)] px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
-        :class="{ 'bg-accent text-text-primary': isSettingsRoute }"
+        :class="settingsButtonClasses()"
         @click="openSettings"
       >
         <span class="flex items-center gap-1.5">
@@ -327,10 +436,11 @@ async function handleInboxSelect(item: InboxItemRecord) {
           <button
             type="button"
             data-testid="topbar-notification-trigger"
-            class="dropdown-trigger relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-xs)] hover:bg-accent"
+            class="ui-focus-ring relative flex items-center justify-center rounded-[var(--radius-xs)] transition-colors"
+            :class="notificationTriggerClasses()"
             :aria-label="t('notifications.triggerAriaLabel')"
           >
-            <Bell :size="15" class="text-text-secondary" />
+            <Bell :size="15" :class="notificationIconClasses()" />
             <span class="absolute -right-1 -top-1">
               <UiNotificationBadge :count="messageCenter.combinedCount" />
             </span>
@@ -373,22 +483,34 @@ async function handleInboxSelect(item: InboxItemRecord) {
         />
       </UiPopover>
 
-      <div class="relative">
-        <button
-          type="button"
-          data-testid="topbar-profile-trigger"
-          class="dropdown-trigger flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 hover:bg-accent"
-          @click="toggleAccountMenu"
-        >
-          <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
-            <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
-            <span v-else>{{ currentUser?.displayName?.slice(0, 1) || 'U' }}</span>
-          </div>
-          <UserRound :size="14" class="text-text-tertiary" />
-        </button>
+      <UiPopover
+        :open="accountMenuOpen"
+        align="end"
+        side="bottom"
+        class="w-64 overflow-hidden p-0"
+        root-class="!inline-flex"
+        @update:open="handleAccountMenuOpenChange"
+      >
+        <template #trigger>
+          <button
+            type="button"
+            data-testid="topbar-profile-trigger"
+            class="ui-focus-ring flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 transition-colors"
+            :class="profileTriggerClasses()"
+          >
+            <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
+              <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
+              <span v-else>{{ currentUser?.displayName?.slice(0, 1) || 'U' }}</span>
+            </div>
+            <UserRound :size="14" :class="profileCaretClasses()" />
+          </button>
+        </template>
 
-        <div v-if="accountMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-64 rounded-[var(--radius-l)] border border-border bg-popover p-3 shadow-md">
-          <div class="space-y-3">
+        <div data-testid="topbar-account-menu" class="flex flex-col">
+          <div
+            data-testid="topbar-account-menu-intro"
+            class="border-b border-border bg-subtle px-4 py-3"
+          >
             <div class="flex items-center gap-3">
               <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-white uppercase">
                 <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
@@ -399,20 +521,34 @@ async function handleInboxSelect(item: InboxItemRecord) {
                 <div class="truncate text-xs text-text-secondary">{{ currentRoleLabel }}</div>
               </div>
             </div>
+          </div>
 
-            <div class="border-t border-border pt-2">
-              <button
-                type="button"
-                class="flex w-full items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
-                @click="openPersonalCenter"
-              >
-                <UserRound :size="14" />
-                {{ t('sidebar.navigation.personalCenter') }}
-              </button>
+          <div class="px-2 py-2">
+            <div class="rounded-[var(--radius-m)] border border-transparent px-2 py-2">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('topbar.accountSectionTitle') }}
+              </div>
+              <div class="mt-1 text-sm text-text-secondary">
+                {{ workspaceLabel }}
+              </div>
             </div>
           </div>
+
+          <div
+            data-testid="topbar-account-menu-actions"
+            class="border-t border-border bg-subtle px-2 py-2"
+          >
+            <UiButton
+              variant="ghost"
+              class="w-full justify-start rounded-[var(--radius-m)] px-3 py-2 text-left text-sm text-text-secondary"
+              @click="openPersonalCenter"
+            >
+              <UserRound :size="14" />
+              {{ t('sidebar.navigation.personalCenter') }}
+            </UiButton>
+          </div>
         </div>
-      </div>
+      </UiPopover>
     </div>
   </header>
 </template>

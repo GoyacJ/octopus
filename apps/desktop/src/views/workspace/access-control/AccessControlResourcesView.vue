@@ -380,7 +380,8 @@ async function deletePolicy(policyId: string) {
               <article
                 v-for="policy in selectedResourcePolicies"
                 :key="policy.id"
-                class="rounded-[var(--radius-m)] border border-border bg-card p-3"
+                :data-testid="`access-control-resource-policy-record-${policy.id}`"
+                class="rounded-[var(--radius-m)] border border-transparent bg-subtle p-3"
               >
                 <div class="flex items-start justify-between gap-2">
                   <div>

@@ -16,6 +16,7 @@ import {
   UiPanelFrame,
   UiRecordCard,
   UiSelect,
+  UiSurface,
   UiStatusCallout,
   UiTabs,
   UiToolbarRow,
@@ -1043,7 +1044,11 @@ async function handleBulkDeleteResourcePolicies() {
             <div class="mt-3 text-sm text-text-secondary">{{ getPermissionDisplayDescription(selectedPermission) }}</div>
           </div>
 
-          <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+          <UiSurface
+            data-testid="access-control-permission-grant-matrix"
+            variant="subtle"
+            padding="md"
+          >
             <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
               {{ t('accessControl.policies.permissions.grantMatrix') }}
             </div>
@@ -1067,7 +1072,7 @@ async function handleBulkDeleteResourcePolicies() {
             <p v-else class="mt-2 text-sm text-text-secondary">
               {{ t('accessControl.policies.permissions.grantMatrixEmpty') }}
             </p>
-          </div>
+          </UiSurface>
         </div>
       </template>
     </UiListDetailWorkspace>

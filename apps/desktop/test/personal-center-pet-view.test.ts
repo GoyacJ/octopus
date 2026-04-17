@@ -228,8 +228,15 @@ describe('personal center pet experience', () => {
 
     await waitForSelector(mounted.container, '[data-testid="personal-center-pet-stats-panel"]')
     await waitForSelector(mounted.container, '[data-testid="personal-center-pet-preferences-panel"]')
+    await waitForSelector(mounted.container, '[data-testid="personal-center-tabs-shell"]')
+
+    const tabsShell = mounted.container.querySelector<HTMLElement>('[data-testid="personal-center-tabs-shell"]')
 
     expect(findPageHeaderDescription(mounted.container, '个人中心')).toBe('维护当前账号的资料、密码与宠物偏好。')
+    expect(tabsShell?.className).toContain('border-b')
+    expect(tabsShell?.className).toContain('border-border')
+    expect(tabsShell?.className).not.toContain('rounded')
+    expect(tabsShell?.className).not.toContain('bg-subtle')
     expect(mounted.container.querySelector('[data-testid="personal-center-pet-species-summary"]')?.textContent).toContain('octopus')
     expect(mounted.container.querySelector('[data-testid="personal-center-pet-model-summary"]')?.textContent).toContain('Claude Alt')
     expect(mounted.container.querySelector('[data-testid="personal-center-pet-permission-summary"]')?.textContent).toContain('工作区可写')

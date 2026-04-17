@@ -42,7 +42,7 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
       props.layout === 'tile' && 'gap-3 p-4',
       props.layout === 'compact' && 'gap-1 p-2',
       props.active
-        ? 'is-active border-border-strong bg-subtle shadow-xs'
+        ? 'is-active border-border-strong bg-accent shadow-xs'
         : 'border-border bg-surface',
       props.interactive && !props.active && 'cursor-pointer hover:bg-subtle hover:border-border-strong',
       props.class,

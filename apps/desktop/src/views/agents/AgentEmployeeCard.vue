@@ -49,7 +49,7 @@ function openCard() {
 
 <template>
   <div
-    class="group flex min-h-[208px] w-full cursor-pointer flex-col justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4 transition-colors hover:border-primary/30 hover:bg-subtle/60"
+    class="group flex min-h-[208px] w-full cursor-pointer flex-col justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-subtle"
     role="button"
     tabindex="0"
     @click="openCard"

@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<{
 <template>
   <article
     :class="cn(
-      'group flex items-start gap-3 rounded-md border border-border/40 bg-background p-3 transition-colors hover:bg-accent cursor-pointer',
+      'group flex items-start gap-3 rounded-md border border-border/40 bg-background p-3 transition-colors hover:border-border-strong hover:bg-subtle cursor-pointer',
       props.class,
     )"
   >

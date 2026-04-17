@@ -90,7 +90,7 @@ function handleToggle(item: UiHierarchyListItem) {
               v-if="item.expandable"
               :data-testid="`ui-hierarchy-toggle-${item.id}`"
               type="button"
-              class="inline-flex size-6 items-center justify-center rounded-[var(--radius-s)] text-text-secondary transition-colors hover:bg-muted/60 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              class="ui-focus-ring inline-flex size-6 items-center justify-center rounded-[var(--radius-s)] text-text-secondary transition-colors hover:bg-muted/60 hover:text-text-primary"
               @click.stop="handleToggle(item)"
             >
               <ChevronDown v-if="item.expanded" :size="14" />

@@ -46,7 +46,7 @@ const toneColor = computed(() => {
   <article
     :class="cn(
       'relative overflow-hidden rounded-[var(--radius-l)] border border-border bg-surface p-4 shadow-xs transition-colors',
-      props.tone === 'accent' && 'bg-accent border-transparent',
+      props.tone === 'accent' && 'bg-accent border-border-strong',
       props.tone === 'muted' && 'bg-subtle',
       props.tone === 'success' && 'border-transparent bg-[var(--color-status-success-soft)]',
       props.tone === 'warning' && 'border-transparent bg-[var(--color-status-warning-soft)]',
