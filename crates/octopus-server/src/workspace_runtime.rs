@@ -788,7 +788,7 @@ pub(crate) async fn project_dashboard(
 
     let project = lookup_project(&state, &project_id).await?;
     let mut sessions = state.services.runtime_session.list_sessions().await?;
-    sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     sessions.retain(|record| record.project_id == project_id);
     let conversations = sessions
         .iter()
@@ -805,7 +805,7 @@ pub(crate) async fn project_dashboard(
         .collect::<Vec<_>>();
 
     let mut audit_records = state.services.observation.list_audit_records().await?;
-    audit_records.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    audit_records.sort_by_key(|record| std::cmp::Reverse(record.created_at));
     audit_records.retain(|record| record.project_id.as_deref() == Some(project_id.as_str()));
     let recent_activity = audit_records
         .iter()
@@ -4137,7 +4137,7 @@ pub(crate) async fn list_conversation_records(
 ) -> Result<Vec<ConversationRecord>, ApiError> {
     let workspace_id = state.services.workspace.workspace_summary().await?.id;
     let mut sessions = state.services.runtime_session.list_sessions().await?;
-    sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     Ok(sessions
         .into_iter()
         .filter(|record| project_id.map(|id| record.project_id == id).unwrap_or(true))
@@ -4159,7 +4159,7 @@ pub(crate) async fn list_activity_records(
     project_id: Option<&str>,
 ) -> Result<Vec<WorkspaceActivityRecord>, ApiError> {
     let mut records = state.services.observation.list_audit_records().await?;
-    records.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    records.sort_by_key(|record| std::cmp::Reverse(record.created_at));
     Ok(records
         .into_iter()
         .filter(|record| {

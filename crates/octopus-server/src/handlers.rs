@@ -3629,7 +3629,7 @@ pub(crate) async fn list_access_audit(
     const PAGE_SIZE: usize = 50;
     ensure_authorized_session(&state, &headers, "audit.read", None).await?;
     let mut items = state.services.observation.list_audit_records().await?;
-    items.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    items.sort_by_key(|item| std::cmp::Reverse(item.created_at));
     if let Some(actor_id) = query.actor_id.as_deref() {
         items.retain(|record| record.actor_id == actor_id);
     }
