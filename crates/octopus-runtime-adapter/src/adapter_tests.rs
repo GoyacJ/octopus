@@ -1220,7 +1220,10 @@ async fn runtime_effective_config_migrates_inline_configured_model_credentials_t
         .iter()
         .find(|source| source.scope == "workspace")
         .expect("workspace source");
-    let workspace_document = workspace_source.document.as_ref().expect("workspace document");
+    let workspace_document = workspace_source
+        .document
+        .as_ref()
+        .expect("workspace document");
     let configured_models = workspace_document
         .get("configuredModels")
         .and_then(Value::as_object)
@@ -1245,9 +1248,11 @@ async fn runtime_effective_config_migrates_inline_configured_model_credentials_t
         "expected workspace secret reference status to reflect the migrated configured model credential"
     );
     assert!(
-        config.validation.warnings.iter().any(|warning| {
-            warning.contains("unknown runtime config key `toolCatalog`")
-        }),
+        config
+            .validation
+            .warnings
+            .iter()
+            .any(|warning| { warning.contains("unknown runtime config key `toolCatalog`") }),
         "expected unrelated unknown keys to remain warnings only"
     );
 
@@ -1260,7 +1265,8 @@ async fn runtime_effective_config_migrates_inline_configured_model_credentials_t
 }
 
 #[tokio::test]
-async fn runtime_effective_config_redacts_inline_configured_model_credentials_when_migration_fails() {
+async fn runtime_effective_config_redacts_inline_configured_model_credentials_when_migration_fails()
+{
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
@@ -1296,7 +1302,10 @@ async fn runtime_effective_config_redacts_inline_configured_model_credentials_wh
         .iter()
         .find(|source| source.scope == "workspace")
         .expect("workspace source");
-    let workspace_document = workspace_source.document.as_ref().expect("workspace document");
+    let workspace_document = workspace_source
+        .document
+        .as_ref()
+        .expect("workspace document");
     let stored_reference = workspace_document
         .pointer("/configuredModels/anthropic-inline/credentialRef")
         .and_then(Value::as_str)
@@ -9933,10 +9942,7 @@ async fn submit_turn_does_not_create_deliverable_for_ordinary_assistant_replies(
         .messages
         .iter()
         .filter(|message| message.sender_type == "assistant")
-        .all(|message| message
-            .deliverable_refs
-            .as_ref()
-            .is_none_or(Vec::is_empty)));
+        .all(|message| message.deliverable_refs.as_ref().is_none_or(Vec::is_empty)));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -9963,7 +9969,10 @@ async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_re
                 preview_kind: "markdown".into(),
                 file_name: Some("release-notes.md".into()),
                 content_type: Some("text/markdown".into()),
-                text_content: Some("# Release Notes Draft\n\n- Runtime deliverables now require explicit output.".into()),
+                text_content: Some(
+                    "# Release Notes Draft\n\n- Runtime deliverables now require explicit output."
+                        .into(),
+                ),
                 data_base64: None,
             }],
         }),
@@ -10049,7 +10058,9 @@ async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_re
         .rev()
         .find(|message| message.sender_type == "assistant")
         .and_then(|message| message.deliverable_refs.clone())
-        .is_some_and(|refs| refs.iter().any(|reference| reference.artifact_id == artifact_id)));
+        .is_some_and(|refs| refs
+            .iter()
+            .any(|reference| reference.artifact_id == artifact_id)));
 
     let reloaded = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
@@ -10064,7 +10075,10 @@ async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_re
                 preview_kind: "markdown".into(),
                 file_name: Some("release-notes.md".into()),
                 content_type: Some("text/markdown".into()),
-                text_content: Some("# Release Notes Draft\n\n- Runtime deliverables now require explicit output.".into()),
+                text_content: Some(
+                    "# Release Notes Draft\n\n- Runtime deliverables now require explicit output."
+                        .into(),
+                ),
                 data_base64: None,
             }],
         }),
@@ -10229,7 +10243,9 @@ async fn promoting_deliverable_creates_knowledge_record_and_preserves_lineage() 
                 preview_kind: "markdown".into(),
                 file_name: Some("reusable-guidance.md".into()),
                 content_type: Some("text/markdown".into()),
-                text_content: Some("# Reusable guidance\n\nKeep the finance review tag on approvals.".into()),
+                text_content: Some(
+                    "# Reusable guidance\n\nKeep the finance review tag on approvals.".into(),
+                ),
                 data_base64: None,
             }],
         }),

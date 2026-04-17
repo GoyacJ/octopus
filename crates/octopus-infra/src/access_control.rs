@@ -201,7 +201,22 @@ fn ensure_system_role(
         .map(|(role_id, _)| role_id.clone())
         .unwrap_or_else(|| matching_roles[0].0.clone());
 
-    if canonical_id != definition.code {
+    if canonical_id == definition.code {
+        connection
+            .execute(
+                "UPDATE access_roles
+                 SET code = ?2, name = ?3, description = ?4, status = 'active', permission_codes = ?5
+                 WHERE id = ?1",
+                params![
+                    definition.code,
+                    definition.code,
+                    definition.name,
+                    definition.description,
+                    serde_json::to_string(&merged_permissions)?,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+    } else {
         connection
             .execute(
                 "UPDATE role_bindings SET role_id = ?2 WHERE role_id = ?1",
@@ -215,21 +230,6 @@ fn ensure_system_role(
                  WHERE id = ?1",
                 params![
                     canonical_id,
-                    definition.code,
-                    definition.name,
-                    definition.description,
-                    serde_json::to_string(&merged_permissions)?,
-                ],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-    } else {
-        connection
-            .execute(
-                "UPDATE access_roles
-                 SET code = ?2, name = ?3, description = ?4, status = 'active', permission_codes = ?5
-                 WHERE id = ?1",
-                params![
-                    definition.code,
                     definition.code,
                     definition.name,
                     definition.description,
@@ -1193,15 +1193,15 @@ fn build_access_member_summary(
             .unwrap_or_default();
         (Some(code.clone()), preset_display_name(&code).to_string())
     } else if !effective_role_ids.is_empty() {
-        if !direct_preset_codes.is_empty() {
-            (
-                Some(MIXED_ACCESS_CODE.into()),
-                MIXED_ACCESS_NAME.to_string(),
-            )
-        } else {
+        if direct_preset_codes.is_empty() {
             (
                 Some(CUSTOM_ACCESS_CODE.into()),
                 CUSTOM_ACCESS_NAME.to_string(),
+            )
+        } else {
+            (
+                Some(MIXED_ACCESS_CODE.into()),
+                MIXED_ACCESS_NAME.to_string(),
             )
         }
     } else {

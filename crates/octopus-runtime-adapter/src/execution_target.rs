@@ -90,14 +90,13 @@ impl RuntimeAdapter {
         let mut hydrated = target.clone();
         if let Some(reference) = target.credential_ref.as_deref() {
             if reference.starts_with("secret-ref:") {
-                hydrated.credential_ref = Some(
-                    self.resolve_secret_reference(reference)?.ok_or_else(|| {
+                hydrated.credential_ref =
+                    Some(self.resolve_secret_reference(reference)?.ok_or_else(|| {
                         AppError::invalid_input(format!(
                             "missing managed credential `{reference}` for provider `{}`",
                             target.provider_id
                         ))
-                    })?,
-                );
+                    })?);
             }
         }
         Ok(hydrated)

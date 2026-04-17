@@ -1,8 +1,5 @@
 #[cfg(test)]
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-};
+use std::{collections::HashMap, sync::Mutex};
 
 use octopus_core::AppError;
 

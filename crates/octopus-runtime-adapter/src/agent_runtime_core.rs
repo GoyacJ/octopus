@@ -473,7 +473,12 @@ fn infer_deliverable_content_type(output: &ModelExecutionDeliverable) -> Option<
 }
 
 fn resolve_deliverable_title(output: &ModelExecutionDeliverable, fallback: &str) -> String {
-    if let Some(title) = output.title.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(title) = output
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         return title.to_string();
     }
 

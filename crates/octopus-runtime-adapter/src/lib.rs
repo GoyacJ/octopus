@@ -28,9 +28,9 @@ mod policy_compiler;
 mod registry;
 mod run_context;
 mod runtime_config;
+mod secret_store;
 mod session_policy;
 mod session_service;
-mod secret_store;
 mod snapshot_store;
 mod subrun_orchestrator;
 mod team_runtime;
@@ -95,11 +95,11 @@ use adapter_state::{
     merge_project_assignments, optional_project_id, sync_runtime_session_detail,
     PendingRuntimeDeliverable, RuntimeAggregate, RuntimeAggregateMetadata, RuntimeState,
 };
-use executor::{ModelExecutionDeliverable, ModelExecutionResult};
 pub use executor::{
     LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationExecution,
     RuntimeConversationRequest, RuntimeModelDriver,
 };
+use executor::{ModelExecutionDeliverable, ModelExecutionResult};
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
 #[cfg(not(test))]
@@ -138,7 +138,8 @@ impl RuntimeAdapter {
     ) -> Self {
         let workspace_id = workspace_id.into();
         #[cfg(test)]
-        let secret_store: Arc<dyn RuntimeSecretStore> = Arc::new(MemoryRuntimeSecretStore::default());
+        let secret_store: Arc<dyn RuntimeSecretStore> =
+            Arc::new(MemoryRuntimeSecretStore::default());
         #[cfg(not(test))]
         let secret_store: Arc<dyn RuntimeSecretStore> =
             Arc::new(KeyringRuntimeSecretStore::new(&workspace_id));

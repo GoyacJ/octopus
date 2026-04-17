@@ -163,10 +163,7 @@ impl RuntimeAdapter {
         Ok(Some(reference.to_string()))
     }
 
-    fn configured_model_secret_status(
-        &self,
-        reference: &str,
-    ) -> Result<&'static str, AppError> {
+    fn configured_model_secret_status(&self, reference: &str) -> Result<&'static str, AppError> {
         if let Some(env_key) = reference.strip_prefix("env:") {
             return Ok(if std::env::var_os(env_key).is_some() {
                 "reference-present"
@@ -175,11 +172,13 @@ impl RuntimeAdapter {
             });
         }
         if reference.starts_with("secret-ref:") {
-            return Ok(if self.state.secret_store.get_secret(reference)?.is_some() {
-                "reference-present"
-            } else {
-                "reference-missing"
-            });
+            return Ok(
+                if self.state.secret_store.get_secret(reference)?.is_some() {
+                    "reference-present"
+                } else {
+                    "reference-missing"
+                },
+            );
         }
         Ok("reference-present")
     }
@@ -210,7 +209,9 @@ impl RuntimeAdapter {
                 let Some(entry_object) = entry.as_object() else {
                     continue;
                 };
-                let Some(raw_reference) = entry_object.get("credentialRef").and_then(JsonValue::as_str)
+                let Some(raw_reference) = entry_object
+                    .get("credentialRef")
+                    .and_then(JsonValue::as_str)
                 else {
                     continue;
                 };
@@ -248,12 +249,16 @@ impl RuntimeAdapter {
                         );
                         attempted_paths.push(path);
                     }
-                    Err(_) => document.secret_reference_statuses.push(RuntimeSecretReferenceStatus {
-                        scope: scope_label.clone(),
-                        path,
-                        reference: None,
-                        status: "migration-failed".to_string(),
-                    }),
+                    Err(_) => {
+                        document
+                            .secret_reference_statuses
+                            .push(RuntimeSecretReferenceStatus {
+                                scope: scope_label.clone(),
+                                path,
+                                reference: None,
+                                status: "migration-failed".to_string(),
+                            })
+                    }
                 }
             }
 
@@ -261,23 +266,24 @@ impl RuntimeAdapter {
                 continue;
             }
 
-            match self.write_runtime_document(&document.storage_path, &next_document) {
-                Ok(()) => {
-                    document.document = Some(next_document);
-                    document.exists = true;
-                    document.loaded = true;
-                }
-                Err(_) => {
-                    document.document = Some(original_document);
-                    document.secret_reference_statuses.extend(attempted_paths.into_iter().map(
-                        |path| RuntimeSecretReferenceStatus {
-                            scope: scope_label.clone(),
-                            path,
-                            reference: None,
-                            status: "migration-failed".to_string(),
-                        },
-                    ));
-                }
+            if let Ok(()) = self.write_runtime_document(&document.storage_path, &next_document) {
+                document.document = Some(next_document);
+                document.exists = true;
+                document.loaded = true;
+            } else {
+                document.document = Some(original_document);
+                document
+                    .secret_reference_statuses
+                    .extend(
+                        attempted_paths
+                            .into_iter()
+                            .map(|path| RuntimeSecretReferenceStatus {
+                                scope: scope_label.clone(),
+                                path,
+                                reference: None,
+                                status: "migration-failed".to_string(),
+                            }),
+                    );
             }
         }
     }
@@ -605,7 +611,8 @@ impl RuntimeAdapter {
     ) -> Result<RuntimeEffectiveConfig, AppError> {
         let mut secret_references = Vec::new();
         let effective_value = self.load_effective_config_json(documents)?;
-        let effective_config = self.redact_config_value("effective", "", &effective_value, &mut Vec::new());
+        let effective_config =
+            self.redact_config_value("effective", "", &effective_value, &mut Vec::new());
         let effective_config_hash = Self::hash_value(&effective_value)?;
 
         let sources = documents

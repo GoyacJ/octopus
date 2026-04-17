@@ -658,8 +658,10 @@ fn has_any_permission_codes(
 fn build_access_section_grants(
     effective_permission_codes: &BTreeSet<String>,
 ) -> Vec<AccessSectionGrant> {
-    let members_allowed =
-        has_any_permission_codes(effective_permission_codes, &["access.users.read", "access.users.manage"]);
+    let members_allowed = has_any_permission_codes(
+        effective_permission_codes,
+        &["access.users.read", "access.users.manage"],
+    );
     let access_allowed = members_allowed;
     let governance_allowed = has_any_permission_codes(
         effective_permission_codes,
@@ -729,8 +731,7 @@ fn build_access_role_templates() -> Vec<AccessRoleTemplate> {
         AccessRoleTemplate {
             code: "owner".into(),
             name: "Owner".into(),
-            description: "Full workspace ownership across members, presets, and governance."
-                .into(),
+            description: "Full workspace ownership across members, presets, and governance.".into(),
             managed_role_codes: vec!["system.owner".into()],
             editable: false,
         },
@@ -753,16 +754,14 @@ fn build_access_role_templates() -> Vec<AccessRoleTemplate> {
         AccessRoleTemplate {
             code: "viewer".into(),
             name: "Viewer".into(),
-            description: "Read workspace context and published work without making changes."
-                .into(),
+            description: "Read workspace context and published work without making changes.".into(),
             managed_role_codes: vec!["system.viewer".into()],
             editable: false,
         },
         AccessRoleTemplate {
             code: "auditor".into(),
             name: "Auditor".into(),
-            description: "Review members, policy state, sessions, and audit activity."
-                .into(),
+            description: "Review members, policy state, sessions, and audit activity.".into(),
             managed_role_codes: vec!["system.auditor".into()],
             editable: false,
         },
@@ -816,8 +815,7 @@ fn build_access_capability_bundles() -> Vec<AccessCapabilityBundle> {
         AccessCapabilityBundle {
             code: "automation_and_tools".into(),
             name: "Automation And Tools".into(),
-            description: "Runtime work, agents, and tool enablement for everyday execution."
-                .into(),
+            description: "Runtime work, agents, and tool enablement for everyday execution.".into(),
             permission_codes: access_string_vec(&[
                 "agent.view",
                 "agent.run",
@@ -894,8 +892,7 @@ fn build_access_role_presets() -> Vec<AccessRolePreset> {
         AccessRolePreset {
             code: "auditor".into(),
             name: "Auditor".into(),
-            description: "Review governance, sessions, and audit activity without editing."
-                .into(),
+            description: "Review governance, sessions, and audit activity without editing.".into(),
             recommended_for: "Risk, compliance, and review-oriented collaborators.".into(),
             template_codes: vec!["auditor".into()],
             capability_bundle_codes: access_string_vec(&[
@@ -917,7 +914,11 @@ async fn build_access_experience_response(
         .cloned()
         .collect::<BTreeSet<_>>();
     let section_grants = build_access_section_grants(&effective_permission_codes);
-    let snapshot = state.services.access_control.get_experience_snapshot().await?;
+    let snapshot = state
+        .services
+        .access_control
+        .get_experience_snapshot()
+        .await?;
     let summary = AccessExperienceSummary {
         experience_level: snapshot.experience_level.clone(),
         member_count: snapshot.member_count,
@@ -2874,7 +2875,13 @@ pub(crate) async fn list_access_members(
     headers: HeaderMap,
 ) -> Result<Json<Vec<AccessMemberSummary>>, ApiError> {
     ensure_authorized_session(&state, &headers, "access.users.read", None).await?;
-    Ok(Json(state.services.access_control.list_member_summaries().await?))
+    Ok(Json(
+        state
+            .services
+            .access_control
+            .list_member_summaries()
+            .await?,
+    ))
 }
 
 pub(crate) async fn create_access_user(
@@ -2920,8 +2927,7 @@ pub(crate) async fn update_access_user_preset(
     Path(user_id): Path<String>,
     Json(request): Json<AccessUserPresetUpdateRequest>,
 ) -> Result<Json<AccessMemberSummary>, ApiError> {
-    let session =
-        ensure_authorized_session(&state, &headers, "access.users.manage", None).await?;
+    let session = ensure_authorized_session(&state, &headers, "access.users.manage", None).await?;
     let summary = state
         .services
         .access_control
@@ -3828,12 +3834,10 @@ mod tests {
             .await
             .expect("hide access users menu");
 
-        let Json(payload) = get_access_experience(
-            State(state.clone()),
-            auth_headers(&session.token),
-        )
-        .await
-        .expect("access experience");
+        let Json(payload) =
+            get_access_experience(State(state.clone()), auth_headers(&session.token))
+                .await
+                .expect("access experience");
 
         assert_eq!(payload.summary.experience_level, "enterprise");
         assert_eq!(payload.summary.member_count, 1);
@@ -3869,12 +3873,10 @@ mod tests {
         let state = test_server_state(temp.path());
         let session = bootstrap_owner(&state).await;
 
-        let Json(payload) = get_access_experience(
-            State(state.clone()),
-            auth_headers(&session.token),
-        )
-        .await
-        .expect("access experience");
+        let Json(payload) =
+            get_access_experience(State(state.clone()), auth_headers(&session.token))
+                .await
+                .expect("access experience");
 
         assert_eq!(payload.summary.experience_level, "personal");
         assert_eq!(payload.summary.member_count, 1);
@@ -3901,12 +3903,10 @@ mod tests {
             .await
             .expect("create member");
 
-        let Json(payload) = get_access_experience(
-            State(state.clone()),
-            auth_headers(&session.token),
-        )
-        .await
-        .expect("access experience");
+        let Json(payload) =
+            get_access_experience(State(state.clone()), auth_headers(&session.token))
+                .await
+                .expect("access experience");
 
         assert_eq!(payload.summary.experience_level, "team");
         assert_eq!(payload.summary.member_count, 2);
@@ -3995,18 +3995,14 @@ mod tests {
 
         assert_eq!(payload.summary.experience_level, "enterprise");
         assert_eq!(payload.summary.recommended_landing_section, "governance");
-        assert!(
-            payload
-                .section_grants
-                .iter()
-                .any(|grant| grant.section == "governance" && grant.allowed)
-        );
-        assert!(
-            payload
-                .section_grants
-                .iter()
-                .all(|grant| grant.section == "governance" || !grant.allowed)
-        );
+        assert!(payload
+            .section_grants
+            .iter()
+            .any(|grant| grant.section == "governance" && grant.allowed));
+        assert!(payload
+            .section_grants
+            .iter()
+            .all(|grant| grant.section == "governance" || !grant.allowed));
     }
 
     #[tokio::test]
@@ -4082,19 +4078,15 @@ mod tests {
             .expect("login role reader")
             .session;
 
-        let Json(payload) = get_access_experience(
-            State(state.clone()),
-            auth_headers(&access_session.token),
-        )
-        .await
-        .expect("access experience");
+        let Json(payload) =
+            get_access_experience(State(state.clone()), auth_headers(&access_session.token))
+                .await
+                .expect("access experience");
 
-        assert!(
-            payload
-                .section_grants
-                .iter()
-                .any(|grant| grant.section == "access" && !grant.allowed)
-        );
+        assert!(payload
+            .section_grants
+            .iter()
+            .any(|grant| grant.section == "access" && !grant.allowed));
     }
 
     #[tokio::test]
@@ -4128,12 +4120,9 @@ mod tests {
             .await
             .expect("bind member role");
 
-        let Json(payload) = list_access_members(
-            State(state.clone()),
-            auth_headers(&session.token),
-        )
-        .await
-        .expect("list access members");
+        let Json(payload) = list_access_members(State(state.clone()), auth_headers(&session.token))
+            .await
+            .expect("list access members");
 
         let member_summary = payload
             .iter()
@@ -4141,12 +4130,10 @@ mod tests {
             .expect("member summary");
         assert_eq!(member_summary.primary_preset_code, Some("member".into()));
         assert_eq!(member_summary.primary_preset_name, "Member");
-        assert!(
-            member_summary
-                .effective_role_names
-                .iter()
-                .any(|name| name == "Member")
-        );
+        assert!(member_summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Member"));
 
         let unassigned_member = state
             .services
@@ -4162,12 +4149,10 @@ mod tests {
             .await
             .expect("create unassigned member");
 
-        let Json(unassigned_payload) = list_access_members(
-            State(state.clone()),
-            auth_headers(&session.token),
-        )
-        .await
-        .expect("list access members");
+        let Json(unassigned_payload) =
+            list_access_members(State(state.clone()), auth_headers(&session.token))
+                .await
+                .expect("list access members");
 
         let unassigned_summary = unassigned_payload
             .iter()
@@ -4178,7 +4163,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_access_user_preset_replaces_direct_system_bindings_and_preserves_other_access() {
+    async fn update_access_user_preset_replaces_direct_system_bindings_and_preserves_other_access()
+    {
         let temp = tempfile::tempdir().expect("tempdir");
         let state = test_server_state(temp.path());
         let session = bootstrap_owner(&state).await;
@@ -4244,12 +4230,13 @@ mod tests {
 
         assert_eq!(summary.user.id, member.id);
         assert_eq!(summary.primary_preset_name, "Mixed access");
-        assert!(summary.effective_role_names.iter().any(|name| name == "Admin"));
-        assert!(
-            summary
-                .effective_role_names
-                .iter()
-                .any(|name| name == "Member Helper")
-        );
+        assert!(summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Admin"));
+        assert!(summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Member Helper"));
     }
 }

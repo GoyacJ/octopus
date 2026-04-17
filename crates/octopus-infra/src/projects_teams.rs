@@ -46,7 +46,10 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         project_id: &str,
     ) -> Result<Vec<ArtifactRecord>, AppError> {
-        Ok(load_project_artifact_records(&self.state.open_db()?, project_id)?)
+        Ok(load_project_artifact_records(
+            &self.state.open_db()?,
+            project_id,
+        )?)
     }
 
     async fn create_project(

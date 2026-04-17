@@ -445,7 +445,10 @@ pub fn build_router(state: ServerState) -> Router {
             delete(unlink_project_team),
         )
         .route("/api/v1/inbox", get(inbox))
-        .route("/api/v1/workspace/deliverables", get(workspace_deliverables))
+        .route(
+            "/api/v1/workspace/deliverables",
+            get(workspace_deliverables),
+        )
         .route(
             "/api/v1/deliverables/:deliverable_id",
             get(get_deliverable_detail),

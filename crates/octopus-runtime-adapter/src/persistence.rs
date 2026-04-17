@@ -354,9 +354,7 @@ impl RuntimeAdapter {
         session_id: &str,
         error: &serde_json::Error,
     ) -> Result<(), AppError> {
-        eprintln!(
-            "dropping legacy runtime projection {session_id}: {error}"
-        );
+        eprintln!("dropping legacy runtime projection {session_id}: {error}");
 
         for statement in [
             "DELETE FROM runtime_session_projections WHERE id = ?1",
@@ -688,9 +686,7 @@ impl RuntimeAdapter {
         fs::write(&path, payload)?;
 
         let content_bytes = deliverable_content_bytes(content)?;
-        let byte_size = content
-            .byte_size
-            .unwrap_or_else(|| content_bytes.len() as u64);
+        let byte_size = content.byte_size.unwrap_or(content_bytes.len() as u64);
         let content_hash = if content_bytes.is_empty() {
             hash_bytes(b"")
         } else {
@@ -800,10 +796,7 @@ impl RuntimeAdapter {
                 "{}-v{}.{}",
                 detail.id,
                 detail.latest_version,
-                deliverable_file_extension(
-                    &content.preview_kind,
-                    content.content_type.as_deref(),
-                )
+                deliverable_file_extension(&content.preview_kind, content.content_type.as_deref(),)
             ));
         }
 
@@ -1565,8 +1558,7 @@ impl RuntimeAdapter {
         order.clear();
 
         for row in rows {
-            let (session_id, detail_json, manifest_snapshot_ref, session_policy_snapshot_ref) =
-                row;
+            let (session_id, detail_json, manifest_snapshot_ref, session_policy_snapshot_ref) = row;
             let mut detail = match serde_json::from_str::<RuntimeSessionDetail>(&detail_json) {
                 Ok(detail) => detail,
                 Err(error) => {

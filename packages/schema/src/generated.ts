@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 137a862563f8aa75eb839fc6ff6d100aad3f2b81c062b7122c7e9bf9af8378f9
+// Source hash: fa8c654d994e87632df4c2a04d913dfd56649eadac570597b0be69397717affe
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
-export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "137a862563f8aa75eb839fc6ff6d100aad3f2b81c062b7122c7e9bf9af8378f9"
+export const OCTOPUS_API_VERSION = "0.2.5"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "fa8c654d994e87632df4c2a04d913dfd56649eadac570597b0be69397717affe"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
