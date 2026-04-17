@@ -219,4 +219,39 @@ describe('TraceView runtime integration', () => {
     runtime.dispose()
     mounted.destroy()
   })
+
+  it('renders run state, recovery, and timeline as inspector panels instead of stacked subtle cards', async () => {
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-trace-layout',
+      projectId: 'proj-redesign',
+      title: 'Trace Layout Runtime Session',
+    })
+    await runtime.submitTurn({
+      content: 'Summarize the runtime trace state.',
+      permissionMode: 'auto',
+    })
+
+    await waitFor(() => runtime.activeRun?.status === 'completed' && runtime.activeTrace.length > 0)
+    await flushUi()
+
+    const runState = mounted.container.querySelector<HTMLElement>('[data-testid="trace-run-state"]')
+    const recovery = mounted.container.querySelector<HTMLElement>('[data-testid="trace-recovery"]')
+    const timeline = mounted.container.querySelector<HTMLElement>('[data-testid="trace-timeline"]')
+
+    expect(runState).not.toBeNull()
+    expect(recovery).not.toBeNull()
+    expect(timeline).not.toBeNull()
+    expect(runState?.querySelector('[data-testid="ui-inspector-panel-header"]')).not.toBeNull()
+    expect(runState?.querySelector('[data-testid="ui-inspector-panel-body"]')).not.toBeNull()
+    expect(recovery?.querySelector('[data-testid="ui-inspector-panel-header"]')).not.toBeNull()
+    expect(recovery?.querySelector('[data-testid="ui-inspector-panel-body"]')).not.toBeNull()
+    expect(timeline?.querySelector('[data-testid="ui-inspector-panel-header"]')).not.toBeNull()
+    expect(timeline?.querySelector('[data-testid="ui-inspector-panel-body"]')).not.toBeNull()
+
+    runtime.dispose()
+    mounted.destroy()
+  })
 })

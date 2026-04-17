@@ -81,7 +81,7 @@ function formatLabel(value?: string): string {
     class="w-[22rem]"
     data-testid="ui-message-center"
   >
-    <UiSurface variant="overlay" padding="sm" class="border-border bg-popover shadow-md">
+    <UiSurface variant="overlay" padding="sm">
       <div class="px-1 pb-3">
         <UiTabs
           :model-value="props.activeTab"
@@ -120,8 +120,8 @@ function formatLabel(value?: string): string {
             type="button"
             class="rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-fast"
             :class="filter === props.activeFilter
-              ? 'border-border-strong bg-accent text-text-primary shadow-xs'
-              : 'border-border bg-surface text-text-secondary hover:bg-accent'"
+              ? 'border-border-strong bg-subtle text-text-primary'
+              : 'border-border bg-surface text-text-secondary hover:bg-subtle'"
             :data-testid="`ui-notification-filter-${filter}`"
             @click="emit('update:filter', filter)"
           >

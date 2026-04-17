@@ -175,4 +175,30 @@ describe('App host bootstrap guard', () => {
 
     mounted.destroy()
   })
+
+  it('uses an integrated recovery shell instead of a floating card when the backend is unavailable', async () => {
+    bootstrapShellHostMock.mockResolvedValue(createBootstrap(false))
+
+    const mounted = mountApp()
+
+    await flushUi()
+
+    const guardShell = mounted.container.querySelector<HTMLElement>('[data-testid="desktop-backend-guard-shell"]')
+    const headerBand = mounted.container.querySelector<HTMLElement>('[data-testid="desktop-backend-guard-header"]')
+    const actionBand = mounted.container.querySelector<HTMLElement>('[data-testid="desktop-backend-guard-actions"]')
+
+    expect(guardShell).not.toBeNull()
+    expect(guardShell?.className).toContain('bg-surface')
+    expect(guardShell?.className).not.toContain('bg-card')
+    expect(guardShell?.className).not.toContain('shadow-lg')
+
+    expect(headerBand).not.toBeNull()
+    expect(headerBand?.className).toContain('bg-subtle')
+
+    expect(actionBand).not.toBeNull()
+    expect(actionBand?.className).toContain('border-t')
+    expect(actionBand?.className).toContain('bg-subtle')
+
+    mounted.destroy()
+  })
 })

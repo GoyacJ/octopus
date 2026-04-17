@@ -7,7 +7,7 @@ const props = defineProps<{
 <template>
   <span
     v-if="props.count > 0"
-    class="inline-flex min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-semibold leading-none text-background"
+    class="inline-flex min-w-5 items-center justify-center rounded-full border border-border-strong bg-accent px-1.5 py-0.5 text-[10px] font-semibold leading-none text-accent-foreground"
     data-testid="ui-notification-badge"
   >
     {{ props.count > 99 ? '99+' : props.count }}

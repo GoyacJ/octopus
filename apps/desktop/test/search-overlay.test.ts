@@ -186,4 +186,148 @@ describe('Workbench search overlay', () => {
 
     mounted.destroy()
   })
+
+  it('tracks an active result and moves it with the keyboard', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await flushNavigation()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    expect(input).not.toBeNull()
+
+    const getResults = () => [...document.body.querySelectorAll<HTMLButtonElement>('[data-result-id]')]
+
+    expect(getResults().length).toBeGreaterThan(1)
+    expect(getResults()[0]?.dataset.active).toBe('true')
+    expect(getResults()[1]?.dataset.active).toBe('false')
+
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await flushNavigation()
+
+    expect(getResults()[0]?.dataset.active).toBe('false')
+    expect(getResults()[1]?.dataset.active).toBe('true')
+    expect(document.body.querySelector('[data-testid="search-overlay-shortcuts"]')).not.toBeNull()
+
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    await flushNavigation()
+
+    expect(getResults()[0]?.dataset.active).toBe('true')
+
+    mounted.destroy()
+  })
+
+  it('keeps the search field frame and active result integrated with the overlay surface', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await flushNavigation()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    const activeResult = document.body.querySelector<HTMLButtonElement>('[data-active="true"]')
+
+    expect(input).not.toBeNull()
+    expect(input?.parentElement?.className).not.toContain('shadow-xs')
+    expect(activeResult).not.toBeNull()
+    expect(activeResult?.className).toContain('border-border-strong')
+    expect(activeResult?.className).toContain('bg-accent')
+    expect(activeResult?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
+  it('keeps inactive search affordances neutral inside the overlay shell', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await flushNavigation()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    const activeResult = document.body.querySelector<HTMLButtonElement>('[data-active="true"]')
+    const inactiveResult = document.body.querySelector<HTMLButtonElement>('[data-active="false"]')
+    const shortcutSpans = [...document.body.querySelectorAll<HTMLElement>('[data-testid="search-overlay-shortcuts"] span')]
+
+    const inputShell = input?.parentElement
+    const inactiveResultIcon = inactiveResult?.firstElementChild as HTMLElement | null
+    const activeResultAction = activeResult?.lastElementChild as HTMLElement | null
+    const enterShortcutKey = shortcutSpans.find(element => element.textContent?.trim() === 'Enter')
+
+    expect(inputShell).not.toBeNull()
+    expect(inputShell?.className).toContain('bg-subtle')
+    expect(inputShell?.className).not.toContain('bg-background')
+
+    expect(inactiveResultIcon).not.toBeNull()
+    expect(inactiveResultIcon?.className).toContain('bg-subtle')
+    expect(inactiveResultIcon?.className).toContain('text-text-secondary')
+    expect(inactiveResultIcon?.className).not.toContain('bg-primary/10')
+    expect(inactiveResultIcon?.className).not.toContain('text-primary')
+
+    expect(activeResultAction).not.toBeNull()
+    expect(activeResultAction?.className).toContain('bg-surface')
+    expect(activeResultAction?.className).not.toContain('bg-background')
+
+    expect(enterShortcutKey).not.toBeNull()
+    expect(enterShortcutKey?.className).toContain('bg-surface')
+    expect(enterShortcutKey?.className).not.toContain('bg-background')
+
+    mounted.destroy()
+  })
+
+  it('renders helper and empty states as integrated command palette sections', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await flushNavigation()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    const shortcuts = document.body.querySelector<HTMLElement>('[data-testid="search-overlay-shortcuts"]')
+
+    expect(shortcuts).not.toBeNull()
+    expect(shortcuts?.className).toContain('border-t')
+    expect(shortcuts?.className).toContain('bg-subtle')
+
+    expect(input).not.toBeNull()
+    input!.value = '__no_results_expected__'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushNavigation()
+
+    const emptyState = document.body.querySelector<HTMLElement>('[data-testid="search-overlay-empty"]')
+
+    expect(emptyState).not.toBeNull()
+    expect(emptyState?.className).toContain('border-border')
+    expect(emptyState?.className).toContain('bg-subtle')
+    expect(emptyState?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
+  it('opens the active result when pressing enter', async () => {
+    const mounted = mountApp()
+    const shell = useShellStore()
+
+    shell.openSearch()
+    await nextTick()
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    expect(input).not.toBeNull()
+
+    input!.value = 'conversation redesign'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushNavigation()
+
+    const activeResult = document.body.querySelector<HTMLElement>('[data-result-id="conversation:rt-conv-redesign"]')
+    expect(activeResult?.dataset.active).toBe('true')
+
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushNavigation()
+
+    expect(shell.searchOpen).toBe(false)
+    expect(router.currentRoute.value.fullPath).toContain('/conversations/conv-redesign')
+
+    mounted.destroy()
+  })
 })

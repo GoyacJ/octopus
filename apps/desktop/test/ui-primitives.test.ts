@@ -2,11 +2,12 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, nextTick, ref } from 'vue'
 
 import {
   UiArtifactBlock,
   UiActionCard,
+  UiBadge,
   UiButton,
   UiCodeEditor,
   UiCombobox,
@@ -14,10 +15,13 @@ import {
   UiDataTable,
   UiDialog,
   UiDropdownMenu,
+  UiEmptyState,
   UiFilterChipGroup,
   UiInfoCard,
+  UiInboxBlock,
   UiMetricCard,
   UiNavCardList,
+  UiNotificationBadge,
   UiPageHeader,
   UiPageHero,
   UiPageShell,
@@ -27,7 +31,9 @@ import {
   UiRankingList,
   UiSearchableMultiSelect,
   UiSelectionMenu,
+  UiSurface,
   UiConversationComposerShell,
+  UiDotLottie,
   UiInspectorPanel,
   UiHierarchyList,
   UiListRow,
@@ -39,6 +45,7 @@ import {
   UiStatusCallout,
   UiStatTile,
   UiSwitch,
+  UiRiveCanvas,
   UiToastItem,
   UiToastViewport,
   UiTraceBlock,
@@ -113,6 +120,66 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Save')
     expect(wrapper.classes().join(' ')).toContain('bg-surface')
     expect(wrapper.classes().join(' ')).toContain('border-border-subtle')
+  })
+
+  it('renders UiNotificationBadge as a brand-soft pill and caps large counts', () => {
+    const wrapper = mount(UiNotificationBadge, {
+      props: {
+        count: 124,
+      },
+    })
+
+    const classes = wrapper.get('[data-testid="ui-notification-badge"]').classes().join(' ')
+
+    expect(wrapper.text()).toBe('99+')
+    expect(classes).toContain('rounded-full')
+    expect(classes).toContain('bg-accent')
+    expect(classes).toContain('border-border-strong')
+    expect(classes).toContain('text-accent-foreground')
+    expect(classes).not.toContain('bg-foreground')
+  })
+
+  it('keeps UiButton outline and ghost variants on neutral hover states', () => {
+    const outlineButton = mount(UiButton, {
+      props: {
+        variant: 'outline',
+      },
+      slots: {
+        default: 'Open',
+      },
+    })
+    const ghostButton = mount(UiButton, {
+      props: {
+        variant: 'ghost',
+      },
+      slots: {
+        default: 'Later',
+      },
+    })
+
+    const outlineClasses = outlineButton.classes().join(' ')
+    const ghostClasses = ghostButton.classes().join(' ')
+
+    expect(outlineClasses).toContain('bg-surface')
+    expect(outlineClasses).toContain('hover:bg-subtle')
+    expect(outlineClasses).not.toContain('hover:bg-accent')
+    expect(ghostClasses).toContain('hover:bg-subtle')
+    expect(ghostClasses).not.toContain('hover:bg-accent')
+  })
+
+  it('keeps UiBadge info tone on a soft semantic fill instead of the raw accent fill', () => {
+    const wrapper = mount(UiBadge, {
+      props: {
+        label: 'Live',
+        tone: 'info',
+      },
+    })
+
+    const classes = wrapper.classes().join(' ')
+
+    expect(classes).toContain('bg-[var(--color-status-info-soft)]')
+    expect(classes).toContain('text-status-info')
+    expect(classes).not.toContain('bg-accent')
   })
 
   it('renders UiHierarchyList with expandable branches and selectable leaf nodes', async () => {
@@ -225,6 +292,30 @@ describe('Shared UI primitives', () => {
     warnSpy.mockRestore()
   })
 
+  it('keeps the UiDialog close control on the neutral hover grammar', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const wrapper = mount(UiDialog, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        title: 'Close project',
+      },
+    })
+
+    await wrapper.vm.$nextTick()
+
+    const closeButton = document.body.querySelector('[data-testid="ui-dialog-close"]')
+
+    expect(closeButton).not.toBeNull()
+    expect(closeButton?.className).toContain('hover:bg-subtle')
+    expect(closeButton?.className).not.toContain('hover:bg-accent')
+    expect(closeButton?.className).toContain('ui-focus-ring')
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+    warnSpy.mockRestore()
+  })
+
   it('keeps UiPopover controlled through v-model', async () => {
     const Demo = defineComponent({
       components: { UiPopover },
@@ -250,7 +341,12 @@ describe('Shared UI primitives', () => {
     await wrapper.get('[data-testid="popover-trigger"]').trigger('click')
     await wrapper.vm.$nextTick()
 
+    const popoverContent = document.body.querySelector('[data-testid="ui-popover-content"]')
+
     expect(wrapper.vm.open).toBe(true)
+    expect(popoverContent).not.toBeNull()
+    expect(popoverContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(popoverContent?.className).not.toContain('border-border')
     expect(document.body.textContent).toContain('Popover content')
     wrapper.unmount()
   })
@@ -285,7 +381,16 @@ describe('Shared UI primitives', () => {
     await wrapper.get('[data-testid="dropdown-trigger"]').trigger('click')
     await wrapper.vm.$nextTick()
 
+    const renameItem = document.body.querySelector<HTMLElement>('[data-testid="ui-dropdown-item-rename"]')
     const deleteItem = document.body.querySelector('[data-testid="ui-dropdown-item-delete"]') as HTMLElement | null
+    const dropdownContent = document.body.querySelector<HTMLElement>('[data-testid="ui-dropdown-content"]')
+
+    expect(renameItem).not.toBeNull()
+    expect(dropdownContent).not.toBeNull()
+    expect(dropdownContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(dropdownContent?.className).not.toContain('border-border')
+    expect(renameItem?.className).toContain('data-[highlighted]:bg-subtle')
+    expect(renameItem?.className).not.toContain('data-[highlighted]:bg-accent')
     expect(deleteItem).not.toBeNull()
     deleteItem?.click()
 
@@ -355,6 +460,52 @@ describe('Shared UI primitives', () => {
     expect(wrapper.vm.value).toBe('team')
   })
 
+  it('keeps shared focus-ring utility on tabs, accordion triggers, hierarchy toggles, and switches', () => {
+    const tabs = mount(UiTabs, {
+      props: {
+        modelValue: 'agent',
+        variant: 'pill',
+        tabs: [
+          { value: 'agent', label: 'Agents' },
+          { value: 'team', label: 'Teams' },
+        ],
+      },
+    })
+    const accordion = mount(UiAccordion, {
+      props: {
+        items: [
+          { value: 'overview', title: 'Overview', content: 'Details' },
+        ],
+      },
+    })
+    const hierarchy = mount(UiHierarchyList, {
+      props: {
+        items: [
+          {
+            id: 'workspace',
+            label: 'Workspace',
+            depth: 0,
+            expandable: true,
+            expanded: false,
+          },
+        ],
+      },
+    })
+    const uiSwitch = mount(UiSwitch, {
+      props: {
+        modelValue: false,
+      },
+    })
+
+    expect(tabs.get('[data-testid="ui-tabs-trigger-agent"]').classes().join(' ')).toContain('ui-focus-ring')
+    expect(accordion.get('[data-testid="ui-accordion-trigger-overview"]').classes().join(' ')).toContain('ui-focus-ring')
+    expect(hierarchy.get('[data-testid="ui-hierarchy-toggle-workspace"]').classes().join(' ')).toContain('ui-focus-ring')
+
+    const switchClasses = uiSwitch.get('[role="switch"]').classes().join(' ')
+    expect(switchClasses).toContain('ui-focus-ring')
+    expect(switchClasses).not.toContain('ring-offset-1')
+  })
+
   it('renders UiMessageCenter with notification and inbox tabs and emits inbox selection', async () => {
     const notificationCreatedAt = Date.UTC(2026, 3, 12, 10, 5)
     const inboxCreatedAt = Date.UTC(2026, 3, 11, 8, 15)
@@ -406,6 +557,13 @@ describe('Shared UI primitives', () => {
     expect(document.body.textContent).toContain('Notifications')
     expect(document.body.textContent).toContain('Inbox')
     expect(document.body.textContent).toContain(formatUiTimestamp(notificationCreatedAt))
+    expect(wrapper.findComponent(UiSurface).attributes('class') ?? '').toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(wrapper.findComponent(UiSurface).attributes('class') ?? '').not.toContain('border-border')
+    expect(wrapper.get('[data-testid="ui-notification-filter-all"]').classes().join(' ')).toContain('bg-subtle')
+    expect(wrapper.get('[data-testid="ui-notification-filter-all"]').classes().join(' ')).not.toContain('bg-accent')
+    expect(wrapper.get('[data-testid="ui-notification-filter-all"]').classes().join(' ')).not.toContain('shadow-xs')
+    expect(wrapper.get('[data-testid="ui-notification-filter-workspace"]').classes().join(' ')).toContain('hover:bg-subtle')
+    expect(wrapper.get('[data-testid="ui-notification-filter-workspace"]').classes().join(' ')).not.toContain('hover:bg-accent')
 
     await wrapper.get('[data-testid="ui-tabs-trigger-inbox"]').trigger('click')
 
@@ -500,6 +658,52 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('从左侧列表中选择一个用户后即可查看详情。')
   })
 
+  it('renders UiListDetailShell and UiInspectorPanel with one integrated list-detail shell grammar', () => {
+    const wrapper = mount(defineComponent({
+      components: {
+        UiInspectorPanel,
+        UiListDetailShell,
+      },
+      template: `
+        <UiListDetailShell>
+          <template #list>
+            <div data-testid="ui-list-detail-list-slot">List</div>
+          </template>
+          <UiInspectorPanel title="Inspector" subtitle="Shared detail shell">
+            <div data-testid="ui-list-detail-detail-slot">Detail</div>
+          </UiInspectorPanel>
+        </UiListDetailShell>
+      `,
+    }))
+
+    const shell = wrapper.find('[data-testid="ui-list-detail-shell"]')
+    const listPane = wrapper.find('[data-testid="ui-list-detail-shell-list"]')
+    const detailPane = wrapper.find('[data-testid="ui-list-detail-shell-detail"]')
+    const inspector = wrapper.find('[data-testid="ui-inspector-panel"]')
+    const inspectorHeader = wrapper.find('[data-testid="ui-inspector-panel-header"]')
+    const inspectorBody = wrapper.find('[data-testid="ui-inspector-panel-body"]')
+
+    expect(shell.exists()).toBe(true)
+    expect(shell.classes().join(' ')).toContain('gap-px')
+    expect(shell.classes().join(' ')).toContain('overflow-hidden')
+    expect(shell.classes().join(' ')).toContain('bg-border')
+
+    expect(listPane.exists()).toBe(true)
+    expect(listPane.classes().join(' ')).toContain('bg-surface')
+
+    expect(detailPane.exists()).toBe(true)
+    expect(detailPane.classes().join(' ')).toContain('bg-[color-mix(in_srgb,var(--surface)_72%,var(--subtle)_28%)]')
+
+    expect(inspector.exists()).toBe(true)
+    expect(inspector.classes().join(' ')).toContain('bg-subtle')
+    expect(inspector.classes().join(' ')).not.toContain('shadow-xs')
+
+    expect(inspectorHeader.exists()).toBe(true)
+    expect(inspectorHeader.classes().join(' ')).toContain('border-b')
+    expect(inspectorBody.exists()).toBe(true)
+    expect(inspectorBody.classes().join(' ')).toContain('px-5')
+  })
+
   it('renders UiAccordion and updates controlled values', async () => {
     const Demo = defineComponent({
       components: { UiAccordion },
@@ -521,8 +725,11 @@ describe('Shared UI primitives', () => {
     })
 
     const wrapper = mount(Demo)
+    const activityTriggerClasses = wrapper.get('[data-testid="ui-accordion-trigger-activity"]').classes().join(' ')
 
     expect(wrapper.text()).toContain('Overview content')
+    expect(activityTriggerClasses).toContain('hover:bg-subtle')
+    expect(activityTriggerClasses).not.toContain('hover:bg-accent')
 
     await wrapper.get('[data-testid="ui-accordion-trigger-activity"]').trigger('click')
 
@@ -543,6 +750,13 @@ describe('Shared UI primitives', () => {
 
     await wrapper.get('[data-testid="ui-combobox-input"]').setValue('sys')
 
+    const comboboxContent = document.body.querySelector<HTMLElement>('[data-testid="ui-combobox-content"]')
+
+    expect(comboboxContent).not.toBeNull()
+    expect(comboboxContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(comboboxContent?.className).not.toContain('border-border')
+    expect(wrapper.get('[data-testid="ui-combobox-option-architect"]').classes().join(' ')).toContain('data-[highlighted]:bg-subtle')
+    expect(wrapper.get('[data-testid="ui-combobox-option-architect"]').classes().join(' ')).not.toContain('data-[highlighted]:bg-accent')
     expect(document.body.textContent).toContain('Architect')
     expect(document.body.textContent).not.toContain('Analyst')
 
@@ -594,9 +808,16 @@ describe('Shared UI primitives', () => {
       clientY: 120,
     })
 
+    const archiveItem = wrapper.get('[data-testid="ui-context-item-archive"]')
+    const contextContent = document.body.querySelector<HTMLElement>('[data-testid="ui-context-content"]')
+
+    expect(contextContent).not.toBeNull()
+    expect(contextContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(contextContent?.className).not.toContain('border-border')
+    expect(archiveItem.classes().join(' ')).toContain('data-[highlighted]:bg-subtle')
+    expect(archiveItem.classes().join(' ')).not.toContain('data-[highlighted]:bg-accent')
     await wrapper.get('[data-testid="ui-context-item-archive"]').trigger('click')
 
-    expect(document.body.querySelector('[data-testid="ui-context-content"]')).not.toBeNull()
     expect(wrapper.emitted('select')).toEqual([['archive']])
     wrapper.unmount()
   })
@@ -654,6 +875,57 @@ describe('Shared UI primitives', () => {
     expect(artifactBlock.attributes('data-ui-artifact-block')).toBe('true')
   })
 
+  it('renders AI-native block primitives with integrated bands instead of floating cards', () => {
+    const composer = mount(UiConversationComposerShell, {
+      slots: {
+        default: '<div data-testid="composer-slot">Composer</div>',
+      },
+    })
+    const artifactBlock = mount(UiArtifactBlock, {
+      props: {
+        title: 'Runtime Delivery Summary',
+        excerpt: 'Latest artifact emitted by the workspace runtime.',
+        typeLabel: 'Report',
+        versionLabel: 'v3',
+        statusLabel: 'Published',
+      },
+    })
+    const inboxBlock = mount(UiInboxBlock, {
+      props: {
+        title: 'Need approval',
+        description: 'Runtime needs approval.',
+        priorityLabel: 'High',
+        timestampLabel: '09:41',
+        statusLabel: 'Pending',
+      },
+    })
+    const traceBlock = mount(UiTraceBlock, {
+      props: {
+        title: 'Workspace sync',
+        detail: 'Updated runtime snapshot.',
+        actor: 'Runtime',
+        timestampLabel: '09:41',
+        tone: 'info',
+      },
+    })
+
+    expect(composer.classes().join(' ')).toContain('border-[color-mix(in_srgb,var(--border)_76%,transparent)]')
+    expect(composer.classes().join(' ')).not.toContain('shadow-sm')
+
+    expect(artifactBlock.classes().join(' ')).toContain('overflow-hidden')
+    expect(artifactBlock.classes().join(' ')).not.toContain('shadow-xs')
+    expect(artifactBlock.get('[data-testid="ui-artifact-block-header"]').classes().join(' ')).toContain('border-b')
+    expect(artifactBlock.get('[data-testid="ui-artifact-block-footer"]').classes().join(' ')).toContain('border-t')
+
+    expect(inboxBlock.classes().join(' ')).toContain('overflow-hidden')
+    expect(inboxBlock.get('[data-testid="ui-inbox-block-priority"]').classes().join(' ')).toContain('border-border-strong')
+    expect(inboxBlock.get('[data-testid="ui-inbox-block-priority"]').classes().join(' ')).not.toContain('text-text-secondary')
+
+    expect(traceBlock.classes().join(' ')).toContain('overflow-hidden')
+    expect(traceBlock.classes().join(' ')).not.toContain('border-transparent')
+    expect(traceBlock.get('[data-testid="ui-trace-block-header"]').classes().join(' ')).toContain('border-b')
+  })
+
   it('renders UiDataTable with declarative columns', () => {
     const wrapper = mount(UiDataTable, {
       props: {
@@ -681,6 +953,34 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Support')
     expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_42%,transparent)]')
     expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_28%,transparent)]')
+  })
+
+  it('keeps UiDataTable row hover neutral while preserving row affordance', () => {
+    const wrapper = mount(UiDataTable, {
+      props: {
+        rowTestId: 'ui-data-table-row',
+        data: [
+          { id: 'agent-1', name: 'Architect', role: 'Lead' },
+        ],
+        columns: [
+          {
+            id: 'name',
+            header: 'Name',
+            accessorKey: 'name',
+          },
+          {
+            id: 'role',
+            header: 'Role',
+            accessorKey: 'role',
+          },
+        ],
+      },
+    })
+
+    const classes = wrapper.get('[data-testid="ui-data-table-row-0"]').classes().join(' ')
+
+    expect(classes).toContain('hover:bg-subtle')
+    expect(classes).not.toContain('hover:bg-accent')
   })
 
   it('keeps UiCodeEditor controlled via modelValue', async () => {
@@ -760,6 +1060,30 @@ describe('Shared UI primitives', () => {
     expect(wrapper.find('[data-testid="composer-shell"]').exists()).toBe(true)
   })
 
+  it('keeps UiStatusCallout restrained instead of using saturated fills', () => {
+    const info = mount(UiStatusCallout, {
+      props: {
+        tone: 'info',
+        title: 'Heads up',
+        description: 'Shared state',
+      },
+    })
+
+    const warning = mount(UiStatusCallout, {
+      props: {
+        tone: 'warning',
+        title: 'Review required',
+      },
+    })
+
+    expect(info.classes().join(' ')).toContain('border-[color-mix(in_srgb,var(--color-status-info)_18%,var(--border))]')
+    expect(info.classes().join(' ')).toContain('bg-[color-mix(in_srgb,var(--color-status-info-soft)_72%,var(--surface)_28%)]')
+    expect(info.classes().join(' ')).not.toContain('bg-accent')
+    expect(info.classes().join(' ')).not.toContain('border-transparent')
+    expect(info.html()).toContain('text-status-info')
+    expect(warning.html()).toContain('text-status-warning')
+  })
+
   it('renders UiActionCard and UiInfoCard through shared page abstractions', () => {
     const actionCard = mount(UiActionCard, {
       props: {
@@ -785,6 +1109,21 @@ describe('Shared UI primitives', () => {
     expect(infoCard.text()).toContain('Unified styling')
   })
 
+  it('keeps UiActionCard hover neutral while strengthening the border affordance', () => {
+    const wrapper = mount(UiActionCard, {
+      props: {
+        title: 'Open knowledge',
+        description: 'Jump to project context',
+      },
+    })
+
+    const classes = wrapper.get('article').classes().join(' ')
+
+    expect(classes).toContain('hover:bg-subtle')
+    expect(classes).toContain('hover:border-border-strong')
+    expect(classes).not.toContain('hover:bg-accent')
+  })
+
   it('renders UiPanelFrame variants through shared shell abstractions', () => {
     const wrapper = mount(UiPanelFrame, {
       props: {
@@ -806,6 +1145,44 @@ describe('Shared UI primitives', () => {
     expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
   })
 
+  it('maps UiPanelFrame panel and interactive variants onto their matching shared surface semantics', () => {
+    const panel = mount(UiPanelFrame, {
+      props: {
+        variant: 'panel',
+        title: 'Panel variant',
+      },
+    })
+    const interactive = mount(UiPanelFrame, {
+      props: {
+        variant: 'interactive',
+        title: 'Interactive variant',
+      },
+    })
+
+    expect(panel.html()).toContain('border-[color-mix(in_srgb,var(--border)_68%,transparent)]')
+    expect(panel.html()).toContain('bg-subtle')
+    expect(panel.html()).toContain('shadow-none')
+
+    expect(interactive.html()).toContain('hover:bg-subtle')
+    expect(interactive.html()).toContain('hover:border-border-strong')
+    expect(interactive.html()).toContain('shadow-xs')
+  })
+
+  it('keeps UiSurface interactive hover neutral while strengthening the border affordance', () => {
+    const wrapper = mount(UiSurface, {
+      props: {
+        variant: 'interactive',
+        title: 'Interactive surface',
+      },
+    })
+
+    const classes = wrapper.get('section').classes().join(' ')
+
+    expect(classes).toContain('hover:bg-subtle')
+    expect(classes).toContain('hover:border-border-strong')
+    expect(classes).not.toContain('hover:bg-accent')
+  })
+
   it('renders UiMetricCard with helper text and progress state', () => {
     const wrapper = mount(UiMetricCard, {
       props: {
@@ -820,6 +1197,22 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('84%')
     expect(wrapper.text()).toContain('Shared UI adoption')
     expect(wrapper.find('[data-testid="ui-metric-progress"]').attributes('style')).toContain('84%')
+  })
+
+  it('renders UiMetricCard accent tone with a brand-soft fill and stronger border', () => {
+    const wrapper = mount(UiMetricCard, {
+      props: {
+        label: 'Priority',
+        value: '12',
+        tone: 'accent',
+      },
+    })
+
+    const classes = wrapper.get('article').classes().join(' ')
+
+    expect(classes).toContain('bg-accent')
+    expect(classes).toContain('border-border-strong')
+    expect(classes).not.toContain('border-transparent')
   })
 
   it('renders UiRankingList and UiTimelineList through shared data-display abstractions', () => {
@@ -908,7 +1301,23 @@ describe('Shared UI primitives', () => {
     expect(toolbar.html()).toContain('xl:flex-row')
   })
 
-  it('renders UiSelectionMenu with grouped items', () => {
+  it('keeps UiToolbarRow on the shared compact toolbar radius', () => {
+    const toolbar = mount(UiToolbarRow, {
+      props: {
+        testId: 'toolbar-radius',
+      },
+      slots: {
+        actions: '<button data-testid="toolbar-radius-action">Run</button>',
+      },
+    })
+
+    const classes = toolbar.get('[data-testid="toolbar-radius"]').classes().join(' ')
+
+    expect(classes).toContain('rounded-[var(--radius-m)]')
+    expect(classes).not.toContain('rounded-[var(--radius-l)]')
+  })
+
+  it('renders UiSelectionMenu with grouped items', async () => {
     const wrapper = mount(UiSelectionMenu, {
       attachTo: document.body,
       props: {
@@ -940,6 +1349,23 @@ describe('Shared UI primitives', () => {
     expect(wrapper.props('title')).toBe('Select actor')
     expect(wrapper.props('sections')).toHaveLength(2)
     expect(wrapper.find('[data-testid="selection-trigger"]').exists()).toBe(true)
+    await wrapper.vm.$nextTick()
+
+    const menu = document.body.querySelector<HTMLElement>('[data-testid="selection-menu"]')
+    const menuHeader = menu?.firstElementChild as HTMLElement | null
+    const architectItem = document.body.querySelector<HTMLElement>('[data-testid="ui-selection-item-agent:architect"]')
+    const redesignTeamItem = document.body.querySelector<HTMLElement>('[data-testid="ui-selection-item-team:redesign"]')
+
+    expect(menu).not.toBeNull()
+    expect(menuHeader?.className).toContain('border-b')
+    expect(menuHeader?.className).toContain('bg-subtle')
+    expect(architectItem).not.toBeNull()
+    expect(redesignTeamItem).not.toBeNull()
+    expect(architectItem?.className).toContain('hover:bg-subtle')
+    expect(architectItem?.className).toContain('hover:border-border')
+    expect(architectItem?.className).not.toContain('hover:bg-accent')
+    expect(redesignTeamItem?.className).toContain('border-border-strong')
+    expect(redesignTeamItem?.className).toContain('bg-accent')
     wrapper.unmount()
   })
 
@@ -999,7 +1425,10 @@ describe('Shared UI primitives', () => {
     await wrapper.vm.$nextTick()
 
     const searchInput = document.body.querySelector<HTMLInputElement>('[data-testid="ui-searchable-multi-select-input"]')
+    const builderOption = document.body.querySelector<HTMLElement>('[data-testid="ui-searchable-multi-select-option-skill:builder"]')
     expect(searchInput).not.toBeNull()
+    expect(builderOption?.className).toContain('hover:bg-subtle')
+    expect(builderOption?.className).not.toContain('hover:bg-accent')
     searchInput!.value = 'impl'
     searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await wrapper.vm.$nextTick()
@@ -1079,7 +1508,28 @@ describe('Shared UI primitives', () => {
     expect(wrapper.emitted('click')).toHaveLength(1)
   })
 
-  it('keeps UiRecordCard active state neutral instead of blue-filled', () => {
+  it('renders UiPageHeader compact mode with tightened header rhythm', () => {
+    const wrapper = mount(UiPageHeader, {
+      props: {
+        eyebrow: 'Workspace',
+        title: 'Models',
+        description: 'Compact header',
+        compact: true,
+      },
+      slots: {
+        actions: '<button data-testid="compact-header-action" type="button">Create</button>',
+      },
+    })
+
+    const headerClasses = wrapper.get('header').classes().join(' ')
+
+    expect(headerClasses).toContain('gap-3')
+    expect(wrapper.html()).toContain('text-[22px]')
+    expect(wrapper.html()).toContain('text-[13px]')
+    expect(wrapper.find('[data-testid="compact-header-action"]').exists()).toBe(true)
+  })
+
+  it('keeps UiRecordCard active state on the brand-soft selection fill instead of a hard accent fill', () => {
     const wrapper = mount(UiRecordCard, {
       props: {
         title: 'Active row',
@@ -1091,8 +1541,8 @@ describe('Shared UI primitives', () => {
     const classes = wrapper.get('[data-testid="active-record-card"]').classes().join(' ')
 
     expect(classes).toContain('is-active')
-    expect(classes).toContain('bg-subtle')
-    expect(classes).not.toContain('bg-accent')
+    expect(classes).toContain('bg-accent')
+    expect(classes).toContain('border-border-strong')
   })
 
   it('renders UiRecordCard compact layout with tightened spacing and low-contrast footer', () => {
@@ -1120,6 +1570,25 @@ describe('Shared UI primitives', () => {
     expect(wrapper.find('[data-testid="record-secondary"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-action"]').exists()).toBe(true)
+  })
+
+  it('renders UiEmptyState media support above icon and actions', () => {
+    const wrapper = mount(UiEmptyState, {
+      props: {
+        title: 'Nothing here yet',
+        description: 'Connect a workspace to get started.',
+      },
+      slots: {
+        media: '<div data-testid="empty-state-media">Illustration</div>',
+        icon: '<span data-testid="empty-state-icon">O</span>',
+        actions: '<button data-testid="empty-state-action" type="button">Connect</button>',
+      },
+    })
+
+    expect(wrapper.find('[data-testid="empty-state-media"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="empty-state-icon"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="empty-state-action"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Nothing here yet')
   })
 
   it('renders UiSwitch with clear off-state track contrast', () => {
@@ -1159,8 +1628,12 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Saved')
     expect(wrapper.text()).toContain('Workspace')
     expect(wrapper.text()).toContain(formatUiTimestamp(createdAt))
-    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').classes().join(' ')).toContain('border-l-status-info')
-    expect(wrapper.html()).toContain('bg-status-info')
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').classes().join(' ')).toContain('overflow-hidden')
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').classes().join(' ')).not.toContain('border-l-status-info')
+    expect(wrapper.get('[data-testid="ui-notification-row-header-notif-row"]').classes().join(' ')).toContain('border-b')
+    expect(wrapper.get('[data-testid="ui-notification-row-marker-notif-row"]').classes().join(' ')).toContain('bg-status-info')
+    expect(wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').classes().join(' ')).toContain('hover:bg-subtle')
+    expect(wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').classes().join(' ')).not.toContain('hover:bg-accent')
 
     await wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').trigger('click')
     expect(wrapper.emitted('mark-read')).toEqual([['notif-row']])
@@ -1193,11 +1666,13 @@ describe('Shared UI primitives', () => {
 
     const warningClasses = warningWrapper.get('[data-testid="ui-notification-row-notif-warning"]').classes().join(' ')
     const errorClasses = errorWrapper.get('[data-testid="ui-notification-row-notif-error"]').classes().join(' ')
+    const warningHeaderClasses = warningWrapper.get('[data-testid="ui-notification-row-header-notif-warning"]').classes().join(' ')
+    const errorHeaderClasses = errorWrapper.get('[data-testid="ui-notification-row-header-notif-error"]').classes().join(' ')
 
-    expect(warningClasses).toContain('border-l-status-warning')
-    expect(warningClasses).toContain('bg-[color-mix(in_srgb,var(--color-status-warning-soft)_42%,var(--bg-surface))]')
-    expect(errorClasses).toContain('border-l-status-error')
-    expect(errorClasses).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_42%,var(--bg-surface))]')
+    expect(warningClasses).not.toContain('border-l-status-warning')
+    expect(warningHeaderClasses).toContain('bg-[var(--color-status-warning-soft)]')
+    expect(errorClasses).not.toContain('border-l-status-error')
+    expect(errorHeaderClasses).toContain('bg-[var(--color-status-error-soft)]')
     expect(errorClasses).toContain('opacity-70')
   })
 
@@ -1234,6 +1709,10 @@ describe('Shared UI primitives', () => {
 
     expect(wrapper.text()).toContain('Notifications')
     expect(wrapper.text()).toContain('Mark all read')
+    expect(wrapper.findComponent(UiSurface).attributes('class') ?? '').toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
+    expect(wrapper.findComponent(UiSurface).attributes('class') ?? '').not.toContain('border-border')
+    expect(wrapper.get('[data-testid="ui-notification-filter-workspace"]').classes().join(' ')).toContain('hover:bg-subtle')
+    expect(wrapper.get('[data-testid="ui-notification-filter-workspace"]').classes().join(' ')).not.toContain('hover:bg-accent')
 
     await wrapper.get('[data-testid="ui-notification-filter-workspace"]').trigger('click')
     expect(wrapper.emitted('update:filter')).toEqual([['workspace']])
@@ -1263,6 +1742,8 @@ describe('Shared UI primitives', () => {
     expect(item.text()).toContain(formatUiTimestamp(createdAt))
     expect(item.html()).toContain('text-status-success')
     expect(item.html()).toContain('border-[color-mix(in_srgb,var(--color-status-success)_22%,var(--border))]')
+    expect(item.get('[data-testid="ui-toast-close-notif-toast"]').classes().join(' ')).toContain('hover:bg-subtle')
+    expect(item.get('[data-testid="ui-toast-close-notif-toast"]').classes().join(' ')).not.toContain('hover:bg-accent')
 
     await item.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
     expect(item.emitted('close')).toEqual([['notif-toast']])
@@ -1312,5 +1793,42 @@ describe('Shared UI primitives', () => {
     expect(warningToast.html()).toContain('bg-[color-mix(in_srgb,var(--color-status-warning-soft)_48%,var(--bg-popover))]')
     expect(errorToast.html()).toContain('text-status-error')
     expect(errorToast.html()).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_48%,var(--bg-popover))]')
+  })
+
+  it('keeps UiToastItem lift restrained and lets animation wrappers opt out of autoplay', async () => {
+    const toast = mount(UiToastItem, {
+      props: {
+        notification: createNotification({
+          id: 'notif-toast-calm',
+          level: 'info',
+        }),
+        scopeLabel: 'Workspace',
+      },
+    })
+
+    expect(toast.findComponent(UiSurface).attributes('class') ?? '').toContain('shadow-sm')
+    expect(toast.findComponent(UiSurface).attributes('class') ?? '').not.toContain('shadow-md')
+
+    const dotLottie = mount(UiDotLottie, {
+      props: {
+        src: '/animations/pulse.lottie',
+        autoplay: false,
+      },
+    })
+
+    expect(dotLottie.get('[data-testid="ui-dotlottie"]').attributes('data-autoplay')).toBe('false')
+
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    const riveCanvas = mount(UiRiveCanvas, {
+      props: {
+        src: '/animations/pet.riv',
+        autoplay: false,
+      },
+    })
+
+    await nextTick()
+
+    expect(riveCanvas.get('[data-testid="ui-rive-canvas"]').attributes('data-autoplay')).toBe('false')
   })
 })

@@ -13,6 +13,7 @@ import {
   UiPagination,
   UiPanelFrame,
   UiSelect,
+  UiSurface,
   UiStatusCallout,
   UiTabs,
   UiToolbarRow,
@@ -400,6 +401,7 @@ async function handleLoadMoreAudit() {
           <UiDataTable
             :data="auditPagination.pagedItems.value"
             :columns="auditColumns"
+            row-test-id="access-control-audit-row"
             :empty-title="t('accessControl.sessions.audit.noListTitle')"
             :empty-description="t('accessControl.sessions.audit.noListDescription')"
             :on-row-click="selectAuditRecord"
@@ -449,26 +451,38 @@ async function handleLoadMoreAudit() {
           </div>
 
           <div class="grid gap-3">
-            <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+            <UiSurface
+              data-testid="access-control-audit-detail-actor"
+              variant="subtle"
+              padding="md"
+            >
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.sessions.audit.detailBlocks.actor') }}
               </div>
               <div class="mt-2 text-sm text-foreground">
                 {{ getSubjectTypeLabel(t, selectedAuditRecord.actorType) }} / {{ selectedAuditRecord.actorId }}
               </div>
-            </div>
-            <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+            </UiSurface>
+            <UiSurface
+              data-testid="access-control-audit-detail-resource"
+              variant="subtle"
+              padding="md"
+            >
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.sessions.audit.detailBlocks.resource') }}
               </div>
               <div class="mt-2 text-sm text-foreground">{{ getAuditResourceLabel(selectedAuditRecord.resource) }}</div>
-            </div>
-            <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+            </UiSurface>
+            <UiSurface
+              data-testid="access-control-audit-detail-record-id"
+              variant="subtle"
+              padding="md"
+            >
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.sessions.audit.detailBlocks.recordId') }}
               </div>
               <div class="mt-2 text-sm text-foreground">{{ selectedAuditRecord.id }}</div>
-            </div>
+            </UiSurface>
           </div>
         </div>
       </template>

@@ -101,13 +101,16 @@ async function returnToOverview() {
     <div class="flex min-h-full items-center py-6">
       <UiPanelFrame
         data-testid="app-runtime-error-boundary"
-        variant="panel"
-        padding="lg"
-        class="mx-auto w-full max-w-[880px]"
-        inner-class="space-y-6"
+        variant="raised"
+        padding="none"
+        class="mx-auto w-full max-w-[880px] overflow-hidden"
+        inner-class="overflow-hidden"
       >
-        <div class="flex items-start gap-4">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-m)] border border-border bg-surface-muted text-status-error">
+        <div
+          data-testid="app-runtime-error-intro"
+          class="flex items-start gap-4 border-b border-border bg-subtle px-6 py-5"
+        >
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-m)] border border-border bg-surface text-status-error">
             <AlertTriangle :size="18" />
           </div>
           <div class="min-w-0 space-y-2">
@@ -123,54 +126,65 @@ async function returnToOverview() {
           </div>
         </div>
 
-        <UiStatusCallout
-          tone="error"
-          :title="errorRecord?.name"
-          :description="errorRecord?.message || t('app.runtimeError.fallbackMessage')"
-        />
+        <div class="space-y-6 px-6 py-6">
+          <UiStatusCallout
+            tone="error"
+            :title="errorRecord?.name"
+            :description="errorRecord?.message || t('app.runtimeError.fallbackMessage')"
+          />
 
-        <div class="flex flex-wrap gap-3">
-          <UiButton data-testid="app-runtime-error-retry" @click="retryCurrentPage">
-            {{ t('app.runtimeError.actions.retry') }}
-          </UiButton>
-          <UiButton
-            v-if="canReturnToProject"
-            data-testid="app-runtime-error-project"
-            variant="outline"
-            @click="returnToProject"
+          <div
+            data-testid="app-runtime-error-recovery"
+            class="flex flex-wrap items-center gap-3 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-3"
           >
-            {{ t('app.runtimeError.actions.project') }}
-          </UiButton>
-          <UiButton
-            data-testid="app-runtime-error-overview"
-            variant="ghost"
-            @click="returnToOverview"
-          >
-            {{ t('app.runtimeError.actions.overview') }}
-          </UiButton>
-          <UiButton
-            data-testid="app-runtime-error-copy"
-            variant="ghost"
-            @click="copyErrorDetails"
-          >
-            {{ t('app.runtimeError.actions.copy') }}
-          </UiButton>
-        </div>
-
-        <div class="space-y-2">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            {{ t('app.runtimeError.detailsTitle') }}
+            <UiButton data-testid="app-runtime-error-retry" @click="retryCurrentPage">
+              {{ t('app.runtimeError.actions.retry') }}
+            </UiButton>
+            <UiButton
+              v-if="canReturnToProject"
+              data-testid="app-runtime-error-project"
+              variant="outline"
+              @click="returnToProject"
+            >
+              {{ t('app.runtimeError.actions.project') }}
+            </UiButton>
+            <UiButton
+              data-testid="app-runtime-error-overview"
+              variant="ghost"
+              @click="returnToOverview"
+            >
+              {{ t('app.runtimeError.actions.overview') }}
+            </UiButton>
           </div>
-          <pre
-            data-testid="app-runtime-error-details"
-            class="max-h-[240px] overflow-auto rounded-[var(--radius-m)] border border-border bg-surface-muted px-4 py-3 text-xs leading-6 text-text-secondary"
-          >{{ detailText }}</pre>
-          <p v-if="copyStatus === 'success'" class="text-xs text-text-secondary">
-            {{ t('app.runtimeError.copySuccess') }}
-          </p>
-          <p v-else-if="copyStatus === 'error'" class="text-xs text-status-error">
-            {{ t('app.runtimeError.copyFailure') }}
-          </p>
+
+          <div
+            data-testid="app-runtime-error-details-section"
+            class="space-y-3 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-4"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('app.runtimeError.detailsTitle') }}
+              </div>
+              <UiButton
+                data-testid="app-runtime-error-copy"
+                variant="outline"
+                size="sm"
+                @click="copyErrorDetails"
+              >
+                {{ t('app.runtimeError.actions.copy') }}
+              </UiButton>
+            </div>
+            <pre
+              data-testid="app-runtime-error-details"
+              class="max-h-[240px] overflow-auto rounded-[var(--radius-m)] border border-border bg-surface px-4 py-3 text-xs leading-6 text-text-secondary"
+            >{{ detailText }}</pre>
+            <p v-if="copyStatus === 'success'" class="text-xs text-text-secondary">
+              {{ t('app.runtimeError.copySuccess') }}
+            </p>
+            <p v-else-if="copyStatus === 'error'" class="text-xs text-status-error">
+              {{ t('app.runtimeError.copyFailure') }}
+            </p>
+          </div>
         </div>
       </UiPanelFrame>
     </div>

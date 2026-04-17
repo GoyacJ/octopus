@@ -86,6 +86,10 @@
 }
 
 @layer components {
+  .ui-focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
   .ui-control {
     border: 1px solid var(--border-input);
     border-radius: var(--radius-xs);

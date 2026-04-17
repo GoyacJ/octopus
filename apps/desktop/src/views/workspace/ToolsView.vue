@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UiBadge, UiButton, UiCodeEditor, UiEmptyState, UiField, UiInput, UiInspectorPanel, UiListDetailShell, UiPageHeader, UiPageShell, UiRecordCard, UiStatusCallout, UiSwitch } from '@octopus/ui'
+import { UiBadge, UiButton, UiCodeEditor, UiEmptyState, UiField, UiInput, UiInspectorPanel, UiListDetailShell, UiPageHeader, UiPageShell, UiStatusCallout, UiSwitch } from '@octopus/ui'
 
 import McpDetailPanel from './McpDetailPanel.vue'
 import SkillActionDialog from './SkillActionDialog.vue'
@@ -109,7 +109,7 @@ const {
       :description="catalogStore.error"
     />
 
-    <UiListDetailShell class="xl:grid-cols-[minmax(0,1fr)_520px]">
+    <UiListDetailShell class="xl:grid-cols-[minmax(0,1fr)_520px]" list-class="p-3" detail-class="p-3">
       <template #list>
         <ToolsCatalogListPanel
           :active-tab="activeTab"
@@ -158,14 +158,18 @@ const {
             ? t('tools.editor.mcpCreateDescription')
             : (selectedEntry?.description ?? t('tools.empty.selectionDescription'))"
       >
-        <UiRecordCard
+        <div
           v-if="draftMode === 'new-skill'"
-          :title="t('tools.actions.newSkill')"
-          :description="t('tools.editor.skillCreateDescription')"
+          class="space-y-5"
         >
-          <template #eyebrow>
-            {{ t('tools.detail.title') }}
-          </template>
+          <div class="space-y-1 border-b border-border pb-4">
+            <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+              {{ t('tools.detail.title') }}
+            </div>
+            <p class="text-[13px] leading-6 text-text-secondary">
+              {{ t('tools.editor.skillCreateDescription') }}
+            </p>
+          </div>
 
           <div class="space-y-4">
             <UiField :label="t('tools.editor.skillSlug')">
@@ -189,16 +193,20 @@ const {
               </UiButton>
             </div>
           </div>
-        </UiRecordCard>
+        </div>
 
-        <UiRecordCard
+        <div
           v-else-if="draftMode === 'new-mcp'"
-          :title="t('tools.actions.newMcp')"
-          :description="t('tools.editor.mcpCreateDescription')"
+          class="space-y-5"
         >
-          <template #eyebrow>
-            {{ t('tools.detail.title') }}
-          </template>
+          <div class="space-y-1 border-b border-border pb-4">
+            <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+              {{ t('tools.detail.title') }}
+            </div>
+            <p class="text-[13px] leading-6 text-text-secondary">
+              {{ t('tools.editor.mcpCreateDescription') }}
+            </p>
+          </div>
 
           <div class="space-y-4">
             <UiField :label="t('tools.editor.mcpServerName')">
@@ -222,16 +230,13 @@ const {
               </UiButton>
             </div>
           </div>
-        </UiRecordCard>
+        </div>
 
-        <UiRecordCard
+        <div
           v-else-if="selectedEntry"
-          :title="selectedEntry.name"
-          :description="selectedEntry.description"
+          data-testid="workspace-tools-detail-document"
+          class="space-y-5"
         >
-          <template #eyebrow>
-            {{ t('tools.detail.title') }}
-          </template>
 
           <SkillDetailPanel
             v-if="selectedSkillEntry"
@@ -285,8 +290,11 @@ const {
             @copy-to-managed="copySelectedMcpToManaged"
           />
 
-          <div v-else class="space-y-4">
-            <div class="grid gap-3 border-b border-border/40 pb-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div v-else class="space-y-5">
+            <div
+              data-testid="workspace-tools-detail-meta"
+              class="grid gap-3 border-b border-border pb-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+            >
               <div class="space-y-1">
                 <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
                   {{ kindLabel(selectedEntry.kind) }}
@@ -303,7 +311,7 @@ const {
               </div>
             </div>
 
-            <div class="space-y-3">
+            <div class="space-y-4">
               <div class="space-y-1">
                 <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
                   {{ t('tools.detail.sourcePath') }}
@@ -385,7 +393,7 @@ const {
               </div>
             </div>
           </div>
-        </UiRecordCard>
+        </div>
 
         <UiEmptyState
           v-else

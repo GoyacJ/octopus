@@ -29,7 +29,7 @@ const emit = defineEmits<{
 const root = ref<HTMLElement | null>(null)
 
 const contentClasses = computed(() => cn(
-  'z-50 min-w-[14rem] rounded-[var(--radius-l)] border border-border bg-popover p-1.5 shadow-md outline-none',
+  'z-50 min-w-[14rem] rounded-[var(--radius-l)] border border-[color-mix(in_srgb,var(--border)_84%,transparent)] bg-popover p-1.5 shadow-md outline-none',
   props.class,
 ))
 </script>
@@ -46,6 +46,7 @@ const contentClasses = computed(() => cn(
       </PopoverTrigger>
       <PopoverPortal>
         <PopoverContent
+          data-testid="ui-popover-content"
           :align="props.align"
           :side="props.side"
           :side-offset="4"

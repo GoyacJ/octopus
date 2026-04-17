@@ -79,7 +79,7 @@ function resolveCellRender(cell: {
           v-for="row in table.getRowModel().rows"
           :key="row.id"
           :class="cn(
-            'group border-b border-[color-mix(in_srgb,var(--border)_28%,transparent)] last:border-0 hover:bg-accent/40 transition-colors',
+            'group border-b border-[color-mix(in_srgb,var(--border)_28%,transparent)] last:border-0 hover:bg-subtle transition-colors',
             props.onRowClick && 'cursor-pointer',
           )"
           :data-testid="props.rowTestId ? `${props.rowTestId}-${row.id}` : undefined"

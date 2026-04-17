@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Trash2 } from 'lucide-vue-next'
 
-import { UiButton, UiDialog, UiPageHeader, UiPageShell, UiSurface, UiTabs } from '@octopus/ui'
+import { UiButton, UiDialog, UiPageHeader, UiPageShell, UiTabs } from '@octopus/ui'
 
 import AgentBundleImportDialog from './AgentBundleImportDialog.vue'
 import AgentEditorDialog from './AgentEditorDialog.vue'
@@ -136,13 +136,16 @@ const {
 
     <AgentsStatsStrip :stats="centerStats" />
 
-    <UiSurface data-testid="agent-center-tabs-shell" variant="subtle" padding="sm">
+    <div
+      data-testid="agent-center-tabs-shell"
+      class="border-b border-border pb-4"
+    >
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
         @update:model-value="setTab"
       />
-    </UiSurface>
+    </div>
 
     <AgentListPanel
       v-show="activeTab === 'agent'"

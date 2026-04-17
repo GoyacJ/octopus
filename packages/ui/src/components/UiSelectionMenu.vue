@@ -81,19 +81,19 @@ function selectItem(item: UiSelectionMenuItem) {
     </template>
 
     <div :data-testid="props.testId" class="flex flex-col">
-      <div v-if="props.title || props.description" class="border-b border-border/40 px-3 py-2.5">
-        <strong v-if="props.title" class="block text-[13px] font-bold text-text-primary">{{ props.title }}</strong>
+      <div v-if="props.title || props.description" class="border-b border-border bg-subtle px-3 py-3">
+        <strong v-if="props.title" class="block text-[13px] font-semibold text-text-primary">{{ props.title }}</strong>
         <p v-if="props.description" class="pt-0.5 text-[11px] leading-relaxed text-text-tertiary">{{ props.description }}</p>
       </div>
 
       <div
         :data-testid="props.listTestId || undefined"
-        class="max-h-72 overflow-y-auto p-1"
+        class="max-h-72 overflow-y-auto p-2"
       >
         <div
           v-for="section in props.sections"
           :key="section.id ?? section.label ?? section.items.map((item) => item.id).join(':')"
-          class="flex flex-col gap-0.5 mb-2 last:mb-0"
+          class="mb-2 flex flex-col gap-0.5 last:mb-0"
         >
           <p v-if="section.label" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary/60">
             {{ section.label }}
@@ -110,10 +110,10 @@ function selectItem(item: UiSelectionMenuItem) {
                 :data-testid="item.testId ?? `ui-selection-item-${item.id}`"
                 :disabled="item.disabled"
                 :class="cn(
-                  'flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left transition-colors',
+                  'flex w-full items-center justify-between gap-3 rounded-[var(--radius-m)] border border-transparent px-2.5 py-2 text-left transition-colors',
                   item.active
-                    ? 'bg-accent text-text-primary font-medium'
-                    : 'text-text-secondary hover:bg-accent hover:text-text-primary',
+                    ? 'border-border-strong bg-accent text-text-primary font-medium'
+                    : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary',
                   item.disabled ? 'cursor-not-allowed opacity-40' : '',
                 )"
                 @click="selectItem(item)"

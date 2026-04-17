@@ -10,6 +10,9 @@ const props = defineProps<{
 
 <template>
   <div :class="cn('flex flex-col items-center justify-center py-10 px-4 text-center', props.class)">
+    <div v-if="$slots.media" class="mb-4 flex w-full max-w-[240px] items-center justify-center">
+      <slot name="media" />
+    </div>
     <div v-if="$slots.icon" class="mb-3 flex size-12 items-center justify-center rounded-lg bg-subtle text-text-tertiary">
       <slot name="icon" />
     </div>

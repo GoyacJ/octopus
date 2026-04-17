@@ -122,6 +122,21 @@ describe('Project resources view', () => {
     mounted.destroy()
   })
 
+  it('renders the resource directory mapping as a calm context band instead of a raised card', async () => {
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'Desktop Redesign Brief')
+
+    const directoryBand = mounted.container.querySelector<HTMLElement>('[data-testid="project-resource-directory"]')
+
+    expect(directoryBand).not.toBeNull()
+    expect(directoryBand?.className).toContain('bg-subtle')
+    expect(directoryBand?.className).not.toContain('bg-surface')
+    expect(directoryBand?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
   it('deactivates and deletes project resources through the project resource workbench', async () => {
     const mounted = mountApp()
     const resourceStore = useResourceStore()

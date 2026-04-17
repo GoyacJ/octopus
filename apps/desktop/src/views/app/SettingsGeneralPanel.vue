@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RotateCcw } from 'lucide-vue-next'
-import { UiButton, UiField, UiListRow, UiSelect, UiSwitch } from '@octopus/ui'
+import { UiButton, UiField, UiListRow, UiSelect, UiSurface, UiSwitch } from '@octopus/ui'
 
 const props = defineProps<{
   locale: string
@@ -49,7 +49,8 @@ const rightSidebarCollapsedModel = computed({
     <div class="space-y-6">
       <div class="space-y-3">
         <h4 class="px-1 text-[14px] font-bold text-text-primary">{{ $t('settings.general.layoutTitle') }}</h4>
-        <div class="space-y-2 rounded-[var(--radius-l)] border border-border bg-surface p-2">
+        <UiSurface data-testid="settings-layout-band" variant="subtle" padding="md">
+          <div class="divide-y divide-border">
           <div data-testid="settings-layout-row-leftSidebarCollapsed">
             <UiListRow
               :title="$t('settings.preferences.leftSidebarCollapsed')"
@@ -71,16 +72,17 @@ const rightSidebarCollapsedModel = computed({
               </template>
             </UiListRow>
           </div>
-        </div>
+          </div>
+        </UiSurface>
       </div>
 
       <div class="space-y-3">
         <h4 class="px-1 text-[14px] font-bold text-text-primary">{{ $t('settings.general.i18nTitle') }}</h4>
-        <div class="max-w-md px-1">
+        <UiSurface data-testid="settings-locale-band" variant="subtle" padding="md" class="max-w-md">
           <UiField :label="$t('settings.preferences.locale')">
             <UiSelect v-model="localeModel" :options="localeOptions" />
           </UiField>
-        </div>
+        </UiSurface>
       </div>
     </div>
   </section>

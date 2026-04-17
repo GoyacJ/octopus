@@ -29,7 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const contentClasses = computed(() => [
-  'z-50 min-w-[10rem] rounded-[var(--radius-l)] border border-border bg-popover p-1.5 shadow-md outline-none',
+  'z-50 min-w-[10rem] rounded-[var(--radius-l)] border border-[color-mix(in_srgb,var(--border)_84%,transparent)] bg-popover p-1.5 shadow-md outline-none',
   props.align === 'end' ? 'origin-top-right' : 'origin-top-left',
 ].join(' '))
 
@@ -55,6 +55,7 @@ function handleSelect(item: UiMenuItem) {
 
       <DropdownMenuPortal>
         <DropdownMenuContent
+          data-testid="ui-dropdown-content"
           :align="props.align"
           :side-offset="4"
           :class="contentClasses"
@@ -64,7 +65,7 @@ function handleSelect(item: UiMenuItem) {
             :key="item.key"
             :data-testid="`ui-dropdown-item-${item.key}`"
             :disabled="item.disabled"
-            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2.5 py-1.5 text-[13px] outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2.5 py-1.5 text-[13px] outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-subtle"
             :class="item.tone === 'danger' ? 'text-destructive data-[highlighted]:bg-destructive/10' : 'text-text-primary'"
             @select="handleSelect(item)"
           >

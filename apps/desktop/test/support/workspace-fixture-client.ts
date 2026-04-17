@@ -118,6 +118,8 @@ export function createWorkspaceClientFixture(
   options: FixtureOptions = {},
   session?: WorkspaceSessionTokenEnvelope,
 ): WorkspaceClient {
+  const protectedResourceKey = (resourceType: string, resourceId: string) => `${resourceType}:${resourceId}`
+
   const ensureRuntimeState = (sessionId: string): RuntimeSessionState => {
     const state = workspaceState.runtimeSessions.get(sessionId)
     if (!state) {
@@ -170,18 +172,15 @@ export function createWorkspaceClientFixture(
     classifications: clone(policy.classifications ?? []),
   }))
 
-  let accessResourcePolicies: Array<{
-    id: string
-    subjectType: string
-    subjectId: string
-    resourceType: string
-    resourceId: string
-    action: string
-    effect: string
-  }> = []
+  let accessResourcePolicies = clone(workspaceState.resourcePolicies)
 
   let accessMenuPolicies = clone(workspaceState.menuPolicies)
-  const protectedResourceMetadata = new Map<string, ProtectedResourceDescriptor>()
+  const protectedResourceMetadata = new Map(
+    workspaceState.protectedResourceMetadata.map(record => [
+      protectedResourceKey(record.resourceType, record.id),
+      clone(record),
+    ] as const),
+  )
   const managedConfiguredModelSecrets = new Map<string, string>()
   const auditRecords: AuditRecord[] = [
     {
@@ -415,7 +414,6 @@ export function createWorkspaceClientFixture(
   }
 
   const getFeatureCode = (menuId: string, routeName?: string) => `feature:${routeName ?? menuId}`
-  const protectedResourceKey = (resourceType: string, resourceId: string) => `${resourceType}:${resourceId}`
   const ROOT_ORG_UNIT_ID = 'org-root'
   const CUSTOM_ACCESS_CODE = 'custom'
   const CUSTOM_ACCESS_NAME = 'Custom access'
@@ -3519,6 +3517,7 @@ export function createWorkspaceClientFixture(
           effect: record.effect,
         }
         accessResourcePolicies = [...accessResourcePolicies, created]
+        workspaceState.resourcePolicies = clone(accessResourcePolicies)
         appendAudit('access.resource-policies.create', 'success', `access.resource-policy:${created.id}`)
         return clone(created)
       },
@@ -3533,11 +3532,13 @@ export function createWorkspaceClientFixture(
           effect: record.effect,
         }
         accessResourcePolicies = accessResourcePolicies.map(policy => policy.id === policyId ? updated : policy)
+        workspaceState.resourcePolicies = clone(accessResourcePolicies)
         appendAudit('access.resource-policies.update', 'success', `access.resource-policy:${policyId}`)
         return clone(updated)
       },
       async deleteResourcePolicy(policyId) {
         accessResourcePolicies = accessResourcePolicies.filter(policy => policy.id !== policyId)
+        workspaceState.resourcePolicies = clone(accessResourcePolicies)
         appendAudit('access.resource-policies.delete', 'success', `access.resource-policy:${policyId}`)
       },
       async listMenuDefinitions() {
@@ -3623,6 +3624,7 @@ export function createWorkspaceClientFixture(
           classification: input.classification ?? current.classification,
         }
         protectedResourceMetadata.set(protectedResourceKey(resourceType, resourceId), clone(updated))
+        workspaceState.protectedResourceMetadata = Array.from(protectedResourceMetadata.values()).map(record => clone(record))
         appendAudit('access.protected-resources.update', 'success', `${resourceType}:${resourceId}`, updated.projectId)
         return clone(updated)
       },

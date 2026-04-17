@@ -9,8 +9,8 @@ import {
   UiButton,
   UiEmptyState,
   UiInput,
+  UiInspectorPanel,
   UiListRow,
-  UiPanelFrame,
   UiSelect,
   UiStatTile,
   UiStatusCallout,
@@ -359,9 +359,19 @@ function sectionButtonClass(itemId: ConversationWorkbenchMode): string {
   return [
     'h-auto rounded-[var(--radius-s)] border border-transparent px-2.5 py-1.5 text-[11px]',
     shell.workbenchMode === itemId
-      ? 'border-border bg-surface text-text-primary shadow-xs'
+      ? 'border-border bg-subtle text-text-primary'
       : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary',
     !hasActiveConversation.value ? 'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-text-tertiary' : '',
+  ].filter(Boolean).join(' ')
+}
+
+function sectionIconButtonClass(itemId: ConversationWorkbenchMode): string {
+  return [
+    'h-9 w-9 rounded-[var(--radius-s)] border px-0',
+    shell.workbenchMode === itemId
+      ? 'border-border bg-subtle text-text-primary'
+      : 'border-transparent text-text-tertiary hover:border-border hover:bg-subtle hover:text-text-secondary',
+    !hasActiveConversation.value ? 'cursor-not-allowed opacity-50 hover:border-transparent hover:bg-transparent hover:text-text-tertiary' : '',
   ].filter(Boolean).join(' ')
 }
 
@@ -487,11 +497,12 @@ async function forkSelectedDeliverable() {
     class="h-full border-l border-border bg-surface"
     :class="shell.rightSidebarCollapsed ? 'w-[48px]' : 'w-[360px]'"
   >
-    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-3 py-4">
+    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-2 py-3">
       <UiButton
+        data-testid="conversation-context-expand"
         variant="ghost"
         size="icon"
-        class="h-9 w-9 rounded-lg text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+        class="h-9 w-9 rounded-[var(--radius-s)] border border-border bg-subtle text-text-tertiary hover:bg-surface hover:text-text-primary"
         :title="t('common.expand')"
         @click="shell.toggleRightSidebar()"
       >
@@ -506,7 +517,7 @@ async function forkSelectedDeliverable() {
         :data-testid="`conversation-context-section-${item.id}`"
         variant="ghost"
         size="icon"
-        class="h-9 w-9 rounded-lg"
+        :class="sectionIconButtonClass(item.id)"
         :title="item.label"
         :disabled="!hasActiveConversation"
         @click="setWorkbenchMode(item.id)"
@@ -516,12 +527,16 @@ async function forkSelectedDeliverable() {
     </div>
 
     <div v-else class="flex h-full flex-col overflow-hidden">
-      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+      <div
+        data-testid="conversation-context-header"
+        class="flex items-center justify-between border-b border-border bg-subtle px-4 py-3"
+      >
         <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</div>
         <UiButton
+          data-testid="conversation-context-collapse"
           variant="ghost"
           size="icon"
-          class="h-6 w-6 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+          class="h-7 w-7 rounded-[var(--radius-s)] border border-transparent text-text-tertiary hover:border-border hover:bg-surface hover:text-text-primary"
           :title="t('common.collapse')"
           @click="shell.toggleRightSidebar()"
         >
@@ -561,20 +576,13 @@ async function forkSelectedDeliverable() {
           />
 
           <template v-else>
-            <UiPanelFrame variant="subtle" padding="md" class="space-y-4">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                  <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-                    {{ t('conversation.detail.sections.deliverable') }}
-                  </div>
-                  <div class="truncate text-sm font-semibold text-text-primary">
-                    {{ selectedDeliverableDetail?.title ?? selectedConversationDeliverable.title }}
-                  </div>
-                  <div class="truncate text-xs text-text-secondary">
-                    {{ selectedConversationDeliverable.id }}
-                  </div>
-                </div>
-
+            <UiInspectorPanel
+              data-testid="conversation-deliverable-overview"
+              :title="selectedDeliverableDetail?.title ?? selectedConversationDeliverable.title"
+              :subtitle="selectedConversationDeliverable.id"
+              class="overflow-hidden"
+            >
+              <template #actions>
                 <div class="flex flex-wrap justify-end gap-2">
                   <UiBadge
                     :label="enumLabel('resourcePreviewKind', selectedDeliverableContent?.previewKind ?? selectedDeliverableDetail?.previewKind ?? selectedConversationDeliverable.previewKind)"
@@ -594,36 +602,41 @@ async function forkSelectedDeliverable() {
                     subtle
                   />
                 </div>
-              </div>
+              </template>
 
-              <div v-if="deliverableOptions.length > 1" class="space-y-2">
-                <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-                  {{ t('conversation.detail.deliverables.switchTitle') }}
+              <div class="space-y-4">
+                <div v-if="deliverableOptions.length > 1" class="space-y-2">
+                  <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                    {{ t('conversation.detail.deliverables.switchTitle') }}
+                  </div>
+                  <UiSelect
+                    data-testid="deliverable-selector"
+                    :model-value="selectedConversationDeliverable.id"
+                    :options="deliverableOptions"
+                    @update:model-value="selectConversationDeliverable"
+                  />
                 </div>
-                <UiSelect
-                  data-testid="deliverable-selector"
-                  :model-value="selectedConversationDeliverable.id"
-                  :options="deliverableOptions"
-                  @update:model-value="selectConversationDeliverable"
-                />
-              </div>
 
-              <div class="grid gap-3 text-xs text-text-secondary sm:grid-cols-2">
-                <div>
-                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.updatedAt') }}</div>
-                  <div class="mt-1 text-text-primary">
-                    {{ formatDateTime(selectedDeliverableDetail?.updatedAt ?? selectedConversationDeliverable.updatedAt) }}
+                <div class="grid gap-3 text-xs text-text-secondary sm:grid-cols-2">
+                  <div>
+                    <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.updatedAt') }}</div>
+                    <div class="mt-1 text-text-primary">
+                      {{ formatDateTime(selectedDeliverableDetail?.updatedAt ?? selectedConversationDeliverable.updatedAt) }}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.contentType') }}</div>
+                    <div class="mt-1 text-text-primary">
+                      {{ selectedDeliverableContent?.contentType ?? selectedDeliverableDetail?.contentType ?? selectedConversationDeliverable.contentType ?? t('common.na') }}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.contentType') }}</div>
-                  <div class="mt-1 text-text-primary">
-                    {{ selectedDeliverableContent?.contentType ?? selectedDeliverableDetail?.contentType ?? selectedConversationDeliverable.contentType ?? t('common.na') }}
-                  </div>
-                </div>
               </div>
 
-              <div class="space-y-3 rounded-[var(--radius-s)] border border-border bg-surface px-3 py-3">
+              <div
+                data-testid="conversation-deliverable-actions"
+                class="space-y-3 border-t border-border pt-4"
+              >
                 <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
                   {{ t('deliverables.detail.actionsTitle') }}
                 </div>
@@ -656,7 +669,7 @@ async function forkSelectedDeliverable() {
                   :description="deliverableActionStatus"
                 />
               </div>
-            </UiPanelFrame>
+            </UiInspectorPanel>
 
             <ArtifactVersionList
               :versions="selectedDeliverableVersions"
@@ -687,14 +700,22 @@ async function forkSelectedDeliverable() {
         </div>
 
         <div v-else-if="shell.workbenchMode === 'context'" class="space-y-4">
-          <UiPanelFrame variant="subtle" padding="md">
-            <div class="text-xs text-text-secondary">{{ t('conversation.detail.summary.title') }}</div>
-            <div class="mt-2 text-sm text-text-primary">{{ runtime.activeSession?.summary.title ?? t('common.na') }}</div>
-            <div class="mt-2 text-xs text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</div>
-            <div class="mt-3 text-xs text-text-secondary">
-              {{ t('conversation.detail.summary.tokenUsage') }}: {{ usageSummary }}
+          <UiInspectorPanel
+            data-testid="conversation-context-summary"
+            :title="t('conversation.detail.summary.title')"
+            :subtitle="t('conversation.detail.summary.subtitle')"
+          >
+            <div
+              data-testid="conversation-context-summary-body"
+              class="space-y-2"
+            >
+              <div class="text-sm text-text-primary">{{ runtime.activeSession?.summary.title ?? t('common.na') }}</div>
+              <div class="text-xs text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</div>
+              <div class="text-xs text-text-secondary">
+                {{ t('conversation.detail.summary.tokenUsage') }}: {{ usageSummary }}
+              </div>
             </div>
-          </UiPanelFrame>
+          </UiInspectorPanel>
 
           <div class="grid grid-cols-2 gap-3">
             <UiStatTile
@@ -705,22 +726,17 @@ async function forkSelectedDeliverable() {
             />
           </div>
 
-          <UiPanelFrame
+          <UiInspectorPanel
             v-if="selectedConversationDeliverable"
-            variant="subtle"
-            padding="md"
-            class="space-y-3"
+            :title="t('conversation.detail.context.promotionTitle')"
           >
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-                {{ t('conversation.detail.context.promotionTitle') }}
-              </div>
+            <template #actions>
               <UiBadge
                 v-if="localizedPromotionState"
                 :label="localizedPromotionState"
                 subtle
               />
-            </div>
+            </template>
 
             <div class="space-y-2 text-sm text-text-primary">
               <div>{{ t('conversation.detail.context.lineageSession') }}: {{ selectedDeliverableDetail?.sessionId ?? t('common.na') }}</div>
@@ -728,82 +744,107 @@ async function forkSelectedDeliverable() {
               <div>{{ t('conversation.detail.context.lineageMessage') }}: {{ selectedDeliverableDetail?.sourceMessageId ?? t('common.na') }}</div>
               <div>{{ t('conversation.detail.context.knowledgeLink') }}: {{ selectedDeliverableDetail?.promotionKnowledgeId ?? t('common.na') }}</div>
             </div>
-          </UiPanelFrame>
+          </UiInspectorPanel>
 
-          <div v-if="memorySelectionSummary" class="grid grid-cols-2 gap-3">
-            <UiStatTile label="Selected" :value="String(memorySelectionSummary.selectedCount)" />
-            <UiStatTile label="Ignored" :value="String(memorySelectionSummary.ignoredCount)" />
-          </div>
-
-          <UiPanelFrame v-if="freshnessSummary" variant="subtle" padding="md" class="space-y-2">
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-xs text-text-secondary">Freshness</div>
+          <UiInspectorPanel
+            v-if="freshnessSummary"
+            data-testid="conversation-context-freshness"
+            title="Freshness"
+          >
+            <template #actions>
               <UiBadge :label="freshnessSummary.freshnessRequired ? 'Required' : 'Optional'" subtle />
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <UiStatTile label="Fresh" :value="String(freshnessSummary.freshCount)" />
-              <UiStatTile label="Stale" :value="String(freshnessSummary.staleCount)" />
-            </div>
-          </UiPanelFrame>
-
-          <UiPanelFrame v-if="pendingMemoryProposal" variant="subtle" padding="md" class="space-y-2">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-sm font-semibold text-text-primary">{{ pendingMemoryProposal.title }}</div>
-                <div class="mt-1 text-xs text-text-secondary">{{ pendingMemoryProposal.summary }}</div>
+            </template>
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-3">
+                <UiStatTile label="Fresh" :value="String(freshnessSummary.freshCount)" />
+                <UiStatTile label="Stale" :value="String(freshnessSummary.staleCount)" />
               </div>
+            </div>
+          </UiInspectorPanel>
+
+          <UiInspectorPanel
+            v-if="pendingMemoryProposal"
+            data-testid="conversation-memory-proposal"
+            title="Memory Proposal"
+            :subtitle="pendingMemoryProposal.summary"
+          >
+            <template #actions>
               <UiBadge :label="pendingMemoryProposal.proposalState" subtle />
+            </template>
+            <div class="space-y-3">
+              <div class="text-sm font-semibold text-text-primary">{{ pendingMemoryProposal.title }}</div>
+              <div class="flex flex-wrap gap-2">
+                <UiBadge :label="pendingMemoryProposal.kind" subtle />
+                <UiBadge :label="pendingMemoryProposal.scope" subtle />
+              </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-              <UiBadge :label="pendingMemoryProposal.kind" subtle />
-              <UiBadge :label="pendingMemoryProposal.scope" subtle />
+          </UiInspectorPanel>
+
+          <UiInspectorPanel
+            :title="t('conversation.detail.memories.title')"
+          >
+            <div v-if="memorySelectionSummary" class="grid grid-cols-2 gap-3">
+              <UiStatTile label="Selected" :value="String(memorySelectionSummary.selectedCount)" />
+              <UiStatTile label="Ignored" :value="String(memorySelectionSummary.ignoredCount)" />
             </div>
-          </UiPanelFrame>
 
-          <div v-if="selectedMemory.length" class="space-y-2">
-            <UiListRow
-              v-for="entry in selectedMemory"
-              :key="entry.memoryId"
-              :title="entry.title"
-              :subtitle="entry.summary"
-            >
-              <template #meta>
-                <UiBadge :label="entry.kind" subtle />
-                <UiBadge :label="entry.freshnessState" subtle />
-              </template>
-            </UiListRow>
-          </div>
+            <div v-if="selectedMemory.length" class="space-y-2">
+              <UiListRow
+                v-for="entry in selectedMemory"
+                :key="entry.memoryId"
+                :title="entry.title"
+                :subtitle="entry.summary"
+              >
+                <template #meta>
+                  <UiBadge :label="entry.kind" subtle />
+                  <UiBadge :label="entry.freshnessState" subtle />
+                </template>
+              </UiListRow>
+            </div>
 
-          <UiPanelFrame variant="subtle" padding="sm" class="space-y-3">
+            <UiEmptyState
+              v-else
+              :title="t('conversation.detail.memories.emptyTitle')"
+              :description="t('conversation.detail.memories.emptyDescription')"
+            />
+          </UiInspectorPanel>
+
+          <UiInspectorPanel
+            :title="t('conversation.detail.resources.title')"
+            :subtitle="t('conversation.detail.resources.emptyDescription')"
+          >
+            <template #actions>
+              <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
+            </template>
+
             <UiInput v-model="resourceFilter" :placeholder="t('conversation.detail.resources.filterPlaceholder')" />
-            <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
-          </UiPanelFrame>
 
-          <div v-if="visibleConversationResources.length" class="space-y-2">
-            <UiListRow
-              v-for="resource in visibleConversationResources"
-              :key="resource.id"
-              :title="resource.name"
-              :subtitle="resource.location || resource.origin"
-            >
-              <template #meta>
-                <div class="flex flex-wrap items-center gap-2">
-                  <UiBadge :label="localizedResourceKind.get(resource.id) ?? resource.kind" subtle />
-                  <UiBadge :label="localizedResourceOrigin.get(resource.id) ?? resource.origin" subtle />
-                  <span v-if="resource.sourceArtifactId" class="inline-flex items-center gap-1 text-xs text-text-tertiary">
-                    <Link2 :size="12" />
-                    {{ resource.sourceArtifactId }}
-                  </span>
-                </div>
-              </template>
-            </UiListRow>
-          </div>
+            <div v-if="visibleConversationResources.length" class="space-y-2">
+              <UiListRow
+                v-for="resource in visibleConversationResources"
+                :key="resource.id"
+                :title="resource.name"
+                :subtitle="resource.location || resource.origin"
+              >
+                <template #meta>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <UiBadge :label="localizedResourceKind.get(resource.id) ?? resource.kind" subtle />
+                    <UiBadge :label="localizedResourceOrigin.get(resource.id) ?? resource.origin" subtle />
+                    <span v-if="resource.sourceArtifactId" class="inline-flex items-center gap-1 text-xs text-text-tertiary">
+                      <Link2 :size="12" />
+                      {{ resource.sourceArtifactId }}
+                    </span>
+                  </div>
+                </template>
+              </UiListRow>
+            </div>
 
-          <UiEmptyState
-            v-else
-            :title="t('conversation.detail.deliverables.noLinkedResourcesTitle')"
-            :description="t('conversation.detail.deliverables.noLinkedResourcesDescription')"
-          />
+            <UiEmptyState
+              v-else
+              :title="t('conversation.detail.deliverables.noLinkedResourcesTitle')"
+              :description="t('conversation.detail.deliverables.noLinkedResourcesDescription')"
+            />
+          </UiInspectorPanel>
         </div>
 
         <div v-else-if="shell.workbenchMode === 'ops'" class="space-y-4">
@@ -831,50 +872,54 @@ async function forkSelectedDeliverable() {
             />
           </div>
 
-          <UiPanelFrame variant="subtle" padding="md" class="space-y-2">
-            <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-              {{ t('conversation.detail.tools.title') }}
+          <UiInspectorPanel
+            data-testid="conversation-ops-tools"
+            :title="t('conversation.detail.tools.title')"
+            :subtitle="t('conversation.detail.tools.emptyDescription')"
+          >
+            <div class="space-y-2">
+              <div v-if="toolEntries.length" class="space-y-2">
+                <UiListRow
+                  v-for="tool in toolEntries"
+                  :key="tool.toolId"
+                  :title="tool.label"
+                  :subtitle="tool.toolId"
+                >
+                  <template #meta>
+                    <div class="flex items-center gap-2">
+                      <UiBadge :label="tool.kind" subtle />
+                      <span class="text-xs text-text-tertiary">×{{ tool.count }}</span>
+                    </div>
+                  </template>
+                </UiListRow>
+              </div>
+
+              <UiEmptyState
+                v-else
+                :title="t('conversation.detail.tools.emptyTitle')"
+                :description="t('conversation.detail.tools.emptyDescription')"
+              />
             </div>
+          </UiInspectorPanel>
 
-            <div v-if="toolEntries.length" class="space-y-2">
-              <UiListRow
-                v-for="tool in toolEntries"
-                :key="tool.toolId"
-                :title="tool.label"
-                :subtitle="tool.toolId"
-              >
-                <template #meta>
-                  <div class="flex items-center gap-2">
-                    <UiBadge :label="tool.kind" subtle />
-                    <span class="text-xs text-text-tertiary">×{{ tool.count }}</span>
-                  </div>
-                </template>
-              </UiListRow>
+          <UiInspectorPanel
+            data-testid="conversation-ops-timeline"
+            :title="t('conversation.detail.timeline.title')"
+            :subtitle="t('conversation.detail.timeline.emptyDescription')"
+          >
+            <div class="space-y-3">
+              <UiTimelineList
+                v-if="timelineItems.length"
+                :items="timelineItems"
+              />
+
+              <UiEmptyState
+                v-else
+                :title="t('conversation.detail.timeline.emptyTitle')"
+                :description="t('conversation.detail.timeline.emptyDescription')"
+              />
             </div>
-
-            <UiEmptyState
-              v-else
-              :title="t('conversation.detail.tools.emptyTitle')"
-              :description="t('conversation.detail.tools.emptyDescription')"
-            />
-          </UiPanelFrame>
-
-          <UiPanelFrame variant="subtle" padding="md" class="space-y-3">
-            <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-              {{ t('conversation.detail.timeline.title') }}
-            </div>
-
-            <UiTimelineList
-              v-if="timelineItems.length"
-              :items="timelineItems"
-            />
-
-            <UiEmptyState
-              v-else
-              :title="t('conversation.detail.timeline.emptyTitle')"
-              :description="t('conversation.detail.timeline.emptyDescription')"
-            />
-          </UiPanelFrame>
+          </UiInspectorPanel>
         </div>
 
         <UiEmptyState

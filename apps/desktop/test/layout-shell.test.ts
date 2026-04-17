@@ -7,6 +7,7 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import * as tauriClient from '@/tauri/client'
@@ -116,6 +117,203 @@ describe('Workbench shell layout', () => {
     expect(mounted.container.querySelector('[data-testid="global-search-trigger"]')).not.toBeNull()
 
     mounted.destroy()
+  })
+
+  it('renders the workbench main area as an integrated shell canvas instead of a raw page wrapper', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="workbench-main-canvas"]') !== null)
+
+    const shellRoot = mounted.container.querySelector<HTMLElement>('[data-testid="workbench-shell"]')
+    const main = mounted.container.querySelector<HTMLElement>('[data-testid="workbench-main"]')
+    const canvas = mounted.container.querySelector<HTMLElement>('[data-testid="workbench-main-canvas"]')
+
+    expect(shellRoot).not.toBeNull()
+    expect(shellRoot?.className).toContain('bg-sidebar')
+
+    expect(main).not.toBeNull()
+    expect(main?.className).toContain('bg-[color-mix(in_srgb,var(--background)_92%,var(--sidebar)_8%)]')
+
+    expect(canvas).not.toBeNull()
+    expect(canvas?.className).toContain('min-h-full')
+    expect(canvas?.className).toContain('min-w-0')
+
+    mounted.destroy()
+  })
+
+  it('keeps the topbar action triggers on neutral hover states', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="topbar-profile-trigger"]') !== null)
+
+    const searchTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="global-search-trigger"]')
+    const settingsTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-settings-button"]')
+    const notificationTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-notification-trigger"]')
+    const profileTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-profile-trigger"]')
+
+    expect(searchTrigger?.className).toContain('hover:bg-subtle')
+    expect(searchTrigger?.className).not.toContain('hover:bg-accent')
+    expect(settingsTrigger?.className).toContain('hover:bg-subtle')
+    expect(settingsTrigger?.className).not.toContain('hover:bg-accent')
+    expect(notificationTrigger?.className).toContain('hover:bg-subtle')
+    expect(notificationTrigger?.className).not.toContain('hover:bg-accent')
+    expect(profileTrigger?.className).toContain('hover:bg-subtle')
+    expect(profileTrigger?.className).not.toContain('hover:bg-accent')
+
+    mounted.destroy()
+  })
+
+  it('renders the topbar search trigger as an integrated shell control instead of a floating card', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="global-search-trigger"]') !== null)
+
+    const searchTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="global-search-trigger"]')
+
+    expect(searchTrigger?.className).toContain('border-border')
+    expect(searchTrigger?.className).toContain('bg-surface')
+    expect(searchTrigger?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
+  it('uses bordered accent-soft open states across topbar shell triggers', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() =>
+      mounted.container.querySelector('[data-testid="topbar-theme-toggle"]') !== null
+      && mounted.container.querySelector('[data-testid="topbar-notification-trigger"]') !== null
+      && mounted.container.querySelector('[data-testid="topbar-profile-trigger"]') !== null,
+    )
+
+    const themeToggle = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')
+    const notificationTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-notification-trigger"]')
+    const profileTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-profile-trigger"]')
+
+    expect(themeToggle?.className).toContain('border-transparent')
+    expect(themeToggle?.className).toContain('hover:border-border')
+    expect(notificationTrigger?.className).toContain('border-transparent')
+    expect(notificationTrigger?.className).toContain('hover:border-border')
+    expect(profileTrigger?.className).toContain('border-transparent')
+    expect(profileTrigger?.className).toContain('hover:border-border')
+
+    themeToggle?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="topbar-theme-menu"]') !== null)
+
+    expect(themeToggle?.className).toContain('border-border-strong')
+    expect(themeToggle?.className).toContain('bg-accent')
+    expect(themeToggle?.className).not.toContain('shadow-xs')
+
+    themeToggle?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="topbar-theme-menu"]') === null)
+
+    notificationTrigger?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-message-center"]') !== null)
+
+    expect(notificationTrigger?.className).toContain('border-border-strong')
+    expect(notificationTrigger?.className).toContain('bg-accent')
+    expect(notificationTrigger?.querySelector('svg')?.getAttribute('class')).toContain('text-text-primary')
+
+    notificationTrigger?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-message-center"]') === null)
+
+    profileTrigger?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="topbar-account-menu"]') !== null)
+
+    expect(profileTrigger?.className).toContain('border-border-strong')
+    expect(profileTrigger?.className).toContain('bg-accent')
+    expect(profileTrigger?.className).not.toContain('shadow-xs')
+
+    mounted.destroy()
+  })
+
+  it('renders the topbar account menu as an integrated shell with calm intro and action bands', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      await waitFor(() => mounted.container.querySelector('[data-testid="topbar-profile-trigger"]') !== null)
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-profile-trigger"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="topbar-account-menu"]') !== null)
+
+      const intro = document.body.querySelector<HTMLElement>('[data-testid="topbar-account-menu-intro"]')
+      const actions = document.body.querySelector<HTMLElement>('[data-testid="topbar-account-menu-actions"]')
+
+      expect(intro).not.toBeNull()
+      expect(intro?.className).toContain('border-b')
+      expect(intro?.className).toContain('bg-subtle')
+
+      expect(actions).not.toBeNull()
+      expect(actions?.className).toContain('border-t')
+      expect(actions?.className).toContain('bg-subtle')
+    } finally {
+      mounted.destroy()
+    }
+  })
+
+  it('renders the topbar theme and locale menus through the shared selection menu shell', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      const shell = useShellStore()
+      await waitFor(() =>
+        mounted.container.querySelector('[data-testid="topbar-theme-toggle"]') !== null
+        && mounted.container.querySelector('[data-testid="topbar-locale-toggle"]') !== null,
+      )
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="topbar-theme-menu"]') !== null)
+
+      const themeMenu = document.body.querySelector<HTMLElement>('[data-testid="topbar-theme-menu"]')
+      const themeHeader = themeMenu?.firstElementChild as HTMLElement | null
+      const activeThemeOption = document.body.querySelector<HTMLElement>(`[data-testid="topbar-theme-option-${shell.preferences.theme}"]`)
+      const inactiveThemeKey = shell.preferences.theme === 'light' ? 'dark' : 'light'
+      const inactiveThemeOption = document.body.querySelector<HTMLElement>(`[data-testid="topbar-theme-option-${inactiveThemeKey}"]`)
+
+      expect(themeMenu).not.toBeNull()
+      expect(themeMenu?.textContent).toContain(String(i18n.global.t('topbar.theme')))
+      expect(themeMenu?.textContent).toContain(String(i18n.global.t('topbar.themeMenuLabel')))
+      expect(themeHeader?.className).toContain('border-b')
+      expect(themeHeader?.className).toContain('bg-subtle')
+      expect(activeThemeOption).not.toBeNull()
+      expect(activeThemeOption?.className).toContain('border-border-strong')
+      expect(activeThemeOption?.className).toContain('bg-accent')
+      expect(inactiveThemeOption?.className).toContain('hover:bg-subtle')
+      expect(inactiveThemeOption?.className).not.toContain('hover:bg-accent')
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="topbar-theme-menu"]') === null)
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-locale-toggle"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="topbar-locale-menu"]') !== null)
+
+      const localeMenu = document.body.querySelector<HTMLElement>('[data-testid="topbar-locale-menu"]')
+      const localeHeader = localeMenu?.firstElementChild as HTMLElement | null
+      const activeLocaleOption = document.body.querySelector<HTMLElement>(`[data-testid="topbar-locale-option-${shell.preferences.locale}"]`)
+
+      expect(localeMenu).not.toBeNull()
+      expect(localeMenu?.textContent).toContain(String(i18n.global.t('topbar.locale')))
+      expect(localeMenu?.textContent).toContain(String(i18n.global.t('topbar.localeMenuLabel')))
+      expect(localeHeader?.className).toContain('border-b')
+      expect(localeHeader?.className).toContain('bg-subtle')
+      expect(activeLocaleOption).not.toBeNull()
+      expect(activeLocaleOption?.className).toContain('border-border-strong')
+      expect(activeLocaleOption?.className).toContain('bg-accent')
+    } finally {
+      mounted.destroy()
+    }
   })
 
   it('opens and closes the topbar message center from the notification trigger', async () => {
@@ -269,9 +467,49 @@ describe('Workbench shell layout', () => {
       const trigger = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-trigger"]')
 
       expect(trigger).not.toBeNull()
-      expect(trigger?.className).toContain('workspace-menu-trigger')
+      expect(trigger?.className).toContain('hover:bg-subtle')
+      expect(trigger?.className).not.toContain('workspace-menu-trigger')
       expect(triggerIcon).not.toBeNull()
-      expect(triggerIcon?.className).toContain('workspace-menu-trigger__icon')
+      expect(triggerIcon?.className).toContain('bg-primary/10')
+      expect(triggerIcon?.className).toContain('text-primary')
+      expect(triggerIcon?.className).not.toContain('workspace-menu-trigger__icon')
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-menu-list"]') !== null)
+
+      const openTrigger = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-trigger"]')
+      expect(openTrigger?.className).toContain('bg-accent')
+      expect(openTrigger?.className).toContain('border-border-strong')
+    } finally {
+      mounted.destroy()
+    }
+  })
+
+  it('renders the footer workspace menu as an integrated shell instead of a loose stacked popover', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+      await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-menu-list"]') !== null)
+
+      const intro = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-intro"]')
+      const actions = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-actions"]')
+      const connectAction = document.body.querySelector<HTMLElement>('[data-testid="sidebar-connect-workspace-trigger"]')
+
+      expect(intro).not.toBeNull()
+      expect(intro?.className).toContain('border-b')
+      expect(intro?.className).toContain('bg-subtle')
+
+      expect(actions).not.toBeNull()
+      expect(actions?.className).toContain('border-t')
+      expect(actions?.className).toContain('bg-subtle')
+
+      expect(connectAction).not.toBeNull()
+      expect(connectAction?.className).toContain('justify-start')
     } finally {
       mounted.destroy()
     }
@@ -374,15 +612,35 @@ describe('Workbench shell layout', () => {
     await waitFor(() => mounted.container.querySelector('[data-testid="topbar-theme-toggle"]') !== null)
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')?.click()
-    await nextTick()
-    Array.from(mounted.container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes(String(i18n.global.t('topbar.themeModes.light'))))?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-popover-content"]') !== null)
+
+    const selectedThemeButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(button =>
+      button.textContent?.includes(String(i18n.global.t(`topbar.themeModes.${shell.preferences.theme}`))))
+    const themeLightButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(button =>
+      button.textContent?.includes(String(i18n.global.t('topbar.themeModes.light'))))
+
+    expect(selectedThemeButton?.className).toContain('border-border-strong')
+    expect(selectedThemeButton?.className).toContain('bg-accent')
+    expect(selectedThemeButton?.className).not.toContain('shadow-xs')
+    expect(themeLightButton?.className).toContain('hover:bg-subtle')
+    expect(themeLightButton?.className).not.toContain('hover:bg-accent')
+    themeLightButton?.click()
     await waitFor(() => shell.preferences.theme === 'light')
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-locale-toggle"]')?.click()
-    await nextTick()
-    Array.from(mounted.container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes(String(i18n.global.t('topbar.localeModes.en-US'))))?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-popover-content"]') !== null)
+
+    const selectedLocaleButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(button =>
+      button.textContent?.includes(String(i18n.global.t(`topbar.localeModes.${shell.preferences.locale}`))))
+    const localeEnglishButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(button =>
+      button.textContent?.includes(String(i18n.global.t('topbar.localeModes.en-US'))))
+
+    expect(selectedLocaleButton?.className).toContain('border-border-strong')
+    expect(selectedLocaleButton?.className).toContain('bg-accent')
+    expect(selectedLocaleButton?.className).not.toContain('shadow-xs')
+    expect(localeEnglishButton?.className).toContain('hover:bg-subtle')
+    expect(localeEnglishButton?.className).not.toContain('hover:bg-accent')
+    localeEnglishButton?.click()
     await waitFor(() => shell.preferences.locale === 'en-US')
 
     expect(shell.preferences.theme).toBe('light')
@@ -569,6 +827,56 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
+  it('renders the connect workspace dialog as an integrated shell overlay with shared error callout styling', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-connect-workspace-trigger"]') !== null)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-connect-workspace-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="connect-workspace-dialog"]') !== null)
+
+    const auth = useAuthStore()
+    auth.error = 'Invalid workspace credentials'
+    await nextTick()
+
+    const dialog = document.body.querySelector<HTMLElement>('[data-testid="connect-workspace-dialog"]')
+    const form = document.body.querySelector<HTMLElement>('[data-testid="connect-workspace-form"]')
+    const intro = document.body.querySelector<HTMLElement>('[data-testid="connect-workspace-intro"]')
+    const errorCallout = document.body.querySelector<HTMLElement>('[data-testid="connect-workspace-error"]')
+    const actions = form?.lastElementChild as HTMLElement | null
+
+    expect(dialog).not.toBeNull()
+    expect(dialog?.className).toContain('overflow-hidden')
+    expect(dialog?.className).toContain('p-0')
+
+    expect(intro).not.toBeNull()
+    expect(intro?.className).toContain('border-b')
+    expect(intro?.className).toContain('border-border')
+    expect(intro?.className).toContain('bg-subtle')
+    expect(intro?.className).not.toContain('rounded-[var(--radius-l)]')
+    expect(intro?.className).not.toContain('shadow-xs')
+
+    expect(actions).not.toBeNull()
+    expect(actions?.className).toContain('border-t')
+    expect(actions?.className).toContain('bg-subtle')
+
+    expect(errorCallout).not.toBeNull()
+    expect(errorCallout?.className).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_72%,var(--surface)_28%)]')
+    expect(errorCallout?.className).toContain('border-[color-mix(in_srgb,var(--color-status-error)_18%,var(--border))]')
+    expect(errorCallout?.textContent).toContain('Invalid workspace credentials')
+    expect(errorCallout?.innerHTML).not.toContain('text-destructive')
+    expect(errorCallout?.className).not.toContain('border-destructive/20')
+    expect(errorCallout?.className).not.toContain('bg-destructive/5')
+    expect(errorCallout?.className).not.toContain('text-destructive')
+
+    mounted.destroy()
+  })
+
   it('navigates to the first console workspace surface from the footer workspace menu', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
@@ -617,15 +925,50 @@ describe('Workbench shell layout', () => {
         === '/workspace/projects/strategy-launch/resources',
     )
 
+    await waitFor(() => {
+      const submit = document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-submit"]')
+      return Boolean(submit && !submit.disabled)
+    })
+
     document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-submit"]')?.click()
 
-    await waitFor(() =>
-      router.currentRoute.value.name === 'project-settings'
-      && String(router.currentRoute.value.params.projectId).includes('strategy-launch'),
+    await waitFor(
+      () =>
+        router.currentRoute.value.name === 'project-settings'
+        && String(router.currentRoute.value.params.projectId).includes('strategy-launch'),
+      4000,
     )
 
     expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-strategy-launch"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Strategy Launch')
+
+    mounted.destroy()
+  })
+
+  it('renders the sidebar quick-create popover as an integrated shell instead of a flat floating form', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-create-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-project-create-popover"]') !== null)
+
+    const popover = document.body.querySelector<HTMLElement>('[data-testid="sidebar-project-create-popover"]')
+    const intro = document.body.querySelector<HTMLElement>('[data-testid="sidebar-project-create-intro"]')
+    const actions = document.body.querySelector<HTMLElement>('[data-testid="sidebar-project-create-actions"]')
+
+    expect(popover).not.toBeNull()
+    expect(popover?.className).not.toContain('shadow-xs')
+
+    expect(intro).not.toBeNull()
+    expect(intro?.className).toContain('border-b')
+    expect(intro?.className).toContain('bg-subtle')
+
+    expect(actions).not.toBeNull()
+    expect(actions?.className).toContain('border-t')
+    expect(actions?.className).toContain('bg-subtle')
 
     mounted.destroy()
   })
@@ -644,6 +987,41 @@ describe('Workbench shell layout', () => {
 
     await waitFor(() => router.currentRoute.value.name === 'project-settings')
     expect(router.currentRoute.value.name).toBe('project-settings')
+
+    mounted.destroy()
+  })
+
+  it('keeps sidebar project modules and workspace menu rows on neutral hover while preserving brand-soft active rows', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]') !== null)
+
+    const settingsLink = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-project-module-proj-redesign-settings"]')
+    const deliverablesLink = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-project-module-proj-redesign-deliverables"]')
+
+    expect(settingsLink?.className).toContain('border-border-strong')
+    expect(settingsLink?.className).toContain('bg-accent')
+    expect(settingsLink?.className).not.toContain('shadow-xs')
+    expect(settingsLink?.className).not.toContain('hover:bg-accent')
+    expect(deliverablesLink?.className).toContain('hover:bg-subtle')
+    expect(deliverablesLink?.className).not.toContain('hover:bg-accent')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-console"]') !== null)
+
+    const workspaceConsoleLink = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-nav-workspace-console"]')
+    const enterpriseConnection = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-item-conn-enterprise"]')
+    const localConnection = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-item-conn-local"]')
+
+    expect(workspaceConsoleLink?.className).toContain('hover:bg-subtle')
+    expect(workspaceConsoleLink?.className).not.toContain('hover:bg-accent')
+    expect(enterpriseConnection?.className).toContain('hover:bg-subtle')
+    expect(enterpriseConnection?.className).not.toContain('hover:bg-accent')
+    expect(localConnection?.className).toContain('bg-accent')
+    expect(localConnection?.className).toContain('border-border-strong')
+    expect(localConnection?.className).not.toContain('shadow-xs')
 
     mounted.destroy()
   })
@@ -667,6 +1045,25 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-governance-settings"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('keeps sidebar project groups integrated with the rail instead of floating card styling', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]') !== null)
+
+    const expandedProject = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-project-proj-redesign"]')
+    const collapsedProject = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-project-proj-governance"]')
+    const collapsedSummary = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-project-summary-proj-governance"]')
+
+    expect(expandedProject?.className).not.toContain('shadow-xs')
+    expect(collapsedProject?.className).not.toContain('shadow-xs')
+    expect(collapsedSummary?.className).toContain('hover:bg-subtle')
+    expect(collapsedSummary?.className).not.toContain('group-hover:-translate-x-1')
 
     mounted.destroy()
   })

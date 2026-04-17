@@ -24,7 +24,7 @@ const emit = defineEmits<{
       role="switch"
       :aria-checked="props.modelValue"
       :disabled="props.disabled"
-      class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed"
+      class="ui-focus-ring relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-fast disabled:cursor-not-allowed"
       :class="[
         props.modelValue
           ? 'border-primary bg-primary shadow-xs'

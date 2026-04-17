@@ -34,10 +34,8 @@ const surfaceVariant = computed(() => {
   if (props.variant === 'hero') {
     return 'overlay'
   }
-  if (props.variant === 'panel' || props.variant === 'raised' || props.variant === 'interactive') {
-    return 'raised'
-  }
-  return 'subtle'
+
+  return props.variant
 })
 
 </script>

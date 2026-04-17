@@ -42,7 +42,6 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
     <UiSurface
       variant="overlay"
       padding="sm"
-      class="border-border bg-popover shadow-md"
     >
       <div class="flex items-start justify-between gap-3 px-1 pb-3">
         <div class="space-y-1">
@@ -70,8 +69,8 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
           type="button"
           class="rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-fast"
           :class="filter === props.activeFilter
-            ? 'border-border-strong bg-accent text-text-primary shadow-xs'
-            : 'border-border bg-surface text-text-secondary hover:bg-accent'"
+            ? 'border-border-strong bg-subtle text-text-primary'
+            : 'border-border bg-surface text-text-secondary hover:bg-subtle'"
           :data-testid="`ui-notification-filter-${filter}`"
           @click="emit('update:filter', filter)"
         >

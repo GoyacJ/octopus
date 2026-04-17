@@ -234,6 +234,10 @@
       "models": "Open models",
       "tools": "Open tools",
       "settings": "Open settings"
+    },
+    "shortcuts": {
+      "navigate": "Move",
+      "open": "Open"
     }
   },
   "sidebar": {

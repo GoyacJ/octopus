@@ -16,6 +16,7 @@ import {
   UiPanelFrame,
   UiRecordCard,
   UiSelect,
+  UiSurface,
   UiSwitch,
   UiStatusCallout,
   UiTabs,
@@ -1907,6 +1908,7 @@ async function handleBulkDeleteAssignments() {
               :active="selectedAssignmentKey === assignmentKey(assignment)"
               :title="assignmentTitle(assignment)"
               :description="assignmentOrgLabel(assignment)"
+              :test-id="`access-control-org-assignment-record-${assignmentKey(assignment)}`"
               @click="selectAssignment(assignment)"
             >
               <template #secondary>
@@ -1964,18 +1966,26 @@ async function handleBulkDeleteAssignments() {
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">
-            <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+            <UiSurface
+              data-testid="access-control-org-assignment-summary-positions"
+              variant="subtle"
+              padding="md"
+            >
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.org.assignments.summaryPositions') }}
               </div>
               <div class="mt-2 text-sm text-foreground">{{ positionSummary(selectedAssignment) }}</div>
-            </div>
-            <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
+            </UiSurface>
+            <UiSurface
+              data-testid="access-control-org-assignment-summary-groups"
+              variant="subtle"
+              padding="md"
+            >
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.org.assignments.summaryGroups') }}
               </div>
               <div class="mt-2 text-sm text-foreground">{{ groupSummary(selectedAssignment) }}</div>
-            </div>
+            </UiSurface>
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">

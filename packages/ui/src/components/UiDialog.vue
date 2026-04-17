@@ -82,7 +82,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
           <DialogClose as-child>
             <button
               type="button"
-              class="inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              class="ui-focus-ring inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-subtle hover:text-text-primary"
               data-testid="ui-dialog-close"
               :aria-label="props.closeLabel"
             >

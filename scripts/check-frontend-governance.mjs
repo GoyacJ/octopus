@@ -28,6 +28,14 @@ const visualDriftChecks = [
     regex: /\bindigo-[A-Za-z0-9_[\]/.-]+\b/g,
   },
   {
+    label: 'uses deprecated blue hue utilities outside token aliases',
+    regex: /\b(?:bg|text|border|ring|from|to|via)-(?:blue|sky)-[A-Za-z0-9_[\]/.-]+\b/g,
+  },
+  {
+    label: 'uses direct warm hue utilities outside semantic token aliases',
+    regex: /\b(?:bg|text|border|ring|from|to|via)-(?:orange|amber|yellow)-[A-Za-z0-9_[\]/.-]+\b/g,
+  },
+  {
     label: 'uses backdrop blur',
     regex: /\bbackdrop-blur(?:-[A-Za-z0-9_[\].-]+)?\b/g,
   },

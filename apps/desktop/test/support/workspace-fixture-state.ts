@@ -16,6 +16,7 @@ import type {
   PetPresenceState,
   PetProfile,
   PositionRecord,
+  ProtectedResourceDescriptor,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
   ProjectPromotionRequest,
@@ -24,6 +25,7 @@ import type {
   DeliverableVersionContent,
   DeliverableVersionSummary,
   RoleBindingRecord,
+  ResourcePolicyRecord,
   RuntimeEffectiveConfig,
   SystemBootstrapStatus,
   TeamRecord,
@@ -121,6 +123,8 @@ export interface WorkspaceFixtureState {
   permissionDefinitions: PermissionDefinition[]
   roleBindings: RoleBindingRecord[]
   dataPolicies: DataPolicyRecord[]
+  resourcePolicies: ResourcePolicyRecord[]
+  protectedResourceMetadata: ProtectedResourceDescriptor[]
   menus: MenuDefinition[]
   menuPolicies: MenuPolicyRecord[]
   runtimeSessions: Map<string, RuntimeSessionState>
@@ -328,6 +332,9 @@ export function createWorkspaceFixtureState(
         },
       ]
     : []
+
+  const resourcePolicies: ResourcePolicyRecord[] = []
+  const protectedResourceMetadata: ProtectedResourceDescriptor[] = []
 
   const recentConversations = local
     ? [
@@ -2409,6 +2416,8 @@ export function createWorkspaceFixtureState(
     permissionDefinitions,
     roleBindings,
     dataPolicies,
+    resourcePolicies,
+    protectedResourceMetadata,
     menus,
     menuPolicies,
     runtimeSessions: new Map(),

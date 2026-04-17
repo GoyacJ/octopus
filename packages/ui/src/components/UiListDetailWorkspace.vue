@@ -18,8 +18,8 @@ const props = withDefaults(defineProps<{
 }>(), {
   class: '',
   toolbarClass: '',
-  listClass: '',
-  detailClass: '',
+  listClass: 'p-3',
+  detailClass: 'p-3',
   detailTitle: '',
   detailSubtitle: '',
   emptyDetailTitle: '请选择一项',

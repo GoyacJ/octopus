@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { MessageSquareText, Plus, X } from 'lucide-vue-next'
 
-import { UiButton, UiPanelFrame } from '@octopus/ui'
+import { UiButton } from '@octopus/ui'
 
 import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useRuntimeStore } from '@/stores/runtime'
@@ -58,47 +58,46 @@ async function removeConversation(event: MouseEvent, sessionId: string) {
 </script>
 
 <template>
-  <section class="mb-2" data-testid="conversation-tabs">
-    <UiPanelFrame variant="subtle" padding="none" class="px-2 py-1.5">
-      <div class="flex items-center gap-2">
-        <div class="scrollbar-visible flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1">
-          <div
-            v-for="session in conversations"
-            :key="session.id"
-            class="group relative flex shrink-0 items-center"
-          >
-            <UiButton
-              variant="ghost"
-              class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-[var(--radius-m)] border border-transparent pl-2.5 pr-8 text-text-secondary hover:border-border hover:bg-surface hover:text-text-primary"
-              :class="session.conversationId === activeConversationId ? 'border-border bg-surface text-text-primary shadow-xs' : ''"
-              @click="openConversation(session.conversationId)"
-            >
-              <MessageSquareText :size="12" class="shrink-0" />
-              <span class="truncate text-xs font-medium">{{ session.title }}</span>
-            </UiButton>
-
-            <button
-              class="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md text-text-tertiary opacity-0 transition-all hover:bg-muted-foreground/10 hover:text-text-primary group-hover:opacity-100"
-              :class="session.conversationId === activeConversationId ? 'opacity-100' : ''"
-              @click="removeConversation($event, session.id)"
-            >
-              <X :size="12" />
-            </button>
-          </div>
-
+  <section class="mb-2 pb-2" data-testid="conversation-tabs">
+    <div data-testid="conversation-tabs-shell" class="flex items-center gap-2 border-b border-border/80 px-1 pt-1">
+      <div class="scrollbar-visible flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1">
+        <div
+          v-for="session in conversations"
+          :key="session.id"
+          class="group relative flex shrink-0 items-center"
+        >
           <UiButton
-            variant="outline"
-            size="icon"
-            class="ml-1 h-7 w-7 shrink-0 rounded-md"
-            data-testid="conversation-tab-create"
-            :title="t('conversation.tabs.create')"
-            @click="createConversation"
+            variant="ghost"
+            :data-testid="`conversation-tab-${session.conversationId}`"
+            class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-[var(--radius-m)] border border-transparent pl-2.5 pr-8 text-text-secondary hover:border-border hover:bg-surface hover:text-text-primary"
+            :class="session.conversationId === activeConversationId ? 'border-border bg-subtle text-text-primary' : ''"
+            @click="openConversation(session.conversationId)"
           >
-            <Plus :size="12" />
+            <MessageSquareText :size="12" class="shrink-0" />
+            <span class="truncate text-xs font-medium">{{ session.title }}</span>
           </UiButton>
+
+          <button
+            class="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md text-text-tertiary opacity-0 transition-all hover:bg-surface hover:text-text-primary group-hover:opacity-100"
+            :class="session.conversationId === activeConversationId ? 'opacity-100' : ''"
+            @click="removeConversation($event, session.id)"
+          >
+            <X :size="12" />
+          </button>
         </div>
+
+        <UiButton
+          variant="outline"
+          size="icon"
+          class="ml-1 h-7 w-7 shrink-0 rounded-md"
+          data-testid="conversation-tab-create"
+          :title="t('conversation.tabs.create')"
+          @click="createConversation"
+        >
+          <Plus :size="12" />
+        </UiButton>
       </div>
-    </UiPanelFrame>
+    </div>
   </section>
 </template>
 
