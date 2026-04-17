@@ -468,12 +468,13 @@ function resolveMessageResources(message: Message): WorkspaceResourceRecord[] {
 }
 
 function resolveMessageArtifacts(message: Message): MessageArtifactOption[] {
-  return (message.artifacts ?? []).map((id) => {
-    const artifact = artifactMap.value.get(id)
+  return (message.artifacts ?? []).map((artifactRef) => {
+    const artifactId = typeof artifactRef === 'string' ? artifactRef : artifactRef.artifactId
+    const artifact = artifactMap.value.get(artifactId)
     return {
-      id,
-      label: artifact?.title ?? id,
-      kindLabel: artifact ? `v${artifact.latestVersion}` : undefined,
+      id: artifactId,
+      label: artifact?.title ?? (typeof artifactRef === 'string' ? artifactId : artifactRef.title) ?? artifactId,
+      kindLabel: `v${(typeof artifactRef === 'string' ? undefined : artifactRef.version) ?? artifact?.latestVersion ?? '?'}`,
     }
   })
 }

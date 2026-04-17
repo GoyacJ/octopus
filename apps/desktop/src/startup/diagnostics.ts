@@ -4,6 +4,9 @@ export type StartupFailureSnapshot = {
   stack: string
 }
 
+export type GlobalDiagnosticSource = 'error' | 'unhandledrejection'
+export type GlobalDiagnosticReporter = (error: unknown, source: GlobalDiagnosticSource) => void
+
 const STARTUP_FAILURE_TITLE = 'Desktop startup failed'
 
 export function describeStartupFailure(error: unknown): StartupFailureSnapshot {
@@ -58,12 +61,38 @@ export function renderStartupFailure(error: unknown): void {
   `
 }
 
-export function installStartupDiagnostics(): void {
-  window.addEventListener('error', (event) => {
-    renderStartupFailure(event.error ?? event.message)
-  })
+function installGlobalDiagnostics(reporter: GlobalDiagnosticReporter): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
 
-  window.addEventListener('unhandledrejection', (event) => {
-    renderStartupFailure(event.reason)
-  })
+  const handleError = (event: ErrorEvent) => {
+    event.preventDefault?.()
+    reporter(event.error ?? event.message, 'error')
+  }
+
+  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    event.preventDefault?.()
+    reporter(event.reason, 'unhandledrejection')
+  }
+
+  window.addEventListener('error', handleError)
+  window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+  return () => {
+    window.removeEventListener('error', handleError)
+    window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+  }
+}
+
+export function installStartupDiagnostics(
+  reporter: GlobalDiagnosticReporter = (error) => {
+    renderStartupFailure(error)
+  },
+): () => void {
+  return installGlobalDiagnostics(reporter)
+}
+
+export function installRuntimeDiagnostics(reporter: GlobalDiagnosticReporter): () => void {
+  return installGlobalDiagnostics(reporter)
 }

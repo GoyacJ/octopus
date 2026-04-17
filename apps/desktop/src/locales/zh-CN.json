@@ -138,6 +138,21 @@
       "description": "宿主控制面或本地 workspace backend 当前不可用，业务页面已停止加载。",
       "retry": "重新连接",
       "restart": "重启后端"
+    },
+    "runtimeError": {
+      "eyebrow": "运行异常",
+      "title": "当前页面暂时无法继续运行",
+      "description": "页面已切换到可恢复状态。你可以重试当前页面，或返回到其他工作区页面继续操作。",
+      "fallbackMessage": "未能读取到更多错误信息。",
+      "detailsTitle": "错误详情",
+      "copySuccess": "错误详情已复制。",
+      "copyFailure": "复制错误详情失败，请手动反馈当前报错信息。",
+      "actions": {
+        "retry": "重试当前页面",
+        "project": "返回项目",
+        "overview": "回到工作区概览",
+        "copy": "复制错误详情"
+      }
     }
   },
   "authGate": {
@@ -774,6 +789,10 @@
     },
     "detail": {
       "title": "会话详情",
+      "empty": {
+        "title": "请先创建或选择会话",
+        "description": "右侧工具区依赖当前会话上下文。创建新会话或切换到已有会话后，这里会显示交付物、上下文和工具信息。"
+      },
       "sections": {
         "deliverable": "交付物",
         "context": "上下文",

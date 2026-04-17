@@ -6,7 +6,12 @@ export * from './auth'
 export * from './governance'
 export * from './observation'
 export * from './shared'
-export * from './knowledge'
+export type {
+  ConversationMemoryItem,
+  KnowledgeCandidate,
+  KnowledgeEntry,
+  KnowledgeRecord,
+} from './knowledge'
 export * from './notifications'
 export * from './catalog'
 export * from './permissions'

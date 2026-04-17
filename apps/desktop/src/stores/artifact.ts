@@ -57,8 +57,8 @@ function uniqueArtifactIds(detail: RuntimeSessionDetail): string[] {
     ids.add(ref.artifactId)
   }
   for (const message of detail.messages) {
-    for (const artifactId of message.artifacts ?? []) {
-      ids.add(artifactId)
+    for (const artifactRef of message.artifacts ?? []) {
+      ids.add(typeof artifactRef === 'string' ? artifactRef : artifactRef.artifactId)
     }
   }
 
@@ -414,7 +414,7 @@ export const useArtifactStore = defineStore('artifact', () => {
   }
 
   async function saveDraftAsVersion(
-    input: Omit<CreateDeliverableVersionInput, 'parentVersion' | 'textContent'> & {
+    input: Partial<Omit<CreateDeliverableVersionInput, 'parentVersion' | 'textContent'>> & {
       title?: string
       textContent?: string
       parentVersion?: number

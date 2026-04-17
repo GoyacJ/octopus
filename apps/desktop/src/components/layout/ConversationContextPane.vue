@@ -56,6 +56,10 @@ const sectionItems = computed(() => [
   { id: 'ops', label: t('conversation.detail.sections.ops'), icon: Wrench },
 ] as const)
 
+function resolveMessageArtifactId(artifact: string | { artifactId: string }) {
+  return typeof artifact === 'string' ? artifact : artifact.artifactId
+}
+
 const timelineItems = computed(() =>
   runtime.activeTrace.map(trace => ({
     id: trace.id,
@@ -66,7 +70,9 @@ const timelineItems = computed(() =>
   })),
 )
 const conversationResourceIds = computed(() => [...new Set(runtime.activeMessages.flatMap(message => message.resourceIds ?? []))])
-const conversationArtifactIds = computed(() => [...new Set(runtime.activeMessages.flatMap(message => message.artifacts ?? []))])
+const conversationArtifactIds = computed(() => [
+  ...new Set(runtime.activeMessages.flatMap(message => (message.artifacts ?? []).map(resolveMessageArtifactId))),
+])
 const conversationResources = computed(() =>
   resourceStore.activeProjectResources.filter(resource => conversationResourceIds.value.includes(resource.id)),
 )
@@ -100,10 +106,14 @@ const filteredConversationResources = computed(() => {
       .includes(query)
   })
 })
+const workspaceId = computed(() => typeof route.params.workspaceId === 'string' ? route.params.workspaceId : '')
+const conversationId = computed(() => typeof route.params.conversationId === 'string' ? route.params.conversationId : '')
 const selectedConversationDeliverable = computed(() =>
   conversationArtifacts.value.find(artifact => artifact.id === shell.selectedDeliverableId) ?? conversationArtifacts.value[0] ?? null,
 )
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
+const hasConversationContext = computed(() => Boolean(workspaceId.value && projectId.value))
+const hasActiveConversation = computed(() => Boolean(workspaceId.value && projectId.value && conversationId.value))
 const projectRecord = computed(() => workspaceStore.projects.find(project => project.id === projectId.value) ?? null)
 const selectedDeliverableDetail = computed(() => {
   const detail = artifactStore.selectedDeliverableDetail
@@ -205,8 +215,8 @@ const opsCallouts = computed(() => {
 
   if (runtime.pendingMediation) {
     callouts.push({
-      title: runtime.pendingMediation.summary,
-      description: runtime.pendingMediation.detail,
+      title: runtime.pendingMediation.summary ?? t('common.na'),
+      description: runtime.pendingMediation.detail ?? t('common.na'),
       tone: runtime.pendingMediation.requiresApproval || runtime.pendingMediation.requiresAuth ? 'warning' : 'info',
     })
   } else if (runtime.authTarget) {
@@ -271,32 +281,72 @@ watch(
   },
 )
 
-async function pushConversationQuery(query: Record<string, string | undefined>) {
-  await router.replace({
-    name: 'project-conversation',
-    params: route.params,
+function createConversationQueryTarget(query: Record<string, string | undefined>) {
+  if (!hasConversationContext.value) {
+    return null
+  }
+
+  return {
+    ...createProjectConversationTarget(
+      workspaceId.value,
+      projectId.value,
+      conversationId.value || undefined,
+    ),
     query: {
       ...route.query,
       ...query,
     },
-  })
+  }
+}
+
+async function pushConversationQuery(query: Record<string, string | undefined>) {
+  if (!hasActiveConversation.value) {
+    return
+  }
+
+  const target = createConversationQueryTarget(query)
+  if (!target) {
+    return
+  }
+
+  await router.replace(target)
 }
 
 function openResource() {
+  if (!hasConversationContext.value) {
+    return
+  }
+
   void router.push({
     name: 'project-resources',
-    params: route.params,
+    params: {
+      workspaceId: workspaceId.value,
+      projectId: projectId.value,
+    },
   })
 }
 
 function setWorkbenchMode(mode: string) {
   shell.setWorkbenchMode(mode as ConversationWorkbenchMode)
   shell.setRightSidebarCollapsed(false)
+  if (!hasActiveConversation.value) {
+    return
+  }
   void pushConversationQuery({
     mode,
     deliverable: shell.selectedDeliverableId || undefined,
     version: shell.selectedDeliverableVersion ? String(shell.selectedDeliverableVersion) : undefined,
   })
+}
+
+function sectionButtonClass(itemId: ConversationWorkbenchMode): string {
+  return [
+    'h-auto rounded-[var(--radius-s)] border border-transparent px-2.5 py-1.5 text-[11px]',
+    shell.workbenchMode === itemId
+      ? 'border-border bg-surface text-text-primary shadow-xs'
+      : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary',
+    !hasActiveConversation.value ? 'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-text-tertiary' : '',
+  ].filter(Boolean).join(' ')
 }
 
 function selectConversationDeliverable(deliverableId: string) {
@@ -437,10 +487,12 @@ async function forkSelectedDeliverable() {
       <UiButton
         v-for="item in sectionItems"
         :key="item.id"
+        :data-testid="`conversation-context-section-${item.id}`"
         variant="ghost"
         size="icon"
         class="h-9 w-9 rounded-lg"
         :title="item.label"
+        :disabled="!hasActiveConversation"
         @click="setWorkbenchMode(item.id)"
       >
         <component :is="item.icon" :size="18" />
@@ -465,10 +517,11 @@ async function forkSelectedDeliverable() {
         <UiButton
           v-for="item in sectionItems"
           :key="item.id"
+          :data-testid="`conversation-context-section-${item.id}`"
           variant="ghost"
           size="sm"
-          class="h-auto rounded-[var(--radius-s)] border border-transparent px-2.5 py-1.5 text-[11px]"
-          :class="shell.workbenchMode === item.id ? 'border-border bg-surface text-text-primary shadow-xs' : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary'"
+          :class="sectionButtonClass(item.id)"
+          :disabled="!hasActiveConversation"
           @click="setWorkbenchMode(item.id)"
         >
           {{ item.label }}
@@ -476,7 +529,15 @@ async function forkSelectedDeliverable() {
       </nav>
 
       <div class="flex-1 overflow-y-auto p-4">
-        <div v-if="shell.workbenchMode === 'deliverable'" class="flex min-h-full flex-col gap-4">
+        <UiEmptyState
+          v-if="!hasActiveConversation"
+          data-testid="conversation-context-empty-state"
+          :title="t('conversation.detail.empty.title')"
+          :description="t('conversation.detail.empty.description')"
+          class="min-h-full"
+        />
+
+        <div v-else-if="shell.workbenchMode === 'deliverable'" class="flex min-h-full flex-col gap-4">
           <UiEmptyState
             v-if="!selectedConversationDeliverable"
             :title="t('conversation.detail.deliverables.emptyTitle')"

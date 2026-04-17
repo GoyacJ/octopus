@@ -5,9 +5,10 @@ import i18n from './plugins/i18n'
 import { router } from './router'
 import { installStartupDiagnostics, renderStartupFailure } from './startup/diagnostics'
 import { prepareRouterStartup } from './startup/router'
+import { installRuntimeAppErrorHandling } from './runtime/app-error-boundary'
 import '@octopus/ui/main.css'
 
-installStartupDiagnostics()
+const stopStartupDiagnostics = installStartupDiagnostics()
 
 async function bootstrapApp(): Promise<void> {
   const app = createApp(App)
@@ -22,8 +23,11 @@ async function bootstrapApp(): Promise<void> {
 
   app.use(router)
   app.mount('#app')
+  stopStartupDiagnostics()
+  installRuntimeAppErrorHandling(app, router)
 }
 
 void bootstrapApp().catch((error) => {
+  stopStartupDiagnostics()
   renderStartupFailure(error)
 })

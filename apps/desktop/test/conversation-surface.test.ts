@@ -942,6 +942,16 @@ describe('Conversation surfaces', () => {
     await waitFor(() => mounted.container.textContent?.includes(String(i18n.global.t('conversation.empty.title'))) ?? false)
 
     expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.empty.title')))
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.empty.title')))
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.empty.description')))
+
+    const opsButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-context-section-ops"]')
+    expect(opsButton).not.toBeNull()
+    expect(opsButton?.disabled).toBe(true)
+    opsButton?.click()
+    await nextTick()
+    expect(String(router.currentRoute.value.name)).toBe('project-conversations')
+    expect(mounted.container.textContent).not.toContain('Fatal startup error')
 
     const createButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
       button.textContent?.includes(String(i18n.global.t('conversation.empty.create'))))
@@ -949,6 +959,10 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => String(router.currentRoute.value.name) === 'project-conversation')
     expect(String(router.currentRoute.value.params.conversationId)).toMatch(/^conversation-/)
+    await waitFor(() =>
+      (mounted.container.querySelector('[data-testid="conversation-context-section-ops"]') as HTMLButtonElement | null)?.disabled === false,
+    )
+    expect(mounted.container.textContent).not.toContain(String(i18n.global.t('conversation.detail.empty.title')))
 
     mounted.destroy()
   })

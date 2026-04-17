@@ -138,6 +138,21 @@
       "description": "The host control plane or local workspace backend is unavailable, so business surfaces are paused.",
       "retry": "Retry connection",
       "restart": "Restart backend"
+    },
+    "runtimeError": {
+      "eyebrow": "Runtime Error",
+      "title": "This page cannot continue right now",
+      "description": "The workbench has switched into a recoverable state. Retry the current page, or move back to another workspace surface.",
+      "fallbackMessage": "No additional error details were available.",
+      "detailsTitle": "Error details",
+      "copySuccess": "Error details copied.",
+      "copyFailure": "Copy failed. Share the visible error details instead.",
+      "actions": {
+        "retry": "Retry current page",
+        "project": "Back to project",
+        "overview": "Back to workspace overview",
+        "copy": "Copy error details"
+      }
     }
   },
   "authGate": {
@@ -774,6 +789,10 @@
     },
     "detail": {
       "title": "Session Detail",
+      "empty": {
+        "title": "Create or select a session first",
+        "description": "The right rail depends on the active session context. After you create a session or switch to an existing one, deliverables, context, and tool activity will appear here."
+      },
       "sections": {
         "deliverable": "Deliverable",
         "context": "Context",

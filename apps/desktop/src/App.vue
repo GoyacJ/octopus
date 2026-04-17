@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -7,9 +7,15 @@ import type { NotificationRecord } from '@octopus/schema'
 import { UiButton, UiStatusCallout, UiToastViewport } from '@octopus/ui'
 
 import AuthGateDialog from '@/components/auth/AuthGateDialog.vue'
+import AppRuntimeErrorBoundary from '@/components/layout/AppRuntimeErrorBoundary.vue'
 import i18n from '@/plugins/i18n'
 import { useWorkbenchRouteSync } from '@/composables/useWorkbenchRouteSync'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout.vue'
+import {
+  clearRuntimeAppError,
+  reportRuntimeAppError,
+  runtimeAppErrorState,
+} from '@/runtime/app-error-boundary'
 import { useAuthStore } from '@/stores/auth'
 import { useInboxStore } from '@/stores/inbox'
 import { useNotificationStore } from '@/stores/notifications'
@@ -37,6 +43,7 @@ const pet = usePetStore()
 const workspaceAccessControl = useWorkspaceAccessControlStore()
 const { t } = useI18n()
 const isBrowserHostRuntime = import.meta.env.VITE_HOST_RUNTIME === 'browser'
+const runtimeBoundaryArmed = ref(false)
 
 useWorkbenchRouteSync()
 
@@ -89,6 +96,8 @@ const hostUnavailableDescription = computed(() =>
 const isAuthRoute = computed(() => route.name === 'auth-login')
 const shouldShowWorkbenchLayout = computed(() => !isAuthRoute.value)
 const shouldShowAuthDialog = computed(() => !isBrowserHostRuntime && shouldShowWorkbenchLayout.value)
+const hasRuntimeAppError = computed(() => Boolean(runtimeAppErrorState.current))
+const workbenchRouterViewKey = computed(() => `${route.fullPath}:${runtimeAppErrorState.resetToken}`)
 
 const handleWorkspaceAuthFailure = (event: Event) => {
   const detail = (event as CustomEvent<WorkspaceAuthFailureDetail>).detail
@@ -108,6 +117,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
 }
 
 onMounted(async () => {
+  runtimeBoundaryArmed.value = true
   window.addEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
   window.addEventListener(
     WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
@@ -117,11 +127,24 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  runtimeBoundaryArmed.value = false
   window.removeEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
   window.removeEventListener(
     WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
     handleWorkspaceAuthorizationFailure as EventListener,
   )
+})
+
+onErrorCaptured((error, _instance, info) => {
+  if (!runtimeBoundaryArmed.value) {
+    return
+  }
+
+  reportRuntimeAppError(error, {
+    source: 'component',
+    info,
+  })
+  return false
 })
 
 watch(
@@ -162,6 +185,15 @@ watch(
       await inbox.bootstrap(workspaceConnectionId, true)
     }
     runtime.syncWorkspaceScopeFromShell()
+  },
+)
+
+watch(
+  () => route.fullPath,
+  (next, previous) => {
+    if (next !== previous && runtimeAppErrorState.current) {
+      clearRuntimeAppError()
+    }
   },
 )
 
@@ -247,7 +279,8 @@ watch(
     </div>
   </div>
   <WorkbenchLayout v-else-if="shouldShowWorkbenchLayout">
-    <RouterView />
+    <AppRuntimeErrorBoundary v-if="hasRuntimeAppError" />
+    <RouterView v-else :key="workbenchRouterViewKey" />
   </WorkbenchLayout>
   <RouterView v-else />
   <AuthGateDialog v-if="shouldShowAuthDialog" />

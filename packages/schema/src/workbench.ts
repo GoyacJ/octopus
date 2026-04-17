@@ -7,7 +7,7 @@ import type {
   PetWorkspaceSnapshot as OpenApiPetWorkspaceSnapshot,
   SavePetPresenceInput as OpenApiSavePetPresenceInput,
 } from './generated'
-import type { DeliverableDetail } from './artifact'
+import type { ArtifactVersionReference, DeliverableDetail } from './artifact'
 import type {
   AgentAssetKind,
   AgentScope,
@@ -263,7 +263,7 @@ export interface Message {
   usage?: MessageUsage
   processEntries?: MessageProcessEntry[]
   attachments?: ConversationAttachment[]
-  artifacts?: string[]
+  artifacts?: Array<string | ArtifactVersionReference>
   approval?: {
     id: string
     toolName: string
