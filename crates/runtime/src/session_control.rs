@@ -96,11 +96,11 @@ impl SessionStore {
     }
 
     pub fn resolve_managed_path(&self, session_id: &str) -> Result<PathBuf, SessionControlError> {
-        for extension in [PRIMARY_SESSION_EXTENSION, LEGACY_SESSION_EXTENSION] {
-            let path = self.sessions_root.join(format!("{session_id}.{extension}"));
-            if path.exists() {
-                return Ok(path);
-            }
+        let path = self
+            .sessions_root
+            .join(format!("{session_id}.{PRIMARY_SESSION_EXTENSION}"));
+        if path.exists() {
+            return Ok(path);
         }
         Err(SessionControlError::Format(
             format_missing_session_reference(session_id),
@@ -234,7 +234,6 @@ pub fn workspace_fingerprint(workspace_root: &Path) -> String {
 }
 
 pub const PRIMARY_SESSION_EXTENSION: &str = "jsonl";
-pub const LEGACY_SESSION_EXTENSION: &str = "json";
 pub const LATEST_SESSION_REFERENCE: &str = "latest";
 
 const SESSION_REFERENCE_ALIASES: &[&str] = &[LATEST_SESSION_REFERENCE, "last", "recent"];
@@ -378,11 +377,9 @@ pub fn resolve_managed_session_path_for(
     session_id: &str,
 ) -> Result<PathBuf, SessionControlError> {
     let directory = managed_sessions_dir_for(base_dir)?;
-    for extension in [PRIMARY_SESSION_EXTENSION, LEGACY_SESSION_EXTENSION] {
-        let path = directory.join(format!("{session_id}.{extension}"));
-        if path.exists() {
-            return Ok(path);
-        }
+    let path = directory.join(format!("{session_id}.{PRIMARY_SESSION_EXTENSION}"));
+    if path.exists() {
+        return Ok(path);
     }
     Err(SessionControlError::Format(
         format_missing_session_reference(session_id),
@@ -393,9 +390,7 @@ pub fn resolve_managed_session_path_for(
 pub fn is_managed_session_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .is_some_and(|extension| {
-            extension == PRIMARY_SESSION_EXTENSION || extension == LEGACY_SESSION_EXTENSION
-        })
+        .is_some_and(|extension| extension == PRIMARY_SESSION_EXTENSION)
 }
 
 pub fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, SessionControlError> {
@@ -540,10 +535,7 @@ pub fn is_session_reference_alias(reference: &str) -> bool {
 fn session_id_from_path(path: &Path) -> Option<String> {
     path.file_name()
         .and_then(|value| value.to_str())
-        .and_then(|name| {
-            name.strip_suffix(&format!(".{PRIMARY_SESSION_EXTENSION}"))
-                .or_else(|| name.strip_suffix(&format!(".{LEGACY_SESSION_EXTENSION}")))
-        })
+        .and_then(|name| name.strip_suffix(&format!(".{PRIMARY_SESSION_EXTENSION}")))
         .map(ToOwned::to_owned)
 }
 
@@ -563,8 +555,9 @@ fn format_no_managed_sessions() -> String {
 mod tests {
     use super::{
         create_managed_session_handle_for, fork_managed_session_for, is_session_reference_alias,
-        list_managed_sessions_for, load_managed_session_for, resolve_session_reference_for,
-        workspace_fingerprint, ManagedSessionSummary, SessionStore, LATEST_SESSION_REFERENCE,
+        list_managed_sessions_for, load_managed_session_for, managed_sessions_dir_for,
+        resolve_managed_session_path_for, resolve_session_reference_for, workspace_fingerprint,
+        ManagedSessionSummary, SessionStore, LATEST_SESSION_REFERENCE,
     };
     use crate::session::Session;
     use std::fs;
@@ -649,6 +642,31 @@ mod tests {
         assert_eq!(sessions[0].id, newer.session_id);
         assert_eq!(summary_by_id(&sessions, &older.session_id).message_count, 1);
         assert_eq!(summary_by_id(&sessions, &newer.session_id).message_count, 1);
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn ignores_legacy_json_managed_session_files() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir should exist");
+
+        let mut legacy_session = Session::new();
+        legacy_session
+            .push_user_text("json extension session")
+            .expect("json extension session message should save");
+        let legacy_path = managed_sessions_dir_for(&root)
+            .expect("managed sessions dir should exist")
+            .join(format!("{}.json", legacy_session.session_id));
+        legacy_session
+            .save_to_path(&legacy_path)
+            .expect("json extension session should persist");
+
+        let sessions = list_managed_sessions_for(&root).expect("managed sessions should list");
+        let resolved_path = resolve_managed_session_path_for(&root, &legacy_session.session_id);
+
+        assert!(sessions.is_empty());
+        assert!(resolved_path.is_err());
+
         fs::remove_dir_all(root).expect("temp dir should clean up");
     }
 

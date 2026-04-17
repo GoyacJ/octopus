@@ -316,7 +316,7 @@ fn temp_session_path(label: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("runtime-session-{label}-{nanos}.json"))
+    std::env::temp_dir().join(format!("runtime-session-{label}-{nanos}.jsonl"))
 }
 
 fn write_temp_session_file(label: &str, contents: &str) -> PathBuf {
