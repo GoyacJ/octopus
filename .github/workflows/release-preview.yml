@@ -2,6 +2,11 @@ name: Preview Release
 
 on:
   workflow_dispatch:
+    inputs:
+      preview_version:
+        description: Preview base version (for example 0.3.0). Leave empty to use VERSION.
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -62,8 +67,16 @@ jobs:
 
       - name: Resolve preview release identity
         id: preview-release
+        env:
+          PREVIEW_VERSION: ${{ inputs.preview_version }}
+        shell: bash
         run: |
-          PREVIEW_TAG="$(pnpm release:tag:preview -- --run-number "${GITHUB_RUN_NUMBER}" | tail -n 1)"
+          CMD=(pnpm release:tag:preview -- --run-number "${GITHUB_RUN_NUMBER}")
+          if [ -n "${PREVIEW_VERSION}" ]; then
+            CMD+=(--version "${PREVIEW_VERSION}")
+          fi
+
+          PREVIEW_TAG="$("${CMD[@]}" | tail -n 1)"
           echo "tag=${PREVIEW_TAG}" >> "$GITHUB_OUTPUT"
           echo "notes_path=tmp/release-notes/${PREVIEW_TAG}.md" >> "$GITHUB_OUTPUT"
           echo "release_name=Octopus Preview ${PREVIEW_TAG}" >> "$GITHUB_OUTPUT"
