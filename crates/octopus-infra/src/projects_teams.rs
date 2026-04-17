@@ -46,10 +46,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         project_id: &str,
     ) -> Result<Vec<ArtifactRecord>, AppError> {
-        Ok(load_artifact_records(&self.state.open_db()?)?
-            .into_iter()
-            .filter(|record| record.project_id == project_id)
-            .collect())
+        Ok(load_project_artifact_records(&self.state.open_db()?, project_id)?)
     }
 
     async fn create_project(
@@ -1732,110 +1729,6 @@ impl WorkspaceService for InfraWorkspaceService {
         Ok(())
     }
 
-    async fn list_automations(&self) -> Result<Vec<AutomationRecord>, AppError> {
-        Ok(self
-            .state
-            .automations
-            .lock()
-            .map_err(|_| AppError::runtime("automations mutex poisoned"))?
-            .clone())
-    }
-
-    async fn create_automation(
-        &self,
-        mut record: AutomationRecord,
-    ) -> Result<AutomationRecord, AppError> {
-        if record.id.is_empty() {
-            record.id = format!("automation-{}", Uuid::new_v4());
-        }
-        if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace_id()?;
-        }
-
-        self.state.open_db()?.execute(
-            "INSERT INTO automations (id, workspace_id, project_id, title, description, cadence, owner_type, owner_id, status, next_run_at, last_run_at, output)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.title,
-                record.description,
-                record.cadence,
-                record.owner_type,
-                record.owner_id,
-                record.status,
-                record.next_run_at.map(|value| value as i64),
-                record.last_run_at.map(|value| value as i64),
-                record.output,
-            ],
-        ).map_err(|error| AppError::database(error.to_string()))?;
-
-        let mut automations = self
-            .state
-            .automations
-            .lock()
-            .map_err(|_| AppError::runtime("automations mutex poisoned"))?;
-        automations.push(record.clone());
-        Ok(record)
-    }
-
-    async fn update_automation(
-        &self,
-        automation_id: &str,
-        mut record: AutomationRecord,
-    ) -> Result<AutomationRecord, AppError> {
-        record.id = automation_id.into();
-        if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace_id()?;
-        }
-
-        self.state.open_db()?.execute(
-            "INSERT OR REPLACE INTO automations (id, workspace_id, project_id, title, description, cadence, owner_type, owner_id, status, next_run_at, last_run_at, output)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.title,
-                record.description,
-                record.cadence,
-                record.owner_type,
-                record.owner_id,
-                record.status,
-                record.next_run_at.map(|value| value as i64),
-                record.last_run_at.map(|value| value as i64),
-                record.output,
-            ],
-        ).map_err(|error| AppError::database(error.to_string()))?;
-
-        let mut automations = self
-            .state
-            .automations
-            .lock()
-            .map_err(|_| AppError::runtime("automations mutex poisoned"))?;
-        Self::replace_or_push(&mut automations, record.clone(), |item| {
-            item.id == automation_id
-        });
-        Ok(record)
-    }
-
-    async fn delete_automation(&self, automation_id: &str) -> Result<(), AppError> {
-        self.state
-            .open_db()?
-            .execute(
-                "DELETE FROM automations WHERE id = ?1",
-                params![automation_id],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-        self.state
-            .automations
-            .lock()
-            .map_err(|_| AppError::runtime("automations mutex poisoned"))?
-            .retain(|item| item.id != automation_id);
-        Ok(())
-    }
-
     async fn update_current_user_profile(
         &self,
         user_id: &str,
@@ -3093,6 +2986,40 @@ mod tests {
         })
     }
 
+    fn insert_artifact_record(
+        connection: &Connection,
+        id: &str,
+        project_id: &str,
+        title: &str,
+        updated_at: u64,
+    ) {
+        connection
+            .execute(
+                "INSERT INTO artifact_records (
+                    id, workspace_id, project_id, conversation_id, session_id, run_id,
+                    source_message_id, parent_artifact_id, title, status, preview_kind,
+                    latest_version, promotion_state, promotion_knowledge_id, updated_at,
+                    storage_path, content_hash, byte_size, content_type
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6,
+                    NULL, NULL, ?7, 'ready', 'markdown',
+                    1, 'not-promoted', NULL, ?8,
+                    NULL, NULL, NULL, 'text/markdown'
+                )",
+                rusqlite::params![
+                    id,
+                    DEFAULT_WORKSPACE_ID,
+                    project_id,
+                    format!("conv-{id}"),
+                    format!("session-{id}"),
+                    format!("run-{id}"),
+                    title,
+                    updated_at as i64,
+                ],
+            )
+            .expect("insert artifact record");
+    }
+
     #[test]
     fn create_agent_persists_runtime_policy_fields_across_db_reload() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -3207,6 +3134,32 @@ mod tests {
         assert_eq!(reloaded.import_metadata.translation_status, "native");
         assert_eq!(reloaded.trust_metadata.trust_level, "trusted");
         assert!(reloaded.dependency_resolution.is_empty());
+    }
+
+    #[test]
+    fn list_project_deliverables_returns_only_requested_project_in_updated_order() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let connection = bundle.workspace.state.open_db().expect("open db");
+
+        insert_artifact_record(&connection, "artifact-a-older", "proj-a", "A older", 100);
+        insert_artifact_record(&connection, "artifact-b-newest", "proj-b", "B newest", 500);
+        insert_artifact_record(&connection, "artifact-a-newest", "proj-a", "A newest", 400);
+        insert_artifact_record(&connection, "artifact-a-middle", "proj-a", "A middle", 200);
+
+        let records = runtime()
+            .block_on(bundle.workspace.list_project_deliverables("proj-a"))
+            .expect("list project deliverables");
+
+        let ids = records
+            .iter()
+            .map(|record| record.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ids,
+            vec!["artifact-a-newest", "artifact-a-middle", "artifact-a-older"]
+        );
+        assert!(records.iter().all(|record| record.project_id == "proj-a"));
     }
 
     #[test]

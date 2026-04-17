@@ -8,7 +8,6 @@ import type {
   AccessUserRecord,
   AccessUserPresetUpdateRequest,
   AgentRecord,
-  AutomationRecord,
   AuthorizationSnapshot,
   CapabilityAssetDisablePatch,
   CapabilityManagementProjection,
@@ -990,36 +989,6 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           session: assertWorkspaceRequestReady(context),
           pathParams: {
             toolId,
-          },
-        })
-      },
-    },
-    automations: {
-      async list() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        }) as unknown as AutomationRecord[]
-      },
-      async create(record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations', 'post', {
-          session: assertWorkspaceRequestReady(context),
-          body: JSON.stringify(record),
-        }) as unknown as AutomationRecord
-      },
-      async update(automationId, record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations/{automationId}', 'patch', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            automationId,
-          },
-          body: JSON.stringify(record),
-        }) as unknown as AutomationRecord
-      },
-      async delete(automationId) {
-        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations/{automationId}', 'delete', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            automationId,
           },
         })
       },

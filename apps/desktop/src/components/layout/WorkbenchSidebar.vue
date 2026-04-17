@@ -21,7 +21,6 @@ import {
   Trash2,
   UserRound,
   Users,
-  Workflow,
   Wrench,
 } from 'lucide-vue-next'
 
@@ -102,7 +101,6 @@ const iconMap: Record<MenuIconKey, unknown> = {
   projects: FolderKanban,
   models: Cpu,
   tools: Wrench,
-  automations: Workflow,
   console: LayoutDashboard,
   'access-control': ShieldCheck,
   profile: UserRound,
@@ -177,14 +175,6 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       to: createWorkspaceConsoleTarget(workspaceId),
     },
     {
-      id: 'workspace-automations',
-      menuId: 'menu-workspace-automations',
-      label: t('sidebar.navigation.automations'),
-      routeNames: ['workspace-automations'],
-      icon: iconMap.automations,
-      to: { name: 'workspace-automations', params: { workspaceId } },
-    },
-    {
       id: 'workspace-access-control',
       menuId: 'menu-workspace-access-control',
       label: t('sidebar.navigation.accessControl'),
@@ -216,7 +206,22 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
 })
 
 function projectConversationId(projectId: string) {
-  return runtime.sessions.find(session => session.projectId === projectId && session.sessionKind !== 'pet')?.conversationId
+  const recentConversations = [
+    ...(workspaceStore.activeOverview?.recentConversations ?? []),
+    ...(workspaceStore.getProjectDashboard(projectId)?.recentConversations ?? []),
+  ]
+    .filter(conversation => conversation.projectId === projectId)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+
+  const latestRecentConversation = recentConversations[0]
+  if (latestRecentConversation) {
+    return latestRecentConversation.id
+  }
+
+  return runtime.sessions
+    .filter(session => session.projectId === projectId && session.sessionKind !== 'pet')
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+    ?.conversationId
 }
 
 function projectModules(projectId: string): NavigationItem[] {

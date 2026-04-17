@@ -2796,87 +2796,6 @@ pub(crate) async fn delete_tool(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub(crate) async fn list_automations(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-) -> Result<Json<Vec<AutomationRecord>>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "automation.view",
-        None,
-        Some("automation"),
-        None,
-    )
-    .await?;
-    Ok(Json(state.services.workspace.list_automations().await?))
-}
-
-pub(crate) async fn create_automation(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Json(record): Json<AutomationRecord>,
-) -> Result<Json<AutomationRecord>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "automation.manage",
-        record.project_id.as_deref(),
-        Some("automation"),
-        None,
-    )
-    .await?;
-    Ok(Json(
-        state.services.workspace.create_automation(record).await?,
-    ))
-}
-
-pub(crate) async fn update_automation(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(automation_id): Path<String>,
-    Json(record): Json<AutomationRecord>,
-) -> Result<Json<AutomationRecord>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "automation.manage",
-        record.project_id.as_deref(),
-        Some("automation"),
-        Some(&automation_id),
-    )
-    .await?;
-    Ok(Json(
-        state
-            .services
-            .workspace
-            .update_automation(&automation_id, record)
-            .await?,
-    ))
-}
-
-pub(crate) async fn delete_automation(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(automation_id): Path<String>,
-) -> Result<StatusCode, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "automation.manage",
-        None,
-        Some("automation"),
-        Some(&automation_id),
-    )
-    .await?;
-    state
-        .services
-        .workspace
-        .delete_automation(&automation_id)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
 pub(crate) async fn update_current_user_profile_route(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -3402,6 +3321,57 @@ pub(crate) async fn probe_runtime_configured_model_route(
             .probe_configured_model(input)
             .await?,
     ))
+}
+
+pub(crate) async fn upsert_runtime_configured_model_credential_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(configured_model_id): Path<String>,
+    Json(input): Json<RuntimeConfiguredModelCredentialUpsertInput>,
+) -> Result<Json<RuntimeConfiguredModelCredentialRecord>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "runtime.config.workspace.manage",
+        None,
+        Some("runtime.config"),
+        Some("workspace"),
+    )
+    .await?;
+    if input.configured_model_id != configured_model_id {
+        return Err(ApiError::from(AppError::invalid_input(
+            "configured model id must match the route path",
+        )));
+    }
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .upsert_configured_model_credential(input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn delete_runtime_configured_model_credential_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(configured_model_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "runtime.config.workspace.manage",
+        None,
+        Some("runtime.config"),
+        Some("workspace"),
+    )
+    .await?;
+    state
+        .services
+        .runtime_config
+        .delete_configured_model_credential(&configured_model_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub(crate) async fn save_runtime_config_route(
@@ -4838,6 +4808,7 @@ mod tests {
             auth_target: None,
             usage_summary: octopus_core::RuntimeUsageSummary::default(),
             artifact_refs: vec!["runtime-artifact-run-1".into()],
+            deliverable_refs: Vec::new(),
             trace_context: octopus_core::RuntimeTraceContext::default(),
             checkpoint: octopus_core::RuntimeRunCheckpoint::default(),
             capability_plan_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),

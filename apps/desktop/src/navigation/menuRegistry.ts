@@ -12,7 +12,6 @@ export type MenuIconKey =
   | 'projects'
   | 'models'
   | 'tools'
-  | 'automations'
   | 'access-control'
   | 'profile'
   | 'pet'
@@ -195,17 +194,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.projectSettings',
     icon: 'settings',
     order: 74,
-  },
-  {
-    id: 'menu-workspace-automations',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-automations',
-    routeNames: ['workspace-automations'],
-    defaultLabel: '自动化',
-    labelKey: 'sidebar.navigation.automations',
-    icon: 'automations',
-    order: 90,
   },
   {
     id: 'menu-workspace-access-control',

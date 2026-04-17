@@ -13,7 +13,7 @@ fn split_modules_expose_workspace_bootstrap_api() {
 }
 
 #[test]
-fn workspace_bootstrap_does_not_seed_editable_agents_teams_or_automations() {
+fn workspace_bootstrap_does_not_seed_editable_agents_or_teams_and_drops_legacy_automations() {
     let temp = tempfile::tempdir().expect("tempdir");
     let initialized = bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
     let connection = Connection::open(&initialized.db_path).expect("db");
@@ -24,13 +24,11 @@ fn workspace_bootstrap_does_not_seed_editable_agents_teams_or_automations() {
     let team_count: i64 = connection
         .query_row("SELECT COUNT(*) FROM teams", [], |row| row.get(0))
         .expect("team count");
-    let automation_count: i64 = connection
-        .query_row("SELECT COUNT(*) FROM automations", [], |row| row.get(0))
-        .expect("automation count");
-
     assert_eq!(agent_count, 0);
     assert_eq!(team_count, 0);
-    assert_eq!(automation_count, 0);
+    assert!(connection
+        .prepare("SELECT 1 FROM automations LIMIT 1")
+        .is_err());
     assert!(std::fs::read_dir(&initialized.managed_skills_dir)
         .expect("managed skills dir")
         .next()

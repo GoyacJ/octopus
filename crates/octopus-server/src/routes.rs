@@ -339,14 +339,6 @@ pub fn build_router(state: ServerState) -> Router {
             patch(update_tool).delete(delete_tool),
         )
         .route(
-            "/api/v1/workspace/automations",
-            get(list_automations).post(create_automation),
-        )
-        .route(
-            "/api/v1/workspace/automations/:automation_id",
-            patch(update_automation).delete(delete_automation),
-        )
-        .route(
             "/api/v1/workspace/personal-center/profile/runtime-config",
             get(get_user_runtime_config_route).patch(save_user_runtime_config_route),
         )
@@ -496,6 +488,11 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
         .route(
             "/config/configured-models/probe",
             post(probe_runtime_configured_model_route),
+        )
+        .route(
+            "/config/configured-models/:configured_model_id/credential",
+            put(upsert_runtime_configured_model_credential_route)
+                .delete(delete_runtime_configured_model_credential_route),
         )
         .route("/config/scopes/:scope", patch(save_runtime_config_route))
         .route(

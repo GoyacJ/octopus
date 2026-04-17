@@ -31,7 +31,6 @@ import type {
   ResourcePreviewKind as OpenApiResourcePreviewKind,
 } from './generated'
 import type {
-  AutomationStatus,
   ViewStatus,
   WorkspaceToolPermissionMode,
   WorkspaceToolStatus,
@@ -136,21 +135,6 @@ export interface ToolRecord {
   status: WorkspaceToolStatus
   permissionMode: WorkspaceToolPermissionMode
   updatedAt: number
-}
-
-export interface AutomationRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  title: string
-  description: string
-  cadence: string
-  ownerType: 'agent' | 'team'
-  ownerId: string
-  status: AutomationStatus
-  nextRunAt?: number
-  lastRunAt?: number
-  output: string
 }
 
 export type UserRecordSummary = OpenApiUserRecordSummary

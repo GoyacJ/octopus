@@ -327,8 +327,8 @@ describe('repository governance', () => {
 
     expect(openApiSpec).toContain('/api/v1/workspace/pet:')
     expect(openApiSpec).toContain('/api/v1/workspace/agents:')
-    expect(openApiSpec).toContain('/api/v1/workspace/automations:')
     expect(openApiSpec).toContain('/api/v1/workspace/teams:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/automations:')
     expect(openApiSpec).not.toContain('/api/v1/auth/login:')
     expect(openApiSpec).not.toContain('/api/v1/auth/logout:')
     expect(openApiSpec).not.toContain('/api/v1/auth/register-owner:')
@@ -364,8 +364,8 @@ describe('repository governance', () => {
 
     expect(generatedSchema).toContain('"/api/v1/workspace/pet": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/agents": {')
-    expect(generatedSchema).toContain('"/api/v1/workspace/automations": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/catalog/tools": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/automations": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/agents/import-preview": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/agents/import": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/agents/export": {')

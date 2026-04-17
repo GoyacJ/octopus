@@ -13,7 +13,6 @@ import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
 import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
 import TraceView from '@/views/project/TraceView.vue'
-import AutomationsView from '@/views/workspace/AutomationsView.vue'
 import AccessControlView from '@/views/workspace/AccessControlView.vue'
 import ModelsView from '@/views/workspace/ModelsView.vue'
 import PersonalCenterView from '@/views/workspace/PersonalCenterView.vue'
@@ -461,11 +460,6 @@ function createRoutes(): RouteRecordRaw[] {
         },
         query: to.query,
       }),
-    },
-    {
-      path: '/workspaces/:workspaceId/automations',
-      name: 'workspace-automations',
-      component: AutomationsView,
     },
     {
       path: '/connections',

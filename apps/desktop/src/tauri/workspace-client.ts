@@ -9,7 +9,6 @@ import type {
   AccessUserPresetUpdateRequest,
   AccessUserUpsertRequest,
   AgentRecord,
-  AutomationRecord,
   AuthorizationSnapshot,
   CapabilityManagementProjection,
   CapabilityAssetDisablePatch,
@@ -88,6 +87,8 @@ import type {
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
+  RuntimeConfiguredModelCredentialRecord,
+  RuntimeConfiguredModelCredentialUpsertInput,
   RuntimeConfiguredModelProbeInput,
   RuntimeConfiguredModelProbeResult,
   RuntimeEventEnvelope,
@@ -294,12 +295,6 @@ export interface WorkspaceClient {
     updateTool: (toolId: string, record: ToolRecord) => Promise<ToolRecord>
     deleteTool: (toolId: string) => Promise<void>
   }
-  automations: {
-    list: () => Promise<AutomationRecord[]>
-    create: (record: AutomationRecord) => Promise<AutomationRecord>
-    update: (automationId: string, record: AutomationRecord) => Promise<AutomationRecord>
-    delete: (automationId: string) => Promise<void>
-  }
   profile: {
     updateCurrentUserProfile: (input: UpdateCurrentUserProfileRequest) => Promise<UserRecordSummary>
     changeCurrentUserPassword: (input: ChangeCurrentUserPasswordRequest) => Promise<ChangeCurrentUserPasswordResponse>
@@ -371,6 +366,11 @@ export interface WorkspaceClient {
     bootstrap: () => Promise<RuntimeBootstrap>
     getConfig: () => Promise<RuntimeEffectiveConfig>
     validateConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
+    upsertConfiguredModelCredential: (
+      configuredModelId: string,
+      input: RuntimeConfiguredModelCredentialUpsertInput,
+    ) => Promise<RuntimeConfiguredModelCredentialRecord>
+    deleteConfiguredModelCredential: (configuredModelId: string) => Promise<void>
     validateConfiguredModel: (input: RuntimeConfiguredModelProbeInput) => Promise<RuntimeConfiguredModelProbeResult>
     saveConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
     getProjectConfig: (projectId: string) => Promise<RuntimeEffectiveConfig>

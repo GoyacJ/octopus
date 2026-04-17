@@ -1,12 +1,13 @@
 use super::*;
 use octopus_core::{
-    AccessExperienceCounts, AccessExperienceSnapshot, AccessMemberSummary, AccessRoleRecord,
-    AccessUserPresetUpdateRequest, AccessUserRecord, AccessUserUpsertRequest, DataPolicyRecord,
-    DataPolicyUpsertRequest, MenuPolicyRecord, MenuPolicyUpsertRequest, OrgUnitRecord,
-    OrgUnitUpsertRequest, PositionRecord, PositionUpsertRequest, ProtectedResourceDescriptor,
-    ProtectedResourceMetadataUpsertRequest, ResourcePolicyRecord, ResourcePolicyUpsertRequest,
-    RoleBindingRecord, RoleBindingUpsertRequest, RoleUpsertRequest, UserGroupRecord,
-    UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
+    AccessExperienceCounts, AccessExperienceSnapshot, AccessMemberRoleSummary, AccessMemberSummary,
+    AccessRoleRecord, AccessUserPresetUpdateRequest, AccessUserRecord, AccessUserUpsertRequest,
+    DataPolicyRecord, DataPolicyUpsertRequest, MenuPolicyRecord, MenuPolicyUpsertRequest,
+    OrgUnitRecord, OrgUnitUpsertRequest, PositionRecord, PositionUpsertRequest,
+    ProtectedResourceDescriptor, ProtectedResourceMetadataUpsertRequest, ResourcePolicyRecord,
+    ResourcePolicyUpsertRequest, RoleBindingRecord, RoleBindingUpsertRequest, RoleUpsertRequest,
+    UserGroupRecord, UserGroupUpsertRequest, UserOrgAssignmentRecord,
+    UserOrgAssignmentUpsertRequest,
 };
 use std::collections::{BTreeSet, HashMap};
 
@@ -87,13 +88,15 @@ fn system_role_definitions() -> Vec<SystemRoleDefinition> {
         SystemRoleDefinition {
             code: SYSTEM_ADMIN_ROLE_ID,
             name: "Admin",
-            description: "Manage members, presets, governance configuration, and workspace operations.",
+            description:
+                "Manage members, presets, governance configuration, and workspace operations.",
             permission_codes: default_admin_permission_codes(),
         },
         SystemRoleDefinition {
             code: SYSTEM_MEMBER_ROLE_ID,
             name: "Member",
-            description: "Participate in day-to-day workspace projects, resources, and runtime work.",
+            description:
+                "Participate in day-to-day workspace projects, resources, and runtime work.",
             permission_codes: default_member_permission_codes(),
         },
         SystemRoleDefinition {
@@ -105,7 +108,8 @@ fn system_role_definitions() -> Vec<SystemRoleDefinition> {
         SystemRoleDefinition {
             code: SYSTEM_AUDITOR_ROLE_ID,
             name: "Auditor",
-            description: "Inspect members, policies, sessions, and audit records without editing them.",
+            description:
+                "Inspect members, policies, sessions, and audit records without editing them.",
             permission_codes: default_auditor_permission_codes(),
         },
     ]
@@ -303,7 +307,10 @@ fn migrate_legacy_owner_role(connection: &Connection) -> Result<(), AppError> {
                 .map_err(|error| AppError::database(error.to_string()))?;
             if legacy_role_id != SYSTEM_OWNER_ROLE_ID {
                 connection
-                    .execute("DELETE FROM access_roles WHERE id = ?1", params![legacy_role_id])
+                    .execute(
+                        "DELETE FROM access_roles WHERE id = ?1",
+                        params![legacy_role_id],
+                    )
                     .map_err(|error| AppError::database(error.to_string()))?;
             }
         }
@@ -844,8 +851,6 @@ pub(crate) fn default_owner_permission_codes() -> Vec<String> {
         "tool.mcp.bind-credential",
         "tool.mcp.publish",
         "tool.mcp.grant",
-        "automation.view",
-        "automation.manage",
         "pet.view",
         "pet.manage",
         "artifact.view",
@@ -1001,13 +1006,15 @@ fn resolve_effective_bindings_for_user(
 
     bindings
         .iter()
-        .filter(|binding| match normalize_subject_type(&binding.subject_type) {
-            "user" => binding.subject_id == user_id,
-            "org-unit" => org_unit_ids.contains(&binding.subject_id),
-            "position" => position_ids.contains(&binding.subject_id),
-            "user-group" => user_group_ids.contains(&binding.subject_id),
-            _ => false,
-        })
+        .filter(
+            |binding| match normalize_subject_type(&binding.subject_type) {
+                "user" => binding.subject_id == user_id,
+                "org-unit" => org_unit_ids.contains(&binding.subject_id),
+                "position" => position_ids.contains(&binding.subject_id),
+                "user-group" => user_group_ids.contains(&binding.subject_id),
+                _ => false,
+            },
+        )
         .cloned()
         .collect()
 }
@@ -1026,7 +1033,9 @@ fn effective_role_ids_from_bindings(bindings: &[RoleBindingRecord]) -> BTreeSet<
         .collect()
 }
 
-fn build_access_experience_snapshot(connection: &Connection) -> Result<AccessExperienceSnapshot, AppError> {
+fn build_access_experience_snapshot(
+    connection: &Connection,
+) -> Result<AccessExperienceSnapshot, AppError> {
     let member_count = query_count(connection, "SELECT COUNT(*) FROM users")?;
     let custom_role_count = query_count(
         connection,
@@ -1041,7 +1050,8 @@ fn build_access_experience_snapshot(connection: &Connection) -> Result<AccessExp
     let data_policy_count = query_count(connection, "SELECT COUNT(*) FROM data_policies")?;
     let resource_policy_count = query_count(connection, "SELECT COUNT(*) FROM resource_policies")?;
     let menu_policy_count = query_count(connection, "SELECT COUNT(*) FROM menu_policies")?;
-    let protected_resource_count = query_count(connection, "SELECT COUNT(*) FROM protected_resources")?;
+    let protected_resource_count =
+        query_count(connection, "SELECT COUNT(*) FROM protected_resources")?;
     let session_count = query_count(connection, "SELECT COUNT(*) FROM sessions")?;
     let audit_event_count = query_count(connection, "SELECT COUNT(*) FROM audit_records")?;
     let has_meaningful_org_assignments = query_exists(
@@ -1065,8 +1075,10 @@ fn build_access_experience_snapshot(connection: &Connection) -> Result<AccessExp
         )",
     )?;
 
-    let has_org_structure =
-        org_unit_count > 0 || position_count > 0 || user_group_count > 0 || has_meaningful_org_assignments;
+    let has_org_structure = org_unit_count > 0
+        || position_count > 0
+        || user_group_count > 0
+        || has_meaningful_org_assignments;
     let has_custom_roles = custom_role_count > 0;
     let has_menu_governance = menu_policy_count > 0;
     let has_resource_governance = resource_policy_count > 0 || protected_resource_count > 0;
@@ -1117,17 +1129,27 @@ fn build_access_member_summary(
     let direct_user_bindings = bindings
         .iter()
         .filter(|binding| {
-            normalize_subject_type(&binding.subject_type) == "user" && binding.subject_id == user.record.id
+            normalize_subject_type(&binding.subject_type) == "user"
+                && binding.subject_id == user.record.id
         })
         .cloned()
         .collect::<Vec<_>>();
     let effective_bindings =
         resolve_effective_bindings_for_user(org_units, assignments, bindings, &user.record.id);
     let effective_role_ids = effective_role_ids_from_bindings(&effective_bindings);
-
-    let effective_role_names = effective_role_ids
+    let effective_roles = effective_role_ids
         .iter()
         .filter_map(|role_id| roles_by_id.get(role_id))
+        .map(|role| AccessMemberRoleSummary {
+            id: role.id.clone(),
+            code: role.code.clone(),
+            name: role.name.clone(),
+            source: role.source.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    let effective_role_names = effective_roles
+        .iter()
         .map(|role| role.name.clone())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -1190,6 +1212,7 @@ fn build_access_member_summary(
         user: access_user,
         primary_preset_code,
         primary_preset_name,
+        effective_roles,
         effective_role_names,
         has_org_assignments: user_assignments.iter().any(has_meaningful_org_assignment),
     })
@@ -1210,7 +1233,14 @@ fn build_access_member_summaries(
     let mut summaries = users
         .iter()
         .map(|user| {
-            build_access_member_summary(connection, user, &roles_by_id, &org_units, &assignments, &bindings)
+            build_access_member_summary(
+                connection,
+                user,
+                &roles_by_id,
+                &org_units,
+                &assignments,
+                &bindings,
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
     summaries.sort_by(|left, right| {
@@ -2205,15 +2235,19 @@ mod tests {
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let session = runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin")
             .session;
 
@@ -2242,7 +2276,11 @@ mod tests {
         assert_eq!(owner_role.code, "system.owner");
         assert_eq!(owner_role.source, "system");
 
-        let reloaded_db = reloaded.access_control.state.open_db().expect("reloaded db");
+        let reloaded_db = reloaded
+            .access_control
+            .state
+            .open_db()
+            .expect("reloaded db");
         let binding_role_id: String = reloaded_db
             .query_row(
                 "SELECT role_id FROM role_bindings WHERE subject_type = 'user' AND subject_id = ?1 LIMIT 1",
@@ -2315,29 +2353,35 @@ mod tests {
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let session = runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin")
             .session;
 
         runtime
-            .block_on(bundle.access_control.create_resource_policy(
-                ResourcePolicyUpsertRequest {
-                    subject_type: "user".into(),
-                    subject_id: session.user_id.clone(),
-                    resource_type: "resource".into(),
-                    resource_id: "res-confidential".into(),
-                    action: "view".into(),
-                    effect: "allow".into(),
-                },
-            ))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_resource_policy(ResourcePolicyUpsertRequest {
+                        subject_type: "user".into(),
+                        subject_id: session.user_id.clone(),
+                        resource_type: "resource".into(),
+                        resource_id: "res-confidential".into(),
+                        action: "view".into(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("create resource policy");
 
         let snapshot = runtime
@@ -2353,19 +2397,21 @@ mod tests {
         );
 
         runtime
-            .block_on(bundle.access_control.create_data_policy(
-                DataPolicyUpsertRequest {
-                    name: "confidential".into(),
-                    subject_type: "user".into(),
-                    subject_id: session.user_id,
-                    resource_type: "resource".into(),
-                    scope_type: "tag-match".into(),
-                    project_ids: Vec::new(),
-                    tags: vec!["confidential".into()],
-                    classifications: Vec::new(),
-                    effect: "allow".into(),
-                },
-            ))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_data_policy(DataPolicyUpsertRequest {
+                        name: "confidential".into(),
+                        subject_type: "user".into(),
+                        subject_id: session.user_id,
+                        resource_type: "resource".into(),
+                        scope_type: "tag-match".into(),
+                        project_ids: Vec::new(),
+                        tags: vec!["confidential".into()],
+                        classifications: Vec::new(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("create advanced data policy");
 
         let advanced_snapshot = runtime
@@ -2375,37 +2421,44 @@ mod tests {
     }
 
     #[test]
-    fn access_control_experience_snapshot_ignores_basic_project_access_policies_for_advanced_governance() {
+    fn access_control_experience_snapshot_ignores_basic_project_access_policies_for_advanced_governance(
+    ) {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let session = runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin")
             .session;
 
         runtime
-            .block_on(bundle.access_control.create_data_policy(
-                DataPolicyUpsertRequest {
-                    name: "owner project access".into(),
-                    subject_type: "user".into(),
-                    subject_id: session.user_id,
-                    resource_type: "project".into(),
-                    scope_type: "selected-projects".into(),
-                    project_ids: vec!["proj-redesign".into()],
-                    tags: Vec::new(),
-                    classifications: Vec::new(),
-                    effect: "allow".into(),
-                },
-            ))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_data_policy(DataPolicyUpsertRequest {
+                        name: "owner project access".into(),
+                        subject_type: "user".into(),
+                        subject_id: session.user_id,
+                        resource_type: "project".into(),
+                        scope_type: "selected-projects".into(),
+                        project_ids: vec!["proj-redesign".into()],
+                        tags: Vec::new(),
+                        classifications: Vec::new(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("create basic project policy");
 
         let snapshot = runtime
@@ -2424,15 +2477,19 @@ mod tests {
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin");
 
         let member = runtime
@@ -2466,12 +2523,16 @@ mod tests {
             ))
             .expect("assign member org unit");
         runtime
-            .block_on(bundle.access_control.create_role_binding(RoleBindingUpsertRequest {
-                role_id: "system.member".into(),
-                subject_type: "user".into(),
-                subject_id: member.id.clone(),
-                effect: "allow".into(),
-            }))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: "system.member".into(),
+                        subject_type: "user".into(),
+                        subject_id: member.id.clone(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("bind member preset");
 
         let summaries = runtime
@@ -2483,7 +2544,10 @@ mod tests {
             .expect("member summary");
         assert_eq!(member_summary.primary_preset_code, Some("member".into()));
         assert_eq!(member_summary.primary_preset_name, "Member");
-        assert!(member_summary.effective_role_names.iter().any(|name| name == "Member"));
+        assert!(member_summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Member"));
         assert!(member_summary.has_org_assignments);
     }
 
@@ -2494,15 +2558,19 @@ mod tests {
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin");
 
         let member = runtime
@@ -2545,28 +2613,40 @@ mod tests {
             ))
             .expect("assign risk org unit");
         runtime
-            .block_on(bundle.access_control.create_role_binding(RoleBindingUpsertRequest {
-                role_id: "system.viewer".into(),
-                subject_type: "user".into(),
-                subject_id: member.id.clone(),
-                effect: "allow".into(),
-            }))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: "system.viewer".into(),
+                        subject_type: "user".into(),
+                        subject_id: member.id.clone(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("bind direct viewer");
         runtime
-            .block_on(bundle.access_control.create_role_binding(RoleBindingUpsertRequest {
-                role_id: custom_role.id.clone(),
-                subject_type: "user".into(),
-                subject_id: member.id.clone(),
-                effect: "allow".into(),
-            }))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: custom_role.id.clone(),
+                        subject_type: "user".into(),
+                        subject_id: member.id.clone(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("bind direct custom role");
         runtime
-            .block_on(bundle.access_control.create_role_binding(RoleBindingUpsertRequest {
-                role_id: "system.auditor".into(),
-                subject_type: "org-unit".into(),
-                subject_id: "org-risk".into(),
-                effect: "allow".into(),
-            }))
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: "system.auditor".into(),
+                        subject_type: "org-unit".into(),
+                        subject_id: "org-risk".into(),
+                        effect: "allow".into(),
+                    }),
+            )
             .expect("bind inherited auditor role");
 
         let summary = runtime
@@ -2581,19 +2661,18 @@ mod tests {
         assert_eq!(summary.user.id, member.id);
         assert_eq!(summary.primary_preset_code, Some("mixed".into()));
         assert_eq!(summary.primary_preset_name, "Mixed access");
-        assert!(summary.effective_role_names.iter().any(|name| name == "Admin"));
-        assert!(
-            summary
-                .effective_role_names
-                .iter()
-                .any(|name| name == "Member Helper")
-        );
-        assert!(
-            summary
-                .effective_role_names
-                .iter()
-                .any(|name| name == "Auditor")
-        );
+        assert!(summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Admin"));
+        assert!(summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Member Helper"));
+        assert!(summary
+            .effective_role_names
+            .iter()
+            .any(|name| name == "Auditor"));
 
         let bindings = runtime
             .block_on(bundle.access_control.list_role_bindings())

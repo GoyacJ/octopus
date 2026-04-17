@@ -1,7 +1,6 @@
 import type {
   AccessRoleRecord,
   AgentRecord,
-  AutomationRecord,
   CapabilityManagementProjection,
   CredentialBinding,
   DataPolicyRecord,
@@ -111,7 +110,6 @@ export interface WorkspaceFixtureState {
   skillFiles: Record<string, Record<string, WorkspaceSkillFileDocument>>
   mcpDocuments: Record<string, WorkspaceMcpServerDocument>
   tools: ToolRecord[]
-  automations: AutomationRecord[]
   currentUserId: string
   users: UserRecordSummary[]
   userPasswords: Record<string, string>
@@ -145,7 +143,6 @@ const RBAC_MENU_IDS = [
   'menu-workspace-console-agents',
   'menu-workspace-console-models',
   'menu-workspace-console-tools',
-  'menu-workspace-automations',
   'menu-workspace-access-control',
 ] as const
 
@@ -457,7 +454,6 @@ export function createWorkspaceFixtureState(
     metrics: [
       { id: 'projects', label: 'Projects', value: String(projects.length), tone: 'accent' },
       { id: 'conversations', label: 'Conversations', value: String(recentConversations.length), tone: 'info' },
-      { id: 'automations', label: 'Automations', value: local ? '1' : '0', tone: local ? 'success' : 'default' },
       { id: 'alerts', label: 'Alerts', value: local ? '0' : '1', tone: local ? 'default' : 'warning' },
     ],
     projects,
@@ -2016,24 +2012,6 @@ export function createWorkspaceFixtureState(
     ? options.managementProjectionTransform(clone(managementProjectionBase))
     : managementProjectionBase
 
-  const automations: AutomationRecord[] = local
-    ? [
-        {
-          id: 'automation-sync',
-          workspaceId: workspace.id,
-          title: 'Daily Runtime Sync',
-          description: 'Refresh runtime projections every morning.',
-          cadence: 'Every day 09:00',
-          ownerType: 'agent',
-          ownerId: 'agent-architect',
-          status: 'active',
-          nextRunAt: 110,
-          lastRunAt: 90,
-          output: 'Update overview and dashboard projections.',
-        },
-      ]
-    : []
-
   const users: UserRecordSummary[] = [
     ...(ownerReady
       ? [{
@@ -2178,8 +2156,6 @@ export function createWorkspaceFixtureState(
     'tool.mcp.invoke',
     'tool.mcp.configure',
     'tool.mcp.bind-credential',
-    'automation.view',
-    'automation.manage',
     'pet.view',
     'pet.manage',
     'artifact.view',
@@ -2203,7 +2179,6 @@ export function createWorkspaceFixtureState(
     'tool.skill.invoke',
     'tool.mcp.view',
     'tool.mcp.invoke',
-    'automation.view',
     'pet.view',
     'artifact.view',
     'inbox.view',
@@ -2423,7 +2398,6 @@ export function createWorkspaceFixtureState(
     skillFiles,
     mcpDocuments,
     tools,
-    automations,
     currentUserId: users[0]?.id ?? '',
     users,
     userPasswords: ownerReady ? { 'user-owner': 'owner-owner', 'user-operator': 'operator-operator' } : { 'user-operator': 'operator-operator' },
@@ -2447,8 +2421,6 @@ export function createWorkspaceFixtureState(
     workspacePetBinding: undefined,
     projectPetBindings: {},
   }
-
-  options.stateTransform?.(state, connection)
 
   return state
 }

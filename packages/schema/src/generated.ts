@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 2b1159239ab33839e45176ea7cc168ac78d4ca9ede849495fa2752bab9386d04
+// Source hash: 137a862563f8aa75eb839fc6ff6d100aad3f2b81c062b7122c7e9bf9af8378f9
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "2b1159239ab33839e45176ea7cc168ac78d4ca9ede849495fa2752bab9386d04"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "137a862563f8aa75eb839fc6ff6d100aad3f2b81c062b7122c7e9bf9af8378f9"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -51,8 +51,16 @@ export interface AccessExperienceSummary {
   recommendedLandingSection: AccessSectionCode
 }
 
+export interface AccessMemberRoleSummary {
+  code: string
+  id: string
+  name: string
+  source: AccessRoleSource
+}
+
 export interface AccessMemberSummary {
   effectiveRoleNames: string[]
+  effectiveRoles: AccessMemberRoleSummary[]
   hasOrgAssignments: boolean
   primaryPresetCode: string | null
   primaryPresetName: string
@@ -335,23 +343,6 @@ export interface AuthorizationSnapshot {
   resourceActionGrants: ResourceActionGrant[]
   visibleMenuIds: string[]
 }
-
-export interface AutomationRecord {
-  cadence: string
-  description: string
-  id: string
-  lastRunAt?: number
-  nextRunAt?: number
-  output: string
-  ownerId: string
-  ownerType: "agent" | "team"
-  projectId?: string
-  status: AutomationStatus
-  title: string
-  workspaceId: string
-}
-
-export type AutomationStatus = "active" | "paused" | "error"
 
 export interface AvatarUploadPayload {
   byteSize: number
@@ -1814,7 +1805,21 @@ export interface RuntimeConfigSource {
   sourceKey: string
 }
 
+export interface RuntimeConfiguredModelCredentialRecord {
+  configuredModelId: string
+  credentialRef: string
+  status: string
+  storageKind: string
+}
+
+export interface RuntimeConfiguredModelCredentialUpsertInput {
+  apiKey: string
+  configuredModelId: string
+  providerId: string
+}
+
 export interface RuntimeConfiguredModelProbeInput {
+  apiKey?: string
   configuredModelId: string
   patch: Record<string, unknown>
   scope: RuntimeConfigScope
@@ -1987,6 +1992,7 @@ export interface RuntimeMessage {
   configuredModelName?: string
   content: string
   conversationId: string
+  deliverableRefs?: ArtifactVersionReference[]
   id: string
   modelId?: string
   processEntries?: MessageProcessEntry[]
@@ -2096,6 +2102,7 @@ export interface RuntimeRunSnapshot {
   conversationId: string
   currentStep: string
   delegatedByToolCallId?: string
+  deliverableRefs?: ArtifactVersionReference[]
   effectiveConfigHash: string
   freshnessSummary?: RuntimeMemoryFreshnessSummary
   handoffRef?: string
@@ -2130,7 +2137,7 @@ export interface RuntimeRunSnapshot {
   workflowRunDetail?: RuntimeWorkflowRunDetail
 }
 
-export type RuntimeSecretReferenceState = "reference-present" | "reference-missing" | "inline-redacted"
+export type RuntimeSecretReferenceState = "reference-present" | "reference-missing" | "inline-redacted" | "migration-failed" | "reference-error"
 
 export interface RuntimeSecretReferenceStatus {
   path: string
@@ -3220,6 +3227,10 @@ export interface OctopusApiPaths {
   "/api/v1/runtime/config": {
     get: { operationId: "getRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
   }
+  "/api/v1/runtime/config/configured-models/{configuredModelId}/credential": {
+    put: { operationId: "upsertRuntimeConfiguredModelCredential"; response: RuntimeConfiguredModelCredentialRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteRuntimeConfiguredModelCredential"; response: void; error: ApiErrorEnvelope }
+  }
   "/api/v1/runtime/config/configured-models/probe": {
     post: { operationId: "probeRuntimeConfiguredModel"; response: RuntimeConfiguredModelProbeResult; error: ApiErrorEnvelope }
   }
@@ -3295,14 +3306,6 @@ export interface OctopusApiPaths {
   }
   "/api/v1/workspace/agents/import-preview": {
     post: { operationId: "previewWorkspaceAgentBundleImport"; response: ImportWorkspaceAgentBundlePreview; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/automations": {
-    get: { operationId: "listWorkspaceAutomations"; response: AutomationRecord[]; error: ApiErrorEnvelope }
-    post: { operationId: "createWorkspaceAutomation"; response: AutomationRecord; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/automations/{automationId}": {
-    patch: { operationId: "updateWorkspaceAutomation"; response: AutomationRecord; error: ApiErrorEnvelope }
-    delete: { operationId: "deleteWorkspaceAutomation"; response: void; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/catalog/management-projection": {
     get: { operationId: "getWorkspaceCapabilityManagementProjection"; response: CapabilityManagementProjection; error: ApiErrorEnvelope }

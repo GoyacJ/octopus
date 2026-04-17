@@ -1,5 +1,4 @@
 import type {
-  AutomationStatus,
   ConnectionMode,
   ConnectionState,
   DesktopSettingsTabId,
@@ -508,21 +507,6 @@ export interface WorkspaceMcpServerDocument {
   displayPath: string
   scope: 'workspace' | 'project' | 'user' | 'builtin'
   config: Record<string, JsonValue>
-}
-
-export interface AutomationSummary {
-  id: string
-  workspaceId: string
-  projectId?: string
-  title: string
-  description: string
-  cadence: string
-  ownerType: 'agent' | 'team'
-  ownerId: string
-  status: AutomationStatus
-  nextRunAt?: number
-  lastRunAt?: number
-  output: string
 }
 
 export interface DesktopSettingsTab {

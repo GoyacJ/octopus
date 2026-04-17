@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AgentRecord, AppError, ArtifactRecord, AutomationRecord, BindPetConversationInput,
-    CapabilityAssetDisablePatch, CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
+    AgentRecord, AppError, ArtifactRecord, BindPetConversationInput, CapabilityAssetDisablePatch,
+    CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
     ChangeCurrentUserPasswordResponse, CopyWorkspaceSkillToManagedInput,
     CreateProjectPromotionRequestInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
     CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
@@ -322,17 +322,6 @@ pub trait WorkspaceService: Send + Sync {
     async fn create_tool(&self, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn update_tool(&self, tool_id: &str, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn delete_tool(&self, tool_id: &str) -> Result<(), AppError>;
-    async fn list_automations(&self) -> Result<Vec<AutomationRecord>, AppError>;
-    async fn create_automation(
-        &self,
-        record: AutomationRecord,
-    ) -> Result<AutomationRecord, AppError>;
-    async fn update_automation(
-        &self,
-        automation_id: &str,
-        record: AutomationRecord,
-    ) -> Result<AutomationRecord, AppError>;
-    async fn delete_automation(&self, automation_id: &str) -> Result<(), AppError>;
     async fn update_current_user_profile(
         &self,
         user_id: &str,

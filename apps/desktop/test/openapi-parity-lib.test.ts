@@ -20,5 +20,7 @@ describe('OpenAPI parity collectors', () => {
     expect(routes).toContain('/api/v1/runtime/sessions/{param}/events')
     expect(routes).toContain('/api/v1/workspace/catalog/skills/{param}/files/{param}')
     expect(routes).toContain('/api/v1/host/notifications/{param}/read')
+    expect(routes).not.toContain('/api/v1/workspace/automations')
+    expect(routes).not.toContain('/api/v1/workspace/automations/{param}')
   })
 })

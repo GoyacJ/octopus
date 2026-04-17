@@ -2615,6 +2615,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/runtime/config/configured-models/{configuredModelId}/credential:
+    put:
+      operationId: upsertRuntimeConfiguredModelCredential
+      parameters:
+        - in: path
+          name: configuredModelId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfiguredModelCredentialUpsertInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfiguredModelCredentialRecord"
+          description: Stored runtime configured model credential payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteRuntimeConfiguredModelCredential
+      parameters:
+        - in: path
+          name: configuredModelId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Runtime configured model credential deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/config/configured-models/probe:
     post:
       operationId: probeRuntimeConfiguredModel
@@ -3247,90 +3292,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreview"
           description: Workspace agent bundle preview payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/automations:
-    get:
-      operationId: listWorkspaceAutomations
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/AutomationRecord"
-                type: array
-          description: Workspace automation list payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    post:
-      operationId: createWorkspaceAutomation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutomationRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AutomationRecord"
-          description: Created workspace automation payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/automations/{automationId}:
-    patch:
-      operationId: updateWorkspaceAutomation
-      parameters:
-        - in: path
-          name: automationId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutomationRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AutomationRecord"
-          description: Updated workspace automation payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    delete:
-      operationId: deleteWorkspaceAutomation
-      parameters:
-        - in: path
-          name: automationId
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Workspace automation deleted.
         default:
           content:
             application/json:
@@ -4492,12 +4453,33 @@ components:
         - hasResourceGovernance
         - recommendedLandingSection
       type: object
+    AccessMemberRoleSummary:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        source:
+          $ref: "#/components/schemas/AccessRoleSource"
+      required:
+        - id
+        - code
+        - name
+        - source
+      type: object
     AccessMemberSummary:
       additionalProperties: false
       properties:
         effectiveRoleNames:
           items:
             type: string
+          type: array
+        effectiveRoles:
+          items:
+            $ref: "#/components/schemas/AccessMemberRoleSummary"
           type: array
         hasOrgAssignments:
           type: boolean
@@ -4512,6 +4494,7 @@ components:
         - user
         - primaryPresetCode
         - primaryPresetName
+        - effectiveRoles
         - effectiveRoleNames
         - hasOrgAssignments
       type: object
@@ -5340,53 +5323,6 @@ components:
         - menuGates
         - resourceActionGrants
       type: object
-    AutomationRecord:
-      additionalProperties: false
-      properties:
-        cadence:
-          type: string
-        description:
-          type: string
-        id:
-          type: string
-        lastRunAt:
-          type: integer
-        nextRunAt:
-          type: integer
-        output:
-          type: string
-        ownerId:
-          type: string
-        ownerType:
-          enum:
-            - agent
-            - team
-          type: string
-        projectId:
-          type: string
-        status:
-          $ref: "#/components/schemas/AutomationStatus"
-        title:
-          type: string
-        workspaceId:
-          type: string
-      required:
-        - id
-        - workspaceId
-        - title
-        - description
-        - cadence
-        - ownerType
-        - ownerId
-        - status
-        - output
-      type: object
-    AutomationStatus:
-      enum:
-        - active
-        - paused
-        - error
-      type: string
     AvatarUploadPayload:
       additionalProperties: false
       properties:
@@ -9498,9 +9434,42 @@ components:
         - exists
         - loaded
       type: object
+    RuntimeConfiguredModelCredentialRecord:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        credentialRef:
+          type: string
+        status:
+          type: string
+        storageKind:
+          type: string
+      required:
+        - configuredModelId
+        - credentialRef
+        - storageKind
+        - status
+      type: object
+    RuntimeConfiguredModelCredentialUpsertInput:
+      additionalProperties: false
+      properties:
+        apiKey:
+          type: string
+        configuredModelId:
+          type: string
+        providerId:
+          type: string
+      required:
+        - configuredModelId
+        - providerId
+        - apiKey
+      type: object
     RuntimeConfiguredModelProbeInput:
       additionalProperties: false
       properties:
+        apiKey:
+          type: string
         configuredModelId:
           type: string
         patch:
@@ -10001,6 +9970,10 @@ components:
           type: string
         conversationId:
           type: string
+        deliverableRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
         id:
           type: string
         modelId:
@@ -10251,6 +10224,10 @@ components:
           type: string
         delegatedByToolCallId:
           type: string
+        deliverableRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
         effectiveConfigHash:
           type: string
         freshnessSummary:
@@ -10347,6 +10324,8 @@ components:
         - reference-present
         - reference-missing
         - inline-redacted
+        - migration-failed
+        - reference-error
       type: string
     RuntimeSecretReferenceStatus:
       additionalProperties: false

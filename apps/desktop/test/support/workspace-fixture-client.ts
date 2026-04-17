@@ -38,6 +38,8 @@ import type {
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
+  RuntimeConfiguredModelCredentialRecord,
+  RuntimeConfiguredModelCredentialUpsertInput,
   RuntimeEffectiveConfig,
   RuntimeRunSnapshot,
   RuntimeSessionSummary,
@@ -180,6 +182,7 @@ export function createWorkspaceClientFixture(
 
   let accessMenuPolicies = clone(workspaceState.menuPolicies)
   const protectedResourceMetadata = new Map<string, ProtectedResourceDescriptor>()
+  const managedConfiguredModelSecrets = new Map<string, string>()
   const auditRecords: AuditRecord[] = [
     {
       id: `audit-${connection.workspaceId}-bootstrap`,
@@ -1200,7 +1203,7 @@ export function createWorkspaceClientFixture(
       code: 'automation_and_tools',
       name: 'Automation and tools',
       description: 'Operate tools and automation capabilities for the workspace.',
-      permissionCodes: ['automation.view', 'tool.catalog.view'],
+      permissionCodes: ['tool.catalog.view'],
     },
     {
       code: 'security_and_audit',
@@ -1268,6 +1271,12 @@ export function createWorkspaceClientFixture(
       user: clone(user),
       primaryPresetCode,
       primaryPresetName,
+      effectiveRoles: effectiveRoles.map(role => ({
+        id: role.id,
+        code: role.code,
+        name: role.name,
+        source: role.source,
+      })),
       effectiveRoleNames: effectiveRoles.map(role => role.name),
       hasOrgAssignments,
     }
@@ -2978,22 +2987,6 @@ export function createWorkspaceClientFixture(
         workspaceState.tools = workspaceState.tools.filter(item => item.id !== toolId)
       },
     },
-    automations: {
-      async list() {
-        return clone(workspaceState.automations)
-      },
-      async create(record) {
-        workspaceState.automations = [...workspaceState.automations, clone(record)]
-        return clone(record)
-      },
-      async update(automationId, record) {
-        workspaceState.automations = workspaceState.automations.map(item => item.id === automationId ? clone(record) : item)
-        return clone(record)
-      },
-      async delete(automationId) {
-        workspaceState.automations = workspaceState.automations.filter(item => item.id !== automationId)
-      },
-    },
     profile: {
       async updateCurrentUserProfile(input: UpdateCurrentUserProfileRequest) {
         const currentUserId = workspaceState.currentUserId
@@ -3655,6 +3648,22 @@ export function createWorkspaceClientFixture(
           errors: [],
           warnings: [],
         }
+      },
+      async upsertConfiguredModelCredential(
+        configuredModelId: string,
+        input: RuntimeConfiguredModelCredentialUpsertInput,
+      ): Promise<RuntimeConfiguredModelCredentialRecord> {
+        const credentialRef = `secret-ref:fixture:${configuredModelId}`
+        managedConfiguredModelSecrets.set(credentialRef, input.apiKey)
+        return {
+          configuredModelId,
+          credentialRef,
+          storageKind: 'os-keyring',
+          status: 'configured',
+        }
+      },
+      async deleteConfiguredModelCredential(configuredModelId: string) {
+        managedConfiguredModelSecrets.delete(`secret-ref:fixture:${configuredModelId}`)
       },
       async validateConfiguredModel(input) {
         const configuredModel = workspaceState.catalog.configuredModels.find(model => model.configuredModelId === input.configuredModelId)

@@ -144,7 +144,6 @@ pub(super) struct InfraState {
     pub(super) model_catalog: Mutex<Vec<ModelCatalogRecord>>,
     pub(super) provider_credentials: Mutex<Vec<ProviderCredentialRecord>>,
     pub(super) tools: Mutex<Vec<ToolRecord>>,
-    pub(super) automations: Mutex<Vec<AutomationRecord>>,
     pub(super) artifacts: Mutex<Vec<ArtifactRecord>>,
     pub(super) inbox: Mutex<Vec<InboxItemRecord>>,
     pub(super) trace_events: Mutex<Vec<TraceEventRecord>>,
@@ -503,20 +502,6 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               status TEXT NOT NULL,
               permission_mode TEXT NOT NULL,
               updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS automations (
-              id TEXT PRIMARY KEY,
-              workspace_id TEXT NOT NULL,
-              project_id TEXT,
-              title TEXT NOT NULL,
-              description TEXT NOT NULL,
-              cadence TEXT NOT NULL,
-              owner_type TEXT NOT NULL,
-              owner_id TEXT NOT NULL,
-              status TEXT NOT NULL,
-              next_run_at INTEGER,
-              last_run_at INTEGER,
-              output TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS org_units (
               id TEXT PRIMARY KEY,
@@ -3077,7 +3062,6 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let model_catalog = load_model_catalog(&connection)?;
     let provider_credentials = load_provider_credentials(&connection)?;
     let tools = load_tools(&connection)?;
-    let automations = load_automations(&connection)?;
     let trace_events = load_trace_events(&connection)?;
     let audit_records = load_audit_records(&connection)?;
     let cost_entries = load_cost_entries(&connection)?;
@@ -3102,7 +3086,6 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         model_catalog: Mutex::new(model_catalog),
         provider_credentials: Mutex::new(provider_credentials),
         tools: Mutex::new(tools),
-        automations: Mutex::new(automations),
         artifacts: Mutex::new(artifacts),
         inbox: Mutex::new(Vec::new()),
         trace_events: Mutex::new(trace_events),
@@ -3810,6 +3793,54 @@ pub(super) fn load_artifact_records(
         .map_err(|error| AppError::database(error.to_string()))
 }
 
+pub(super) fn load_project_artifact_records(
+    connection: &Connection,
+    project_id: &str,
+) -> Result<Vec<ArtifactRecord>, AppError> {
+    let mut stmt = connection
+        .prepare(
+            "SELECT id, workspace_id, project_id, conversation_id, title, status, preview_kind,
+                    latest_version, promotion_state, updated_at, content_type
+             FROM artifact_records
+             WHERE project_id = ?1
+             ORDER BY updated_at DESC, id ASC",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([project_id], |row| {
+            let id = row.get::<_, String>(0)?;
+            let title = row.get::<_, String>(4)?;
+            let preview_kind = row.get::<_, String>(6)?;
+            let latest_version = row.get::<_, i64>(7)?.max(0) as u32;
+            let updated_at = row.get::<_, i64>(9)?.max(0) as u64;
+            let content_type = row.get::<_, Option<String>>(10)?;
+            Ok(ArtifactRecord {
+                id: id.clone(),
+                workspace_id: row.get(1)?,
+                project_id: row.get(2)?,
+                conversation_id: row.get(3)?,
+                title: title.clone(),
+                status: row.get(5)?,
+                preview_kind: preview_kind.clone(),
+                latest_version,
+                latest_version_ref: ArtifactVersionReference {
+                    artifact_id: id,
+                    version: latest_version,
+                    title,
+                    preview_kind,
+                    updated_at,
+                    content_type: content_type.clone(),
+                },
+                promotion_state: row.get(8)?,
+                updated_at,
+                content_type,
+            })
+        })
+        .map_err(|error| AppError::database(error.to_string()))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
 pub(super) fn agent_avatar(paths: &WorkspacePaths, avatar_path: Option<&str>) -> Option<String> {
     let avatar_path = avatar_path?;
     let absolute_path = paths.root.join(avatar_path);
@@ -4280,34 +4311,6 @@ pub(super) fn load_tools(connection: &Connection) -> Result<Vec<ToolRecord>, App
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-pub(super) fn load_automations(connection: &Connection) -> Result<Vec<AutomationRecord>, AppError> {
-    let mut stmt = connection
-        .prepare(
-            "SELECT id, workspace_id, project_id, title, description, cadence, owner_type, owner_id, status, next_run_at, last_run_at, output FROM automations",
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(AutomationRecord {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                project_id: row.get(2)?,
-                title: row.get(3)?,
-                description: row.get(4)?,
-                cadence: row.get(5)?,
-                owner_type: row.get(6)?,
-                owner_id: row.get(7)?,
-                status: row.get(8)?,
-                next_run_at: row.get::<_, Option<i64>>(9)?.map(|value| value as u64),
-                last_run_at: row.get::<_, Option<i64>>(10)?.map(|value| value as u64),
-                output: row.get(11)?,
-            })
-        })
-        .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
 pub(super) fn load_sessions(connection: &Connection) -> Result<Vec<SessionRecord>, AppError> {
     let mut stmt = connection
         .prepare(
@@ -4696,25 +4699,6 @@ pub(super) fn default_tool_records() -> Vec<ToolRecord> {
             updated_at: now,
         },
     ]
-}
-
-#[allow(dead_code)]
-pub(super) fn default_automation_records() -> Vec<AutomationRecord> {
-    let now = timestamp_now();
-    vec![AutomationRecord {
-        id: "auto-daily-summary".into(),
-        workspace_id: DEFAULT_WORKSPACE_ID.into(),
-        project_id: Some(DEFAULT_PROJECT_ID.into()),
-        title: "Daily summary".into(),
-        description: "Summarize active runtime work for the default project.".into(),
-        cadence: "Weekdays 09:30".into(),
-        owner_type: "agent".into(),
-        owner_id: "agent-project-delivery".into(),
-        status: "active".into(),
-        next_run_at: Some(now + 86_400_000),
-        last_run_at: None,
-        output: "Inbox summary".into(),
-    }]
 }
 
 pub(super) fn avatar_data_url(paths: &WorkspacePaths, user: &StoredUser) -> Option<String> {

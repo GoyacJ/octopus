@@ -105,7 +105,6 @@ export type HostPlatform = OpenApiHostPlatform
 export type HostExecutionMode = OpenApiHostExecutionMode
 export type BackendTransport = OpenApiBackendTransport
 export type BackendConnectionState = OpenApiBackendConnectionState
-export type AutomationStatus = 'active' | 'paused' | 'error'
 export type SettingsSectionId = 'connections' | 'roles' | 'policies' | 'audit' | 'integrations' | 'logs'
 export type DesktopSettingsTabId = 'general' | 'theme' | 'i18n' | 'version'
 export type ToolCatalogKind = 'builtin' | 'skill' | 'mcp'

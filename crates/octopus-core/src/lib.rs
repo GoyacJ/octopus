@@ -1497,23 +1497,6 @@ pub struct ToolRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct AutomationRecord {
-    pub id: String,
-    pub workspace_id: String,
-    pub project_id: Option<String>,
-    pub title: String,
-    pub description: String,
-    pub cadence: String,
-    pub owner_type: String,
-    pub owner_id: String,
-    pub status: String,
-    pub next_run_at: Option<u64>,
-    pub last_run_at: Option<u64>,
-    pub output: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct UserRecordSummary {
     pub id: String,
     pub username: String,
@@ -1782,10 +1765,20 @@ pub struct AccessExperienceResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AccessMemberRoleSummary {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct AccessMemberSummary {
     pub user: AccessUserRecord,
     pub primary_preset_code: Option<String>,
     pub primary_preset_name: String,
+    pub effective_roles: Vec<AccessMemberRoleSummary>,
     pub effective_role_names: Vec<String>,
     pub has_org_assignments: bool,
 }
@@ -2053,6 +2046,24 @@ pub struct RuntimeConfiguredModelProbeInput {
     pub scope: String,
     pub configured_model_id: String,
     pub patch: serde_json::Value,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfiguredModelCredentialUpsertInput {
+    pub configured_model_id: String,
+    pub provider_id: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfiguredModelCredentialRecord {
+    pub configured_model_id: String,
+    pub credential_ref: String,
+    pub storage_kind: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2833,6 +2844,8 @@ pub struct RuntimeRunSnapshot {
     pub auth_target: Option<RuntimeAuthChallengeSummary>,
     pub usage_summary: RuntimeUsageSummary,
     pub artifact_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deliverable_refs: Vec<ArtifactVersionReference>,
     pub trace_context: RuntimeTraceContext,
     #[serde(default)]
     pub checkpoint: RuntimeRunCheckpoint,
@@ -2879,6 +2892,7 @@ pub struct RuntimeMessage {
     pub resource_ids: Option<Vec<String>>,
     pub attachments: Option<Vec<String>>,
     pub artifacts: Option<Vec<String>>,
+    pub deliverable_refs: Option<Vec<ArtifactVersionReference>>,
     pub usage: Option<serde_json::Value>,
     pub tool_calls: Option<Vec<serde_json::Value>>,
     pub process_entries: Option<Vec<serde_json::Value>>,
