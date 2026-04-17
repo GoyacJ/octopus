@@ -152,11 +152,10 @@ impl AppUpdateService {
                 move |chunk_length, total_bytes| {
                     downloaded_bytes += chunk_length as u64;
                     let total_bytes = total_bytes.unwrap_or(downloaded_bytes);
-                    let percent = if total_bytes == 0 {
-                        0
-                    } else {
-                        downloaded_bytes.saturating_mul(100) / total_bytes
-                    };
+                    let percent = downloaded_bytes
+                        .saturating_mul(100)
+                        .checked_div(total_bytes)
+                        .unwrap_or(0);
                     let mut snapshot = progress_snapshot.write();
                     let mut status = snapshot.status.clone().unwrap_or_else(|| {
                         default_host_update_status(current_version, current_channel)
