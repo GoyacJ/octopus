@@ -7,25 +7,23 @@ pub(crate) fn summarize_auth_state(
     let mut summary = RuntimeAuthStateSummary::default();
     for provider in provider_state_summary {
         match provider.state.as_str() {
-            "auth_required" => {
+            "auth_required"
                 if !summary
                     .challenged_provider_keys
-                    .contains(&provider.provider_key)
-                {
-                    summary
-                        .challenged_provider_keys
-                        .push(provider.provider_key.clone());
-                }
+                    .contains(&provider.provider_key) =>
+            {
+                summary
+                    .challenged_provider_keys
+                    .push(provider.provider_key.clone());
             }
-            "degraded" | "unavailable" => {
+            "degraded" | "unavailable"
                 if !summary
                     .failed_provider_keys
-                    .contains(&provider.provider_key)
-                {
-                    summary
-                        .failed_provider_keys
-                        .push(provider.provider_key.clone());
-                }
+                    .contains(&provider.provider_key) =>
+            {
+                summary
+                    .failed_provider_keys
+                    .push(provider.provider_key.clone());
             }
             _ => {}
         }
