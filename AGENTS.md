@@ -3,6 +3,7 @@
 ## Frontend Governance
 
 - This root file defines repo-wide defaults. If a more specific `AGENTS.md` exists deeper in the tree, the nearest file wins for that subtree.
+- All git worktrees must be created from `main`. Do not create worktrees from feature branches or other non-`main` branch heads.
 - Before changing HTTP/API/OpenAPI-related code or docs, read `docs/api-openapi-governance.md`.
 - Before changing files under `docs/**`, follow `docs/AGENTS.md`.
 - Before changing files under `contracts/openapi/**`, follow `contracts/openapi/AGENTS.md`.

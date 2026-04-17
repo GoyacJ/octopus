@@ -11,7 +11,11 @@ import ConversationMessageBubble from '@/components/conversation/ConversationMes
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
 import ConversationContextPane from '@/components/layout/ConversationContextPane.vue'
 import ConversationTabsBar from '@/components/layout/ConversationTabsBar.vue'
-import { createProjectConversationTarget } from '@/i18n/navigation'
+import {
+  createProjectConversationTarget,
+  createProjectSurfaceTarget,
+  createWorkspaceConsoleSurfaceTarget,
+} from '@/i18n/navigation'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
@@ -48,19 +52,34 @@ interface MessageArtifactOption {
   id: string
   label: string
   kindLabel?: string
+  version?: number
+}
+
+interface ConversationSetupState {
+  title: string
+  description: string
+  actions: Array<{
+    id: 'open-models' | 'open-settings'
+    label: string
+  }>
 }
 
 const messageDraft = ref('')
 const selectedModelId = ref('')
 const selectedPermissionMode = ref<PermissionMode>('auto')
 const selectedActorValue = ref('')
+const composerContextReadyKey = ref('')
 const expandedMessageIds = ref<string[]>([])
 const focusedToolByMessageId = ref<Record<string, string>>({})
 const scrollContainer = ref<HTMLElement | null>(null)
-let lastProjectContextKey = ''
+const resolvingConversationEntry = ref(false)
+let lastComposerContextKey = ''
+let lastContextPaneKey = ''
 let lastPermissionSeedKey = ''
 let lastSessionKey = ''
 let sessionLoadPromise: Promise<void> | null = null
+let conversationEntryKey = ''
+let conversationEntryPromise: Promise<string | null> | null = null
 
 const conversationId = computed(() =>
   typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
@@ -232,7 +251,93 @@ const activeMediationDetail = computed(() =>
 )
 const hasModelOptions = computed(() => modelOptions.value.length > 0)
 const hasActorOptions = computed(() => actorOptions.value.length > 0)
+const currentComposerContextKey = computed(() => (
+  shell.activeWorkspaceConnectionId && projectId.value
+    ? `${shell.activeWorkspaceConnectionId}:${projectId.value}`
+    : ''
+))
+const isComposerContextReady = computed(() =>
+  Boolean(currentComposerContextKey.value) && composerContextReadyKey.value === currentComposerContextKey.value,
+)
+const baseConversationSetupState = computed<ConversationSetupState | null>(() => {
+  if (!isComposerContextReady.value) {
+    return null
+  }
+
+  if (hasModelOptions.value && hasActorOptions.value) {
+    return null
+  }
+
+  if (!hasModelOptions.value && !hasActorOptions.value) {
+    return {
+      title: t('conversation.setup.missingModelAndActor.title'),
+      description: t('conversation.setup.missingModelAndActor.description'),
+      actions: [
+        {
+          id: 'open-models',
+          label: t('conversation.setup.actions.openModels'),
+        },
+        {
+          id: 'open-settings',
+          label: t('conversation.setup.actions.openSettings'),
+        },
+      ],
+    }
+  }
+
+  if (!hasModelOptions.value) {
+    return {
+      title: t('conversation.setup.missingModel.title'),
+      description: t('conversation.setup.missingModel.description'),
+      actions: [
+        {
+          id: 'open-models',
+          label: t('conversation.setup.actions.openModels'),
+        },
+      ],
+    }
+  }
+
+  return {
+    title: t('conversation.setup.missingActor.title'),
+    description: t('conversation.setup.missingActor.description'),
+    actions: [
+      {
+        id: 'open-settings',
+        label: t('conversation.setup.actions.openSettings'),
+      },
+    ],
+  }
+})
+const conversationSetupState = computed(() =>
+  renderedMessages.value.length
+    ? null
+    : baseConversationSetupState.value,
+)
+const composerPlaceholder = computed(() =>
+  conversationSetupState.value
+    ? t('conversation.composer.setupPlaceholder')
+    : t('conversation.composer.placeholder'),
+)
+const visibleRuntimeError = computed(() => {
+  const error = runtime.error.trim()
+  if (!error) {
+    return ''
+  }
+
+  if (baseConversationSetupState.value && isRecoverableConversationSetupError(error)) {
+    return ''
+  }
+
+  return error
+})
 const canSubmit = computed(() => messageDraft.value.trim().length > 0 && hasModelOptions.value && !!selectedActor.value)
+
+function isRecoverableConversationSetupError(message: string) {
+  return message.includes('actor ref id is missing')
+    || message.includes('actor ref kind is missing')
+    || message.includes('missing configured model binding')
+}
 
 function resolveConfiguredPermissionMode(value: unknown): PermissionMode | null {
   if (value === 'auto' || value === 'readonly' || value === 'danger-full-access') {
@@ -269,20 +374,22 @@ function createConversationId() {
   return `conversation-${Date.now()}`
 }
 
-async function ensureConversationProjectContext(connectionId: string, nextProjectId: string) {
-  const projectContextKey = `${connectionId}:${nextProjectId}`
-  if (lastProjectContextKey === projectContextKey) {
+function logDevTiming(label: string, startedAt: number, detail?: string) {
+  if (!import.meta.env.DEV) {
     return
   }
 
-  await Promise.all([
-    workspaceStore.loadProjectRuntimeConfig(nextProjectId),
-    catalogStore.load(connectionId),
-    agentStore.load(connectionId),
-    teamStore.load(connectionId),
-    resourceStore.loadProjectResources(nextProjectId, connectionId),
-    artifactStore.loadProjectDeliverables(nextProjectId, connectionId),
-  ])
+  const suffix = detail ? ` ${detail}` : ''
+  console.debug(`[conversation] ${label}${suffix} ${Math.round(performance.now() - startedAt)}ms`)
+}
+
+function seedComposerSelections(projectContextKey: string) {
+  if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {
+    selectedModelId.value = modelOptions.value[0]?.value ?? ''
+  }
+  if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
+    selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+  }
   if (lastPermissionSeedKey !== projectContextKey) {
     const configuredDefaultMode = resolveProjectDefaultPermissionMode()
     if (configuredDefaultMode) {
@@ -290,14 +397,112 @@ async function ensureConversationProjectContext(connectionId: string, nextProjec
     }
     lastPermissionSeedKey = projectContextKey
   }
-  lastProjectContextKey = projectContextKey
+}
+
+async function ensureConversationComposerContext(connectionId: string, nextProjectId: string) {
+  const projectContextKey = `${connectionId}:${nextProjectId}`
+  if (lastComposerContextKey === projectContextKey) {
+    return
+  }
+
+  composerContextReadyKey.value = ''
+  const startedAt = performance.now()
+  await Promise.all([
+    workspaceStore.ensureProjectRuntimeConfig(nextProjectId, connectionId),
+    catalogStore.ensureLoaded(connectionId),
+    agentStore.ensureLoaded(connectionId),
+    teamStore.ensureLoaded(connectionId),
+  ])
+  seedComposerSelections(projectContextKey)
+  lastComposerContextKey = projectContextKey
+  composerContextReadyKey.value = projectContextKey
+  logDevTiming('composer-context', startedAt, projectContextKey)
+}
+
+async function ensureConversationContextPaneData(connectionId: string, nextProjectId: string) {
+  const projectContextKey = `${connectionId}:${nextProjectId}`
+  if (lastContextPaneKey === projectContextKey) {
+    return
+  }
+
+  const startedAt = performance.now()
+  await Promise.all([
+    resourceStore.ensureProjectResources(nextProjectId, connectionId),
+    artifactStore.ensureProjectDeliverables(nextProjectId, connectionId),
+  ])
+  lastContextPaneKey = projectContextKey
+  logDevTiming('context-pane', startedAt, projectContextKey)
+}
+
+function recentProjectConversations(nextProjectId: string) {
+  const combined = [
+    ...(workspaceStore.activeOverview?.recentConversations ?? []),
+    ...(workspaceStore.getProjectDashboard(nextProjectId)?.recentConversations ?? []),
+  ].filter(conversation => conversation.projectId === nextProjectId)
+
+  const byId = new Map(combined.map(conversation => [conversation.id, conversation]))
+  return [...byId.values()].sort((left, right) => right.updatedAt - left.updatedAt)
+}
+
+async function resolveBareConversationRoute() {
+  const nextProjectId = projectId.value
+  const nextWorkspaceId = workspaceId.value
+  const connectionId = shell.activeWorkspaceConnectionId
+
+  if (conversationId.value || !nextProjectId || !nextWorkspaceId) {
+    return conversationId.value || null
+  }
+
+  const taskKey = `${connectionId}:${nextProjectId}`
+  if (conversationEntryPromise && conversationEntryKey === taskKey) {
+    return await conversationEntryPromise
+  }
+
+  const task = (async () => {
+    resolvingConversationEntry.value = true
+    const startedAt = performance.now()
+    try {
+      let conversations = recentProjectConversations(nextProjectId)
+      if (!conversations.length && connectionId) {
+        await workspaceStore.ensureWorkspaceBootstrap(connectionId)
+        conversations = recentProjectConversations(nextProjectId)
+      }
+      if (!conversations.length && connectionId) {
+        await workspaceStore.loadProjectDashboard(nextProjectId, connectionId)
+        conversations = recentProjectConversations(nextProjectId)
+      }
+
+      const targetConversation = conversations[0] ?? null
+      if (!targetConversation) {
+        return null
+      }
+
+      await router.replace(
+        createProjectConversationTarget(nextWorkspaceId, nextProjectId, targetConversation.id),
+      )
+      return targetConversation.id
+    } finally {
+      resolvingConversationEntry.value = false
+      logDevTiming('entry-resolve', startedAt, taskKey)
+    }
+  })()
+
+  conversationEntryKey = taskKey
+  conversationEntryPromise = task
+  try {
+    return await task
+  } finally {
+    if (conversationEntryPromise === task) {
+      conversationEntryPromise = null
+    }
+  }
 }
 
 async function ensureRuntimeSession() {
-  const nextConversationId = conversationId.value
   const nextProjectId = projectId.value
   const connectionId = shell.activeWorkspaceConnectionId
   const sessionToken = shell.activeWorkspaceSession?.token ?? ''
+  const nextConversationId = conversationId.value || await resolveBareConversationRoute()
 
   if (!nextConversationId || !nextProjectId || !connectionId || !sessionToken) {
     return
@@ -318,17 +523,30 @@ async function ensureRuntimeSession() {
   }
 
   const task = (async () => {
+    const startedAt = performance.now()
     await workspaceAccessControlStore.ensureAuthorizationContext(connectionId)
     await userProfileStore.load(connectionId)
-    await ensureConversationProjectContext(connectionId, nextProjectId)
+    await runtime.bootstrap()
 
-    if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {
-      selectedModelId.value = modelOptions.value[0]?.value ?? ''
-    }
-    if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
-      selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+    const existingSession = runtime.sessions.find(session =>
+      session.conversationId === nextConversationId
+      && session.projectId === nextProjectId
+      && session.sessionKind !== 'pet')
+
+    if (existingSession) {
+      await runtime.loadSession(existingSession.id)
+      void ensureConversationComposerContext(connectionId, nextProjectId)
+      void ensureConversationContextPaneData(connectionId, nextProjectId)
+      logDevTiming('session-load', startedAt, `${nextProjectId}:${nextConversationId}`)
+      return
     }
 
+    await ensureConversationComposerContext(connectionId, nextProjectId)
+    if (baseConversationSetupState.value) {
+      logDevTiming('session-create-skipped', startedAt, `${nextProjectId}:${nextConversationId}`)
+      return
+    }
+    seedComposerSelections(`${connectionId}:${nextProjectId}`)
     await runtime.ensureSession({
       conversationId: nextConversationId,
       projectId: nextProjectId,
@@ -337,6 +555,8 @@ async function ensureRuntimeSession() {
       selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
       executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
     })
+    void ensureConversationContextPaneData(connectionId, nextProjectId)
+    logDevTiming('session-create', startedAt, `${nextProjectId}:${nextConversationId}`)
   })()
 
   lastSessionKey = sessionKey
@@ -359,7 +579,14 @@ watch(renderedMessages, (messages) => {
 }, { deep: true })
 
 watch(
-  () => [conversationId.value, projectId.value, shell.activeWorkspaceConnectionId, shell.activeWorkspaceSession?.token],
+  () => [
+    conversationId.value,
+    projectId.value,
+    shell.activeWorkspaceConnectionId,
+    shell.activeWorkspaceSession?.token,
+    hasModelOptions.value,
+    hasActorOptions.value,
+  ],
   () => {
     if (shell.activeWorkspaceConnectionId && shell.activeWorkspaceSession?.token) {
       void ensureRuntimeSession()
@@ -370,6 +597,19 @@ watch(
 
 async function createConversationFromEmpty() {
   await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, createConversationId()))
+}
+
+async function openConversationSetupDestination(actionId: ConversationSetupState['actions'][number]['id']) {
+  if (!workspaceId.value || !projectId.value) {
+    return
+  }
+
+  if (actionId === 'open-models') {
+    await router.push(createWorkspaceConsoleSurfaceTarget('workspace-console-models', workspaceId.value))
+    return
+  }
+
+  await router.push(createProjectSurfaceTarget('project-settings', workspaceId.value, projectId.value))
 }
 
 async function submitRuntimeTurn() {
@@ -470,19 +710,24 @@ function resolveMessageResources(message: Message): WorkspaceResourceRecord[] {
 }
 
 function resolveMessageArtifacts(message: Message): MessageArtifactOption[] {
-  return (message.artifacts ?? []).map((artifactRef) => {
-    const artifactId = typeof artifactRef === 'string' ? artifactRef : artifactRef.artifactId
+  return (message.deliverableRefs ?? []).map((deliverableRef) => {
+    const artifactId = typeof deliverableRef === 'string' ? deliverableRef : deliverableRef.artifactId
     const artifact = artifactMap.value.get(artifactId)
+    const version = typeof deliverableRef === 'string'
+      ? artifact?.latestVersion
+      : (deliverableRef.version ?? artifact?.latestVersion)
+
     return {
       id: artifactId,
-      label: artifact?.title ?? (typeof artifactRef === 'string' ? artifactId : artifactRef.title) ?? artifactId,
-      kindLabel: `v${(typeof artifactRef === 'string' ? undefined : artifactRef.version) ?? artifact?.latestVersion ?? '?'}`,
+      label: artifact?.title ?? (typeof deliverableRef === 'string' ? artifactId : deliverableRef.title) ?? artifactId,
+      kindLabel: version ? `v${version}` : undefined,
+      version,
     }
   })
 }
 
-function openArtifact(artifactId: string) {
-  shell.selectDeliverable(artifactId)
+function openArtifact(artifactId: string, version?: number) {
+  shell.selectDeliverable(artifactId, version)
   shell.setRightSidebarCollapsed(false)
   void router.replace({
     name: 'project-conversation',
@@ -526,7 +771,9 @@ async function rejectMemoryProposal() {
     <div class="flex min-w-0 flex-1 flex-col px-2 pb-6">
       <ConversationTabsBar />
 
-      <div v-if="!conversationId" class="flex flex-1 items-center justify-center">
+      <div v-if="!conversationId && resolvingConversationEntry" class="flex flex-1" />
+
+      <div v-else-if="!conversationId" class="flex flex-1 items-center justify-center">
         <UiEmptyState :title="t('conversation.empty.title')" :description="t('conversation.empty.description')">
           <template #actions>
             <UiButton @click="createConversationFromEmpty">
@@ -556,7 +803,7 @@ async function rejectMemoryProposal() {
               :focused-tool-id="focusedToolByMessageId[message.id]"
               :approval-resolving="runtime.isApprovalResolving(message.approval?.id)"
               @toggle-detail="toggleDetail"
-              @open-artifact="openArtifact"
+              @open-artifact="(payload) => openArtifact(payload.id, payload.version)"
               @approve="approveMessageApproval"
               @reject="rejectMessageApproval"
               @focus-tool="focusMessageTool"
@@ -564,9 +811,20 @@ async function rejectMemoryProposal() {
 
             <UiEmptyState
               v-if="!renderedMessages.length"
-              :title="t('conversation.messages.emptyTitle')"
-              :description="t('conversation.messages.emptyDescription')"
-            />
+              :title="conversationSetupState?.title ?? t('conversation.messages.emptyTitle')"
+              :description="conversationSetupState?.description ?? t('conversation.messages.emptyDescription')"
+            >
+              <template v-if="conversationSetupState" #actions>
+                <UiButton
+                  v-for="action in conversationSetupState.actions"
+                  :key="action.id"
+                  :data-testid="`conversation-setup-${action.id}`"
+                  @click="openConversationSetupDestination(action.id)"
+                >
+                  {{ action.label }}
+                </UiButton>
+              </template>
+            </UiEmptyState>
           </div>
         </div>
 
@@ -629,19 +887,40 @@ async function rejectMemoryProposal() {
           class="mx-auto mt-4 w-full max-w-[840px]"
         >
           <UiStatusCallout
-            v-if="runtime.error"
+            v-if="conversationSetupState"
+            data-testid="conversation-setup-callout"
+            class="mx-1 mb-1"
+            :title="conversationSetupState.title"
+            :description="conversationSetupState.description"
+          >
+            <div class="flex flex-wrap gap-2">
+              <UiButton
+                v-for="action in conversationSetupState.actions"
+                :key="action.id"
+                size="sm"
+                :data-testid="`conversation-setup-${action.id}`"
+                @click="openConversationSetupDestination(action.id)"
+              >
+                {{ action.label }}
+              </UiButton>
+            </div>
+          </UiStatusCallout>
+
+          <UiStatusCallout
+            v-else-if="visibleRuntimeError"
             class="mx-1 mb-1"
             tone="error"
-            :description="runtime.error"
+            :description="visibleRuntimeError"
             role="alert"
           />
 
           <div class="px-5 pb-3 pt-3">
             <UiTextarea
               v-model="messageDraft"
+              :disabled="!!conversationSetupState"
               class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus:border-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               :rows="3"
-              :placeholder="t('conversation.composer.placeholder')"
+              :placeholder="composerPlaceholder"
               @keydown="handleComposerKeydown"
             />
 
@@ -674,6 +953,7 @@ async function rejectMemoryProposal() {
                       v-model="selectedPermissionMode"
                       data-testid="conversation-permission-select"
                       :options="permissionOptions"
+                      :disabled="!!conversationSetupState"
                       class="h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
                     />
                   </div>

@@ -38,6 +38,8 @@ interface CatalogActionContext {
 }
 
 export function createCatalogActions(context: CatalogActionContext) {
+  const inflightLoads = new Map<string, Promise<void>>()
+
   function replaceManagementProjection(
     connectionId: string,
     nextManagementProjection: CapabilityManagementProjection,
@@ -87,6 +89,45 @@ export function createCatalogActions(context: CatalogActionContext) {
           ...context.errors.value,
           [connectionId]: cause instanceof Error ? cause.message : 'Failed to load workspace catalog',
         }
+      }
+    }
+  }
+
+  function hasCatalogCache(connectionId: string) {
+    return Boolean(
+      context.snapshots.value[connectionId]
+      && context.managementProjectionsByConnection.value[connectionId]
+      && context.toolsByConnection.value[connectionId],
+    )
+  }
+
+  async function ensureLoaded(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { connectionId } = resolvedClient
+    if (!options.force && hasCatalogCache(connectionId)) {
+      return
+    }
+
+    const inflight = inflightLoads.get(connectionId)
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    const task = load(connectionId)
+    inflightLoads.set(connectionId, task)
+    try {
+      await task
+    } finally {
+      if (inflightLoads.get(connectionId) === task) {
+        inflightLoads.delete(connectionId)
       }
     }
   }
@@ -382,6 +423,7 @@ export function createCatalogActions(context: CatalogActionContext) {
 
   return {
     load,
+    ensureLoaded,
     refreshManagementProjection,
     setAssetDisabled,
     getSkillDocument,

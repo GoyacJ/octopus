@@ -50,19 +50,46 @@ function buildDeliverableRefs(records: DeliverableSummary[]): ArtifactVersionRef
   })
 }
 
-function uniqueArtifactIds(detail: RuntimeSessionDetail): string[] {
-  const ids = new Set<string>()
-
-  for (const ref of detail.run.artifactRefs ?? []) {
-    ids.add(ref.artifactId)
+function normalizeDeliverableRef(
+  ref: string | ArtifactVersionReference | undefined,
+  knownRefs: Map<string, ArtifactVersionReference>,
+): ArtifactVersionReference | null {
+  if (!ref) {
+    return null
   }
-  for (const message of detail.messages) {
-    for (const artifactRef of message.artifacts ?? []) {
-      ids.add(typeof artifactRef === 'string' ? artifactRef : artifactRef.artifactId)
+  if (typeof ref === 'string') {
+    return knownRefs.get(ref) ?? null
+  }
+  return ref
+}
+
+function collectConversationDeliverableRefs(
+  detail: RuntimeSessionDetail,
+  knownRefs: Map<string, ArtifactVersionReference>,
+): ArtifactVersionReference[] {
+  const refsById = new Map<string, ArtifactVersionReference>()
+
+  for (const ref of detail.run.deliverableRefs ?? []) {
+    const normalized = normalizeDeliverableRef(ref, knownRefs)
+    if (normalized) {
+      refsById.set(normalized.artifactId, normalized)
     }
   }
 
-  return [...ids]
+  for (const message of detail.messages) {
+    for (const ref of message.deliverableRefs ?? []) {
+      const normalized = normalizeDeliverableRef(ref, knownRefs)
+      if (!normalized) {
+        continue
+      }
+      const existing = refsById.get(normalized.artifactId)
+      if (!existing || normalized.version >= existing.version) {
+        refsById.set(normalized.artifactId, normalized)
+      }
+    }
+  }
+
+  return [...refsById.values()]
 }
 
 function deliverablePromotionPriority(state: DeliverableSummary['promotionState']): number {
@@ -86,6 +113,7 @@ export const useArtifactStore = defineStore('artifact', () => {
   const loadingScopes = ref<Record<string, boolean>>({})
   const savingScopes = ref<Record<string, boolean>>({})
   const errors = ref<Record<string, string>>({})
+  const inflightLoads = new Map<string, Promise<unknown>>()
 
   const shell = useShellStore()
   const workspaceStore = useWorkspaceStore()
@@ -227,7 +255,6 @@ export const useArtifactStore = defineStore('artifact', () => {
         ...projectDeliverablesByScope.value,
         [scope]: records,
       }
-      shell.hydrateDeliverableSelection(buildDeliverableRefs(records))
       return records
     } catch (cause) {
       if (requestTokens.value[scope] === token) {
@@ -366,18 +393,165 @@ export const useArtifactStore = defineStore('artifact', () => {
     }
   }
 
+  function hasProjectDeliverablesCache(projectId: string, workspaceConnectionId?: string) {
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!connectionId || !projectId) {
+      return false
+    }
+    return Object.prototype.hasOwnProperty.call(
+      projectDeliverablesByScope.value,
+      projectScopeKey(connectionId, projectId),
+    )
+  }
+
+  function hasDeliverableDetailCache(deliverableId: string, workspaceConnectionId?: string) {
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!connectionId || !deliverableId) {
+      return false
+    }
+    return Object.prototype.hasOwnProperty.call(
+      deliverableDetailsByScope.value,
+      deliverableScopeKey(connectionId, deliverableId),
+    )
+  }
+
+  function hasDeliverableVersionsCache(deliverableId: string, workspaceConnectionId?: string) {
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!connectionId || !deliverableId) {
+      return false
+    }
+    return Object.prototype.hasOwnProperty.call(
+      deliverableVersionsByScope.value,
+      deliverableScopeKey(connectionId, deliverableId),
+    )
+  }
+
+  function hasDeliverableContentCache(
+    deliverableId: string,
+    version: number,
+    workspaceConnectionId?: string,
+  ) {
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!connectionId || !deliverableId) {
+      return false
+    }
+    return Object.prototype.hasOwnProperty.call(
+      deliverableContentsByScope.value,
+      deliverableVersionScopeKey(connectionId, deliverableId, version),
+    )
+  }
+
+  async function runInflightLoad<T>(scope: string, task: () => Promise<T>): Promise<T> {
+    const existing = inflightLoads.get(scope)
+    if (existing) {
+      return await existing as T
+    }
+
+    const promise = task()
+    inflightLoads.set(scope, promise)
+    try {
+      return await promise
+    } finally {
+      if (inflightLoads.get(scope) === promise) {
+        inflightLoads.delete(scope)
+      }
+    }
+  }
+
+  async function ensureProjectDeliverables(
+    projectId = workspaceStore.currentProjectId,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!projectId) {
+      return []
+    }
+    if (!options.force && hasProjectDeliverablesCache(projectId, workspaceConnectionId)) {
+      const connectionId = workspaceConnectionId ?? activeConnectionId.value
+      return connectionId
+        ? projectDeliverablesByScope.value[projectScopeKey(connectionId, projectId)] ?? []
+        : []
+    }
+
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    const scope = connectionId ? projectScopeKey(connectionId, projectId) : `project:${projectId}`
+    return await runInflightLoad(scope, () => loadProjectDeliverables(projectId, workspaceConnectionId))
+  }
+
+  async function ensureDeliverableDetail(
+    deliverableId: string,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!deliverableId) {
+      return null
+    }
+    if (!options.force && hasDeliverableDetailCache(deliverableId, workspaceConnectionId)) {
+      const connectionId = workspaceConnectionId ?? activeConnectionId.value
+      return connectionId
+        ? deliverableDetailsByScope.value[deliverableScopeKey(connectionId, deliverableId)] ?? null
+        : null
+    }
+
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    const scope = connectionId ? `${deliverableScopeKey(connectionId, deliverableId)}:detail` : `detail:${deliverableId}`
+    return await runInflightLoad(scope, () => loadDeliverableDetail(deliverableId, workspaceConnectionId))
+  }
+
+  async function ensureDeliverableVersions(
+    deliverableId: string,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!deliverableId) {
+      return []
+    }
+    if (!options.force && hasDeliverableVersionsCache(deliverableId, workspaceConnectionId)) {
+      const connectionId = workspaceConnectionId ?? activeConnectionId.value
+      return connectionId
+        ? deliverableVersionsByScope.value[deliverableScopeKey(connectionId, deliverableId)] ?? []
+        : []
+    }
+
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    const scope = connectionId ? `${deliverableScopeKey(connectionId, deliverableId)}:versions` : `versions:${deliverableId}`
+    return await runInflightLoad(scope, () => loadDeliverableVersions(deliverableId, workspaceConnectionId))
+  }
+
+  async function ensureDeliverableVersionContent(
+    deliverableId: string,
+    version: number,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!deliverableId) {
+      return null
+    }
+    if (!options.force && hasDeliverableContentCache(deliverableId, version, workspaceConnectionId)) {
+      const connectionId = workspaceConnectionId ?? activeConnectionId.value
+      return connectionId
+        ? deliverableContentsByScope.value[deliverableVersionScopeKey(connectionId, deliverableId, version)] ?? null
+        : null
+    }
+
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    const scope = connectionId ? deliverableVersionScopeKey(connectionId, deliverableId, version) : `content:${deliverableId}:${version}`
+    return await runInflightLoad(scope, () => loadDeliverableVersionContent(deliverableId, version, workspaceConnectionId))
+  }
+
   async function ensureDeliverableState(
     deliverableId = shell.selectedDeliverableId,
     version = resolvedSelectedVersion.value,
     workspaceConnectionId?: string,
+    options: { includeContent?: boolean, force?: boolean } = {},
   ) {
     if (!deliverableId) {
       return null
     }
 
     const [detail, versions] = await Promise.all([
-      loadDeliverableDetail(deliverableId, workspaceConnectionId),
-      loadDeliverableVersions(deliverableId, workspaceConnectionId),
+      ensureDeliverableDetail(deliverableId, workspaceConnectionId, options),
+      ensureDeliverableVersions(deliverableId, workspaceConnectionId, options),
     ])
 
     const targetVersion = version
@@ -386,7 +560,14 @@ export const useArtifactStore = defineStore('artifact', () => {
       ?? null
     if (targetVersion) {
       shell.setSelectedDeliverableVersion(targetVersion)
-      await loadDeliverableVersionContent(deliverableId, targetVersion, workspaceConnectionId)
+      if (options.includeContent !== false) {
+        await ensureDeliverableVersionContent(
+          deliverableId,
+          targetVersion,
+          workspaceConnectionId,
+          options,
+        )
+      }
     }
 
     return detail
@@ -560,26 +741,14 @@ export const useArtifactStore = defineStore('artifact', () => {
       return
     }
 
-    const projectScope = projectScopeKey(connectionId, detail.summary.projectId)
-    let records = projectDeliverablesByScope.value[projectScope]
-    if (!records?.length) {
-      records = await loadProjectDeliverables(detail.summary.projectId, connectionId)
-    }
+    const records = await ensureProjectDeliverables(detail.summary.projectId, connectionId)
 
     const knownRefs = buildDeliverableRefs(records ?? [])
     const refsById = new Map(knownRefs.map(ref => [ref.artifactId, ref]))
-    const runtimeRefs = (detail.run.artifactRefs ?? [])
-      .filter(ref => ref.artifactId)
-    const messageRefs = uniqueArtifactIds(detail)
-      .map(artifactId => refsById.get(artifactId))
-      .filter((ref): ref is ArtifactVersionReference => Boolean(ref))
+    const nextRefs = collectConversationDeliverableRefs(detail, refsById)
 
-    const nextRefs = [...runtimeRefs, ...messageRefs]
-      .filter((ref, index, items) => items.findIndex(candidate => candidate.artifactId === ref.artifactId) === index)
-
-    shell.hydrateDeliverableSelection(nextRefs)
-    if (shell.selectedDeliverableId) {
-      await ensureDeliverableState(shell.selectedDeliverableId, shell.selectedDeliverableVersion, connectionId)
+    if (nextRefs.length || !shell.selectedDeliverableId) {
+      shell.hydrateDeliverableSelection(nextRefs)
     }
   }
 
@@ -635,9 +804,13 @@ export const useArtifactStore = defineStore('artifact', () => {
     saving,
     error,
     loadProjectDeliverables,
+    ensureProjectDeliverables,
     loadDeliverableDetail,
+    ensureDeliverableDetail,
     loadDeliverableVersions,
+    ensureDeliverableVersions,
     loadDeliverableVersionContent,
+    ensureDeliverableVersionContent,
     ensureDeliverableState,
     updateDraft,
     resetDraft,

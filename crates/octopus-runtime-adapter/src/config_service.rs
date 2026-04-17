@@ -13,6 +13,7 @@ impl RuntimeAdapter {
         &self,
         documents: &[RuntimeConfigDocumentRecord],
         configured_model_id: &str,
+        api_key: Option<&str>,
     ) -> Result<RuntimeConfiguredModelProbeResult, AppError> {
         let validation = self.validate_registry_documents(documents)?;
         if !validation.valid {
@@ -76,8 +77,13 @@ impl RuntimeAdapter {
             });
         }
 
+        let mut probe_target = resolved_target.clone();
+        if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
+            probe_target.credential_ref = Some(api_key.to_string());
+        }
+
         let response = match self
-            .execute_resolved_prompt(&resolved_target, "Reply with exactly OK.", None)
+            .execute_resolved_prompt(&probe_target, "Reply with exactly OK.", None)
             .await
         {
             Ok(response) => response,
@@ -255,8 +261,51 @@ impl RuntimeConfigService for RuntimeAdapter {
         }
 
         let documents = self.patched_documents(scope, None, None, &input.patch)?;
-        self.probe_configured_model_documents(&documents, &input.configured_model_id)
-            .await
+        self.probe_configured_model_documents(
+            &documents,
+            &input.configured_model_id,
+            input.api_key.as_deref(),
+        )
+        .await
+    }
+
+    async fn upsert_configured_model_credential(
+        &self,
+        input: RuntimeConfiguredModelCredentialUpsertInput,
+    ) -> Result<RuntimeConfiguredModelCredentialRecord, AppError> {
+        let configured_model_id = input.configured_model_id.trim();
+        if configured_model_id.is_empty() {
+            return Err(AppError::invalid_input(
+                "configured model id is required for runtime credential storage",
+            ));
+        }
+        if input.api_key.trim().is_empty() {
+            return Err(AppError::invalid_input("apiKey is required"));
+        }
+
+        let credential_ref = self.configured_model_secret_reference(configured_model_id);
+        self.state
+            .secret_store
+            .put_secret(&credential_ref, input.api_key.trim())?;
+
+        Ok(RuntimeConfiguredModelCredentialRecord {
+            configured_model_id: configured_model_id.to_string(),
+            credential_ref,
+            storage_kind: "os-keyring".to_string(),
+            status: "configured".to_string(),
+        })
+    }
+
+    async fn delete_configured_model_credential(
+        &self,
+        configured_model_id: &str,
+    ) -> Result<(), AppError> {
+        let configured_model_id = configured_model_id.trim();
+        if configured_model_id.is_empty() {
+            return Ok(());
+        }
+        let credential_ref = self.configured_model_secret_reference(configured_model_id);
+        self.state.secret_store.delete_secret(&credential_ref)
     }
 
     async fn save_config(

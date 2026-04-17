@@ -36,6 +36,7 @@ export const useTeamStore = defineStore('team', () => {
   const errors = ref<Record<string, string>>({})
   const requestTokens = ref<Record<string, number>>({})
   const projectLinkRequestTokens = ref<Record<string, number>>({})
+  const inflightLoads = new Map<string, Promise<void>>()
 
   const workspaceStore = useWorkspaceStore()
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
@@ -115,6 +116,37 @@ export const useTeamStore = defineStore('team', () => {
           ...errors.value,
           [connectionId]: cause instanceof Error ? cause.message : 'Failed to load teams',
         }
+      }
+    }
+  }
+
+  async function ensureLoaded(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { connectionId } = resolvedClient
+    if (!options.force && Object.prototype.hasOwnProperty.call(teamsByConnection.value, connectionId)) {
+      return
+    }
+
+    const inflight = inflightLoads.get(connectionId)
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    const task = load(connectionId)
+    inflightLoads.set(connectionId, task)
+    try {
+      await task
+    } finally {
+      if (inflightLoads.get(connectionId) === task) {
+        inflightLoads.delete(connectionId)
       }
     }
   }
@@ -250,6 +282,7 @@ export const useTeamStore = defineStore('team', () => {
     currentProjectLinks,
     error,
     load,
+    ensureLoaded,
     loadProjectLinks,
     create,
     update,

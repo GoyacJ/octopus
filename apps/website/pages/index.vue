@@ -82,9 +82,9 @@ const features: HomeFeature[] = [
     <UiSectionHero
       align="split"
       :badge="t('site.status')"
-      title="构建您的私有化"
-      highlight="数字员工团队"
-      subtitle="在信创环境或私有云中，部署安全、可控、极速的 AI 专家集群与组织知识大脑。"
+      :title="t('pages.home.title')"
+      :highlight="t('pages.home.highlight')"
+      :subtitle="t('pages.home.subtitle')"
     >
       <template #actions>
         <UiButton to="/book-demo" size="lg" class="px-10 h-16 text-lg font-black group shadow-2xl shadow-[var(--website-accent)]/20">

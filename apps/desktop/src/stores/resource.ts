@@ -39,6 +39,7 @@ export const useResourceStore = defineStore('resource', () => {
   const childrenByConnection = ref<ResourceMap<WorkspaceResourceChildrenRecord[]>>({})
   const requestTokens = ref<Record<string, number>>({})
   const errors = ref<Record<string, string>>({})
+  const inflightLoads = new Map<string, Promise<WorkspaceResourceRecord[] | void>>()
 
   const workspaceStore = useWorkspaceStore()
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
@@ -227,6 +228,37 @@ export const useResourceStore = defineStore('resource', () => {
           ...errors.value,
           [connectionId]: cause instanceof Error ? cause.message : 'Failed to load project resources',
         }
+      }
+    }
+  }
+
+  async function ensureProjectResources(
+    projectId = workspaceStore.currentProjectId,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!projectId) {
+      return []
+    }
+
+    const connectionId = workspaceConnectionId ?? activeConnectionId.value
+    if (!options.force && connectionId && Object.prototype.hasOwnProperty.call(projectResources.value, projectKey(connectionId, projectId))) {
+      return projectResources.value[projectKey(connectionId, projectId)] ?? []
+    }
+
+    const scope = connectionId ? projectKey(connectionId, projectId) : `project:${projectId}`
+    const inflight = inflightLoads.get(scope)
+    if (inflight && !options.force) {
+      return await inflight as WorkspaceResourceRecord[]
+    }
+
+    const task = loadProjectResources(projectId, workspaceConnectionId)
+    inflightLoads.set(scope, task)
+    try {
+      return await task
+    } finally {
+      if (inflightLoads.get(scope) === task) {
+        inflightLoads.delete(scope)
       }
     }
   }
@@ -461,6 +493,7 @@ export const useResourceStore = defineStore('resource', () => {
     getCachedChildren,
     loadWorkspaceResources,
     loadProjectResources,
+    ensureProjectResources,
     createWorkspaceResource,
     createProjectResource,
     createProjectResourceFolder,

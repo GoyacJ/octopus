@@ -26,7 +26,7 @@ const props = defineProps<{
   permissionLabel: string
   resources: WorkspaceResourceRecord[]
   attachments: ConversationAttachment[]
-  artifacts: Array<{ id: string, label: string, kindLabel?: string }>
+  artifacts: Array<{ id: string, label: string, kindLabel?: string, version?: number }>
   isExpanded: boolean
   focusedToolId?: string
   approvalResolving?: boolean
@@ -36,7 +36,7 @@ const emit = defineEmits<{
   (event: 'toggle-detail', messageId: string): void
   (event: 'rollback', messageId: string): void
   (event: 'open-resource', resourceId: string): void
-  (event: 'open-artifact', artifactId: string): void
+  (event: 'open-artifact', payload: { id: string, version?: number }): void
   (event: 'approve', approvalId: string): void
   (event: 'reject', approvalId: string): void
   (event: 'focus-tool', payload: { messageId: string, toolId: string }): void
@@ -254,7 +254,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             v-for="artifact in artifacts"
             :key="artifact.id"
             class="flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-accent px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-accent/80"
-            @click="emit('open-artifact', artifact.id)"
+            @click="emit('open-artifact', { id: artifact.id, version: artifact.version })"
           >
             <FileText :size="13" />
             <span>{{ artifact.label }}</span>

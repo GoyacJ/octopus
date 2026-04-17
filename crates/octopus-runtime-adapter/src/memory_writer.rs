@@ -568,6 +568,7 @@ mod tests {
             content: content.into(),
             request_id: None,
             total_tokens: None,
+            deliverables: Vec::new(),
         }
     }
 

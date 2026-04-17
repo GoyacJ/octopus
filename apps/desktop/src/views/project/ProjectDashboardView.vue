@@ -63,7 +63,7 @@ async function loadDashboard() {
   }
   await Promise.all([
     workspaceStore.loadProjectDashboard(projectId),
-    artifactStore.loadProjectDeliverables(projectId),
+    artifactStore.ensureProjectDeliverables(projectId),
   ])
 }
 

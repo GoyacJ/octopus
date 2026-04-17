@@ -813,6 +813,7 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
                     auth_target: None,
                     usage_summary: RuntimeUsageSummary::default(),
                     artifact_refs: Vec::new(),
+                    deliverable_refs: Vec::new(),
                     trace_context: trace_context::runtime_trace_context(
                         &aggregate.detail.summary.id,
                         Some(subrun.run_id.clone()),

@@ -429,6 +429,7 @@ mod tests {
             auth_target: None,
             usage_summary: RuntimeUsageSummary::default(),
             artifact_refs: Vec::new(),
+            deliverable_refs: Vec::new(),
             trace_context: RuntimeTraceContext::default(),
             checkpoint: RuntimeRunCheckpoint::default(),
             capability_plan_summary: RuntimeCapabilityPlanSummary::default(),

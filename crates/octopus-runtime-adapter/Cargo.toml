@@ -12,6 +12,7 @@ workspace = true
 api = { path = "../api" }
 async-trait.workspace = true
 base64 = "0.22"
+keyring = "3"
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
 octopus-platform = { path = "../octopus-platform" }

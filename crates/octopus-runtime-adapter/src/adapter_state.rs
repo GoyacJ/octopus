@@ -7,10 +7,19 @@ pub(super) struct RuntimeState {
     pub(super) authorization: Arc<dyn AuthorizationService>,
     pub(super) config_loader: ConfigLoader,
     pub(super) executor: Arc<dyn RuntimeModelDriver>,
+    pub(super) secret_store: Arc<dyn RuntimeSecretStore>,
     pub(super) sessions: Mutex<HashMap<String, RuntimeAggregate>>,
     pub(super) config_snapshots: Mutex<HashMap<String, Value>>,
     pub(super) order: Mutex<Vec<String>>,
     pub(super) broadcasters: Mutex<HashMap<String, broadcast::Sender<RuntimeEventEnvelope>>>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct PendingRuntimeDeliverable {
+    pub(super) detail: DeliverableDetail,
+    pub(super) content: DeliverableVersionContent,
+    pub(super) source_message_id: Option<String>,
+    pub(super) parent_version: Option<u32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -18,6 +27,7 @@ pub(super) struct RuntimeAggregateMetadata {
     pub(super) manifest_snapshot_ref: String,
     pub(super) session_policy_snapshot_ref: String,
     pub(super) primary_run_serialized_session: Value,
+    pub(super) pending_deliverables: BTreeMap<String, PendingRuntimeDeliverable>,
     pub(super) subrun_states: BTreeMap<String, team_runtime::PersistedSubrunState>,
 }
 

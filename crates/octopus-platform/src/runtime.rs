@@ -3,10 +3,11 @@ use octopus_core::{
     AppError, CancelRuntimeSubrunInput, CreateDeliverableVersionInput, CreateRuntimeSessionInput,
     DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
     PromoteDeliverableInput, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
-    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
-    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
-    RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, SubmitRuntimeTurnInput,
+    ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch, RuntimeConfigValidationResult,
+    RuntimeConfiguredModelCredentialRecord, RuntimeConfiguredModelCredentialUpsertInput,
+    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
+    RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary,
+    SubmitRuntimeTurnInput,
 };
 
 #[async_trait]
@@ -124,6 +125,14 @@ pub trait RuntimeConfigService: Send + Sync {
         &self,
         input: RuntimeConfiguredModelProbeInput,
     ) -> Result<RuntimeConfiguredModelProbeResult, AppError>;
+    async fn upsert_configured_model_credential(
+        &self,
+        input: RuntimeConfiguredModelCredentialUpsertInput,
+    ) -> Result<RuntimeConfiguredModelCredentialRecord, AppError>;
+    async fn delete_configured_model_credential(
+        &self,
+        configured_model_id: &str,
+    ) -> Result<(), AppError>;
     async fn save_config(
         &self,
         scope: &str,
@@ -240,6 +249,7 @@ mod tests {
             auth_target: None,
             usage_summary: octopus_core::RuntimeUsageSummary::default(),
             artifact_refs: vec!["runtime-artifact-run-1".into()],
+            deliverable_refs: Vec::new(),
             trace_context: octopus_core::RuntimeTraceContext::default(),
             checkpoint: octopus_core::RuntimeRunCheckpoint::default(),
             capability_plan_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),

@@ -6,6 +6,7 @@ import type {
 } from '@octopus/schema'
 import { Trash2 } from 'lucide-vue-next'
 
+import { enumLabel } from '@/i18n/copy'
 import type { CatalogConfiguredModelRow } from '@/stores/catalog'
 import { UiBadge, UiButton, UiCheckbox, UiDialog, UiEmptyState, UiInput, UiStatusCallout, UiSurface } from '@octopus/ui'
 
@@ -15,6 +16,11 @@ defineProps<{
   selectedConfiguredModel: ConfiguredModelRecord | null
   selectedModel: ModelRegistryRecord | null
   selectedProvider: ProviderRegistryRecord | null
+  selectedApiKey: string
+  selectedCredentialStatusLabel: string
+  selectedCredentialStatusDescription: string
+  selectedCredentialStatusTone: 'info' | 'success' | 'warning' | 'error'
+  selectedCredentialBlocked: boolean
   selectedIsCustomManaged: boolean
   selectedProbeResult: {
     reachable?: boolean
@@ -22,7 +28,6 @@ defineProps<{
     consumedTokens?: number
     requestId?: string
   } | null
-  hasPendingPatch: boolean
   runtimeConfigValidating: boolean
   runtimeConfiguredModelProbing: boolean
   runtimeConfigSaving: boolean
@@ -35,7 +40,7 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
   'update:name': [value: string]
   'update:custom-provider-label': [value: string]
-  'update:credential-ref': [value: string]
+  'update:api-key': [value: string]
   'update:base-url': [value: string]
   'update:total-tokens': [value: string]
   'update:enabled': [value: boolean]
@@ -111,10 +116,19 @@ const emit = defineEmits<{
             {{ t('models.detail.credentialRef') }}
           </p>
           <UiInput
-            :model-value="selectedConfiguredModel.credentialRef ?? ''"
+            :model-value="selectedApiKey"
             data-testid="models-detail-credential-ref"
+            type="password"
             :placeholder="t('models.detail.credentialRefPlaceholder')"
-            @update:model-value="emit('update:credential-ref', String($event))"
+            @update:model-value="emit('update:api-key', String($event))"
+          />
+          <p class="text-xs text-text-tertiary">
+            {{ t('models.security.inputHint') }}
+          </p>
+          <UiStatusCallout
+            :tone="selectedCredentialStatusTone"
+            :title="selectedCredentialStatusLabel"
+            :description="selectedCredentialStatusDescription"
           />
         </div>
 
@@ -182,7 +196,7 @@ const emit = defineEmits<{
               <UiBadge
                 v-for="capability in selectedModel.capabilities"
                 :key="capability.capabilityId"
-                :label="capability.label || capability.capabilityId"
+                :label="enumLabel('modelCapability', capability.capabilityId) || capability.label || capability.capabilityId"
                 subtle
               />
               <p v-if="!selectedModel.capabilities.length" class="text-sm text-text-secondary">
@@ -197,7 +211,7 @@ const emit = defineEmits<{
               <UiBadge
                 v-for="binding in selectedModel.surfaceBindings.filter(item => item.enabled)"
                 :key="binding.surface"
-                :label="binding.surface"
+                :label="enumLabel('modelSurface', binding.surface)"
                 subtle
               />
               <p v-if="!selectedModel.surfaceBindings.some(item => item.enabled)" class="text-sm text-text-secondary">
@@ -222,7 +236,7 @@ const emit = defineEmits<{
               data-testid="models-validate-button"
               variant="ghost"
               size="sm"
-              :disabled="runtimeConfigValidating || runtimeConfiguredModelProbing"
+              :disabled="runtimeConfigValidating || runtimeConfiguredModelProbing || selectedCredentialBlocked"
               @click="emit('validate')"
             >
               {{ t('models.actions.validate') }}
@@ -230,7 +244,7 @@ const emit = defineEmits<{
             <UiButton
               data-testid="models-save-button"
               size="sm"
-              :disabled="runtimeConfigSaving || !hasPendingPatch"
+              :disabled="runtimeConfigSaving || selectedCredentialBlocked"
               @click="emit('save')"
             >
               {{ t('models.actions.save') }}

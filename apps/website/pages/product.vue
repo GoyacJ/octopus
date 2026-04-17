@@ -85,19 +85,15 @@ const capabilities = [
       <div class="container-custom">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div>
-            <h2 class="text-3xl font-bold mb-8 tracking-tight">可信、可控、可审计</h2>
+            <h2 class="text-3xl font-bold mb-8 tracking-tight">{{ t('pages.product.governance.title') }}</h2>
             <div class="space-y-8">
-              <div v-for="i in [
-                { t: '执行边界可控', d: '从工具调用到任务执行，能力边界被清晰约束，数字员工可以真正动手，但不会越权。' },
-                { t: '过程上下文可回放', d: '每一次协作链路、调用记录与结果产物都能被查看、追溯与复盘。' },
-                { t: '治理策略可落地', d: '把权限、角色和审计要求落到系统层，而不是停留在演示级概念。' }
-              ]" :key="i.t" class="flex gap-4" v-reveal>
+              <div v-for="i in (t('pages.product.governance.items') as any)" :key="i.title" class="flex gap-4" v-reveal>
                 <div class="mt-1 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
                 <div>
-                  <h4 class="font-bold mb-1">{{ i.t }}</h4>
-                  <p class="text-sm text-[var(--website-text-muted)] leading-relaxed">{{ i.d }}</p>
+                  <h4 class="font-bold mb-1">{{ i.title }}</h4>
+                  <p class="text-sm text-[var(--website-text-muted)] leading-relaxed">{{ i.desc }}</p>
                 </div>
               </div>
             </div>

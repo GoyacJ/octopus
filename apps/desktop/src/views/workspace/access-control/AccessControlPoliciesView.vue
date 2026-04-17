@@ -35,6 +35,12 @@ import { usePagination } from '@/composables/usePagination'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
 import {
+  getAccessRoleName,
+  getPermissionDisplayDescription,
+  getPermissionDisplayName,
+  getResourceActionLabel,
+} from './display-i18n'
+import {
   createDataResourceTypeOptions,
   createPolicyEffectOptions,
   createResourceTypeOptions,
@@ -146,7 +152,12 @@ const scopeTypeOptions = computed(() => createScopeTypeOptions(t))
 const dataResourceTypeOptions = computed(() => createDataResourceTypeOptions(t))
 const resourceTypeOptions = computed(() => createResourceTypeOptions(t))
 
-const roleMap = computed(() => new Map(accessControlStore.roles.map(role => [role.id, role.name])))
+const roleMap = computed(() =>
+  new Map(accessControlStore.roles.map(role => [role.id, getAccessRoleName(role)])),
+)
+const roleOptions = computed(() =>
+  accessControlStore.roles.map(role => ({ label: getAccessRoleName(role), value: role.id })),
+)
 const subjectOptions = computed(() => ({
   user: accessControlStore.users.map(user => ({ label: user.displayName, value: user.id })),
   org_unit: accessControlStore.orgUnits.map(unit => ({ label: unit.name, value: unit.id })),
@@ -166,9 +177,9 @@ const filteredPermissions = computed(() => {
   return [...accessControlStore.permissionDefinitions]
     .sort((left, right) => left.code.localeCompare(right.code))
     .filter(permission => !normalizedQuery || [
-      permission.name,
+      getPermissionDisplayName(permission),
       permission.code,
-      permission.description,
+      getPermissionDisplayDescription(permission),
       permission.resourceType,
     ].join(' ').toLowerCase().includes(normalizedQuery))
 })
@@ -231,9 +242,9 @@ const filteredResourcePolicies = computed(() => {
   const normalizedQuery = resourcePolicyQuery.value.trim().toLowerCase()
   return [...accessControlStore.resourcePolicies]
     .filter(policy => !resourcePolicyTypeFilter.value || policy.resourceType === resourcePolicyTypeFilter.value)
-    .sort((left, right) => left.action.localeCompare(right.action))
+    .sort((left, right) => getResourceActionLabel(left.action).localeCompare(getResourceActionLabel(right.action)))
     .filter(policy => !normalizedQuery || [
-      policy.action,
+      getResourceActionLabel(policy.action),
       policy.resourceType,
       policy.resourceId,
       resolveSubjectLabel(policy.subjectType, policy.subjectId),
@@ -307,7 +318,7 @@ const visiblePermissionTreeItems = computed<PermissionTreeItem[]>(() => {
     for (const permission of module.permissions) {
       items.push({
         id: permission.code,
-        label: permission.name,
+        label: getPermissionDisplayName(permission),
         description: permission.code,
         depth: 1,
         selectable: true,
@@ -868,7 +879,7 @@ async function handleCreateResourcePolicy() {
     const record = await accessControlStore.createResourcePolicy(toResourcePolicyPayload(createResourcePolicyForm))
     selectedResourcePolicyId.value = record.id
     createResourcePolicyDialogOpen.value = false
-    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), record.action)
+    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), getResourceActionLabel(record.action))
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveResourceFailed')
   } finally {
@@ -890,7 +901,7 @@ async function handleSaveResourcePolicy() {
   try {
     const payload = toResourcePolicyPayload(editResourcePolicyForm)
     await accessControlStore.updateResourcePolicy(selectedResourcePolicy.value.id, payload)
-    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), payload.action)
+    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), getResourceActionLabel(payload.action))
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveResourceFailed')
   } finally {
@@ -905,7 +916,7 @@ async function handleDeleteResourcePolicy() {
 
   submitError.value = ''
   try {
-    const label = selectedResourcePolicy.value.action
+    const label = getResourceActionLabel(selectedResourcePolicy.value.action)
     await accessControlStore.deleteResourcePolicy(selectedResourcePolicy.value.id)
     selectedResourcePolicyId.value = ''
     await notifySuccess(t('accessControl.policies.feedback.toastResourceDeleted'), label)
@@ -957,7 +968,7 @@ async function handleBulkDeleteResourcePolicies() {
     <UiListDetailWorkspace
       v-if="activeSection === 'permissions'"
       :has-selection="Boolean(selectedPermission)"
-      :detail-title="selectedPermission ? selectedPermission.name : ''"
+      :detail-title="selectedPermission ? getPermissionDisplayName(selectedPermission) : ''"
       :detail-subtitle="t('accessControl.policies.permissions.detailSubtitle')"
       :empty-detail-title="t('accessControl.policies.permissions.emptyTitle')"
       :empty-detail-description="t('accessControl.policies.permissions.emptyDescription')"
@@ -1025,11 +1036,11 @@ async function handleBulkDeleteResourcePolicies() {
         <div v-if="selectedPermission" class="space-y-4">
             <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
               <div class="flex flex-wrap items-center gap-2">
-                <div class="text-sm font-semibold text-foreground">{{ selectedPermission.name }}</div>
+                <div class="text-sm font-semibold text-foreground">{{ getPermissionDisplayName(selectedPermission) }}</div>
                 <UiBadge :label="getResourceTypeLabel(t, selectedPermission.resourceType)" subtle />
               </div>
             <div class="mt-2 text-xs text-muted-foreground">{{ selectedPermission.code }}</div>
-            <div class="mt-3 text-sm text-text-secondary">{{ selectedPermission.description }}</div>
+            <div class="mt-3 text-sm text-text-secondary">{{ getPermissionDisplayDescription(selectedPermission) }}</div>
           </div>
 
           <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
@@ -1047,7 +1058,7 @@ async function handleBulkDeleteResourcePolicies() {
                   <UiBadge
                     v-for="action in grant.actions"
                     :key="`${grant.resourceType}:${action}`"
-                    :label="action"
+                    :label="getResourceActionLabel(action)"
                     subtle
                   />
                 </div>
@@ -1179,7 +1190,7 @@ async function handleBulkDeleteResourcePolicies() {
             <UiField :label="t('accessControl.policies.bindings.fields.role')">
               <UiSelect
                 v-model="editRoleBindingForm.roleId"
-                :options="accessControlStore.roles.map(role => ({ label: role.name, value: role.id }))"
+                :options="roleOptions"
               />
             </UiField>
             <UiField :label="t('accessControl.policies.bindings.fields.subjectType')">
@@ -1368,7 +1379,7 @@ async function handleBulkDeleteResourcePolicies() {
     <UiListDetailWorkspace
       v-else
       :has-selection="Boolean(selectedResourcePolicy)"
-      :detail-title="selectedResourcePolicy ? selectedResourcePolicy.action : ''"
+      :detail-title="selectedResourcePolicy ? getResourceActionLabel(selectedResourcePolicy.action) : ''"
       :detail-subtitle="t('accessControl.policies.resources.detailSubtitle')"
       :empty-detail-title="t('accessControl.policies.resources.emptyTitle')"
       :empty-detail-description="t('accessControl.policies.resources.emptyDescription')"
@@ -1436,7 +1447,7 @@ async function handleBulkDeleteResourcePolicies() {
               layout="compact"
               interactive
               :active="selectedResourcePolicyId === policy.id"
-              :title="policy.action"
+              :title="getResourceActionLabel(policy.action)"
               :description="resolveResourceLabel(policy.resourceType, policy.resourceId)"
               @click="selectResourcePolicy(policy.id)"
             >
@@ -1481,7 +1492,7 @@ async function handleBulkDeleteResourcePolicies() {
         <div v-if="selectedResourcePolicy" class="space-y-4">
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ selectedResourcePolicy.action }}</div>
+              <div class="text-sm font-semibold text-foreground">{{ getResourceActionLabel(selectedResourcePolicy.action) }}</div>
               <UiBadge :label="getResourceTypeLabel(t, selectedResourcePolicy.resourceType)" subtle />
               <UiBadge :label="getPolicyEffectLabel(t, selectedResourcePolicy.effect)" subtle />
             </div>
@@ -1561,7 +1572,7 @@ async function handleBulkDeleteResourcePolicies() {
         <UiField :label="t('accessControl.policies.bindings.fields.role')">
           <UiSelect
             v-model="createRoleBindingForm.roleId"
-            :options="accessControlStore.roles.map(role => ({ label: role.name, value: role.id }))"
+            :options="roleOptions"
           />
         </UiField>
         <UiField :label="t('accessControl.policies.bindings.fields.subjectType')">

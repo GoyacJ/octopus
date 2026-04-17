@@ -274,7 +274,108 @@ impl RuntimeModelDriver for FixedTokenRuntimeModelDriver {
             content: format!("fixed token response{prompt_prefix} -> {input}"),
             request_id: Some("fixed-token-request".into()),
             total_tokens: self.total_tokens,
+            deliverables: Vec::new(),
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ExplicitDeliverableRuntimeModelDriver {
+    total_tokens: Option<u32>,
+    content: String,
+    deliverables: Vec<ModelExecutionDeliverable>,
+}
+
+#[async_trait]
+impl RuntimeModelDriver for ExplicitDeliverableRuntimeModelDriver {
+    async fn execute_prompt(
+        &self,
+        _target: &ResolvedExecutionTarget,
+        input: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<ModelExecutionResult, AppError> {
+        Ok(ModelExecutionResult {
+            content: if self.content.is_empty() {
+                format!("explicit deliverable response -> {input}")
+            } else {
+                self.content.clone()
+            },
+            request_id: Some("explicit-deliverable-request".into()),
+            total_tokens: self.total_tokens,
+            deliverables: self.deliverables.clone(),
+        })
+    }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
+        let input = last_user_text(request).unwrap_or_default();
+        let response = self.execute_prompt(target, input, None).await?;
+        let mut events = vec![runtime::AssistantEvent::TextDelta(response.content)];
+        if let Some(total_tokens) = response.total_tokens {
+            events.push(runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 0,
+                output_tokens: total_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }));
+        }
+        events.push(runtime::AssistantEvent::MessageStop);
+        Ok(RuntimeConversationExecution {
+            events,
+            deliverables: response.deliverables,
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+struct InspectingPromptRuntimeModelDriver {
+    targets: Mutex<Vec<ResolvedExecutionTarget>>,
+}
+
+impl InspectingPromptRuntimeModelDriver {
+    fn last_target(&self) -> Option<ResolvedExecutionTarget> {
+        self.targets.lock().expect("targets mutex").last().cloned()
+    }
+}
+
+#[async_trait]
+impl RuntimeModelDriver for InspectingPromptRuntimeModelDriver {
+    async fn execute_prompt(
+        &self,
+        target: &ResolvedExecutionTarget,
+        input: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<ModelExecutionResult, AppError> {
+        self.targets
+            .lock()
+            .expect("targets mutex")
+            .push(target.clone());
+        Ok(ModelExecutionResult {
+            content: format!("inspected -> {input}"),
+            request_id: Some("inspect-request".into()),
+            total_tokens: Some(4),
+            deliverables: Vec::new(),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+struct FailingRuntimeSecretStore;
+
+impl secret_store::RuntimeSecretStore for FailingRuntimeSecretStore {
+    fn put_secret(&self, _reference: &str, _value: &str) -> Result<(), AppError> {
+        Err(AppError::runtime("simulated secret store failure"))
+    }
+
+    fn get_secret(&self, _reference: &str) -> Result<Option<String>, AppError> {
+        Ok(None)
+    }
+
+    fn delete_secret(&self, _reference: &str) -> Result<(), AppError> {
+        Ok(())
     }
 }
 
@@ -340,6 +441,17 @@ impl RuntimeModelDriver for ScriptedConversationRuntimeModelDriver {
             .expect("responses mutex")
             .pop()
             .ok_or_else(|| AppError::runtime("scripted conversation response missing"))
+    }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
+        Ok(RuntimeConversationExecution {
+            events: self.execute_conversation(target, request).await?,
+            deliverables: Vec::new(),
+        })
     }
 }
 
@@ -1064,6 +1176,257 @@ async fn runtime_effective_config_includes_backfilled_upstream_fields() {
             .effective_config
             .pointer("/providerFallbacks/fallbacks/1"),
         Some(&json!("dashscope"))
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn runtime_effective_config_migrates_inline_configured_model_credentials_to_secret_refs() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+    write_json(
+        &workspace_config_path,
+        json!({
+            "configuredModels": {
+                "anthropic-inline": {
+                    "configuredModelId": "anthropic-inline",
+                    "name": "Claude Inline",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": "sk-ant-inline-secret",
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            },
+            "toolCatalog": {
+                "disabledSourceKeys": []
+            }
+        }),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let config = adapter.get_config().await.expect("runtime config");
+    let workspace_source = config
+        .sources
+        .iter()
+        .find(|source| source.scope == "workspace")
+        .expect("workspace source");
+    let workspace_document = workspace_source.document.as_ref().expect("workspace document");
+    let configured_models = workspace_document
+        .get("configuredModels")
+        .and_then(Value::as_object)
+        .expect("configured models");
+    let configured_model = configured_models
+        .get("anthropic-inline")
+        .and_then(Value::as_object)
+        .expect("configured model");
+    let stored_reference = configured_model
+        .get("credentialRef")
+        .and_then(Value::as_str)
+        .expect("credential ref");
+
+    assert!(stored_reference.starts_with("secret-ref:"));
+    assert!(
+        config.secret_references.iter().any(|entry| {
+            entry.scope == "workspace"
+                && entry.path == "configuredModels.anthropic-inline.credentialRef"
+                && entry.status == "reference-present"
+                && entry.reference.as_deref() == Some(stored_reference)
+        }),
+        "expected workspace secret reference status to reflect the migrated configured model credential"
+    );
+    assert!(
+        config.validation.warnings.iter().any(|warning| {
+            warning.contains("unknown runtime config key `toolCatalog`")
+        }),
+        "expected unrelated unknown keys to remain warnings only"
+    );
+
+    let persisted = fs::read_to_string(&workspace_config_path).expect("persisted workspace config");
+    assert!(!persisted.contains("sk-ant-inline-secret"));
+    assert!(persisted.contains("secret-ref:"));
+    assert!(persisted.contains("\"toolCatalog\""));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn runtime_effective_config_redacts_inline_configured_model_credentials_when_migration_fails() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+    write_json(
+        &workspace_config_path,
+        json!({
+            "configuredModels": {
+                "anthropic-inline": {
+                    "configuredModelId": "anthropic-inline",
+                    "name": "Claude Inline",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": "sk-ant-inline-secret",
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor_and_secret_store(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+        Arc::new(FailingRuntimeSecretStore),
+    );
+
+    let config = adapter.get_config().await.expect("runtime config");
+    let workspace_source = config
+        .sources
+        .iter()
+        .find(|source| source.scope == "workspace")
+        .expect("workspace source");
+    let workspace_document = workspace_source.document.as_ref().expect("workspace document");
+    let stored_reference = workspace_document
+        .pointer("/configuredModels/anthropic-inline/credentialRef")
+        .and_then(Value::as_str)
+        .expect("redacted credential ref");
+
+    assert_eq!(stored_reference, "***");
+    assert!(
+        config.secret_references.iter().any(|entry| {
+            entry.scope == "workspace"
+                && entry.path == "configuredModels.anthropic-inline.credentialRef"
+                && entry.status == "migration-failed"
+        }),
+        "expected migration failure to be reported through runtime secret reference status"
+    );
+
+    let persisted = fs::read_to_string(&workspace_config_path).expect("persisted workspace config");
+    assert!(persisted.contains("sk-ant-inline-secret"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn probe_configured_model_resolves_managed_secret_refs_and_supports_api_key_override() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+    write_json(
+        &workspace_config_path,
+        json!({
+            "configuredModels": {
+                "anthropic-inline": {
+                    "configuredModelId": "anthropic-inline",
+                    "name": "Claude Inline",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": "sk-ant-inline-secret",
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+
+    let driver = Arc::new(InspectingPromptRuntimeModelDriver::default());
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        driver.clone(),
+    );
+
+    let migrated_probe = adapter
+        .probe_configured_model(RuntimeConfiguredModelProbeInput {
+            scope: "workspace".into(),
+            configured_model_id: "anthropic-inline".into(),
+            patch: json!({}),
+            api_key: None,
+        })
+        .await
+        .expect("probe configured model");
+    assert!(migrated_probe.valid);
+    assert!(migrated_probe.reachable);
+    assert_eq!(
+        driver
+            .last_target()
+            .and_then(|target| target.credential_ref),
+        Some("sk-ant-inline-secret".into())
+    );
+
+    let override_probe = adapter
+        .probe_configured_model(RuntimeConfiguredModelProbeInput {
+            scope: "workspace".into(),
+            configured_model_id: "anthropic-inline".into(),
+            patch: json!({}),
+            api_key: Some("sk-ant-override-secret".into()),
+        })
+        .await
+        .expect("probe configured model with override");
+    assert!(override_probe.valid);
+    assert!(override_probe.reachable);
+    assert_eq!(
+        driver
+            .last_target()
+            .and_then(|target| target.credential_ref),
+        Some("sk-ant-override-secret".into())
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn upsert_and_delete_runtime_configured_model_credentials_manage_managed_secret_store() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let stored = adapter
+        .upsert_configured_model_credential(RuntimeConfiguredModelCredentialUpsertInput {
+            configured_model_id: "anthropic-inline".into(),
+            provider_id: "anthropic".into(),
+            api_key: "sk-ant-stored-secret".into(),
+        })
+        .await
+        .expect("store configured model credential");
+
+    assert_eq!(stored.storage_kind, "os-keyring");
+    assert_eq!(stored.status, "configured");
+    assert_eq!(
+        adapter
+            .resolve_secret_reference(&stored.credential_ref)
+            .expect("resolve stored secret"),
+        Some("sk-ant-stored-secret".into())
+    );
+
+    adapter
+        .delete_configured_model_credential("anthropic-inline")
+        .await
+        .expect("delete configured model credential");
+    assert_eq!(
+        adapter
+            .resolve_secret_reference(&stored.credential_ref)
+            .expect("resolve deleted secret"),
+        None
     );
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
@@ -4562,6 +4925,7 @@ async fn team_worker_subrun_approval_resume_survives_restart_and_respects_schedu
             resource_ids: Some(Vec::new()),
             attachments: Some(Vec::new()),
             artifacts: Some(Vec::new()),
+            deliverable_refs: None,
             usage: None,
             tool_calls: None,
             process_entries: None,
@@ -6765,8 +7129,17 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
     adapter
@@ -6870,8 +7243,17 @@ async fn submit_turn_filters_runtime_memory_by_actor_scope_kind_and_owner() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
     for record in [
@@ -7000,8 +7382,17 @@ async fn submit_turn_prefers_project_memory_from_subrun_lineage_over_unrelated_b
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
     for record in [
@@ -7164,8 +7555,17 @@ async fn submit_turn_rejects_memory_pollution_candidates() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
 
@@ -7224,8 +7624,17 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
 
@@ -9464,7 +9873,7 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
 }
 
 #[tokio::test]
-async fn submit_turn_persists_deliverable_detail_and_versions_across_reload() {
+async fn submit_turn_does_not_create_deliverable_for_ordinary_assistant_replies() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     write_workspace_config(
@@ -9505,11 +9914,90 @@ async fn submit_turn_persists_deliverable_detail_and_versions_across_reload() {
         .await
         .expect("run");
 
-    let artifact_id = run
+    assert!(run.deliverable_refs.is_empty());
+    let runtime_artifact_id = run
         .artifact_refs
         .first()
         .cloned()
-        .expect("generated deliverable artifact id");
+        .expect("runtime artifact id");
+    assert!(adapter
+        .get_deliverable_detail(&runtime_artifact_id)
+        .expect("deliverable detail query")
+        .is_none());
+
+    let session_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(session_detail
+        .messages
+        .iter()
+        .filter(|message| message.sender_type == "assistant")
+        .all(|message| message
+            .deliverable_refs
+            .as_ref()
+            .is_none_or(Vec::is_empty)));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_persists_explicit_deliverable_detail_and_versions_across_reload() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
+            total_tokens: Some(12),
+            content: "Created the release notes deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("Release Notes Draft".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("release-notes.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# Release Notes Draft\n\n- Runtime deliverables now require explicit output.".into()),
+                data_base64: None,
+            }],
+        }),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-deliverable-persistence",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Deliverable Persistence",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Draft the deliverable body", None),
+        )
+        .await
+        .expect("run");
+
+    let deliverable_ref = run
+        .deliverable_refs
+        .first()
+        .cloned()
+        .expect("generated deliverable ref");
+    let artifact_id = deliverable_ref.artifact_id.clone();
     let detail = adapter
         .get_deliverable_detail(&artifact_id)
         .expect("deliverable detail query")
@@ -9522,6 +10010,7 @@ async fn submit_turn_persists_deliverable_detail_and_versions_across_reload() {
     assert_eq!(detail.latest_version, 1);
     assert_eq!(detail.latest_version_ref.version, 1);
     assert_eq!(detail.latest_version_ref.artifact_id, detail.id);
+    assert_eq!(detail.latest_version_ref.title, "Release Notes Draft");
     assert_eq!(detail.promotion_state, "not-promoted");
 
     let versions = adapter
@@ -9544,18 +10033,40 @@ async fn submit_turn_persists_deliverable_detail_and_versions_across_reload() {
     assert_eq!(content.version, 1);
     assert!(content.editable);
     assert_eq!(content.preview_kind, "markdown");
+    assert_eq!(content.file_name.as_deref(), Some("release-notes.md"));
     assert!(content
         .text_content
         .as_deref()
-        .is_some_and(|value| value.contains("Draft the deliverable body")));
+        .is_some_and(|value| value.contains("Runtime deliverables now require explicit output.")));
+
+    let session_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(session_detail
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.sender_type == "assistant")
+        .and_then(|message| message.deliverable_refs.clone())
+        .is_some_and(|refs| refs.iter().any(|reference| reference.artifact_id == artifact_id)));
 
     let reloaded = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the release notes deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("Release Notes Draft".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("release-notes.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# Release Notes Draft\n\n- Runtime deliverables now require explicit output.".into()),
+                data_base64: None,
+            }],
         }),
     );
     let reloaded_detail = reloaded
@@ -9586,8 +10097,17 @@ async fn creating_new_deliverable_version_preserves_previous_versions() {
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the first explicit deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("First deliverable".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("first-deliverable.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# First deliverable\n\nProduce the first draft".into()),
+                data_base64: None,
+            }],
         }),
     );
 
@@ -9615,9 +10135,9 @@ async fn creating_new_deliverable_version_preserves_previous_versions() {
         .expect("run");
 
     let artifact_id = run
-        .artifact_refs
+        .deliverable_refs
         .first()
-        .cloned()
+        .map(|reference| reference.artifact_id.clone())
         .expect("generated deliverable artifact id");
     let updated = adapter
         .create_deliverable_version(
@@ -9701,8 +10221,17 @@ async fn promoting_deliverable_creates_knowledge_record_and_preserves_lineage() 
         infra.paths.clone(),
         infra.observation.clone(),
         infra.authorization.clone(),
-        Arc::new(FixedTokenRuntimeModelDriver {
+        Arc::new(ExplicitDeliverableRuntimeModelDriver {
             total_tokens: Some(12),
+            content: "Created the reusable guidance deliverable.".into(),
+            deliverables: vec![ModelExecutionDeliverable {
+                title: Some("Reusable guidance".into()),
+                preview_kind: "markdown".into(),
+                file_name: Some("reusable-guidance.md".into()),
+                content_type: Some("text/markdown".into()),
+                text_content: Some("# Reusable guidance\n\nKeep the finance review tag on approvals.".into()),
+                data_base64: None,
+            }],
         }),
     );
 
@@ -9729,9 +10258,9 @@ async fn promoting_deliverable_creates_knowledge_record_and_preserves_lineage() 
         .await
         .expect("run");
     let artifact_id = run
-        .artifact_refs
+        .deliverable_refs
         .first()
-        .cloned()
+        .map(|reference| reference.artifact_id.clone())
         .expect("generated deliverable artifact id");
 
     let promoted = adapter
@@ -10208,7 +10737,7 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
 }
 
 #[tokio::test]
-async fn loads_legacy_runtime_projection_missing_selected_actor_ref() {
+async fn deletes_legacy_runtime_projection_missing_phase_four_run_fields_on_startup() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     let detail_json = json!({
@@ -10283,23 +10812,6 @@ async fn loads_legacy_runtime_projection_missing_selected_actor_ref() {
             "configSnapshotId": "cfgsnap-legacy",
             "effectiveConfigHash": "hash-legacy",
             "startedFromScopeSet": ["workspace", "project"],
-            "runKind": "primary",
-            "parentRunId": null,
-            "actorRef": "agent:agent-architect",
-            "delegatedByToolCallId": null,
-            "approvalState": "not-required",
-            "usageSummary": {
-                "inputTokens": 0,
-                "outputTokens": 0,
-                "totalTokens": 0
-            },
-            "artifactRefs": [],
-            "traceContext": {
-                "sessionId": "rt-legacy-selected-actor",
-                "traceId": "trace-legacy-selected-actor",
-                "turnId": "turn-legacy-selected-actor",
-                "parentRunId": null
-            },
             "checkpoint": {
                 "serializedSession": {},
                 "currentIterationIndex": 0,
@@ -10354,16 +10866,16 @@ async fn loads_legacy_runtime_projection_missing_selected_actor_ref() {
     );
 
     let sessions = adapter.list_sessions().await.expect("sessions");
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].id, "rt-legacy-selected-actor");
-    assert_eq!(sessions[0].selected_actor_ref, "agent:agent-architect");
+    assert!(sessions.is_empty());
 
-    let detail = adapter
-        .get_session("rt-legacy-selected-actor")
-        .await
-        .expect("legacy session detail");
-    assert_eq!(detail.selected_actor_ref, "agent:agent-architect");
-    assert_eq!(detail.summary.selected_actor_ref, "agent:agent-architect");
+    let remaining: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM runtime_session_projections WHERE id = ?1",
+            ["rt-legacy-selected-actor"],
+            |row| row.get(0),
+        )
+        .expect("legacy projection count");
+    assert_eq!(remaining, 0);
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

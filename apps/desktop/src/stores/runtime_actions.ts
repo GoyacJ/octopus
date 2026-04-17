@@ -5,6 +5,8 @@ import {
   type ResolveRuntimeMemoryProposalInput,
   type RuntimeConfigScope,
   type RuntimeConfigValidationResult,
+  type RuntimeConfiguredModelCredentialRecord,
+  type RuntimeConfiguredModelCredentialUpsertInput,
   type RuntimeConfiguredModelProbeResult,
   type RuntimeDecisionAction,
   type RuntimeEffectiveConfig,
@@ -172,6 +174,7 @@ export const runtimeStoreActions = {
     this: any,
     scope: RuntimeConfigScope,
     configuredModelId: string,
+    apiKey?: string,
   ): Promise<RuntimeConfiguredModelProbeResult> {
     if (scope !== 'workspace') {
       return {
@@ -227,6 +230,7 @@ export const runtimeStoreActions = {
         scope,
         configuredModelId,
         patch: patch.patch,
+        apiKey,
       })
       if (this.activeWorkspaceConnectionId !== connectionId) {
         return result
@@ -273,6 +277,26 @@ export const runtimeStoreActions = {
         this.configuredModelProbing = false
       }
     }
+  },
+  async upsertConfiguredModelCredential(
+    this: any,
+    configuredModelId: string,
+    input: RuntimeConfiguredModelCredentialUpsertInput,
+  ): Promise<RuntimeConfiguredModelCredentialRecord> {
+    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection selected')
+    }
+    const { client } = resolvedClient
+    return await client.runtime.upsertConfiguredModelCredential(configuredModelId, input)
+  },
+  async deleteConfiguredModelCredential(this: any, configuredModelId: string): Promise<void> {
+    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection selected')
+    }
+    const { client } = resolvedClient
+    await client.runtime.deleteConfiguredModelCredential(configuredModelId)
   },
   async saveConfig(this: any, scope: RuntimeConfigScope): Promise<RuntimeEffectiveConfig | null> {
     if (scope !== 'workspace') {

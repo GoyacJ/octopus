@@ -195,7 +195,7 @@ watch(
     if (!connectionId || !projectId) {
       return
     }
-    void artifactStore.loadProjectDeliverables(projectId)
+    void artifactStore.ensureProjectDeliverables(projectId)
   },
   { immediate: true },
 )
@@ -214,7 +214,7 @@ watch(
     if (workspaceStore.currentProjectId) {
       await Promise.all([
         workspaceStore.loadProjectDashboard(workspaceStore.currentProjectId),
-        artifactStore.loadProjectDeliverables(workspaceStore.currentProjectId),
+        artifactStore.ensureProjectDeliverables(workspaceStore.currentProjectId),
       ])
     }
     await runtime.bootstrap()

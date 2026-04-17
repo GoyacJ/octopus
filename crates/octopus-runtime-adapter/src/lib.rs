@@ -30,6 +30,7 @@ mod run_context;
 mod runtime_config;
 mod session_policy;
 mod session_service;
+mod secret_store;
 mod snapshot_store;
 mod subrun_orchestrator;
 mod team_runtime;
@@ -61,7 +62,8 @@ use octopus_core::{
     RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
     RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
     RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
-    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialRecord,
+    RuntimeConfiguredModelCredentialUpsertInput, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
     RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMediationOutcome,
     RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
@@ -90,15 +92,21 @@ use tools as _;
 use uuid::Uuid;
 
 use adapter_state::{
-    merge_project_assignments, optional_project_id, sync_runtime_session_detail, RuntimeAggregate,
-    RuntimeAggregateMetadata, RuntimeState,
+    merge_project_assignments, optional_project_id, sync_runtime_session_detail,
+    PendingRuntimeDeliverable, RuntimeAggregate, RuntimeAggregateMetadata, RuntimeState,
 };
-use executor::ModelExecutionResult;
+use executor::{ModelExecutionDeliverable, ModelExecutionResult};
 pub use executor::{
-    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationRequest, RuntimeModelDriver,
+    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationExecution,
+    RuntimeConversationRequest, RuntimeModelDriver,
 };
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
+#[cfg(not(test))]
+use secret_store::KeyringRuntimeSecretStore;
+#[cfg(test)]
+use secret_store::MemoryRuntimeSecretStore;
+use secret_store::RuntimeSecretStore;
 
 #[derive(Clone)]
 pub struct RuntimeAdapter {
@@ -128,15 +136,41 @@ impl RuntimeAdapter {
         authorization: Arc<dyn AuthorizationService>,
         executor: Arc<dyn RuntimeModelDriver>,
     ) -> Self {
+        let workspace_id = workspace_id.into();
+        #[cfg(test)]
+        let secret_store: Arc<dyn RuntimeSecretStore> = Arc::new(MemoryRuntimeSecretStore::default());
+        #[cfg(not(test))]
+        let secret_store: Arc<dyn RuntimeSecretStore> =
+            Arc::new(KeyringRuntimeSecretStore::new(&workspace_id));
+        Self::new_with_executor_and_secret_store(
+            workspace_id,
+            paths,
+            observation,
+            authorization,
+            executor,
+            secret_store,
+        )
+    }
+
+    pub(crate) fn new_with_executor_and_secret_store(
+        workspace_id: impl Into<String>,
+        paths: WorkspacePaths,
+        observation: Arc<dyn ObservationService>,
+        authorization: Arc<dyn AuthorizationService>,
+        executor: Arc<dyn RuntimeModelDriver>,
+        secret_store: Arc<dyn RuntimeSecretStore>,
+    ) -> Self {
+        let workspace_id = workspace_id.into();
         let config_loader = ConfigLoader::new(&paths.root, paths.runtime_config_dir.clone());
         let adapter = Self {
             state: Arc::new(RuntimeState {
-                workspace_id: workspace_id.into(),
+                workspace_id,
                 paths,
                 observation,
                 authorization,
                 config_loader,
                 executor,
+                secret_store,
                 sessions: Mutex::new(HashMap::new()),
                 config_snapshots: Mutex::new(HashMap::new()),
                 order: Mutex::new(Vec::new()),

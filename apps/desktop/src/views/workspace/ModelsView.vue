@@ -28,7 +28,7 @@ const {
   createProviderType,
   createCustomProviderLabel,
   createModelId,
-  createCredentialRef,
+  createApiKey,
   createBaseUrl,
   createTotalTokens,
   createEnabled,
@@ -41,15 +41,22 @@ const {
   selectedConfiguredModel,
   selectedModel,
   selectedProvider,
+  selectedApiKey,
+  selectedCredentialStatusLabel,
+  selectedCredentialStatusDescription,
+  selectedCredentialStatusTone,
+  selectedCredentialBlocked,
   selectedIsCustomManaged,
   selectedProbeResult,
-  hasPendingPatch,
+  validationErrors,
+  validationWarnings,
   createProviderOptions,
   createUsesFreeformModel,
   createRequiresCustomProviderName,
   createUpstreamModelOptions,
   columns,
   updateSelectedConfiguredModel,
+  updateSelectedApiKey,
   updateSelectedTokenQuota,
   updateSelectedBaseUrl,
   updateSelectedCustomProviderLabel,
@@ -117,19 +124,23 @@ const {
       :selected-configured-model="selectedConfiguredModel"
       :selected-model="selectedModel"
       :selected-provider="selectedProvider"
+      :selected-api-key="selectedApiKey"
+      :selected-credential-status-label="selectedCredentialStatusLabel"
+      :selected-credential-status-description="selectedCredentialStatusDescription"
+      :selected-credential-status-tone="selectedCredentialStatusTone"
+      :selected-credential-blocked="selectedCredentialBlocked"
       :selected-is-custom-managed="selectedIsCustomManaged"
       :selected-probe-result="selectedProbeResult"
-      :has-pending-patch="hasPendingPatch"
       :runtime-config-validating="runtime.configValidating"
       :runtime-configured-model-probing="runtime.configuredModelProbing"
       :runtime-config-saving="runtime.configSaving"
-      :validation-errors="runtime.configValidation.workspace?.errors ?? []"
-      :validation-warnings="runtime.configValidation.workspace?.warnings ?? []"
+      :validation-errors="validationErrors"
+      :validation-warnings="validationWarnings"
       :t="t"
       @update:open="detailDialogOpen = $event"
       @update:name="updateSelectedConfiguredModel({ name: $event })"
       @update:custom-provider-label="updateSelectedCustomProviderLabel"
-      @update:credential-ref="updateSelectedConfiguredModel({ credentialRef: $event.trim() || undefined })"
+      @update:api-key="updateSelectedApiKey"
       @update:base-url="updateSelectedBaseUrl"
       @update:total-tokens="updateSelectedTokenQuota"
       @update:enabled="updateSelectedConfiguredModel({ enabled: $event })"
@@ -148,7 +159,7 @@ const {
       :create-uses-freeform-model="createUsesFreeformModel"
       :create-model-id="createModelId"
       :create-upstream-model-options="createUpstreamModelOptions"
-      :create-credential-ref="createCredentialRef"
+      :create-api-key="createApiKey"
       :create-base-url="createBaseUrl"
       :create-total-tokens="createTotalTokens"
       :create-enabled="createEnabled"
@@ -161,7 +172,7 @@ const {
       @update:create-provider-type="createProviderType = $event"
       @update:create-custom-provider-label="createCustomProviderLabel = $event"
       @update:create-model-id="createModelId = $event"
-      @update:create-credential-ref="createCredentialRef = $event"
+      @update:create-api-key="createApiKey = $event"
       @update:create-base-url="createBaseUrl = $event"
       @update:create-total-tokens="createTotalTokens = $event"
       @update:create-enabled="createEnabled = $event"

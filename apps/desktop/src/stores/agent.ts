@@ -40,6 +40,7 @@ export const useAgentStore = defineStore('agent', () => {
   const errors = ref<Record<string, string>>({})
   const requestTokens = ref<Record<string, number>>({})
   const projectLinkRequestTokens = ref<Record<string, number>>({})
+  const inflightLoads = new Map<string, Promise<void>>()
 
   const workspaceStore = useWorkspaceStore()
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
@@ -119,6 +120,37 @@ export const useAgentStore = defineStore('agent', () => {
           ...errors.value,
           [connectionId]: cause instanceof Error ? cause.message : 'Failed to load agents',
         }
+      }
+    }
+  }
+
+  async function ensureLoaded(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { connectionId } = resolvedClient
+    if (!options.force && Object.prototype.hasOwnProperty.call(agentsByConnection.value, connectionId)) {
+      return
+    }
+
+    const inflight = inflightLoads.get(connectionId)
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    const task = load(connectionId)
+    inflightLoads.set(connectionId, task)
+    try {
+      await task
+    } finally {
+      if (inflightLoads.get(connectionId) === task) {
+        inflightLoads.delete(connectionId)
       }
     }
   }
@@ -274,6 +306,7 @@ export const useAgentStore = defineStore('agent', () => {
     currentProjectLinks,
     error,
     load,
+    ensureLoaded,
     loadProjectLinks,
     create,
     update,

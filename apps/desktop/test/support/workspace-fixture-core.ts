@@ -83,6 +83,14 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     }
   }
 
+  for (const connection of WORKSPACE_CONNECTIONS) {
+    const state = workspaceStates.get(connection.workspaceConnectionId)
+    if (!state) {
+      continue
+    }
+    options.stateTransform?.(state, connection)
+  }
+
   if (options.localRuntimeConfigTransform) {
     const localState = workspaceStates.get('conn-local')
     if (localState) {

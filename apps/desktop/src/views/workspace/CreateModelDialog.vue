@@ -13,7 +13,7 @@ defineProps<{
   createUsesFreeformModel: boolean
   createModelId: string
   createUpstreamModelOptions: CatalogFilterOption[]
-  createCredentialRef: string
+  createApiKey: string
   createBaseUrl: string
   createTotalTokens: string
   createEnabled: boolean
@@ -29,7 +29,7 @@ const emit = defineEmits<{
   'update:create-provider-type': [value: string]
   'update:create-custom-provider-label': [value: string]
   'update:create-model-id': [value: string]
-  'update:create-credential-ref': [value: string]
+  'update:create-api-key': [value: string]
   'update:create-base-url': [value: string]
   'update:create-total-tokens': [value: string]
   'update:create-enabled': [value: boolean]
@@ -96,10 +96,15 @@ const emit = defineEmits<{
       <div class="space-y-1">
         <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.credentialRef') }}</p>
         <UiInput
-          :model-value="createCredentialRef"
+          :model-value="createApiKey"
           data-testid="models-create-credential-ref-input"
+          type="password"
           :placeholder="t('models.detail.credentialRefPlaceholder')"
-          @update:model-value="emit('update:create-credential-ref', String($event))"
+          @update:model-value="emit('update:create-api-key', String($event))"
+        />
+        <UiStatusCallout
+          tone="info"
+          :description="t('models.security.createHint')"
         />
       </div>
 

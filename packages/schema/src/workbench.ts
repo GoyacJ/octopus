@@ -264,6 +264,7 @@ export interface Message {
   processEntries?: MessageProcessEntry[]
   attachments?: ConversationAttachment[]
   artifacts?: Array<string | ArtifactVersionReference>
+  deliverableRefs?: Array<string | ArtifactVersionReference>
   approval?: {
     id: string
     toolName: string

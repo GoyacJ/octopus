@@ -114,7 +114,7 @@ watch(
     if (!connectionId || !nextProjectId) {
       return
     }
-    await artifactStore.loadProjectDeliverables(nextProjectId)
+    await artifactStore.ensureProjectDeliverables(nextProjectId)
   },
   { immediate: true },
 )

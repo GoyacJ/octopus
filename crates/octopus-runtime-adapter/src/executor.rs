@@ -16,10 +16,27 @@ pub struct RuntimeConversationRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeConversationExecution {
+    pub events: Vec<AssistantEvent>,
+    pub deliverables: Vec<ModelExecutionDeliverable>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelExecutionResult {
     pub content: String,
     pub request_id: Option<String>,
     pub total_tokens: Option<u32>,
+    pub deliverables: Vec<ModelExecutionDeliverable>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelExecutionDeliverable {
+    pub title: Option<String>,
+    pub preview_kind: String,
+    pub file_name: Option<String>,
+    pub content_type: Option<String>,
+    pub text_content: Option<String>,
+    pub data_base64: Option<String>,
 }
 
 #[async_trait]
@@ -36,6 +53,17 @@ pub trait RuntimeModelDriver: Send + Sync {
         target: &ResolvedExecutionTarget,
         request: &RuntimeConversationRequest,
     ) -> Result<Vec<AssistantEvent>, AppError> {
+        Ok(self
+            .execute_conversation_execution(target, request)
+            .await?
+            .events)
+    }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
         let fallback_input = request
             .messages
             .iter()
@@ -52,17 +80,7 @@ pub trait RuntimeModelDriver: Send + Sync {
         let response = self
             .execute_prompt(target, fallback_input.as_str(), system_prompt.as_deref())
             .await?;
-        let mut events = vec![AssistantEvent::TextDelta(response.content)];
-        if let Some(total_tokens) = response.total_tokens {
-            events.push(AssistantEvent::Usage(TokenUsage {
-                input_tokens: 0,
-                output_tokens: total_tokens,
-                cache_creation_input_tokens: 0,
-                cache_read_input_tokens: 0,
-            }));
-        }
-        events.push(AssistantEvent::MessageStop);
-        Ok(events)
+        Ok(conversation_execution_from_response(response))
     }
 }
 
@@ -113,14 +131,39 @@ impl RuntimeModelDriver for LiveRuntimeModelDriver {
         target: &ResolvedExecutionTarget,
         request: &RuntimeConversationRequest,
     ) -> Result<Vec<AssistantEvent>, AppError> {
+        Ok(self
+            .execute_conversation_execution(target, request)
+            .await?
+            .events)
+    }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
         match target.protocol_family.as_str() {
             "anthropic_messages" => {
-                execute_message_protocol_conversation(target, request, ProviderProtocol::Anthropic)
-                    .await
+                Ok(RuntimeConversationExecution {
+                    events: execute_message_protocol_conversation(
+                        target,
+                        request,
+                        ProviderProtocol::Anthropic,
+                    )
+                    .await?,
+                    deliverables: Vec::new(),
+                })
             }
             "openai_chat" => {
-                execute_message_protocol_conversation(target, request, ProviderProtocol::OpenAiChat)
-                    .await
+                Ok(RuntimeConversationExecution {
+                    events: execute_message_protocol_conversation(
+                        target,
+                        request,
+                        ProviderProtocol::OpenAiChat,
+                    )
+                    .await?,
+                    deliverables: Vec::new(),
+                })
             }
             "openai_responses" | "gemini_native" if request.tools.is_empty() => {
                 let input = request
@@ -139,17 +182,7 @@ impl RuntimeModelDriver for LiveRuntimeModelDriver {
                 let response = self
                     .execute_prompt(target, input.as_str(), system_prompt.as_deref())
                     .await?;
-                let mut events = vec![AssistantEvent::TextDelta(response.content)];
-                if let Some(total_tokens) = response.total_tokens {
-                    events.push(AssistantEvent::Usage(TokenUsage {
-                        input_tokens: 0,
-                        output_tokens: total_tokens,
-                        cache_creation_input_tokens: 0,
-                        cache_read_input_tokens: 0,
-                    }));
-                }
-                events.push(AssistantEvent::MessageStop);
-                Ok(events)
+                Ok(conversation_execution_from_response(response))
             }
             "openai_responses" | "gemini_native" => Err(AppError::runtime(format!(
                 "runtime tool loop does not support protocol family `{}` with tool-enabled turns yet",
@@ -183,7 +216,27 @@ impl RuntimeModelDriver for MockRuntimeModelDriver {
             ),
             request_id: Some("mock-request-id".into()),
             total_tokens: Some(32),
+            deliverables: Vec::new(),
         })
+    }
+}
+
+fn conversation_execution_from_response(
+    response: ModelExecutionResult,
+) -> RuntimeConversationExecution {
+    let mut events = vec![AssistantEvent::TextDelta(response.content)];
+    if let Some(total_tokens) = response.total_tokens {
+        events.push(AssistantEvent::Usage(TokenUsage {
+            input_tokens: 0,
+            output_tokens: total_tokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+        }));
+    }
+    events.push(AssistantEvent::MessageStop);
+    RuntimeConversationExecution {
+        events,
+        deliverables: response.deliverables,
     }
 }
 
@@ -214,6 +267,7 @@ async fn execute_anthropic_messages(
         content: flatten_output_content(&response.content),
         request_id: response.request_id.clone(),
         total_tokens: Some(response.total_tokens()),
+        deliverables: Vec::new(),
     })
 }
 
@@ -274,6 +328,7 @@ async fn execute_openai_chat(
         content: flatten_output_content(&response.content),
         request_id: response.request_id.clone(),
         total_tokens: Some(response.total_tokens()),
+        deliverables: Vec::new(),
     })
 }
 
@@ -324,6 +379,7 @@ async fn execute_openai_responses(
             .and_then(|usage| usage.get("total_tokens"))
             .and_then(Value::as_u64)
             .map(|value| value as u32),
+        deliverables: Vec::new(),
     })
 }
 
@@ -389,6 +445,7 @@ async fn execute_gemini_native(
             .and_then(|usage| usage.get("totalTokenCount"))
             .and_then(Value::as_u64)
             .map(|value| value as u32),
+        deliverables: Vec::new(),
     })
 }
 
@@ -401,6 +458,11 @@ fn resolve_api_key(target: &ResolvedExecutionTarget) -> Result<String, AppError>
                     target.provider_id
                 ))
             });
+        }
+        if reference.starts_with("secret-ref:") {
+            return Err(AppError::invalid_input(format!(
+                "managed credential `{reference}` was not resolved before execution"
+            )));
         }
         if !reference.trim().is_empty() {
             return Ok(reference.to_string());

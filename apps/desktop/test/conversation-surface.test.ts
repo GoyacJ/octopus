@@ -118,6 +118,195 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('shows localized setup guidance and skips session creation when no models or actors are available', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.agents = state.agents.filter(agent => agent.projectId !== 'proj-redesign')
+        state.teams = state.teams.filter(team => team.projectId !== 'proj-redesign')
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments) {
+          throw new Error('Expected proj-redesign assignments')
+        }
+
+        project.assignments = {
+          ...project.assignments,
+          models: {
+            configuredModelIds: [],
+            defaultConfiguredModelId: '',
+          },
+          agents: {
+            agentIds: [],
+            teamIds: [],
+          },
+        }
+
+        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
+        if (!projectConfig) {
+          throw new Error('Expected proj-redesign runtime config')
+        }
+
+        state.runtimeProjectConfigs['proj-redesign'] = {
+          ...projectConfig,
+          effectiveConfig: {
+            ...((projectConfig.effectiveConfig as Record<string, any>) ?? {}),
+            projectSettings: {
+              ...(((projectConfig.effectiveConfig as Record<string, any>)?.projectSettings as Record<string, any>) ?? {}),
+              agents: {
+                enabledAgentIds: ['agent-architect'],
+                enabledTeamIds: ['team-studio'],
+              },
+            },
+          },
+          sources: projectConfig.sources.map((source) => (
+            source.scope === 'project'
+              ? {
+                  ...source,
+                  document: {
+                    approvals: {
+                      defaultMode: 'manual',
+                    },
+                    projectSettings: {
+                      models: {
+                        allowedConfiguredModelIds: [],
+                        defaultConfiguredModelId: '',
+                      },
+                      agents: {
+                        enabledAgentIds: [],
+                        enabledTeamIds: [],
+                      },
+                    },
+                  },
+                }
+              : source
+          )),
+        }
+      },
+    })
+
+    let createSessionCalls = 0
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async createSession(input, idempotencyKey) {
+          createSessionCalls += 1
+          return await client.runtime.createSession(input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-first-launch')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-setup-callout"]') !== null)
+
+    expect(createSessionCalls).toBe(0)
+    expect(runtime.activeSessionId).toBe('')
+    expect(mounted.container.textContent).toContain('先完成会话准备')
+    expect(mounted.container.textContent).toContain('这个项目还没有可用模型和智能体。完成配置后即可开始会话。')
+    expect(mounted.container.textContent).not.toContain('actor ref id is missing')
+    expect(mounted.container.querySelector('[data-testid="conversation-setup-open-models"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-setup-open-settings"]')).not.toBeNull()
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(textarea.disabled).toBe(true)
+    expect(sendButton?.disabled).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('shows model-specific setup guidance when the project has actors but no model assignment', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments) {
+          throw new Error('Expected proj-redesign assignments')
+        }
+
+        project.assignments = {
+          ...project.assignments,
+          models: {
+            configuredModelIds: [],
+            defaultConfiguredModelId: '',
+          },
+        }
+
+        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
+        if (!projectConfig) {
+          throw new Error('Expected proj-redesign runtime config')
+        }
+
+        state.runtimeProjectConfigs['proj-redesign'] = {
+          ...projectConfig,
+          sources: projectConfig.sources.map((source) => (
+            source.scope === 'project'
+              ? {
+                  ...source,
+                  document: {
+                    approvals: {
+                      defaultMode: 'manual',
+                    },
+                    projectSettings: {
+                      models: {
+                        allowedConfiguredModelIds: [],
+                        defaultConfiguredModelId: '',
+                      },
+                      agents: {
+                        enabledAgentIds: ['agent-architect'],
+                        enabledTeamIds: ['team-studio'],
+                      },
+                    },
+                  },
+                }
+              : source
+          )),
+        }
+      },
+    })
+
+    let createSessionCalls = 0
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async createSession(input, idempotencyKey) {
+          createSessionCalls += 1
+          return await client.runtime.createSession(input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-no-model')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-setup-callout"]') !== null)
+
+    expect(createSessionCalls).toBe(0)
+    expect(mounted.container.textContent).toContain('还不能开始对话')
+    expect(mounted.container.textContent).toContain('当前项目还没有可用模型。先完成模型配置，再发起会话。')
+    expect(mounted.container.querySelector('[data-testid="conversation-setup-open-models"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-setup-open-settings"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
   it('submits a new turn when the user presses Enter in the composer', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
     await router.isReady()
@@ -208,7 +397,29 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('renders runtime actor and artifact labels from real entity records', async () => {
+  it('renders explicit deliverable chips from message deliverable refs', async () => {
+    installWorkspaceApiFixture({
+      preloadConversationMessages: true,
+      stateTransform(state) {
+        const runtimeState = [...state.runtimeSessions.values()]
+          .find(session => session.detail.summary.conversationId === 'conv-redesign')
+        const assistantMessage = runtimeState?.detail.messages.find(message => message.senderType === 'assistant')
+        if (!assistantMessage) {
+          return
+        }
+
+        assistantMessage.deliverableRefs = [
+          {
+            artifactId: 'artifact-run-conv-redesign',
+            title: 'Runtime Delivery Summary',
+            version: 3,
+            previewKind: 'markdown',
+            contentType: 'text/markdown',
+            updatedAt: 103,
+          },
+        ]
+      },
+    })
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
     await router.isReady()
 
@@ -222,6 +433,21 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
     expect(mounted.container.textContent).toContain('v3')
     expect(mounted.container.querySelectorAll('[data-testid="conversation-avatar-image"]').length).toBeGreaterThan(0)
+
+    mounted.destroy()
+  })
+
+  it('does not show deliverable chips for ordinary assistant replies', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).not.toContain('Runtime Delivery Summary')
+    expect(mounted.container.textContent).not.toContain('v3')
 
     mounted.destroy()
   })
@@ -540,6 +766,35 @@ describe('Conversation surfaces', () => {
     Array.from(mounted.container.querySelectorAll('button')).find(button => button.textContent?.includes('工具'))?.click()
     await waitFor(() => mounted.container.textContent?.includes('Workspace API') ?? false)
     expect(mounted.container.textContent).toContain('workspace-api')
+
+    mounted.destroy()
+  })
+
+  it('does not request deliverable body content while the context pane stays in context mode', async () => {
+    let deliverableContentCalls = 0
+
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async getDeliverableVersionContent(deliverableId, version) {
+          deliverableContentCalls += 1
+          return await client.runtime.getDeliverableVersionContent(deliverableId, version)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await nextTick()
+
+    expect(deliverableContentCalls).toBe(0)
+    expect(mounted.container.querySelector('[data-testid="deliverable-preview-panel"]')).toBeNull()
 
     mounted.destroy()
   })
@@ -984,8 +1239,130 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('renders the empty conversation state and creates a new routed conversation from it', async () => {
+  it('reuses cached conversation dependencies when re-entering the same project conversation', async () => {
+    const counters = {
+      catalogSnapshot: 0,
+      catalogTools: 0,
+      agents: 0,
+      teams: 0,
+      projectResources: 0,
+      projectDeliverables: 0,
+      projectRuntimeConfig: 0,
+    }
+
+    configureWorkspaceClient(client => ({
+      ...client,
+      catalog: {
+        ...client.catalog,
+        async getSnapshot() {
+          counters.catalogSnapshot += 1
+          return await client.catalog.getSnapshot()
+        },
+        async listTools() {
+          counters.catalogTools += 1
+          return await client.catalog.listTools()
+        },
+      },
+      agents: {
+        ...client.agents,
+        async list() {
+          counters.agents += 1
+          return await client.agents.list()
+        },
+      },
+      teams: {
+        ...client.teams,
+        async list() {
+          counters.teams += 1
+          return await client.teams.list()
+        },
+      },
+      resources: {
+        ...client.resources,
+        async listProject(projectId) {
+          counters.projectResources += 1
+          return await client.resources.listProject(projectId)
+        },
+      },
+      projects: {
+        ...client.projects,
+        async listDeliverables(projectId) {
+          counters.projectDeliverables += 1
+          return await client.projects.listDeliverables(projectId)
+        },
+      },
+      runtime: {
+        ...client.runtime,
+        async getProjectConfig(projectId) {
+          counters.projectRuntimeConfig += 1
+          return await client.runtime.getProjectConfig(projectId)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/deliverables')
+    await waitFor(() => String(router.currentRoute.value.name) === 'project-deliverables')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await waitFor(() => String(router.currentRoute.value.name) === 'project-conversation')
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(counters.catalogSnapshot).toBe(1)
+    expect(counters.catalogTools).toBe(1)
+    expect(counters.agents).toBe(1)
+    expect(counters.teams).toBe(1)
+    expect(counters.projectResources).toBe(1)
+    expect(counters.projectDeliverables).toBe(1)
+    expect(counters.projectRuntimeConfig).toBe(1)
+
+    mounted.destroy()
+  })
+
+  it('redirects bare project conversations route to the latest conversation when history exists', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => String(router.currentRoute.value.name) === 'project-conversation')
+    await waitFor(() => String(router.currentRoute.value.params.conversationId) === 'conv-redesign')
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).not.toContain(String(i18n.global.t('conversation.empty.title')))
+    expect(mounted.container.textContent).toContain('请先查看当前桌面端实现状态')
+
+    mounted.destroy()
+  })
+
+  it('renders the empty conversation state only when the project truly has no conversations', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state) {
+        if (!state.dashboards['proj-governance']) {
+          return
+        }
+        state.overview.recentConversations = state.overview.recentConversations
+          .filter(item => item.projectId !== 'proj-governance')
+        state.dashboards['proj-governance'] = {
+          ...state.dashboards['proj-governance'],
+          recentConversations: [],
+          overview: {
+            ...state.dashboards['proj-governance']!.overview,
+            conversationCount: 0,
+          },
+        }
+      },
+    })
+
+    await router.push('/workspaces/ws-local/projects/proj-governance/conversations')
     await router.isReady()
 
     const mounted = mountApp()
@@ -996,24 +1373,12 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.empty.title')))
     expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.empty.description')))
 
-    const opsButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-context-section-ops"]')
-    expect(opsButton).not.toBeNull()
-    expect(opsButton?.disabled).toBe(true)
-    opsButton?.click()
-    await nextTick()
-    expect(String(router.currentRoute.value.name)).toBe('project-conversations')
-    expect(mounted.container.textContent).not.toContain('Fatal startup error')
-
     const createButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
       button.textContent?.includes(String(i18n.global.t('conversation.empty.create'))))
     createButton?.click()
 
     await waitFor(() => String(router.currentRoute.value.name) === 'project-conversation')
     expect(String(router.currentRoute.value.params.conversationId)).toMatch(/^conversation-/)
-    await waitFor(() =>
-      (mounted.container.querySelector('[data-testid="conversation-context-section-ops"]') as HTMLButtonElement | null)?.disabled === false,
-    )
-    expect(mounted.container.textContent).not.toContain(String(i18n.global.t('conversation.detail.empty.title')))
 
     mounted.destroy()
   })

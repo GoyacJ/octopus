@@ -21,9 +21,9 @@ import {
 import type { CreateMenuPolicyRequest, MenuDefinition, MenuPolicyUpsertRequest } from '@octopus/schema'
 
 import { usePagination } from '@/composables/usePagination'
-import { getMenuDefinition } from '@/navigation/menuRegistry'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
+import { getAccessMenuLabel } from './display-i18n'
 import { createMenuVisibilityOptions, getMenuSourceLabel, normalizeOrderInput } from './helpers'
 import { useAccessControlNotifications } from './useAccessControlNotifications'
 
@@ -84,9 +84,8 @@ const filteredMenus = computed(() => {
   const matchedIds = new Set(
     configuredMenus
       .filter((menu) => {
-        const definition = getMenuDefinition(menu.id)
         return [
-          definition?.defaultLabel ?? menu.label,
+          getAccessMenuLabel(menu),
           menu.routeName ?? '',
           menu.id,
           menu.featureCode,
@@ -214,7 +213,7 @@ function toggleMenuExpanded(menuId: string) {
 }
 
 function menuLabel(menu: MenuDefinition) {
-  return getMenuDefinition(menu.id)?.defaultLabel ?? menu.label
+  return getAccessMenuLabel(menu)
 }
 
 function menuDescription(menu: MenuDefinition) {
@@ -291,7 +290,7 @@ async function handleSave() {
     resetForm(selectedMenu.value)
     await notifySuccess(
       t('accessControl.menus.feedback.toastSaved'),
-      getMenuDefinition(selectedMenu.value.id)?.defaultLabel ?? selectedMenu.value.label,
+      getAccessMenuLabel(selectedMenu.value),
     )
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : t('accessControl.menus.feedback.saveFailed')
@@ -309,7 +308,7 @@ async function handleDelete() {
 
   deleting.value = true
   try {
-    const label = getMenuDefinition(selectedMenu.value.id)?.defaultLabel ?? selectedMenu.value.label
+    const label = getAccessMenuLabel(selectedMenu.value)
     await accessControlStore.deleteMenuPolicy(selectedMenu.value.id)
     resetForm(selectedMenu.value)
     await notifySuccess(t('accessControl.menus.feedback.toastDeleted'), label)
@@ -403,7 +402,7 @@ async function handleDelete() {
         <div v-if="selectedMenu" class="space-y-4">
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ getMenuDefinition(selectedMenu.id)?.defaultLabel ?? selectedMenu.label }}</div>
+              <div class="text-sm font-semibold text-foreground">{{ getAccessMenuLabel(selectedMenu) }}</div>
               <UiBadge :label="getMenuSourceLabel(t, selectedMenu.source)" subtle />
               <UiBadge :label="gateMap.get(selectedMenu.id)?.allowed ? t('accessControl.menus.badges.gateAllow') : t('accessControl.menus.badges.gateDeny')" :tone="gateMap.get(selectedMenu.id)?.allowed ? 'success' : 'warning'" subtle />
             </div>

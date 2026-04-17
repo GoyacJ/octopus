@@ -396,6 +396,7 @@ export function createSessionDetail(
         totalTokens: 0,
       },
       artifactRefs: [],
+      deliverableRefs: [],
       traceContext: {
         sessionId,
         traceId: `trace-${conversationId}`,
@@ -535,6 +536,11 @@ export function createRuntimeMessage(
   configuredModelName = modelId === 'claude-sonnet-4-5' ? 'Claude Sonnet 4.5' : 'GPT-4o',
   actorKind: RuntimeMessage['resolvedActorKind'] = 'agent',
   actorId = 'agent-architect',
+  options: {
+    artifacts?: RuntimeMessage['artifacts']
+    deliverableRefs?: RuntimeMessage['deliverableRefs']
+    resourceIds?: RuntimeMessage['resourceIds']
+  } = {},
 ): RuntimeMessage {
   const timestamp = state.nextSequence * 10
   return {
@@ -555,9 +561,10 @@ export function createRuntimeMessage(
     resolvedActorId: actorId,
     resolvedActorLabel: senderType === 'assistant' ? senderLabel : 'You',
     usedDefaultActor: false,
-    resourceIds: senderType === 'assistant' ? [`${state.detail.summary.projectId}-res-2`] : [],
+    resourceIds: options.resourceIds ?? (senderType === 'assistant' ? [`${state.detail.summary.projectId}-res-2`] : []),
     attachments: [],
-    artifacts: senderType === 'assistant' ? [`artifact-${state.detail.run.id}`] : [],
+    artifacts: options.artifacts ?? [],
+    deliverableRefs: options.deliverableRefs ?? [],
     usage: senderType === 'assistant'
       ? {
           inputTokens: 320,

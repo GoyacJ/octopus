@@ -1305,6 +1305,8 @@ RuntimeConfigValidationResult:
 RuntimeConfiguredModelProbeInput:
   additionalProperties: false
   properties:
+    apiKey:
+      type: string
     configuredModelId:
       type: string
     patch:
@@ -1316,6 +1318,37 @@ RuntimeConfiguredModelProbeInput:
     - scope
     - configuredModelId
     - patch
+  type: object
+RuntimeConfiguredModelCredentialUpsertInput:
+  additionalProperties: false
+  properties:
+    apiKey:
+      type: string
+    configuredModelId:
+      type: string
+    providerId:
+      type: string
+  required:
+    - configuredModelId
+    - providerId
+    - apiKey
+  type: object
+RuntimeConfiguredModelCredentialRecord:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    credentialRef:
+      type: string
+    status:
+      type: string
+    storageKind:
+      type: string
+  required:
+    - configuredModelId
+    - credentialRef
+    - storageKind
+    - status
   type: object
 RuntimeConfiguredModelProbeResult:
   additionalProperties: false
@@ -1527,6 +1560,10 @@ RuntimeMessage:
       items:
         $ref: "#/components/schemas/ArtifactVersionReference"
       type: array
+    deliverableRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
     attachments:
       items:
         type: string
@@ -1607,6 +1644,10 @@ RuntimeRunSnapshot:
     authTarget:
       $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
     artifactRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
+    deliverableRefs:
       items:
         $ref: "#/components/schemas/ArtifactVersionReference"
       type: array
@@ -1738,6 +1779,8 @@ RuntimeSecretReferenceState:
     - reference-present
     - reference-missing
     - inline-redacted
+    - migration-failed
+    - reference-error
   type: string
 RuntimeSecretReferenceStatus:
   additionalProperties: false

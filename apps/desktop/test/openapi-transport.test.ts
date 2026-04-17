@@ -141,6 +141,9 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).toContain('operationId: "getAccessExperience"')
     expect(generated).toContain('export interface AccessMemberSummary')
     expect(generated).toContain('primaryPresetCode: string | null')
+    expect(generated).toContain('effectiveRoles: AccessMemberRoleSummary[]')
+    expect(generated).toContain('export interface AccessMemberRoleSummary')
+    expect(generated).toContain('source: AccessRoleSource')
     expect(generated).toContain('export interface AccessUserPresetUpdateRequest')
     expect(generated).toContain('"/api/v1/access/members": {')
     expect(generated).toContain('operationId: "listAccessMembers"')
@@ -176,8 +179,8 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/versions/{version}"')
     expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/promote"')
     expect(generated).toContain('"/api/v1/deliverables/{deliverableId}/fork"')
-    expect(generated).toContain('artifacts?: ArtifactVersionReference[]')
     expect(generated).toContain('artifactRefs: ArtifactVersionReference[]')
+    expect(generated).toContain('deliverableRefs?: ArtifactVersionReference[]')
     expect(generated).not.toContain(legacySummaryAliasInterface)
     expect(generated).not.toContain(legacyWorkspaceArtifactsPath)
   })
@@ -670,6 +673,20 @@ describe('OpenAPI transport helpers', () => {
     const secondHeaders = fetchSpy.mock.calls[1]?.[1]?.headers as Headers
     expect(firstHeaders.get('Authorization')).toBe('Bearer workspace-session-token')
     expect(secondHeaders.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('keeps managed configured-model credential paths and probe apiKey override in the generated transport contract', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('"/api/v1/runtime/config/configured-models/{configuredModelId}/credential"')
+    expect(generated).toContain('operationId: "upsertRuntimeConfiguredModelCredential"')
+    expect(generated).toContain('operationId: "deleteRuntimeConfiguredModelCredential"')
+    expect(generated).toContain('export interface RuntimeConfiguredModelCredentialUpsertInput')
+    expect(generated).toContain('export interface RuntimeConfiguredModelCredentialRecord')
+    expect(generated).toContain('apiKey?: string')
   })
 
   it('resolves generated runtime session and approval paths with path params, query params, and idempotency headers', async () => {

@@ -358,13 +358,11 @@ export const useShellStore = defineStore('shell', {
         this.workbenchMode = normalizeConversationWorkbenchMode(routeState.mode)
         this.workbenchModeLocked = true
       }
-      if (routeState.deliverable !== undefined) {
-        this.selectedDeliverableId = routeState.deliverable ?? ''
-        if (!routeState.deliverable) {
-          this.selectedDeliverableVersion = null
-        }
-        this.workbenchModeLocked = true
+      this.selectedDeliverableId = routeState.deliverable ?? ''
+      if (!routeState.deliverable) {
+        this.selectedDeliverableVersion = null
       }
+      this.workbenchModeLocked = true
       if (routeState.version !== undefined) {
         this.selectedDeliverableVersion = normalizeWorkbenchVersion(routeState.version)
         this.workbenchModeLocked = true

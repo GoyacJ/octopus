@@ -83,15 +83,48 @@ impl RuntimeAdapter {
         Ok((resolved_target, configured_model))
     }
 
+    fn hydrate_execution_target_credentials(
+        &self,
+        target: &ResolvedExecutionTarget,
+    ) -> Result<ResolvedExecutionTarget, AppError> {
+        let mut hydrated = target.clone();
+        if let Some(reference) = target.credential_ref.as_deref() {
+            if reference.starts_with("secret-ref:") {
+                hydrated.credential_ref = Some(
+                    self.resolve_secret_reference(reference)?.ok_or_else(|| {
+                        AppError::invalid_input(format!(
+                            "missing managed credential `{reference}` for provider `{}`",
+                            target.provider_id
+                        ))
+                    })?,
+                );
+            }
+        }
+        Ok(hydrated)
+    }
+
     pub(super) async fn execute_resolved_prompt(
         &self,
         target: &ResolvedExecutionTarget,
         content: &str,
         system_prompt: Option<&str>,
     ) -> Result<ModelExecutionResult, AppError> {
+        let hydrated_target = self.hydrate_execution_target_credentials(target)?;
         self.state
             .executor
-            .execute_prompt(target, content, system_prompt)
+            .execute_prompt(&hydrated_target, content, system_prompt)
+            .await
+    }
+
+    pub(super) async fn execute_resolved_conversation(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
+        let hydrated_target = self.hydrate_execution_target_credentials(target)?;
+        self.state
+            .executor
+            .execute_conversation_execution(&hydrated_target, request)
             .await
     }
 }

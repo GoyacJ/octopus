@@ -21,6 +21,33 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         body: JSON.stringify(patch),
       })
     },
+    async upsertConfiguredModelCredential(configuredModelId, input) {
+      return await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/config/configured-models/{configuredModelId}/credential',
+        'put',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            configuredModelId,
+          },
+          body: JSON.stringify(input),
+        },
+      )
+    },
+    async deleteConfiguredModelCredential(configuredModelId) {
+      await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/config/configured-models/{configuredModelId}/credential',
+        'delete',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            configuredModelId,
+          },
+        },
+      )
+    },
     async validateConfiguredModel(input) {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/configured-models/probe', 'post', {
         session: assertWorkspaceRequestReady(context),

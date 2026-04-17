@@ -443,7 +443,155 @@ fn latest_runtime_response(
         content: assistant_message_content(assistant_message),
         request_id: None,
         total_tokens,
+        deliverables: Vec::new(),
     })
+}
+
+fn infer_deliverable_content_type(output: &ModelExecutionDeliverable) -> Option<String> {
+    output
+        .content_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            if output.text_content.is_some() {
+                Some(
+                    match output.preview_kind.as_str() {
+                        "markdown" => "text/markdown",
+                        "json" => "application/json",
+                        _ => "text/plain",
+                    }
+                    .to_string(),
+                )
+            } else if output.data_base64.is_some() {
+                Some("application/octet-stream".to_string())
+            } else {
+                None
+            }
+        })
+}
+
+fn resolve_deliverable_title(output: &ModelExecutionDeliverable, fallback: &str) -> String {
+    if let Some(title) = output.title.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        return title.to_string();
+    }
+
+    if let Some(text_content) = output.text_content.as_deref() {
+        if let Some(title) = text_content
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .map(|line| line.trim_start_matches('#').trim())
+            .filter(|line| !line.is_empty())
+        {
+            return title.chars().take(80).collect();
+        }
+    }
+
+    fallback.to_string()
+}
+
+fn build_pending_runtime_deliverables(
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+    session_id: &str,
+    run_id: &str,
+    fallback_title: &str,
+    updated_at: u64,
+    outputs: &[ModelExecutionDeliverable],
+    source_message_id: Option<&str>,
+) -> Vec<PendingRuntimeDeliverable> {
+    if project_id.trim().is_empty() {
+        return Vec::new();
+    }
+
+    outputs
+        .iter()
+        .map(|output| {
+            let deliverable_id = format!("artifact-{}", Uuid::new_v4());
+            let preview_kind = output
+                .preview_kind
+                .trim()
+                .to_string()
+                .chars()
+                .collect::<String>();
+            let preview_kind = if preview_kind.is_empty() {
+                "markdown".to_string()
+            } else {
+                preview_kind
+            };
+            let title = resolve_deliverable_title(output, fallback_title);
+            let content_type = infer_deliverable_content_type(output);
+            let latest_version_ref = ArtifactVersionReference {
+                artifact_id: deliverable_id.clone(),
+                version: 1,
+                title: title.clone(),
+                preview_kind: preview_kind.clone(),
+                updated_at,
+                content_type: content_type.clone(),
+            };
+            let detail = DeliverableDetail {
+                id: deliverable_id.clone(),
+                workspace_id: workspace_id.to_string(),
+                project_id: project_id.to_string(),
+                conversation_id: conversation_id.to_string(),
+                session_id: session_id.to_string(),
+                run_id: run_id.to_string(),
+                source_message_id: source_message_id.map(str::to_string),
+                parent_artifact_id: None,
+                title: title.clone(),
+                status: "ready".into(),
+                preview_kind: preview_kind.clone(),
+                latest_version: 1,
+                latest_version_ref,
+                promotion_state: "not-promoted".into(),
+                promotion_knowledge_id: None,
+                updated_at,
+                storage_path: None,
+                content_hash: None,
+                byte_size: None,
+                content_type: content_type.clone(),
+            };
+            let content = DeliverableVersionContent {
+                artifact_id: deliverable_id,
+                version: 1,
+                preview_kind,
+                editable: true,
+                file_name: output.file_name.clone(),
+                content_type,
+                text_content: output.text_content.clone(),
+                data_base64: output.data_base64.clone(),
+                byte_size: None,
+            };
+            PendingRuntimeDeliverable {
+                detail,
+                content,
+                source_message_id: source_message_id.map(str::to_string),
+                parent_version: None,
+            }
+        })
+        .collect()
+}
+
+fn register_pending_runtime_deliverables(
+    aggregate: &mut RuntimeAggregate,
+    deliverables: Vec<PendingRuntimeDeliverable>,
+) -> Vec<ArtifactVersionReference> {
+    let refs = deliverables
+        .iter()
+        .map(|deliverable| deliverable.detail.latest_version_ref.clone())
+        .collect::<Vec<_>>();
+
+    for deliverable in deliverables {
+        aggregate
+            .metadata
+            .pending_deliverables
+            .insert(deliverable.detail.id.clone(), deliverable);
+    }
+
+    refs
 }
 
 fn serialized_runtime_session(
@@ -986,15 +1134,15 @@ async fn execute_runtime_turn_loop(
                 .collect(),
         };
         current_iteration_index = next_runtime_iteration_index_from_value(current_iteration_index)?;
-        let events = adapter
-            .state
-            .executor
-            .execute_conversation(resolved_target, &request)
+        let conversation_execution = adapter
+            .execute_resolved_conversation(resolved_target, &request)
             .await?;
-        let streamed = events
+        let streamed = conversation_execution
+            .events
             .iter()
             .any(|event| matches!(event, runtime::AssistantEvent::TextDelta(_)));
-        let (assistant_message, usage) = assistant_message_from_events(events)?;
+        let (assistant_message, usage) =
+            assistant_message_from_events(conversation_execution.events)?;
         model_iterations.push(RuntimeLoopModelIteration {
             iteration: current_iteration_index,
             streamed,
@@ -1013,6 +1161,7 @@ async fn execute_runtime_turn_loop(
             content: response_content,
             request_id: None,
             total_tokens: segment_total_tokens,
+            deliverables: conversation_execution.deliverables,
         };
         let tool_uses = collect_tool_uses(&assistant_message);
         session
@@ -3649,6 +3798,7 @@ fn apply_submit_state(
         resource_ids: Some(Vec::new()),
         attachments: Some(Vec::new()),
         artifacts: Some(Vec::new()),
+        deliverable_refs: None,
         usage: None,
         tool_calls: None,
         process_entries: None,
@@ -3684,33 +3834,50 @@ fn apply_submit_state(
         },
     );
     aggregate.detail.trace.push(submitted_trace.clone());
-
-    let assistant_message = execution.map(|response| RuntimeMessage {
-        id: format!("msg-{}", Uuid::new_v4()),
-        session_id: run_context.session_id.clone(),
-        conversation_id: run_context.conversation_id.clone(),
-        sender_type: "assistant".into(),
-        sender_label: actor_label.clone(),
-        content: response.content.clone(),
-        timestamp: run_context.now,
-        configured_model_id: Some(run_context.resolved_target.configured_model_id.clone()),
-        configured_model_name: Some(run_context.resolved_target.configured_model_name.clone()),
-        model_id: Some(run_context.resolved_target.registry_model_id.clone()),
-        status: "completed".into(),
-        requested_actor_kind: requested_actor_kind.clone(),
-        requested_actor_id: requested_actor_id.clone(),
-        resolved_actor_kind: requested_actor_kind.clone(),
-        resolved_actor_id: requested_actor_id.clone(),
-        resolved_actor_label: Some(actor_label.clone()),
-        used_default_actor: Some(false),
-        resource_ids: Some(Vec::new()),
-        attachments: Some(Vec::new()),
-        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
-            &aggregate.detail.run.id,
-        )]),
-        usage: None,
-        tool_calls: None,
-        process_entries: None,
+    let assistant_message = execution.map(|response| {
+        let message_id = format!("msg-{}", Uuid::new_v4());
+        let deliverable_refs = register_pending_runtime_deliverables(
+            aggregate,
+            build_pending_runtime_deliverables(
+                &adapter.state.workspace_id,
+                &aggregate.detail.summary.project_id,
+                &run_context.conversation_id,
+                &run_context.session_id,
+                &aggregate.detail.run.id,
+                &aggregate.detail.summary.title,
+                run_context.now,
+                &response.deliverables,
+                Some(&message_id),
+            ),
+        );
+        RuntimeMessage {
+            id: message_id,
+            session_id: run_context.session_id.clone(),
+            conversation_id: run_context.conversation_id.clone(),
+            sender_type: "assistant".into(),
+            sender_label: actor_label.clone(),
+            content: response.content.clone(),
+            timestamp: run_context.now,
+            configured_model_id: Some(run_context.resolved_target.configured_model_id.clone()),
+            configured_model_name: Some(run_context.resolved_target.configured_model_name.clone()),
+            model_id: Some(run_context.resolved_target.registry_model_id.clone()),
+            status: "completed".into(),
+            requested_actor_kind: requested_actor_kind.clone(),
+            requested_actor_id: requested_actor_id.clone(),
+            resolved_actor_kind: requested_actor_kind.clone(),
+            resolved_actor_id: requested_actor_id.clone(),
+            resolved_actor_label: Some(actor_label.clone()),
+            used_default_actor: Some(false),
+            resource_ids: Some(Vec::new()),
+            attachments: Some(Vec::new()),
+            artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+                &aggregate.detail.run.id,
+            )]),
+            deliverable_refs: (!deliverable_refs.is_empty()).then_some(deliverable_refs),
+            usage: None,
+            tool_calls: None,
+            process_entries: None,
+        }
     });
     if let Some(message) = assistant_message.as_ref() {
         aggregate.detail.messages.push(message.clone());
@@ -3844,6 +4011,10 @@ fn apply_submit_state(
     } else {
         Vec::new()
     };
+    aggregate.detail.run.deliverable_refs = assistant_message
+        .as_ref()
+        .and_then(|message| message.deliverable_refs.clone())
+        .unwrap_or_default();
     aggregate.detail.run.trace_context = run_context.trace_context.clone();
     aggregate.detail.run.capability_plan_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.run.provider_state_summary = run_context.provider_state_summary.clone();
@@ -4196,32 +4367,50 @@ fn apply_approval_resolution_state(
         }
     }
 
-    let assistant_message = execution.map(|response| RuntimeMessage {
-        id: format!("msg-{}", Uuid::new_v4()),
-        session_id: session_id.to_string(),
-        conversation_id: aggregate.detail.summary.conversation_id.clone(),
-        sender_type: "assistant".into(),
-        sender_label: actor_manifest.label().to_string(),
-        content: response.content.clone(),
-        timestamp: now,
-        configured_model_id: aggregate.detail.run.configured_model_id.clone(),
-        configured_model_name: aggregate.detail.run.configured_model_name.clone(),
-        model_id: aggregate.detail.run.model_id.clone(),
-        status: "completed".into(),
-        requested_actor_kind: aggregate.detail.run.requested_actor_kind.clone(),
-        requested_actor_id: aggregate.detail.run.requested_actor_id.clone(),
-        resolved_actor_kind: aggregate.detail.run.resolved_actor_kind.clone(),
-        resolved_actor_id: aggregate.detail.run.resolved_actor_id.clone(),
-        resolved_actor_label: aggregate.detail.run.resolved_actor_label.clone(),
-        used_default_actor: Some(false),
-        resource_ids: Some(Vec::new()),
-        attachments: Some(Vec::new()),
-        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
-            &aggregate.detail.run.id,
-        )]),
-        usage: None,
-        tool_calls: None,
-        process_entries: None,
+    let assistant_message = execution.map(|response| {
+        let message_id = format!("msg-{}", Uuid::new_v4());
+        let deliverable_refs = register_pending_runtime_deliverables(
+            aggregate,
+            build_pending_runtime_deliverables(
+                &adapter.state.workspace_id,
+                &aggregate.detail.summary.project_id,
+                &aggregate.detail.summary.conversation_id,
+                session_id,
+                &aggregate.detail.run.id,
+                &aggregate.detail.summary.title,
+                now,
+                &response.deliverables,
+                Some(&message_id),
+            ),
+        );
+        RuntimeMessage {
+            id: message_id,
+            session_id: session_id.to_string(),
+            conversation_id: aggregate.detail.summary.conversation_id.clone(),
+            sender_type: "assistant".into(),
+            sender_label: actor_manifest.label().to_string(),
+            content: response.content.clone(),
+            timestamp: now,
+            configured_model_id: aggregate.detail.run.configured_model_id.clone(),
+            configured_model_name: aggregate.detail.run.configured_model_name.clone(),
+            model_id: aggregate.detail.run.model_id.clone(),
+            status: "completed".into(),
+            requested_actor_kind: aggregate.detail.run.requested_actor_kind.clone(),
+            requested_actor_id: aggregate.detail.run.requested_actor_id.clone(),
+            resolved_actor_kind: aggregate.detail.run.resolved_actor_kind.clone(),
+            resolved_actor_id: aggregate.detail.run.resolved_actor_id.clone(),
+            resolved_actor_label: aggregate.detail.run.resolved_actor_label.clone(),
+            used_default_actor: Some(false),
+            resource_ids: Some(Vec::new()),
+            attachments: Some(Vec::new()),
+            artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+                &aggregate.detail.run.id,
+            )]),
+            deliverable_refs: (!deliverable_refs.is_empty()).then_some(deliverable_refs),
+            usage: None,
+            tool_calls: None,
+            process_entries: None,
+        }
     });
     if let Some(message) = assistant_message.as_ref() {
         aggregate.detail.messages.push(message.clone());
@@ -4296,6 +4485,10 @@ fn apply_approval_resolution_state(
     } else {
         Vec::new()
     };
+    aggregate.detail.run.deliverable_refs = assistant_message
+        .as_ref()
+        .and_then(|message| message.deliverable_refs.clone())
+        .unwrap_or_default();
     aggregate.detail.run.checkpoint = if let Some(checkpoint) = checkpoint {
         checkpoint
     } else {
@@ -4492,32 +4685,50 @@ fn apply_auth_challenge_resolution_state(
         tool_name: challenge.tool_name.clone(),
     });
 
-    let assistant_message = execution.map(|response| RuntimeMessage {
-        id: format!("msg-{}", Uuid::new_v4()),
-        session_id: session_id.to_string(),
-        conversation_id: aggregate.detail.summary.conversation_id.clone(),
-        sender_type: "assistant".into(),
-        sender_label: actor_manifest.label().to_string(),
-        content: response.content.clone(),
-        timestamp: now,
-        configured_model_id: aggregate.detail.run.configured_model_id.clone(),
-        configured_model_name: aggregate.detail.run.configured_model_name.clone(),
-        model_id: aggregate.detail.run.model_id.clone(),
-        status: "completed".into(),
-        requested_actor_kind: aggregate.detail.run.requested_actor_kind.clone(),
-        requested_actor_id: aggregate.detail.run.requested_actor_id.clone(),
-        resolved_actor_kind: aggregate.detail.run.resolved_actor_kind.clone(),
-        resolved_actor_id: aggregate.detail.run.resolved_actor_id.clone(),
-        resolved_actor_label: aggregate.detail.run.resolved_actor_label.clone(),
-        used_default_actor: Some(false),
-        resource_ids: Some(Vec::new()),
-        attachments: Some(Vec::new()),
-        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
-            &aggregate.detail.run.id,
-        )]),
-        usage: None,
-        tool_calls: None,
-        process_entries: None,
+    let assistant_message = execution.map(|response| {
+        let message_id = format!("msg-{}", Uuid::new_v4());
+        let deliverable_refs = register_pending_runtime_deliverables(
+            aggregate,
+            build_pending_runtime_deliverables(
+                &adapter.state.workspace_id,
+                &aggregate.detail.summary.project_id,
+                &aggregate.detail.summary.conversation_id,
+                session_id,
+                &aggregate.detail.run.id,
+                &aggregate.detail.summary.title,
+                now,
+                &response.deliverables,
+                Some(&message_id),
+            ),
+        );
+        RuntimeMessage {
+            id: message_id,
+            session_id: session_id.to_string(),
+            conversation_id: aggregate.detail.summary.conversation_id.clone(),
+            sender_type: "assistant".into(),
+            sender_label: actor_manifest.label().to_string(),
+            content: response.content.clone(),
+            timestamp: now,
+            configured_model_id: aggregate.detail.run.configured_model_id.clone(),
+            configured_model_name: aggregate.detail.run.configured_model_name.clone(),
+            model_id: aggregate.detail.run.model_id.clone(),
+            status: "completed".into(),
+            requested_actor_kind: aggregate.detail.run.requested_actor_kind.clone(),
+            requested_actor_id: aggregate.detail.run.requested_actor_id.clone(),
+            resolved_actor_kind: aggregate.detail.run.resolved_actor_kind.clone(),
+            resolved_actor_id: aggregate.detail.run.resolved_actor_id.clone(),
+            resolved_actor_label: aggregate.detail.run.resolved_actor_label.clone(),
+            used_default_actor: Some(false),
+            resource_ids: Some(Vec::new()),
+            attachments: Some(Vec::new()),
+            artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+                &aggregate.detail.run.id,
+            )]),
+            deliverable_refs: (!deliverable_refs.is_empty()).then_some(deliverable_refs),
+            usage: None,
+            tool_calls: None,
+            process_entries: None,
+        }
     });
     if let Some(message) = assistant_message.as_ref() {
         aggregate.detail.messages.push(message.clone());
@@ -4571,6 +4782,10 @@ fn apply_auth_challenge_resolution_state(
     } else {
         Vec::new()
     };
+    aggregate.detail.run.deliverable_refs = assistant_message
+        .as_ref()
+        .and_then(|message| message.deliverable_refs.clone())
+        .unwrap_or_default();
     aggregate.detail.run.checkpoint.pending_auth_challenge = None;
     aggregate.detail.run.checkpoint.current_iteration_index = current_iteration_index;
     aggregate.detail.run.checkpoint.usage_summary = usage_summary.clone();

@@ -154,6 +154,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     setProjectRuntimeDraft: runtimeActions.setProjectRuntimeDraft,
     getProjectSettings: runtimeActions.getProjectSettings,
     loadProjectRuntimeConfig: runtimeActions.loadProjectRuntimeConfig,
+    ensureProjectRuntimeConfig: runtimeActions.ensureProjectRuntimeConfig,
     validateProjectRuntimeConfig: runtimeActions.validateProjectRuntimeConfig,
     saveProjectRuntimeConfig: runtimeActions.saveProjectRuntimeConfig,
     saveProjectModelSettings: runtimeActions.saveProjectModelSettings,

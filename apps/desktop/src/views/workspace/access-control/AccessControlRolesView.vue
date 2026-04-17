@@ -27,6 +27,11 @@ import type { PermissionDefinition, RoleUpsertRequest } from '@octopus/schema'
 import { usePagination } from '@/composables/usePagination'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
+import {
+  getAccessRoleDescription,
+  getAccessRoleName,
+  getPermissionDisplayName,
+} from './display-i18n'
 import { createStatusOptions, getCapabilityModuleLabel, getStatusLabel } from './helpers'
 import { useAccessControlNotifications } from './useAccessControlNotifications'
 import { useAccessControlSelection } from './useAccessControlSelection'
@@ -64,11 +69,11 @@ const editForm = reactive<RoleFormState>(createEmptyForm())
 const filteredRoles = computed(() => {
   const normalizedQuery = query.value.trim().toLowerCase()
   return [...accessControlStore.roles]
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) => getAccessRoleName(left).localeCompare(getAccessRoleName(right)))
     .filter(role => !normalizedQuery || [
-      role.name,
+      getAccessRoleName(role),
       role.code,
-      role.description,
+      getAccessRoleDescription(role),
       ...role.permissionCodes,
     ].join(' ').toLowerCase().includes(normalizedQuery))
 })
@@ -336,7 +341,7 @@ async function toggleRoleStatus(role: { id: string, code: string, name: string, 
     })
     await notifySuccess(
       t(enabled ? 'accessControl.roles.feedback.toastEnabledTitle' : 'accessControl.roles.feedback.toastDisabledTitle'),
-      role.name,
+      getAccessRoleName(role),
     )
   } catch (error) {
     clearRoleStatusOverride(role.id)
@@ -396,7 +401,7 @@ async function handleDelete() {
   deletingRoleId.value = selectedRole.value.id
   submitError.value = ''
   try {
-    const label = selectedRole.value.name
+    const label = getAccessRoleName(selectedRole.value)
     await accessControlStore.deleteRole(selectedRole.value.id)
     selectedRoleId.value = ''
     deleteDialogOpen.value = false
@@ -466,7 +471,7 @@ async function handleBulkDelete() {
 
     <UiListDetailWorkspace
       :has-selection="Boolean(selectedRole)"
-      :detail-title="selectedRole ? selectedRole.name : ''"
+      :detail-title="selectedRole ? getAccessRoleName(selectedRole) : ''"
       :detail-subtitle="t('accessControl.roles.detail.subtitle')"
       :empty-detail-title="t('accessControl.roles.detail.emptyTitle')"
       :empty-detail-description="t('accessControl.roles.detail.emptyDescription')"
@@ -529,7 +534,7 @@ async function handleBulkDelete() {
               layout="compact"
               interactive
               :active="selectedRoleId === role.id"
-              :title="role.name"
+              :title="getAccessRoleName(role)"
               :description="role.code"
               :test-id="`access-control-role-record-${role.id}`"
               @click="selectRole(role.id)"
@@ -547,7 +552,7 @@ async function handleBulkDelete() {
                     @update:model-value="toggleRoleStatus(role, $event)"
                   >
                     <span class="sr-only">
-                      {{ t('accessControl.roles.list.toggleStatus', { name: role.name }) }}
+                      {{ t('accessControl.roles.list.toggleStatus', { name: getAccessRoleName(role) }) }}
                     </span>
                   </UiSwitch>
                 </div>
@@ -581,7 +586,7 @@ async function handleBulkDelete() {
         <div v-if="selectedRole" class="space-y-4">
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ selectedRole.name }}</div>
+              <div class="text-sm font-semibold text-foreground">{{ getAccessRoleName(selectedRole) }}</div>
               <UiBadge :label="getStatusLabel(t, selectedRole.status)" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">{{ selectedRole.code }}</div>
@@ -672,7 +677,7 @@ async function handleBulkDelete() {
                           />
                           <div class="min-w-0 flex-1">
                             <div class="truncate text-sm font-medium text-text-primary">
-                              {{ permission.name }}
+                              {{ getPermissionDisplayName(permission) }}
                             </div>
                             <div class="truncate pt-0.5 text-xs text-text-secondary">
                               {{ permission.code }}
@@ -789,7 +794,7 @@ async function handleBulkDelete() {
                         />
                         <div class="min-w-0 flex-1">
                           <div class="truncate text-sm font-medium text-text-primary">
-                            {{ permission.name }}
+                            {{ getPermissionDisplayName(permission) }}
                           </div>
                           <div class="truncate pt-0.5 text-xs text-text-secondary">
                             {{ permission.code }}
@@ -845,7 +850,7 @@ async function handleBulkDelete() {
       @update:open="deleteDialogOpen = $event"
     >
       <p class="text-sm text-text-secondary">
-        {{ t('accessControl.roles.dialogs.deleteConfirm', { name: selectedRole?.name ?? t('common.na') }) }}
+        {{ t('accessControl.roles.dialogs.deleteConfirm', { name: selectedRole ? getAccessRoleName(selectedRole) : t('common.na') }) }}
       </p>
 
       <template #footer>

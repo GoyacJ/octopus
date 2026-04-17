@@ -9,6 +9,7 @@ import type {
   RuntimeConfigSource,
 } from '@octopus/schema'
 
+import { enumLabel, formatList } from '@/i18n/copy'
 import type { CatalogConfiguredModelRow, CatalogFilterOption } from '@/stores/catalog'
 import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
@@ -37,12 +38,28 @@ import {
   updateProviderBaseUrl,
   VLLM_PROVIDER_ID,
 } from './models-runtime-helpers'
+import {
+  getConfiguredModelCredentialStatus,
+  isModelCredentialBlocked,
+  localizeModelCredentialDescription,
+  localizeModelCredentialLabel,
+  localizeModelRuntimeMessage,
+  localizeModelRuntimeMessages,
+  resolveModelCredentialSecurityState,
+  resolveModelCredentialTone,
+} from './models-security'
+import { useWorkspaceModelNotifications } from './useWorkspaceModelNotifications'
+
+function genericTableFallback(value?: string | null) {
+  return value?.trim() || '—'
+}
 
 export function useModelsDraft() {
   const { t } = useI18n()
   const catalogStore = useCatalogStore()
   const runtime = useRuntimeStore()
   const shell = useShellStore()
+  const notifications = useWorkspaceModelNotifications()
 
   const searchQuery = ref('')
   const providerFilter = ref('')
@@ -51,13 +68,14 @@ export function useModelsDraft() {
   const page = ref(1)
   const selectedConfiguredModelId = ref('')
   const detailDialogOpen = ref(false)
+  const selectedApiKey = ref('')
 
   const createDialogOpen = ref(false)
   const createName = ref('')
   const createProviderType = ref('')
   const createCustomProviderLabel = ref('')
   const createModelId = ref('')
-  const createCredentialRef = ref('')
+  const createApiKey = ref('')
   const createBaseUrl = ref('')
   const createTotalTokens = ref('')
   const createEnabled = ref(true)
@@ -83,6 +101,7 @@ export function useModelsDraft() {
   const workspaceModelOverridesCurrent = computed<Record<string, ModelRegistryRecord>>(() =>
     toModelRegistryMap(workspaceModelRegistryDocument.value.models),
   )
+  const secretReferences = computed(() => runtime.config?.secretReferences ?? [])
 
   const createProviderOptions = computed<CatalogFilterOption[]>(() => {
     const providerOptions = catalogStore.providers
@@ -128,6 +147,13 @@ export function useModelsDraft() {
           item.includes(configuredModel.configuredModelId) || item.includes(configuredModel.providerId) || item.includes(configuredModel.modelId))
           || catalogStore.diagnostics.errors.some(item =>
             item.includes(configuredModel.configuredModelId) || item.includes(configuredModel.providerId) || item.includes(configuredModel.modelId))
+        const credentialSecurityState = resolveModelCredentialSecurityState({
+          credentialRef: configuredModel.credentialRef,
+          secretStatus: getConfiguredModelCredentialStatus(
+            secretReferences.value,
+            configuredModel.configuredModelId,
+          ),
+        })
 
         return {
           configuredModelId: configuredModel.configuredModelId,
@@ -149,6 +175,7 @@ export function useModelsDraft() {
           credentialRef: configuredModel.credentialRef,
           credentialStatus: (configuredModel.credentialRef ? 'configured' : 'unconfigured') as CatalogConfiguredModelRow['credentialStatus'],
           credentialConfigured: Boolean(configuredModel.credentialRef),
+          credentialDisplayLabel: localizeModelCredentialLabel(t, credentialSecurityState),
           baseUrl: configuredModel.baseUrl,
           totalTokens,
           usedTokens,
@@ -168,10 +195,10 @@ export function useModelsDraft() {
     for (const row of localRows.value) {
       providersMap.set(row.providerId, row.providerLabel)
       for (const surface of row.surfaces) {
-        surfacesMap.set(surface, surface)
+        surfacesMap.set(surface, enumLabel('modelSurface', surface))
       }
       for (const capability of row.capabilities) {
-        capabilitiesMap.set(capability, capability)
+        capabilitiesMap.set(capability, enumLabel('modelCapability', capability))
       }
     }
 
@@ -179,12 +206,12 @@ export function useModelsDraft() {
       providers: [...providersMap.entries()]
         .sort((left, right) => left[1].localeCompare(right[1]))
         .map(([value, label]) => ({ value, label })),
-      surfaces: [...surfacesMap.keys()]
-        .sort((left, right) => left.localeCompare(right))
-        .map(value => ({ value, label: value })),
-      capabilities: [...capabilitiesMap.keys()]
-        .sort((left, right) => left.localeCompare(right))
-        .map(value => ({ value, label: value })),
+      surfaces: [...surfacesMap.entries()]
+        .sort((left, right) => left[1].localeCompare(right[1]))
+        .map(([value, label]) => ({ value, label })),
+      capabilities: [...capabilitiesMap.entries()]
+        .sort((left, right) => left[1].localeCompare(right[1]))
+        .map(([value, label]) => ({ value, label })),
     }
   })
 
@@ -258,6 +285,27 @@ export function useModelsDraft() {
       ? runtime.configuredModelProbeResult
       : null,
   )
+  const selectedCredentialStatusEntry = computed(() =>
+    getConfiguredModelCredentialStatus(
+      secretReferences.value,
+      selectedConfiguredModel.value?.configuredModelId,
+    ),
+  )
+  const selectedCredentialSecurityState = computed(() =>
+    resolveModelCredentialSecurityState({
+      credentialRef: selectedConfiguredModel.value?.credentialRef,
+      secretStatus: selectedCredentialStatusEntry.value,
+      hasPendingApiKey: Boolean(selectedApiKey.value.trim()),
+    }),
+  )
+  const selectedCredentialStatusLabel = computed(() =>
+    localizeModelCredentialLabel(t, selectedCredentialSecurityState.value))
+  const selectedCredentialStatusDescription = computed(() =>
+    localizeModelCredentialDescription(t, selectedCredentialSecurityState.value))
+  const selectedCredentialStatusTone = computed(() =>
+    resolveModelCredentialTone(selectedCredentialSecurityState.value))
+  const selectedCredentialBlocked = computed(() =>
+    isModelCredentialBlocked(selectedCredentialSecurityState.value))
 
   const patchDocument = computed<Record<string, JsonValue>>(() => {
     const patch: Record<string, JsonValue> = {}
@@ -287,6 +335,22 @@ export function useModelsDraft() {
 
   const patchPreview = computed(() => JSON.stringify(patchDocument.value, null, 2))
   const hasPendingPatch = computed(() => Object.keys(patchDocument.value).length > 0)
+  const hasPendingSaveChanges = computed(() =>
+    hasPendingPatch.value || Boolean(selectedApiKey.value.trim()))
+  const validationErrors = computed(() =>
+    localizeModelRuntimeMessages(
+      t,
+      runtime.configValidation.workspace?.errors ?? [],
+      'models.messages.validateFailed',
+    ),
+  )
+  const validationWarnings = computed(() =>
+    localizeModelRuntimeMessages(
+      t,
+      runtime.configValidation.workspace?.warnings ?? [],
+      'models.messages.runtimeWarning',
+    ),
+  )
 
   function initializeDrafts() {
     draftConfiguredModels.value = cloneJson(workspaceConfiguredModelsCurrent.value)
@@ -298,6 +362,23 @@ export function useModelsDraft() {
     if (!selectedConfiguredModelId.value || !draftConfiguredModels.value[selectedConfiguredModelId.value]) {
       selectedConfiguredModelId.value = filteredRows.value[0]?.configuredModelId ?? localRows.value[0]?.configuredModelId ?? ''
     }
+  }
+
+  function resolveWorkspaceMessage(fallbackKey: string) {
+    const localizedErrors = localizeModelRuntimeMessages(
+      t,
+      runtime.configValidation.workspace?.errors ?? [],
+      fallbackKey,
+    )
+    return localizedErrors[0]
+      || localizeModelRuntimeMessage(t, runtime.configError, fallbackKey)
+      || t(fallbackKey)
+  }
+
+  function resolveUnknownError(error: unknown, fallbackKey: string) {
+    return error instanceof Error
+      ? localizeModelRuntimeMessage(t, error.message, fallbackKey)
+      : t(fallbackKey)
   }
 
   function updateSelectedConfiguredModel(patch: Partial<ConfiguredModelRecord>) {
@@ -313,6 +394,11 @@ export function useModelsDraft() {
         ...patch,
       },
     }
+  }
+
+  function updateSelectedApiKey(value: string) {
+    runtime.clearConfiguredModelProbeResult()
+    selectedApiKey.value = value
   }
 
   function updateSelectedTokenQuota(value: string) {
@@ -377,17 +463,28 @@ export function useModelsDraft() {
     }
   }
 
+  async function upsertManagedCredential(configuredModelId: string, providerId: string, apiKey: string) {
+    return await runtime.upsertConfiguredModelCredential(configuredModelId, {
+      configuredModelId,
+      providerId,
+      apiKey,
+    })
+  }
+
   async function deleteSelectedConfiguredModel() {
     if (!selectedConfiguredModel.value) {
       return
     }
+
+    const removedModelName = selectedConfiguredModel.value.name
+    const removedConfiguredModelId = selectedConfiguredModel.value.configuredModelId
     const previousConfiguredModels = cloneJson(draftConfiguredModels.value)
     const previousProviderOverrides = cloneJson(draftProviderOverrides.value)
     const previousModelOverrides = cloneJson(draftModelOverrides.value)
     const previousSelectedConfiguredModelId = selectedConfiguredModelId.value
     const next = { ...draftConfiguredModels.value }
-    const removed = next[selectedConfiguredModel.value.configuredModelId]
-    delete next[selectedConfiguredModel.value.configuredModelId]
+    const removed = next[removedConfiguredModelId]
+    delete next[removedConfiguredModelId]
     draftConfiguredModels.value = next
     cleanupUnusedManagedEntries(next, removed.modelId, removed.providerId)
     selectedConfiguredModelId.value = ''
@@ -400,10 +497,25 @@ export function useModelsDraft() {
       draftModelOverrides.value = previousModelOverrides
       selectedConfiguredModelId.value = previousSelectedConfiguredModelId
       syncRuntimeDraft()
+      await notifications.notifyDeleteFailed(
+        removedModelName,
+        resolveWorkspaceMessage('models.messages.deleteFailed'),
+      )
       return
     }
 
     detailDialogOpen.value = false
+
+    try {
+      await runtime.deleteConfiguredModelCredential(removedConfiguredModelId)
+      await notifications.notifyDeleteSuccess(removedModelName)
+    } catch (error) {
+      await notifications.notifyDeleteWarning(
+        removedModelName,
+        resolveUnknownError(error, 'models.messages.secretCleanupFailed'),
+      )
+    }
+
     await refreshWorkspaceModels()
   }
 
@@ -412,7 +524,7 @@ export function useModelsDraft() {
     createProviderType.value = createProviderOptions.value[0]?.value ?? ''
     createCustomProviderLabel.value = ''
     createModelId.value = ''
-    createCredentialRef.value = ''
+    createApiKey.value = ''
     createBaseUrl.value = createBaseUrlDefault.value
     createTotalTokens.value = ''
     createEnabled.value = true
@@ -461,6 +573,25 @@ export function useModelsDraft() {
     const previousProviderOverrides = cloneJson(draftProviderOverrides.value)
     const previousModelOverrides = cloneJson(draftModelOverrides.value)
     const previousSelectedConfiguredModelId = selectedConfiguredModelId.value
+    const trimmedApiKey = createApiKey.value.trim()
+    let managedCredentialCreated = false
+    let credentialRef: string | undefined
+
+    try {
+      if (trimmedApiKey) {
+        const credentialRecord = await upsertManagedCredential(
+          configuredModelId,
+          providerId,
+          trimmedApiKey,
+        )
+        credentialRef = credentialRecord.credentialRef
+        managedCredentialCreated = true
+      }
+    } catch (error) {
+      createFormError.value = resolveUnknownError(error, 'models.messages.createFailed')
+      await notifications.notifyCreateFailed(name, createFormError.value)
+      return
+    }
 
     if (providerType === CUSTOM_PROVIDER_MODE) {
       draftProviderOverrides.value = {
@@ -494,7 +625,7 @@ export function useModelsDraft() {
         name,
         providerId,
         modelId: registryModelId,
-        credentialRef: createCredentialRef.value.trim() || undefined,
+        credentialRef,
         baseUrl,
         tokenQuota: totalTokens && totalTokens > 0 ? { totalTokens } : undefined,
         tokenUsage: {
@@ -504,8 +635,8 @@ export function useModelsDraft() {
         },
         enabled: createEnabled.value,
         source: 'workspace',
-        status: createCredentialRef.value.trim() ? 'configured' : 'unconfigured',
-        configured: Boolean(createCredentialRef.value.trim()),
+        status: credentialRef ? 'configured' : 'unconfigured',
+        configured: Boolean(credentialRef),
       },
     }
     selectedConfiguredModelId.value = configuredModelId
@@ -518,15 +649,22 @@ export function useModelsDraft() {
       draftModelOverrides.value = previousModelOverrides
       selectedConfiguredModelId.value = previousSelectedConfiguredModelId
       syncRuntimeDraft()
-      createFormError.value = runtime.configError
-        || runtime.configValidation.workspace?.errors[0]
-        || t('models.create.errors.saveFailed')
+      if (managedCredentialCreated) {
+        try {
+          await runtime.deleteConfiguredModelCredential(configuredModelId)
+        } catch {}
+      }
+      createFormError.value = resolveWorkspaceMessage('models.messages.createFailed')
+      await notifications.notifyCreateFailed(name, createFormError.value)
       return
     }
 
     await refreshWorkspaceModels()
     createDialogOpen.value = false
     detailDialogOpen.value = true
+    createApiKey.value = ''
+    createFormError.value = ''
+    await notifications.notifyCreateSuccess(name)
   }
 
   function syncRuntimeDraft() {
@@ -541,38 +679,103 @@ export function useModelsDraft() {
     ])
   }
 
-  async function validateWorkspacePatch() {
-    syncRuntimeDraft()
-    return await runtime.validateConfig('workspace')
-  }
-
   async function validateSelectedConfiguredModel() {
     if (!selectedConfiguredModel.value) {
       return
     }
-    syncRuntimeDraft()
-    const result = await runtime.probeConfiguredModel('workspace', selectedConfiguredModel.value.configuredModelId)
-    if (result.valid && result.reachable) {
-      await refreshWorkspaceModels()
-    }
-  }
 
-  async function saveWorkspacePatch() {
-    const validation = await validateWorkspacePatch()
-    if (!validation.valid) {
+    if (selectedCredentialBlocked.value) {
+      await notifications.notifyValidationFailed(
+        selectedConfiguredModel.value.name,
+        t('models.messages.migrationBlocked'),
+      )
       return
     }
 
+    syncRuntimeDraft()
+    const result = await runtime.probeConfiguredModel(
+      'workspace',
+      selectedConfiguredModel.value.configuredModelId,
+      selectedApiKey.value.trim() || undefined,
+    )
+
+    if (result.valid && result.reachable) {
+      await notifications.notifyValidationSuccess(
+        result.configuredModelName ?? selectedConfiguredModel.value.name,
+        result.consumedTokens ?? 0,
+      )
+      await refreshWorkspaceModels()
+      return
+    }
+
+    const message = localizeModelRuntimeMessages(
+      t,
+      result.errors.length ? result.errors : result.warnings,
+      'models.messages.validateFailed',
+    )[0] ?? t('models.messages.validateFailed')
+
+    await notifications.notifyValidationFailed(selectedConfiguredModel.value.name, message)
+  }
+
+  async function saveWorkspacePatch() {
+    if (!selectedConfiguredModel.value) {
+      return
+    }
+
+    if (!hasPendingSaveChanges.value) {
+      return
+    }
+
+    if (selectedCredentialBlocked.value) {
+      await notifications.notifySaveFailed(
+        selectedConfiguredModel.value.name,
+        t('models.messages.migrationBlocked'),
+      )
+      return
+    }
+
+    const trimmedApiKey = selectedApiKey.value.trim()
+
+    if (trimmedApiKey) {
+      try {
+        const credentialRecord = await upsertManagedCredential(
+          selectedConfiguredModel.value.configuredModelId,
+          selectedConfiguredModel.value.providerId,
+          trimmedApiKey,
+        )
+        updateSelectedConfiguredModel({
+          credentialRef: credentialRecord.credentialRef,
+          status: 'configured',
+          configured: true,
+        })
+        selectedApiKey.value = ''
+      } catch (error) {
+        await notifications.notifySaveFailed(
+          selectedConfiguredModel.value.name,
+          resolveUnknownError(error, 'models.messages.saveFailed'),
+        )
+        return
+      }
+    }
+
+    syncRuntimeDraft()
+
     const saved = await runtime.saveConfig('workspace')
     if (!saved) {
+      await notifications.notifySaveFailed(
+        selectedConfiguredModel.value.name,
+        resolveWorkspaceMessage('models.messages.saveFailed'),
+      )
       return
     }
 
     await refreshWorkspaceModels()
+    await notifications.notifySaveSuccess(selectedConfiguredModel.value.name)
   }
 
   function selectRow(row: CatalogConfiguredModelRow) {
     runtime.clearConfiguredModelProbeResult()
+    selectedApiKey.value = ''
     selectedConfiguredModelId.value = row.configuredModelId
     detailDialogOpen.value = true
   }
@@ -600,7 +803,9 @@ export function useModelsDraft() {
     {
       id: 'surfaces',
       header: t('models.table.columns.surfaces'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.surfaces.join(', ') || '—',
+      accessorFn: (row: CatalogConfiguredModelRow) => formatList(
+        row.surfaces.map(surface => enumLabel('modelSurface', surface)),
+      ) || '—',
     },
     {
       id: 'usedTokens',
@@ -622,12 +827,12 @@ export function useModelsDraft() {
     {
       id: 'credentialRef',
       header: t('models.table.columns.credentialRef'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.credentialRef || '—',
+      accessorFn: (row: CatalogConfiguredModelRow) => genericTableFallback(String(row.credentialDisplayLabel ?? '')),
     },
     {
       id: 'baseUrl',
       header: t('models.table.columns.baseUrl'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.baseUrl || '—',
+      accessorFn: (row: CatalogConfiguredModelRow) => genericTableFallback(row.baseUrl),
     },
   ])
 
@@ -684,6 +889,16 @@ export function useModelsDraft() {
     createBaseUrl.value = createBaseUrlDefault.value
   }, { immediate: true })
 
+  watch(selectedConfiguredModelId, () => {
+    selectedApiKey.value = ''
+  })
+
+  watch(detailDialogOpen, (open) => {
+    if (!open) {
+      selectedApiKey.value = ''
+    }
+  })
+
   return {
     t,
     catalogStore,
@@ -699,7 +914,7 @@ export function useModelsDraft() {
     createProviderType,
     createCustomProviderLabel,
     createModelId,
-    createCredentialRef,
+    createApiKey,
     createBaseUrl,
     createTotalTokens,
     createEnabled,
@@ -712,15 +927,23 @@ export function useModelsDraft() {
     selectedConfiguredModel,
     selectedModel,
     selectedProvider,
+    selectedApiKey,
+    selectedCredentialStatusLabel,
+    selectedCredentialStatusDescription,
+    selectedCredentialStatusTone,
+    selectedCredentialBlocked,
     selectedIsCustomManaged,
     selectedProbeResult,
-    hasPendingPatch,
+    validationErrors,
+    validationWarnings,
+    hasPendingSaveChanges,
     createProviderOptions,
     createUsesFreeformModel,
     createRequiresCustomProviderName,
     createUpstreamModelOptions,
     columns,
     updateSelectedConfiguredModel,
+    updateSelectedApiKey,
     updateSelectedTokenQuota,
     updateSelectedBaseUrl,
     updateSelectedCustomProviderLabel,

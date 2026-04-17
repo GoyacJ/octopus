@@ -239,6 +239,23 @@ AccessRoleRecord:
     - source
     - editable
   type: object
+AccessMemberRoleSummary:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    source:
+      $ref: "#/components/schemas/AccessRoleSource"
+  required:
+    - id
+    - code
+    - name
+    - source
+  type: object
 RoleUpsertRequest:
   additionalProperties: false
   properties:
@@ -894,6 +911,10 @@ AccessMemberSummary:
       nullable: true
     primaryPresetName:
       type: string
+    effectiveRoles:
+      items:
+        $ref: "#/components/schemas/AccessMemberRoleSummary"
+      type: array
     effectiveRoleNames:
       items:
         type: string
@@ -904,6 +925,7 @@ AccessMemberSummary:
     - user
     - primaryPresetCode
     - primaryPresetName
+    - effectiveRoles
     - effectiveRoleNames
     - hasOrgAssignments
   type: object

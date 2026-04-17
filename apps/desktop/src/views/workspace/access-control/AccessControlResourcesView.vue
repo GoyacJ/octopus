@@ -23,6 +23,7 @@ import type { ProtectedResourceMetadataUpsertRequest, ResourcePolicyUpsertReques
 import { usePagination } from '@/composables/usePagination'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
+import { getResourceActionLabel } from './display-i18n'
 import {
   createClassificationOptions,
   createPolicyEffectOptions,
@@ -191,7 +192,7 @@ async function createPolicy() {
       effect: policyForm.effect,
     }
     await accessControlStore.createResourcePolicy(payload)
-    await notifySuccess(t('accessControl.resources.feedback.toastPolicySaved'), payload.action)
+    await notifySuccess(t('accessControl.resources.feedback.toastPolicySaved'), getResourceActionLabel(payload.action))
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : t('accessControl.resources.feedback.createPolicyFailed')
   } finally {
@@ -233,7 +234,9 @@ async function saveMetadata() {
 async function deletePolicy(policyId: string) {
   submitError.value = ''
   try {
-    const label = selectedResourcePolicies.value.find(policy => policy.id === policyId)?.action ?? policyId
+    const label = getResourceActionLabel(
+      selectedResourcePolicies.value.find(policy => policy.id === policyId)?.action ?? policyId,
+    )
     await accessControlStore.deleteResourcePolicy(policyId)
     await notifySuccess(t('accessControl.resources.feedback.toastPolicyDeleted'), label)
   } catch (error) {
@@ -381,7 +384,7 @@ async function deletePolicy(policyId: string) {
               >
                 <div class="flex items-start justify-between gap-2">
                   <div>
-                    <div class="text-sm font-medium text-foreground">{{ policy.action }}</div>
+                    <div class="text-sm font-medium text-foreground">{{ getResourceActionLabel(policy.action) }}</div>
                     <div class="text-xs text-muted-foreground">
                       {{ getSubjectTypeLabel(t, policy.subjectType) }} / {{ resolveSubjectLabel(policy.subjectType, policy.subjectId) }}
                     </div>

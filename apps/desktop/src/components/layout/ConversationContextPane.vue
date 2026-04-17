@@ -56,7 +56,7 @@ const sectionItems = computed(() => [
   { id: 'ops', label: t('conversation.detail.sections.ops'), icon: Wrench },
 ] as const)
 
-function resolveMessageArtifactId(artifact: string | { artifactId: string }) {
+function resolveMessageDeliverableId(artifact: string | { artifactId: string }) {
   return typeof artifact === 'string' ? artifact : artifact.artifactId
 }
 
@@ -71,13 +71,19 @@ const timelineItems = computed(() =>
 )
 const conversationResourceIds = computed(() => [...new Set(runtime.activeMessages.flatMap(message => message.resourceIds ?? []))])
 const conversationArtifactIds = computed(() => [
-  ...new Set(runtime.activeMessages.flatMap(message => (message.artifacts ?? []).map(resolveMessageArtifactId))),
+  ...new Set([
+    ...(runtime.activeRun?.deliverableRefs ?? []).map(resolveMessageDeliverableId),
+    ...runtime.activeMessages.flatMap(message => (message.deliverableRefs ?? []).map(resolveMessageDeliverableId)),
+  ]),
 ])
 const conversationResources = computed(() =>
   resourceStore.activeProjectResources.filter(resource => conversationResourceIds.value.includes(resource.id)),
 )
 const conversationArtifacts = computed(() =>
   artifactStore.activeProjectDeliverables.filter(artifact => conversationArtifactIds.value.includes(artifact.id)),
+)
+const selectedProjectDeliverable = computed(() =>
+  artifactStore.activeProjectDeliverables.find(artifact => artifact.id === shell.selectedDeliverableId) ?? null,
 )
 const deliverableOptions = computed(() =>
   conversationArtifacts.value.map(artifact => ({
@@ -86,7 +92,12 @@ const deliverableOptions = computed(() =>
   })),
 )
 const localizedArtifactStatus = computed(() =>
-  new Map(conversationArtifacts.value.map(artifact => [artifact.id, enumLabel('artifactStatus', artifact.status)])),
+  new Map(
+    [
+      ...conversationArtifacts.value,
+      ...(selectedProjectDeliverable.value ? [selectedProjectDeliverable.value] : []),
+    ].map(artifact => [artifact.id, enumLabel('artifactStatus', artifact.status)]),
+  ),
 )
 const localizedResourceKind = computed(() =>
   new Map(conversationResources.value.map(resource => [resource.id, enumLabel('projectResourceKind', resource.kind)])),
@@ -109,7 +120,10 @@ const filteredConversationResources = computed(() => {
 const workspaceId = computed(() => typeof route.params.workspaceId === 'string' ? route.params.workspaceId : '')
 const conversationId = computed(() => typeof route.params.conversationId === 'string' ? route.params.conversationId : '')
 const selectedConversationDeliverable = computed(() =>
-  conversationArtifacts.value.find(artifact => artifact.id === shell.selectedDeliverableId) ?? conversationArtifacts.value[0] ?? null,
+  conversationArtifacts.value.find(artifact => artifact.id === shell.selectedDeliverableId)
+  ?? selectedProjectDeliverable.value
+  ?? conversationArtifacts.value[0]
+  ?? null,
 )
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
 const hasConversationContext = computed(() => Boolean(workspaceId.value && projectId.value))
@@ -137,8 +151,10 @@ const selectedDeliverableDraft = computed(() =>
     ? artifactStore.selectedDeliverableDraft
     : '',
 )
-const selectedDeliverableSourceResources = computed(() =>
-  filteredConversationResources.value.filter(resource => resource.sourceArtifactId === selectedConversationDeliverable.value?.id),
+const visibleConversationResources = computed(() =>
+  selectedConversationDeliverable.value
+    ? filteredConversationResources.value.filter(resource => resource.sourceArtifactId === selectedConversationDeliverable.value.id)
+    : filteredConversationResources.value,
 )
 const localizedPromotionState = computed(() =>
   selectedDeliverableDetail.value
@@ -258,7 +274,7 @@ watch(
     shell.workbenchMode,
   ] as const,
   async ([deliverableId, version, mode]) => {
-    if (!deliverableId || (mode !== 'deliverable' && mode !== 'context')) {
+    if (!deliverableId || mode !== 'deliverable') {
       return
     }
     await artifactStore.ensureDeliverableState(deliverableId, version ?? undefined)
@@ -373,7 +389,7 @@ async function selectDeliverableVersion(version: number) {
   saveStatus.value = ''
   deliverableActionStatus.value = ''
   shell.setSelectedDeliverableVersion(version)
-  await artifactStore.loadDeliverableVersionContent(selectedConversationDeliverable.value.id, version)
+  await artifactStore.ensureDeliverableVersionContent(selectedConversationDeliverable.value.id, version)
   await pushConversationQuery({
     mode: 'deliverable',
     deliverable: selectedConversationDeliverable.value.id,
@@ -763,9 +779,9 @@ async function forkSelectedDeliverable() {
             <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
           </UiPanelFrame>
 
-          <div v-if="selectedDeliverableSourceResources.length" class="space-y-2">
+          <div v-if="visibleConversationResources.length" class="space-y-2">
             <UiListRow
-              v-for="resource in selectedDeliverableSourceResources"
+              v-for="resource in visibleConversationResources"
               :key="resource.id"
               :title="resource.name"
               :subtitle="resource.location || resource.origin"

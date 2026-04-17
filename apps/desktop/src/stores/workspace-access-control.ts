@@ -44,6 +44,10 @@ import type {
 } from '@octopus/schema'
 
 import { getMenuDefinition } from '@/navigation/menuRegistry'
+import {
+  createProjectAccessPolicyName,
+  getAccessRoleName,
+} from '@/views/workspace/access-control/display-i18n'
 
 import {
   activeWorkspaceConnectionId,
@@ -152,7 +156,9 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   const currentRoleBindings = computed(() =>
     roleBindings.value.filter(binding => binding.subjectType === 'user' && binding.subjectId === currentUser.value?.id),
   )
-  const currentRoleNames = computed(() => authorization.value?.effectiveRoles.map(role => role.name) ?? [])
+  const currentRoleNames = computed(() =>
+    authorization.value?.effectiveRoles.map(role => getAccessRoleName(role)) ?? [],
+  )
   const currentEffectiveFeatureCodes = computed(() => authorization.value?.featureCodes ?? [])
   const currentEffectiveMenuIds = computed(() => authorization.value?.visibleMenuIds ?? [])
   const currentResourceActionGrants = computed<ResourceActionGrant[]>(() => authorization.value?.resourceActionGrants ?? [])
@@ -868,7 +874,7 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         return {
           userId,
           payload: {
-            name: `${user?.displayName ?? userId} project access`,
+            name: createProjectAccessPolicyName(user?.displayName ?? userId),
             subjectType: 'user',
             subjectId: userId,
             resourceType: 'project',

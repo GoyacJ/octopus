@@ -19,6 +19,13 @@ import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-contro
 import { useWorkspaceStore } from '@/stores/workspace'
 import { formatList } from '@/i18n/copy'
 
+import {
+  getAccessCapabilityBundleName,
+  getAccessPresetDescription,
+  getAccessPresetName,
+  getAccessPresetRecommendedFor,
+  getAccessTemplateName,
+} from './display-i18n'
 import { useAccessControlNotifications } from './useAccessControlNotifications'
 
 const { t } = useI18n()
@@ -126,6 +133,26 @@ function presetMemberCountLabel(presetCode: string) {
   })
 }
 
+function presetName(preset: NonNullable<typeof selectedPreset.value>) {
+  return getAccessPresetName(preset.code, preset.name)
+}
+
+function presetDescription(preset: NonNullable<typeof selectedPreset.value>) {
+  return getAccessPresetDescription(preset)
+}
+
+function presetRecommendedFor(preset: NonNullable<typeof selectedPreset.value>) {
+  return getAccessPresetRecommendedFor(preset)
+}
+
+function bundleName(bundle: { code: string, name: string }) {
+  return getAccessCapabilityBundleName(bundle.code, bundle.name)
+}
+
+function templateName(template: { code: string, name: string }) {
+  return getAccessTemplateName(template.code, template.name)
+}
+
 async function handleAssignPreset() {
   if (!selectedMemberId.value) {
     assignError.value = t('accessControl.assignment.validation.memberRequired')
@@ -144,7 +171,7 @@ async function handleAssignPreset() {
       presetCode: selectedPreset.value.code,
     })
     const successMessage = t('accessControl.assignment.feedback.applied', {
-      preset: selectedPreset.value.name,
+      preset: presetName(selectedPreset.value),
       member: selectedMember.value?.user.displayName || selectedMember.value?.user.username || selectedMemberId.value,
     })
     feedback.value = {
@@ -201,8 +228,8 @@ async function handleAssignPreset() {
           <UiRecordCard
             v-for="preset in accessControlStore.presetCards"
             :key="preset.code"
-            :title="preset.name"
-            :description="preset.description"
+            :title="getAccessPresetName(preset.code, preset.name)"
+            :description="getAccessPresetDescription(preset)"
             :test-id="`access-preset-card-${preset.code}`"
             :active="preset.code === selectedPresetCode"
             interactive
@@ -212,7 +239,7 @@ async function handleAssignPreset() {
               {{ t('accessControl.access.presetEyebrow') }}
             </template>
             <template #secondary>
-              <UiBadge :label="preset.recommendedFor" />
+              <UiBadge :label="getAccessPresetRecommendedFor(preset)" />
               <UiBadge :label="t('accessControl.access.templateCount', { count: preset.templates.length })" subtle />
               <UiBadge :label="presetMemberCountLabel(preset.code)" subtle />
             </template>
@@ -225,7 +252,7 @@ async function handleAssignPreset() {
                   <UiBadge
                     v-for="bundle in preset.capabilityBundles"
                     :key="bundle.code"
-                    :label="bundle.name"
+                    :label="bundleName(bundle)"
                     subtle
                   />
                 </div>
@@ -238,7 +265,7 @@ async function handleAssignPreset() {
                   <UiBadge
                     v-for="template in preset.templates"
                     :key="template.code"
-                    :label="template.name"
+                    :label="templateName(template)"
                     subtle
                   />
                 </div>
@@ -251,8 +278,8 @@ async function handleAssignPreset() {
       <UiPanelFrame
         variant="subtle"
         padding="sm"
-        :title="selectedPreset ? selectedPreset.name : t('accessControl.access.assignment.emptyTitle')"
-        :subtitle="selectedPreset ? selectedPreset.description : t('accessControl.access.assignment.emptyDescription')"
+        :title="selectedPreset ? presetName(selectedPreset) : t('accessControl.access.assignment.emptyTitle')"
+        :subtitle="selectedPreset ? presetDescription(selectedPreset) : t('accessControl.access.assignment.emptyDescription')"
       >
         <UiEmptyState
           v-if="!selectedPreset"
@@ -266,7 +293,7 @@ async function handleAssignPreset() {
               {{ t('accessControl.access.assignment.audienceLabel') }}
             </p>
             <p class="text-[14px] text-text-primary">
-              {{ selectedPreset.recommendedFor }}
+              {{ presetRecommendedFor(selectedPreset) }}
             </p>
           </div>
 
@@ -278,7 +305,7 @@ async function handleAssignPreset() {
               <UiBadge
                 v-for="bundle in selectedPreset.capabilityBundles"
                 :key="bundle.code"
-                :label="bundle.name"
+                :label="bundleName(bundle)"
                 subtle
               />
             </div>
@@ -292,7 +319,7 @@ async function handleAssignPreset() {
               <UiBadge
                 v-for="template in selectedPreset.templates"
                 :key="template.code"
-                :label="template.name"
+                :label="templateName(template)"
                 subtle
               />
             </div>

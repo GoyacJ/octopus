@@ -46,6 +46,7 @@ pub(super) struct RuntimeConfigDocumentRecord {
     pub(super) exists: bool,
     pub(super) loaded: bool,
     pub(super) document: Option<std::collections::BTreeMap<String, JsonValue>>,
+    pub(super) secret_reference_statuses: Vec<RuntimeSecretReferenceStatus>,
 }
 
 impl RuntimeAdapter {
@@ -138,6 +139,149 @@ impl RuntimeAdapter {
         Ok(())
     }
 
+    pub(super) fn configured_model_secret_reference(&self, configured_model_id: &str) -> String {
+        format!(
+            "secret-ref:workspace:{}:configured-model:{}",
+            self.state.workspace_id,
+            BASE64_STANDARD.encode(configured_model_id)
+        )
+    }
+
+    pub(super) fn resolve_secret_reference(
+        &self,
+        reference: &str,
+    ) -> Result<Option<String>, AppError> {
+        if let Some(env_key) = reference.strip_prefix("env:") {
+            return Ok(std::env::var(env_key).ok());
+        }
+        if reference.starts_with("secret-ref:") {
+            return self.state.secret_store.get_secret(reference);
+        }
+        if reference.trim().is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(reference.to_string()))
+    }
+
+    fn configured_model_secret_status(
+        &self,
+        reference: &str,
+    ) -> Result<&'static str, AppError> {
+        if let Some(env_key) = reference.strip_prefix("env:") {
+            return Ok(if std::env::var_os(env_key).is_some() {
+                "reference-present"
+            } else {
+                "reference-missing"
+            });
+        }
+        if reference.starts_with("secret-ref:") {
+            return Ok(if self.state.secret_store.get_secret(reference)?.is_some() {
+                "reference-present"
+            } else {
+                "reference-missing"
+            });
+        }
+        Ok("reference-present")
+    }
+
+    fn migrate_inline_configured_model_credentials(
+        &self,
+        documents: &mut [RuntimeConfigDocumentRecord],
+    ) {
+        for document in documents {
+            document.secret_reference_statuses.clear();
+
+            let Some(original_document) = document.document.clone() else {
+                continue;
+            };
+
+            let Some(configured_models) = original_document
+                .get("configuredModels")
+                .and_then(JsonValue::as_object)
+            else {
+                continue;
+            };
+
+            let mut next_document = original_document.clone();
+            let mut attempted_paths: Vec<String> = Vec::new();
+            let scope_label = Self::public_scope_label(document.scope).to_string();
+
+            for (entry_key, entry) in configured_models {
+                let Some(entry_object) = entry.as_object() else {
+                    continue;
+                };
+                let Some(raw_reference) = entry_object.get("credentialRef").and_then(JsonValue::as_str)
+                else {
+                    continue;
+                };
+                let trimmed_reference = raw_reference.trim();
+                if trimmed_reference.is_empty() || Self::is_reference_value(trimmed_reference) {
+                    continue;
+                }
+
+                let configured_model_id = entry_object
+                    .get("configuredModelId")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or(entry_key);
+                let path = format!("configuredModels.{configured_model_id}.credentialRef");
+                let managed_reference = self.configured_model_secret_reference(configured_model_id);
+
+                match self
+                    .state
+                    .secret_store
+                    .put_secret(&managed_reference, trimmed_reference)
+                {
+                    Ok(()) => {
+                        let Some(JsonValue::Object(next_configured_models)) =
+                            next_document.get_mut("configuredModels")
+                        else {
+                            continue;
+                        };
+                        let Some(JsonValue::Object(next_entry_object)) =
+                            next_configured_models.get_mut(entry_key)
+                        else {
+                            continue;
+                        };
+                        next_entry_object.insert(
+                            "credentialRef".to_string(),
+                            JsonValue::String(managed_reference),
+                        );
+                        attempted_paths.push(path);
+                    }
+                    Err(_) => document.secret_reference_statuses.push(RuntimeSecretReferenceStatus {
+                        scope: scope_label.clone(),
+                        path,
+                        reference: None,
+                        status: "migration-failed".to_string(),
+                    }),
+                }
+            }
+
+            if attempted_paths.is_empty() {
+                continue;
+            }
+
+            match self.write_runtime_document(&document.storage_path, &next_document) {
+                Ok(()) => {
+                    document.document = Some(next_document);
+                    document.exists = true;
+                    document.loaded = true;
+                }
+                Err(_) => {
+                    document.document = Some(original_document);
+                    document.secret_reference_statuses.extend(attempted_paths.into_iter().map(
+                        |path| RuntimeSecretReferenceStatus {
+                            scope: scope_label.clone(),
+                            path,
+                            reference: None,
+                            status: "migration-failed".to_string(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+
     pub(super) fn read_optional_runtime_document(
         path: &Path,
     ) -> Result<Option<BTreeMap<String, JsonValue>>, AppError> {
@@ -192,6 +336,7 @@ impl RuntimeAdapter {
             loaded: document.is_some(),
             storage_path,
             document,
+            secret_reference_statuses: Vec::new(),
         })
     }
 
@@ -231,6 +376,7 @@ impl RuntimeAdapter {
         }
 
         documents.sort_by_key(|document| Self::scope_precedence(document.scope));
+        self.migrate_inline_configured_model_credentials(&mut documents);
 
         Ok(documents)
     }
@@ -265,6 +411,7 @@ impl RuntimeAdapter {
             "authtoken",
             "clientsecret",
             "accesskey",
+            "credentialref",
         ]
         .iter()
         .any(|needle| normalized.contains(needle))
@@ -303,21 +450,16 @@ impl RuntimeAdapter {
     }
 
     fn redact_secret_value(
+        &self,
         scope: &str,
         path: &str,
         raw: &str,
         secret_references: &mut Vec<RuntimeSecretReferenceStatus>,
     ) -> serde_json::Value {
         if Self::is_reference_value(raw) {
-            let status = if let Some(env_key) = raw.strip_prefix("env:") {
-                if std::env::var_os(env_key).is_some() {
-                    "reference-present"
-                } else {
-                    "reference-missing"
-                }
-            } else {
-                "reference-present"
-            };
+            let status = self
+                .configured_model_secret_status(raw)
+                .unwrap_or("reference-error");
             Self::record_secret_reference(
                 secret_references,
                 scope,
@@ -333,6 +475,7 @@ impl RuntimeAdapter {
     }
 
     fn redact_config_value(
+        &self,
         scope: &str,
         path: &str,
         value: &serde_json::Value,
@@ -350,9 +493,9 @@ impl RuntimeAdapter {
                         };
                         let next_value = match value {
                             serde_json::Value::String(raw) if Self::is_sensitive_key(key) => {
-                                Self::redact_secret_value(scope, &next_path, raw, secret_references)
+                                self.redact_secret_value(scope, &next_path, raw, secret_references)
                             }
-                            _ => Self::redact_config_value(
+                            _ => self.redact_config_value(
                                 scope,
                                 &next_path,
                                 value,
@@ -366,7 +509,7 @@ impl RuntimeAdapter {
             serde_json::Value::Array(values) => serde_json::Value::Array(
                 values
                     .iter()
-                    .map(|value| Self::redact_config_value(scope, path, value, secret_references))
+                    .map(|value| self.redact_config_value(scope, path, value, secret_references))
                     .collect(),
             ),
             _ => value.clone(),
@@ -462,19 +605,27 @@ impl RuntimeAdapter {
     ) -> Result<RuntimeEffectiveConfig, AppError> {
         let mut secret_references = Vec::new();
         let effective_value = self.load_effective_config_json(documents)?;
-        let effective_config =
-            Self::redact_config_value("effective", "", &effective_value, &mut Vec::new());
+        let effective_config = self.redact_config_value("effective", "", &effective_value, &mut Vec::new());
         let effective_config_hash = Self::hash_value(&effective_value)?;
 
         let sources = documents
             .iter()
             .map(|document| {
+                for status in &document.secret_reference_statuses {
+                    Self::record_secret_reference(
+                        &mut secret_references,
+                        &status.scope,
+                        &status.path,
+                        status.reference.clone(),
+                        &status.status,
+                    );
+                }
                 let document_value = document
                     .document
                     .as_ref()
                     .map(|value| Self::runtime_json_to_serde(&JsonValue::Object(value.clone())));
                 let redacted_document = document_value.as_ref().map(|value| {
-                    Self::redact_config_value(
+                    self.redact_config_value(
                         Self::public_scope_label(document.scope),
                         "",
                         value,
@@ -548,6 +699,7 @@ impl RuntimeAdapter {
         target_document.exists = true;
         target_document.loaded = true;
         target_document.document = Some(next);
+        self.migrate_inline_configured_model_credentials(&mut documents);
 
         Ok(documents)
     }

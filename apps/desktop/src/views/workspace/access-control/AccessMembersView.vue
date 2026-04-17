@@ -22,6 +22,11 @@ import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-contro
 import { useWorkspaceStore } from '@/stores/workspace'
 import { formatList } from '@/i18n/copy'
 
+import {
+  getAccessMemberEffectiveRoleNames,
+  getAccessMemberPresetName,
+  getAccessPresetName,
+} from './display-i18n'
 import { getStatusLabel } from './helpers'
 import { useAccessControlNotifications } from './useAccessControlNotifications'
 
@@ -69,7 +74,7 @@ const memberCount = computed(() =>
 )
 const hasStarterWorkspace = computed(() => memberCount.value <= 1)
 const presetOptions = computed(() => accessControlStore.presetCards.map(preset => ({
-  label: preset.name,
+  label: getAccessPresetName(preset.code, preset.name),
   value: preset.code,
 })))
 const currentUserId = computed(() => accessControlStore.currentUser?.id ?? '')
@@ -137,17 +142,22 @@ function memberStatusLabel(member: AccessMemberSummary) {
 }
 
 function memberRolesLabel(member: AccessMemberSummary) {
-  if (!member.effectiveRoleNames.length) {
+  const roleNames = getAccessMemberEffectiveRoleNames(member)
+  if (!roleNames.length) {
     return t('accessControl.members.list.noEffectiveRoles')
   }
 
-  return formatList(member.effectiveRoleNames)
+  return formatList(roleNames)
 }
 
 function memberOrgLabel(member: AccessMemberSummary) {
   return member.hasOrgAssignments
     ? t('accessControl.members.list.orgAssigned')
     : t('accessControl.members.list.orgNotAssigned')
+}
+
+function memberPresetLabel(member: AccessMemberSummary) {
+  return getAccessMemberPresetName(member)
 }
 
 function resetCreateForm() {
@@ -373,7 +383,7 @@ async function handleAssignPreset() {
                 {{ t('accessControl.members.list.memberEyebrow') }}
               </template>
               <template #secondary>
-                <UiBadge :label="member.primaryPresetName" />
+                <UiBadge :label="memberPresetLabel(member)" />
                 <UiBadge :label="memberStatusLabel(member)" subtle />
                 <UiBadge
                   v-if="member.user.id === currentUserId"
@@ -383,7 +393,7 @@ async function handleAssignPreset() {
               </template>
               <template #meta>
                 <span class="text-[12px] text-text-tertiary">
-                  {{ t('accessControl.members.list.currentAccess', { preset: member.primaryPresetName }) }}
+                  {{ t('accessControl.members.list.currentAccess', { preset: memberPresetLabel(member) }) }}
                 </span>
                 <span class="text-[12px] text-text-tertiary">
                   {{ memberOrgLabel(member) }}
@@ -427,7 +437,7 @@ async function handleAssignPreset() {
 
           <div v-else class="space-y-4">
             <div class="flex flex-wrap gap-2">
-              <UiBadge :label="selectedMember.primaryPresetName" />
+              <UiBadge :label="memberPresetLabel(selectedMember)" />
               <UiBadge :label="memberStatusLabel(selectedMember)" subtle />
               <UiBadge
                 v-if="selectedMember.hasOrgAssignments"
@@ -451,7 +461,7 @@ async function handleAssignPreset() {
                 {{ t('accessControl.members.detail.primaryPresetLabel') }}
               </p>
               <p class="text-[14px] text-text-primary">
-                {{ selectedMember.primaryPresetName }}
+                {{ memberPresetLabel(selectedMember) }}
               </p>
             </div>
 
@@ -470,13 +480,13 @@ async function handleAssignPreset() {
               </p>
               <div class="flex flex-wrap gap-2">
                 <UiBadge
-                  v-for="roleName in selectedMember.effectiveRoleNames"
+                  v-for="roleName in getAccessMemberEffectiveRoleNames(selectedMember)"
                   :key="roleName"
                   :label="roleName"
                   subtle
                 />
                 <span
-                  v-if="!selectedMember.effectiveRoleNames.length"
+                  v-if="!getAccessMemberEffectiveRoleNames(selectedMember).length"
                   class="text-[13px] text-text-tertiary"
                 >
                   {{ t('accessControl.members.list.noEffectiveRoles') }}

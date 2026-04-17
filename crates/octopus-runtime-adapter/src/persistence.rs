@@ -348,6 +348,38 @@ fn approval_lineage_json(
 }
 
 impl RuntimeAdapter {
+    fn purge_legacy_runtime_session_projection(
+        &self,
+        connection: &Connection,
+        session_id: &str,
+        error: &serde_json::Error,
+    ) -> Result<(), AppError> {
+        eprintln!(
+            "dropping legacy runtime projection {session_id}: {error}"
+        );
+
+        for statement in [
+            "DELETE FROM runtime_session_projections WHERE id = ?1",
+            "DELETE FROM runtime_run_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_subrun_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_artifact_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_mailbox_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_handoff_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_workflow_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_background_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_approval_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_auth_challenge_projections WHERE session_id = ?1",
+            "DELETE FROM runtime_memory_proposals WHERE session_id = ?1",
+        ] {
+            connection
+                .execute(statement, [session_id])
+                .map_err(|db_error| AppError::database(db_error.to_string()))?;
+        }
+
+        let _ = fs::remove_file(self.runtime_events_path(session_id));
+        Ok(())
+    }
+
     pub(super) fn runtime_events_path(&self, session_id: &str) -> PathBuf {
         self.state
             .paths
@@ -752,125 +784,65 @@ impl RuntimeAdapter {
         Ok(())
     }
 
-    fn persist_runtime_generated_deliverable(
+    fn persist_pending_runtime_deliverable(
         &self,
         connection: &Connection,
-        aggregate: &RuntimeAggregate,
-        artifact: &RuntimeArtifactProjectionRow,
+        deliverable: &PendingRuntimeDeliverable,
     ) -> Result<(), AppError> {
-        if self.deliverable_version_exists(connection, &artifact.artifact_ref, 1)? {
+        let detail = &deliverable.detail;
+        if self.deliverable_version_exists(connection, &detail.id, detail.latest_version)? {
             return Ok(());
         }
 
-        let source_message = aggregate.detail.messages.iter().rev().find(|message| {
-            message.sender_type == "assistant"
-                && message.artifacts.as_ref().is_some_and(|artifacts| {
-                    artifacts
-                        .iter()
-                        .any(|artifact_id| artifact_id == &artifact.artifact_ref)
-                })
-        });
-
-        let (title, preview_kind, content_type, text_content, source_message_id, updated_at) =
-            if let Some(message) = source_message {
-                (
-                    deliverable_title_from_text(&message.content, &aggregate.detail.summary.title),
-                    "markdown".to_string(),
-                    Some("text/markdown".to_string()),
-                    message.content.clone(),
-                    Some(message.id.clone()),
-                    message.timestamp,
+        let mut content = deliverable.content.clone();
+        if content.file_name.is_none() {
+            content.file_name = Some(format!(
+                "{}-v{}.{}",
+                detail.id,
+                detail.latest_version,
+                deliverable_file_extension(
+                    &content.preview_kind,
+                    content.content_type.as_deref(),
                 )
-            } else {
-                let fallback_session = self
-                    .load_runtime_artifact::<PersistedRuntimeOutputArtifact>(Some(
-                        &artifact.storage_path,
-                    ))?
-                    .map(|record| serde_json::to_string_pretty(&record.serialized_session))
-                    .transpose()?
-                    .unwrap_or_else(|| "{}".to_string());
-                (
-                    aggregate.detail.summary.title.clone(),
-                    "json".to_string(),
-                    Some("application/json".to_string()),
-                    fallback_session,
-                    None,
-                    artifact.updated_at,
-                )
-            };
+            ));
+        }
 
-        let mut content = DeliverableVersionContent {
-            artifact_id: artifact.artifact_ref.clone(),
-            version: 1,
-            preview_kind: preview_kind.clone(),
-            editable: true,
-            file_name: Some(format!(
-                "{}-v1.{}",
-                artifact.artifact_ref,
-                deliverable_file_extension(&preview_kind, content_type.as_deref())
-            )),
-            content_type: content_type.clone(),
-            text_content: Some(text_content),
-            data_base64: None,
-            byte_size: None,
-        };
         let content_bytes = deliverable_content_bytes(&content)?;
         content.byte_size = Some(content_bytes.len() as u64);
         let (storage_path, content_hash, byte_size) =
             self.persist_deliverable_version_body(&content)?;
 
-        let initial_detail = DeliverableDetail {
-            id: artifact.artifact_ref.clone(),
-            workspace_id: self.state.workspace_id.clone(),
-            project_id: aggregate.detail.summary.project_id.clone(),
-            conversation_id: aggregate.detail.summary.conversation_id.clone(),
-            session_id: artifact.session_id.clone(),
-            run_id: artifact.run_id.clone(),
-            source_message_id: source_message_id.clone(),
-            parent_artifact_id: None,
-            title: title.clone(),
-            status: "ready".into(),
-            preview_kind: preview_kind.clone(),
-            latest_version: 1,
-            latest_version_ref: ArtifactVersionReference {
-                artifact_id: artifact.artifact_ref.clone(),
-                version: 1,
-                title: title.clone(),
-                preview_kind: preview_kind.clone(),
-                updated_at,
-                content_type: content_type.clone(),
-            },
-            promotion_state: "not-promoted".into(),
-            promotion_knowledge_id: None,
-            updated_at,
+        let persisted_detail = DeliverableDetail {
             storage_path: Some(storage_path.clone()),
             content_hash: Some(content_hash.clone()),
             byte_size: Some(byte_size),
-            content_type: content_type.clone(),
+            content_type: content.content_type.clone(),
+            latest_version_ref: ArtifactVersionReference {
+                artifact_id: detail.id.clone(),
+                version: detail.latest_version,
+                title: detail.title.clone(),
+                preview_kind: detail.preview_kind.clone(),
+                updated_at: detail.updated_at,
+                content_type: content.content_type.clone(),
+            },
+            ..detail.clone()
         };
 
         self.insert_deliverable_version_row(
             connection,
-            &initial_detail,
-            1,
-            &title,
-            &preview_kind,
-            updated_at,
+            &persisted_detail,
+            persisted_detail.latest_version,
+            &persisted_detail.title,
+            &persisted_detail.preview_kind,
+            persisted_detail.updated_at,
             &storage_path,
             &content_hash,
             byte_size,
-            content_type.as_deref(),
-            source_message_id.as_deref(),
-            None,
+            content.content_type.as_deref(),
+            deliverable.source_message_id.as_deref(),
+            deliverable.parent_version,
         )?;
-
-        if self
-            .deliverable_detail_from_connection(connection, &artifact.artifact_ref)?
-            .is_none()
-        {
-            self.upsert_deliverable_record(connection, &initial_detail)?;
-        }
-
+        self.upsert_deliverable_record(connection, &persisted_detail)?;
         Ok(())
     }
 
@@ -1556,22 +1528,28 @@ impl RuntimeAdapter {
                 [],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
-        let mut statement = connection
-            .prepare(
-                "SELECT detail_json, manifest_snapshot_ref, session_policy_snapshot_ref
-                 FROM runtime_session_projections
-                 ORDER BY updated_at DESC, id DESC",
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            })
-            .map_err(|error| AppError::database(error.to_string()))?;
+        let rows = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT id, detail_json, manifest_snapshot_ref, session_policy_snapshot_ref
+                     FROM runtime_session_projections
+                     ORDER BY updated_at DESC, id DESC",
+                )
+                .map_err(|error| AppError::database(error.to_string()))?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                    ))
+                })
+                .map_err(|error| AppError::database(error.to_string()))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| AppError::database(error.to_string()))?;
+            rows
+        };
 
         let mut sessions = self
             .state
@@ -1587,9 +1565,15 @@ impl RuntimeAdapter {
         order.clear();
 
         for row in rows {
-            let (detail_json, manifest_snapshot_ref, session_policy_snapshot_ref) =
-                row.map_err(|error| AppError::database(error.to_string()))?;
-            let mut detail = serde_json::from_str::<RuntimeSessionDetail>(&detail_json)?;
+            let (session_id, detail_json, manifest_snapshot_ref, session_policy_snapshot_ref) =
+                row;
+            let mut detail = match serde_json::from_str::<RuntimeSessionDetail>(&detail_json) {
+                Ok(detail) => detail,
+                Err(error) => {
+                    self.purge_legacy_runtime_session_projection(&connection, &session_id, &error)?;
+                    continue;
+                }
+            };
             sync_runtime_session_detail(&mut detail);
             self.hydrate_phase_four_runtime_projection(&connection, &mut detail)?;
             let subrun_states = self.load_subrun_state_artifacts(
@@ -1628,6 +1612,7 @@ impl RuntimeAdapter {
                         manifest_snapshot_ref,
                         session_policy_snapshot_ref,
                         primary_run_serialized_session,
+                        pending_deliverables: BTreeMap::new(),
                         subrun_states,
                     },
                 },
@@ -2249,8 +2234,8 @@ impl RuntimeAdapter {
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;
         }
-        for artifact in runtime_artifact_rows.values() {
-            self.persist_runtime_generated_deliverable(&connection, aggregate, artifact)?;
+        for deliverable in aggregate.metadata.pending_deliverables.values() {
+            self.persist_pending_runtime_deliverable(&connection, deliverable)?;
         }
 
         connection

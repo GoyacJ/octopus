@@ -74,6 +74,7 @@ export function createOptimisticRuntimeMessage(
     resourceIds: [],
     attachments: [],
     artifacts: [],
+    deliverableRefs: [],
   }
 }
 
@@ -111,6 +112,7 @@ export function createOptimisticAssistantMessage(
     resourceIds: [],
     attachments: [],
     artifacts: [],
+    deliverableRefs: [],
     processEntries: [
       {
         id: `optimistic-process-${timestamp}`,
@@ -149,6 +151,7 @@ export function createPendingApprovalAssistantMessage(
     resourceIds: [],
     attachments: [],
     artifacts: [],
+    deliverableRefs: [],
     processEntries: [
       {
         id: approval.id,
@@ -187,6 +190,7 @@ export function createPendingAuthAssistantMessage(
     resourceIds: [],
     attachments: [],
     artifacts: [],
+    deliverableRefs: [],
     processEntries: [
       {
         id: challenge.id,
@@ -306,6 +310,7 @@ export function toConversationMessage(message: RuntimeMessage, pendingApproval?:
     resourceIds: message.resourceIds ?? [],
     attachments: toConversationAttachments(message.attachments),
     artifacts: message.artifacts ?? [],
+    deliverableRefs: message.deliverableRefs ?? [],
     usage: message.usage,
     toolCalls: message.toolCalls,
     processEntries: message.processEntries,

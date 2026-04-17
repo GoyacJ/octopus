@@ -52,6 +52,51 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/runtime/config/configured-models/{configuredModelId}/credential:
+  put:
+    operationId: upsertRuntimeConfiguredModelCredential
+    parameters:
+      - in: path
+        name: configuredModelId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfiguredModelCredentialUpsertInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfiguredModelCredentialRecord"
+        description: Stored runtime configured model credential payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteRuntimeConfiguredModelCredential
+    parameters:
+      - in: path
+        name: configuredModelId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Runtime configured model credential deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/runtime/config/scopes/{scope}:
   patch:
     operationId: saveRuntimeConfigScope

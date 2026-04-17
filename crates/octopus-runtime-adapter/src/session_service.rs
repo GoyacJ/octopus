@@ -174,6 +174,7 @@ impl RuntimeSessionService for RuntimeAdapter {
                 auth_target: None,
                 usage_summary: RuntimeUsageSummary::default(),
                 artifact_refs: Vec::new(),
+                deliverable_refs: Vec::new(),
                 trace_context: trace_context::runtime_trace_context(&session_id, None),
                 checkpoint: RuntimeRunCheckpoint {
                     approval_layer: None,
@@ -228,6 +229,7 @@ impl RuntimeSessionService for RuntimeAdapter {
                 manifest_snapshot_ref: session_policy.manifest_snapshot_ref.clone(),
                 session_policy_snapshot_ref: session_policy.session_policy_snapshot_ref.clone(),
                 primary_run_serialized_session: json!({}),
+                pending_deliverables: BTreeMap::new(),
                 subrun_states: BTreeMap::new(),
             },
         };

@@ -7,6 +7,7 @@ import type { ModelCatalogSnapshot, RuntimeConfigPatch, RuntimeConfigValidationR
 
 import ModelsView from '@/views/workspace/ModelsView.vue'
 import i18n from '@/plugins/i18n'
+import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import * as tauriClient from '@/tauri/client'
@@ -399,6 +400,292 @@ describe('Models view', () => {
       },
     })
     await waitFor(() => document.body.textContent?.includes('已完成真实请求校验') ?? false, 2000, 'probe success message')
+
+    mounted.destroy()
+  })
+
+  it('shows ApiKey copy and masks configured credential values across the models surface', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'openai-primary': {
+          configuredModelId: 'openai-primary',
+          name: 'GPT-4o Primary',
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          credentialRef: 'env:OPENAI_API_KEY',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'GPT-4o Primary')
+    expect(mounted.container.textContent).toContain('ApiKey')
+    expect(mounted.container.textContent).not.toContain('凭据引用')
+    expect(mounted.container.textContent).not.toContain('env:OPENAI_API_KEY')
+
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+    expect(document.body.textContent).toContain('ApiKey')
+    expect(document.body.textContent).not.toContain('env:OPENAI_API_KEY')
+
+    const createButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-create-button"]')
+    expect(createButton).not.toBeNull()
+    createButton?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="models-create-dialog"]') !== null, 2000, 'create dialog')
+    expect(document.body.textContent).toContain('ApiKey')
+
+    mounted.destroy()
+  })
+
+  it('routes validate success through workspace notifications instead of inline-only feedback', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'anthropic-primary': {
+          configuredModelId: 'anthropic-primary',
+          name: 'Claude Primary',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-5',
+          credentialRef: 'env:ANTHROPIC_API_KEY',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const probeSpy = vi.fn(async () => ({
+      valid: true,
+      reachable: true,
+      configuredModelId: 'anthropic-primary',
+      configuredModelName: 'Claude Primary',
+      requestId: 'probe-request-2',
+      consumedTokens: 9,
+      errors: [],
+      warnings: [],
+    }))
+
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async validateConfiguredModel(input) {
+          return await probeSpy(input as Record<string, unknown>)
+        },
+      },
+    }))
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'Claude Primary')
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+
+    const notificationStore = useNotificationStore()
+    const validateButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-validate-button"]')
+    expect(validateButton).not.toBeNull()
+    validateButton?.click()
+
+    await waitFor(() => probeSpy.mock.calls.length === 1, 2000, 'configured model probe call')
+    await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'validation toast')
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.scopeKind === 'workspace'
+        && notification.title.includes('校验'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('stores a replacement ApiKey through managed secret upsert before saving and emits a save notification', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'anthropic-primary': {
+          configuredModelId: 'anthropic-primary',
+          name: 'Claude Primary',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-5',
+          credentialRef: 'env:ANTHROPIC_API_KEY',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const upsertSpy = vi.fn(async () => ({
+      configuredModelId: 'anthropic-primary',
+      credentialRef: 'secret-ref:fixture:anthropic-primary',
+      storageKind: 'os-keyring',
+      status: 'configured',
+    }))
+    const saveSpy = vi.fn()
+
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async upsertConfiguredModelCredential(configuredModelId, input) {
+          return await upsertSpy(configuredModelId, input)
+        },
+        async saveConfig(patch) {
+          saveSpy(patch)
+          return await client.runtime.saveConfig(patch)
+        },
+      },
+    }))
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'Claude Primary')
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+
+    setInputValue(document.body, 'models-detail-credential-ref', 'sk-ant-replacement-secret')
+    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-save-button"]')
+    expect(saveButton).not.toBeNull()
+    saveButton?.click()
+
+    await waitFor(() => upsertSpy.mock.calls.length === 1, 2000, 'credential upsert call')
+    expect(upsertSpy.mock.calls[0]?.[0]).toBe('anthropic-primary')
+    expect(upsertSpy.mock.calls[0]?.[1]).toMatchObject({
+      configuredModelId: 'anthropic-primary',
+      providerId: 'anthropic',
+      apiKey: 'sk-ant-replacement-secret',
+    })
+
+    await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'save config call')
+    expect(saveSpy.mock.calls[0]?.[0]).toMatchObject({
+      scope: 'workspace',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            credentialRef: 'secret-ref:fixture:anthropic-primary',
+          },
+        },
+      },
+    })
+
+    const notificationStore = useNotificationStore()
+    await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'save toast')
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.scopeKind === 'workspace'
+        && notification.title.includes('保存'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('stores ApiKey through managed secret upsert before creating a model and emits a create notification', async () => {
+    const upsertSpy = vi.fn(async (configuredModelId: string) => ({
+      configuredModelId,
+      credentialRef: `secret-ref:fixture:${configuredModelId}`,
+      storageKind: 'os-keyring',
+      status: 'configured',
+    }))
+    const saveSpy = vi.fn()
+
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async upsertConfiguredModelCredential(configuredModelId, input) {
+          return await upsertSpy(configuredModelId, input)
+        },
+        async saveConfig(patch) {
+          saveSpy(patch)
+          return await client.runtime.saveConfig(patch)
+        },
+      },
+    }))
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, '工作区模型中心')
+
+    const createButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-create-button"]')
+    expect(createButton).not.toBeNull()
+    createButton?.click()
+
+    await waitFor(() => document.body.querySelector('[data-testid="models-create-dialog"]') !== null, 2000, 'create dialog')
+    setInputValue(document.body, 'models-create-name-input', 'Managed GPT-4o')
+    setSelectValue(document.body, 'models-create-provider-select', 'openai')
+    await nextTick()
+    setSelectValue(document.body, 'models-create-upstream-model-select', 'gpt-4o')
+    setInputValue(document.body, 'models-create-credential-ref-input', 'sk-openai-managed-secret')
+
+    const confirmButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).at(-1)
+    expect(confirmButton).not.toBeUndefined()
+    confirmButton?.click()
+
+    await waitFor(() => upsertSpy.mock.calls.length === 1, 2000, 'create credential upsert')
+    expect(upsertSpy.mock.calls[0]?.[1]).toMatchObject({
+      providerId: 'openai',
+      apiKey: 'sk-openai-managed-secret',
+    })
+
+    await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'create save config call')
+    const configuredModelsPatch = saveSpy.mock.calls[0]?.[0]?.patch?.configuredModels as Record<string, Record<string, unknown>>
+    const createdEntry = Object.values(configuredModelsPatch ?? {})[0]
+    expect(createdEntry?.credentialRef).toMatch(/^secret-ref:fixture:/)
+    expect(JSON.stringify(createdEntry)).not.toContain('sk-openai-managed-secret')
+
+    const notificationStore = useNotificationStore()
+    await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'create toast')
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.scopeKind === 'workspace'
+        && notification.title.includes('创建'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('deletes the configured model and best-effort managed secret through a workspace notification workflow', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'anthropic-primary': {
+          configuredModelId: 'anthropic-primary',
+          name: 'Claude Primary',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-5',
+          credentialRef: 'secret-ref:fixture:anthropic-primary',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const deleteCredentialSpy = vi.fn(async () => {})
+
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async deleteConfiguredModelCredential(configuredModelId) {
+          deleteCredentialSpy(configuredModelId)
+          await client.runtime.deleteConfiguredModelCredential(configuredModelId)
+        },
+      },
+    }))
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'Claude Primary')
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+
+    const deleteButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-delete-button"]')
+    expect(deleteButton).not.toBeNull()
+    deleteButton?.click()
+
+    await waitFor(() => deleteCredentialSpy.mock.calls.length === 1, 2000, 'delete credential cleanup call')
+    expect(deleteCredentialSpy).toHaveBeenCalledWith('anthropic-primary')
+
+    const notificationStore = useNotificationStore()
+    await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'delete toast')
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.scopeKind === 'workspace'
+        && notification.title.includes('删除'),
+    )).toBe(true)
 
     mounted.destroy()
   })

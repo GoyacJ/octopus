@@ -23,6 +23,7 @@ import { usePagination } from '@/composables/usePagination'
 import { formatDateTime } from '@/i18n/copy'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
+import { getAuditActionLabel, getAuditResourceLabel } from './display-i18n'
 import {
   createAuditOutcomeOptions,
   getAuditOutcomeLabel,
@@ -138,14 +139,14 @@ const auditColumns = computed<ColumnDef<AuditRecord>[]>(() => [
     accessorKey: 'action',
     header: t('accessControl.sessions.audit.columns.action'),
     cell: ({ row }) => h('div', { class: 'space-y-1' }, [
-      h('div', { class: 'text-sm font-medium text-text-primary' }, row.original.action),
+      h('div', { class: 'text-sm font-medium text-text-primary' }, getAuditActionLabel(row.original.action)),
       h('div', { class: 'text-xs text-text-secondary' }, `${getSubjectTypeLabel(t, row.original.actorType)} / ${row.original.actorId}`),
     ]),
   },
   {
     accessorKey: 'resource',
     header: t('accessControl.sessions.audit.columns.resource'),
-    cell: ({ row }) => h('div', { class: 'text-xs text-text-secondary' }, row.original.resource),
+    cell: ({ row }) => h('div', { class: 'text-xs text-text-secondary' }, getAuditResourceLabel(row.original.resource)),
   },
   {
     accessorKey: 'createdAt',
@@ -349,7 +350,7 @@ async function handleLoadMoreAudit() {
     <UiListDetailWorkspace
       v-else
       :has-selection="Boolean(selectedAuditRecord)"
-      :detail-title="selectedAuditRecord ? selectedAuditRecord.action : ''"
+      :detail-title="selectedAuditRecord ? getAuditActionLabel(selectedAuditRecord.action) : ''"
       :detail-subtitle="t('accessControl.sessions.audit.detailSubtitle')"
       :empty-detail-title="t('accessControl.sessions.audit.emptyTitle')"
       :empty-detail-description="t('accessControl.sessions.audit.emptyDescription')"
@@ -437,7 +438,7 @@ async function handleLoadMoreAudit() {
         <div v-if="selectedAuditRecord" class="space-y-4">
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ selectedAuditRecord.action }}</div>
+              <div class="text-sm font-semibold text-foreground">{{ getAuditActionLabel(selectedAuditRecord.action) }}</div>
               <UiBadge
                 :label="getAuditOutcomeLabel(t, selectedAuditRecord.outcome)"
                 :tone="selectedAuditRecord.outcome === 'success' ? 'success' : 'warning'"
@@ -460,7 +461,7 @@ async function handleLoadMoreAudit() {
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('accessControl.sessions.audit.detailBlocks.resource') }}
               </div>
-              <div class="mt-2 text-sm text-foreground">{{ selectedAuditRecord.resource }}</div>
+              <div class="mt-2 text-sm text-foreground">{{ getAuditResourceLabel(selectedAuditRecord.resource) }}</div>
             </div>
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
               <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">

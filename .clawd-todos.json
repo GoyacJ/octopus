@@ -1,0 +1,22 @@
+[
+  {
+    "content": "编写 Agent Harness PRD 文档",
+    "activeForm": "编写 Agent Harness PRD 文档",
+    "status": "in_progress"
+  },
+  {
+    "content": "创建用户故事和验收标准",
+    "activeForm": "创建用户故事和验收标准",
+    "status": "pending"
+  },
+  {
+    "content": "定义成功指标和优先级矩阵",
+    "activeForm": "定义成功指标和优先级矩阵",
+    "status": "pending"
+  },
+  {
+    "content": "规划技术方案和上线策略",
+    "activeForm": "规划技术方案和上线策略",
+    "status": "pending"
+  }
+]

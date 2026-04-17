@@ -278,7 +278,7 @@ describe('workspace access centers', () => {
     updateSelect(mounted.container, '[data-testid="access-members-assign-preset-select"]', 'owner')
     clickSelector(mounted.container, '[data-testid="access-members-assign-submit"]')
 
-    await waitForText(mounted.container, '已将 Owner 应用给 Workspace Operator')
+    await waitForText(mounted.container, '已将 所有者 应用给 Workspace Operator')
     await mounted.destroy()
   })
 

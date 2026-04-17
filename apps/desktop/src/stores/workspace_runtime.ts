@@ -34,6 +34,8 @@ interface WorkspaceRuntimeContext {
 }
 
 export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) {
+  const inflightLoads = new Map<string, Promise<RuntimeEffectiveConfig | null>>()
+
   function resolveProjectRuntimeKey(projectId = context.currentProjectId.value, workspaceConnectionId?: string) {
     const connectionId = workspaceConnectionId ?? context.activeConnectionId.value
     if (!connectionId || !projectId) {
@@ -207,6 +209,42 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     }
   }
 
+  async function ensureProjectRuntimeConfig(
+    projectId = context.currentProjectId.value,
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    if (!projectId) {
+      return null
+    }
+
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    const connectionId = resolvedClient?.connectionId ?? context.activeConnectionId.value
+    const key = resolveProjectRuntimeKey(projectId, connectionId)
+    if (!key) {
+      return null
+    }
+
+    if (!options.force && Object.prototype.hasOwnProperty.call(context.projectRuntimeConfigs.value, key)) {
+      return context.projectRuntimeConfigs.value[key] ?? null
+    }
+
+    const inflight = inflightLoads.get(key)
+    if (inflight && !options.force) {
+      return await inflight
+    }
+
+    const task = loadProjectRuntimeConfig(projectId, Boolean(options.force), connectionId)
+    inflightLoads.set(key, task)
+    try {
+      return await task
+    } finally {
+      if (inflightLoads.get(key) === task) {
+        inflightLoads.delete(key)
+      }
+    }
+  }
+
   async function validateProjectRuntimeConfig(projectId = context.currentProjectId.value, workspaceConnectionId?: string): Promise<RuntimeConfigValidationResult> {
     if (!projectId) {
       return {
@@ -298,6 +336,7 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     applyProjectRuntimeConfigState,
     getProjectSettings,
     loadProjectRuntimeConfig,
+    ensureProjectRuntimeConfig,
     validateProjectRuntimeConfig,
     saveProjectRuntimeConfig,
     saveProjectModelSettings,
