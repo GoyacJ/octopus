@@ -392,10 +392,12 @@ async function submitRuntimeTurn() {
 }
 
 function handleComposerKeydown(event: KeyboardEvent) {
-  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-    event.preventDefault()
-    void submitRuntimeTurn()
+  if (event.isComposing || event.key !== 'Enter' || event.shiftKey) {
+    return
   }
+
+  event.preventDefault()
+  void submitRuntimeTurn()
 }
 
 function toggleDetail(messageId: string) {
@@ -637,7 +639,7 @@ async function rejectMemoryProposal() {
           <div class="px-5 pb-3 pt-3">
             <UiTextarea
               v-model="messageDraft"
-              class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus-visible:border-transparent focus-visible:ring-0"
+              class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus:border-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               :rows="3"
               :placeholder="t('conversation.composer.placeholder')"
               @keydown="handleComposerKeydown"

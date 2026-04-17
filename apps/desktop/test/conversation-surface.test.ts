@@ -118,6 +118,57 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('submits a new turn when the user presses Enter in the composer', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '直接按回车发送这条消息。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+    }))
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === '直接按回车发送这条消息。'))
+    expect(mounted.container.textContent).toContain('直接按回车发送这条消息。')
+
+    mounted.destroy()
+  })
+
+  it('keeps Shift+Enter available for multiline drafts in the composer', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '这条消息先不要发送。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      shiftKey: true,
+      bubbles: true,
+    }))
+    await nextTick()
+
+    expect(runtime.activeMessages.some(message => message.content === '这条消息先不要发送。')).toBe(false)
+
+    mounted.destroy()
+  })
+
   it('does not fetch admin access-control collections when opening a conversation', async () => {
     let accessUsersCalls = 0
     let accessRolesCalls = 0
