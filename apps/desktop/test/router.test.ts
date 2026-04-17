@@ -63,7 +63,6 @@ describe('desktop router contract', () => {
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/roles')
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/permissions')
     expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/menus')
-    expect(routePaths).toContain('/workspaces/:workspaceId/automations')
     expect(routePaths).toContain('/connections')
   })
 

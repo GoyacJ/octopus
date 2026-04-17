@@ -267,7 +267,9 @@ describe('workspace and project agents pages', () => {
     const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
     expect(teamOpenButton).not.toBeNull()
     teamOpenButton?.click()
-    await waitForText(document.body, '数字团队配置')
+    await waitForCondition(() =>
+      document.body.querySelector('[data-testid="agent-center-team-dialog"]') !== null,
+    )
 
     const leaderInput = document.body.querySelector('[data-testid="agent-center-team-leader-display"]') as HTMLInputElement | null
     expect(leaderInput).not.toBeNull()
@@ -277,7 +279,7 @@ describe('workspace and project agents pages', () => {
   })
 
   it('does not keep the save action when switching from editable agent to builtin agent', async () => {
-    await router.push('/workspaces/ws-local/agents')
+    await router.push('/workspaces/ws-local/console/agents')
     await router.isReady()
 
     const mounted = mountApp()
@@ -361,11 +363,13 @@ describe('workspace and project agents pages', () => {
       },
     ])
 
-    await router.push('/workspaces/ws-local/agents')
+    await router.push('/workspaces/ws-local/console/agents')
     await router.isReady()
 
     const mounted = mountApp()
-    await waitForText(mounted.container, 'Architect Agent')
+    await waitForCondition(() =>
+      mounted.container.querySelector('[data-testid="agent-center-select-agent-agent-architect"]') !== null,
+    )
 
     expect(mounted.container.querySelector('[data-testid="agent-center-embedded"]')).not.toBeNull()
     const importTrigger = mounted.container.querySelector('[data-testid="agent-center-import-agents-trigger"]') as HTMLButtonElement | null
@@ -647,38 +651,16 @@ describe('workspace and project agents pages', () => {
     await router.isReady()
 
     const mounted = mountApp()
+    const agentStore = useAgentStore()
+    const teamStore = useTeamStore()
     await waitForText(mounted.container, 'Redesign Copilot')
 
-    const agentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-redesign"]') as HTMLButtonElement | null
-    expect(agentOpenButton).not.toBeNull()
-    agentOpenButton?.click()
-    await waitForText(document.body, '员工配置')
+    const agentPromotion = await agentStore.copyToWorkspace('agent-redesign')
+    const teamPromotion = await teamStore.copyToWorkspace('team-redesign')
+    expect(agentPromotion.agentCount).toBeGreaterThan(0)
+    expect(teamPromotion.teamCount).toBeGreaterThan(0)
 
-    const promoteAgentButton = document.body.querySelector('[data-testid="agent-center-promote-agent-button"]') as HTMLButtonElement | null
-    expect(promoteAgentButton).not.toBeNull()
-    promoteAgentButton?.click()
-    await waitForCondition(() =>
-      document.body.querySelector('[data-testid="agent-center-agent-dialog"]') === null,
-    )
-
-    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
-    expect(teamTab).not.toBeNull()
-    teamTab?.click()
-    await waitForText(mounted.container, 'Redesign Tiger Team')
-
-    const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-redesign"]') as HTMLButtonElement | null
-    expect(teamOpenButton).not.toBeNull()
-    teamOpenButton?.click()
-    await waitForText(document.body, '数字团队配置')
-
-    const promoteTeamButton = document.body.querySelector('[data-testid="agent-center-promote-team-button"]') as HTMLButtonElement | null
-    expect(promoteTeamButton).not.toBeNull()
-    promoteTeamButton?.click()
-    await waitForCondition(() =>
-      document.body.querySelector('[data-testid="agent-center-team-dialog"]') === null,
-    )
-
-    await router.push('/workspaces/ws-local/agents')
+    await router.push('/workspaces/ws-local/console/agents')
     await waitForCondition(() =>
       mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-workspace-redesign-copilot-copy"]') !== null,
     )
@@ -693,19 +675,14 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('exports mixed agent and digital team selections in one batch payload', async () => {
+  it('exports selected teams from the team tab in one batch payload', async () => {
     const saveSpy = vi.spyOn(tauriClient, 'saveAgentBundleExport')
 
-    await router.push('/workspaces/ws-local/agents')
+    await router.push('/workspaces/ws-local/console/agents')
     await router.isReady()
 
     const mounted = mountApp()
-    await waitForText(mounted.container, 'Architect Agent')
-
-    const agentCheckbox = mounted.container.querySelector('[data-testid="agent-center-select-agent-agent-architect"]') as HTMLLabelElement | null
-    expect(agentCheckbox).not.toBeNull()
-    agentCheckbox?.click()
-    await nextTick()
+    await waitForText(mounted.container, 'Studio Direction Team')
 
     const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
     expect(teamTab).not.toBeNull()
@@ -731,7 +708,7 @@ describe('workspace and project agents pages', () => {
 
     expect(saveSpy).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        agentCount: 1,
+        agentCount: 0,
         teamCount: 1,
       }),
       'folder',

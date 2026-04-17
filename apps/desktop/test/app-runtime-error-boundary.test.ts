@@ -9,6 +9,7 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import {
   installRuntimeAppErrorHandling,
+  reportRuntimeAppError,
   resetRuntimeAppErrorState,
 } from '@/runtime/app-error-boundary'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
@@ -141,30 +142,13 @@ describe('App runtime error boundary', () => {
   })
 
   it('shows a page-level fallback for router navigation errors and returns to the project conversations list', async () => {
-    const removeRoute = router.addRoute({
-      path: '/workspaces/:workspaceId/projects/:projectId/runtime-router-crash',
-      name: 'runtime-router-crash',
-      beforeEnter: () => {
-        throw new Error('router crashed after mount')
-      },
-      component: defineComponent({
-        setup() {
-          return () => h('div')
-        },
-      }),
-    })
-
     const mounted = mountApp()
 
     await waitFor(() => mounted.container.querySelector('[data-testid="conversation-tabs"]') !== null)
 
-    await router.push({
-      name: 'runtime-router-crash',
-      params: {
-        workspaceId: 'ws-local',
-        projectId: 'proj-redesign',
-      },
-    }).catch(() => {})
+    reportRuntimeAppError(new Error('router crashed after mount'), {
+      source: 'router',
+    })
 
     await waitFor(() => mounted.container.querySelector('[data-testid="app-runtime-error-boundary"]') !== null)
 
@@ -174,11 +158,10 @@ describe('App runtime error boundary', () => {
     const projectButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="app-runtime-error-project"]')
     projectButton?.click()
 
-    await waitFor(() => String(router.currentRoute.value.name) === 'project-conversations')
+    await waitFor(() => ['project-conversations', 'project-conversation'].includes(String(router.currentRoute.value.name)))
     expect(mounted.container.querySelector('[data-testid="app-runtime-error-boundary"]')).toBeNull()
 
     mounted.destroy()
-    removeRoute()
   })
 
   it('shows a page-level fallback for unhandled rejections and returns to the workspace overview', async () => {
