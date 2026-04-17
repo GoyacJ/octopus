@@ -47,8 +47,8 @@ use octopus_core::{
     NotificationListResponse, NotificationRecord, NotificationUnreadSummary, OrgUnitRecord,
     OrgUnitUpsertRequest, PermissionDefinition, PetConversationBinding, PetPresenceState,
     PetWorkspaceSnapshot, PositionRecord, PositionUpsertRequest, ProjectAgentLinkInput,
-    ProjectAgentLinkRecord, ProjectDashboardSnapshot, ProjectRecord, ProjectTeamLinkInput,
-    ProjectTeamLinkRecord, PromoteWorkspaceResourceInput, ProtectedResourceDescriptor,
+    ProjectAgentLinkRecord, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
+    PromoteWorkspaceResourceInput, ProtectedResourceDescriptor,
     ProtectedResourceMetadataUpsertRequest, ProviderCredentialRecord,
     RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput, ResourceActionGrant,
     ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord, RoleBindingUpsertRequest,
@@ -567,6 +567,9 @@ fn project_module_for_request(
     if authorization_request.capability.starts_with("knowledge.") {
         return Some("knowledge");
     }
+    if authorization_request.capability.starts_with("task.") {
+        return Some("tasks");
+    }
     if authorization_request.capability.starts_with("tool.") {
         return Some("tools");
     }
@@ -575,6 +578,7 @@ fn project_module_for_request(
         Some("agent") | Some("team") => Some("agents"),
         Some("resource") => Some("resources"),
         Some("knowledge") => Some("knowledge"),
+        Some("task") => Some("tasks"),
         Some(resource_type) if resource_type.starts_with("tool.") => Some("tools"),
         _ => None,
     }
@@ -590,6 +594,7 @@ fn resolve_project_module_permission<'a>(
         "resources" => workspace.project_default_permissions.resources.as_str(),
         "tools" => workspace.project_default_permissions.tools.as_str(),
         "knowledge" => workspace.project_default_permissions.knowledge.as_str(),
+        "tasks" => workspace.project_default_permissions.tasks.as_str(),
         _ => "allow",
     };
     let override_value = match module {
@@ -597,6 +602,7 @@ fn resolve_project_module_permission<'a>(
         "resources" => project.permission_overrides.resources.as_str(),
         "tools" => project.permission_overrides.tools.as_str(),
         "knowledge" => project.permission_overrides.knowledge.as_str(),
+        "tasks" => project.permission_overrides.tasks.as_str(),
         _ => "inherit",
     };
     if override_value == "inherit" {
@@ -859,4 +865,37 @@ fn accepts_sse(headers: &HeaderMap) -> bool {
         .and_then(|value| value.to_str().ok())
         .map(|value| value.contains("text/event-stream"))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_module_for_request_routes_task_capabilities_and_resources_to_tasks_module() {
+        let capability_request = AuthorizationRequest {
+            subject_id: "user-owner".into(),
+            capability: "task.view".into(),
+            project_id: Some("proj-redesign".into()),
+            resource_type: None,
+            resource_id: None,
+            resource_subtype: None,
+            tags: Vec::new(),
+            classification: None,
+            owner_subject_type: None,
+            owner_subject_id: None,
+        };
+        assert_eq!(
+            project_module_for_request(&capability_request),
+            Some("tasks")
+        );
+
+        let resource_request = AuthorizationRequest {
+            capability: "project.view".into(),
+            resource_type: Some("task".into()),
+            resource_id: Some("task-1".into()),
+            ..capability_request
+        };
+        assert_eq!(project_module_for_request(&resource_request), Some("tasks"));
+    }
 }

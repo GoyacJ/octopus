@@ -64,6 +64,45 @@ describe('OpenAPI bundler', () => {
     expect(bundledContract).not.toContain(legacyWorkspaceArtifactsPath)
   })
 
+  it('keeps the repo bundled contract aligned with project task transport schemas', () => {
+    const bundledContract = readFileSync(
+      path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'),
+      'utf8',
+    )
+
+    expect(bundledContract).toContain('TaskSummary:')
+    expect(bundledContract).toContain('TaskDetail:')
+    expect(bundledContract).toContain('TaskRunSummary:')
+    expect(bundledContract).toContain('TaskContextBundle:')
+    expect(bundledContract).toContain('TaskContextRef:')
+    expect(bundledContract).toContain('TaskFailureCategory:')
+    expect(bundledContract).toContain('TaskStateTransitionSummary:')
+    expect(bundledContract).toContain('TaskAnalyticsSummary:')
+    expect(bundledContract).toContain('pendingApprovalId:')
+    expect(bundledContract).toContain('approvalId:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks/{taskId}:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks/{taskId}/launch:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks/{taskId}/rerun:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks/{taskId}/runs:')
+    expect(bundledContract).toContain('/api/v1/projects/{projectId}/tasks/{taskId}/interventions:')
+    expect(bundledContract).toContain('- change_actor')
+  })
+
+  it('keeps project dashboard task summaries and task permission modules in the bundled contract', () => {
+    const bundledContract = readFileSync(
+      path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'),
+      'utf8',
+    )
+
+    expect(bundledContract).toContain('recentTasks:')
+    expect(bundledContract).toContain('taskCount:')
+    expect(bundledContract).toContain('activeTaskCount:')
+    expect(bundledContract).toContain('attentionTaskCount:')
+    expect(bundledContract).toContain('scheduledTaskCount:')
+    expect(bundledContract).toContain('tasks:')
+  })
+
   it('bundles multi-file contract sources into a stable single OpenAPI artifact', () => {
     const tempDir = createTempDir('octopus-openapi-bundle-')
     const sourceDir = path.join(tempDir, 'contracts', 'openapi', 'src')

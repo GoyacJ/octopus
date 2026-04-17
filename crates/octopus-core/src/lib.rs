@@ -1,6 +1,7 @@
 mod asset_bundle;
 mod asset_records;
 mod runtime_policy;
+mod task_records;
 
 use std::{
     collections::BTreeMap,
@@ -13,6 +14,7 @@ use thiserror::Error;
 pub use asset_bundle::*;
 pub use asset_records::*;
 pub use runtime_policy::*;
+pub use task_records::*;
 
 pub const DEFAULT_WORKSPACE_ID: &str = "ws-local";
 pub const DEFAULT_PROJECT_ID: &str = "proj-redesign";
@@ -464,19 +466,31 @@ pub struct ProjectWorkspaceAssignments {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDefaultPermissions {
+    #[serde(default = "default_project_permission_allow")]
     pub agents: String,
+    #[serde(default = "default_project_permission_allow")]
     pub resources: String,
+    #[serde(default = "default_project_permission_allow")]
     pub tools: String,
+    #[serde(default = "default_project_permission_allow")]
     pub knowledge: String,
+    #[serde(default = "default_project_permission_allow")]
+    pub tasks: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectPermissionOverrides {
+    #[serde(default = "default_project_permission_inherit")]
     pub agents: String,
+    #[serde(default = "default_project_permission_inherit")]
     pub resources: String,
+    #[serde(default = "default_project_permission_inherit")]
     pub tools: String,
+    #[serde(default = "default_project_permission_inherit")]
     pub knowledge: String,
+    #[serde(default = "default_project_permission_inherit")]
+    pub tasks: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -633,6 +647,8 @@ pub struct ProjectDashboardSnapshot {
     pub model_breakdown: Vec<ProjectDashboardBreakdownItem>,
     pub recent_conversations: Vec<ConversationRecord>,
     pub recent_activity: Vec<WorkspaceActivityRecord>,
+    #[serde(default)]
+    pub recent_tasks: Vec<TaskSummary>,
     pub used_tokens: u64,
 }
 
@@ -653,6 +669,10 @@ pub struct ProjectDashboardSummary {
     pub token_record_count: u64,
     pub total_tokens: u64,
     pub activity_count: u64,
+    pub task_count: u64,
+    pub active_task_count: u64,
+    pub attention_task_count: u64,
+    pub scheduled_task_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

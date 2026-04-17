@@ -36,6 +36,7 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/conversations')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/conversations/:conversationId')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/deliverables')
+    expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/tasks')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/agents')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/resources')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/knowledge')
@@ -351,6 +352,10 @@ describe('desktop router contract', () => {
     expect(getRouteMenuId('workspace-access-control-users')).toBeUndefined()
     expect(getRouteMenuId('workspace-access-control-org')).toBeUndefined()
     expect(getRouteMenuId('workspace-access-control-roles')).toBeUndefined()
+  })
+
+  it('maps the project task route to the project tasks menu entry', () => {
+    expect(getRouteMenuId('project-tasks')).toBe('menu-project-tasks')
   })
 
   it('removes legacy access child menu permission mappings from the desktop fixture layer', () => {

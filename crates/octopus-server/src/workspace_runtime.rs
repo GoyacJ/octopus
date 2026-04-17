@@ -3,14 +3,19 @@ use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
     ConversationRecord, CostLedgerEntry, CreateDeliverableVersionInput,
-    CreateProjectPromotionRequestInput, CreateRuntimeSessionInput, DeliverableDetail,
-    DeliverableVersionContent, DeliverableVersionSummary, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ForkDeliverableInput, KnowledgeEntryRecord,
-    PetDashboardSummary, ProjectDashboardBreakdownItem, ProjectDashboardConversationInsight,
-    ProjectDashboardRankingItem, ProjectDashboardSummary, ProjectDashboardTrendPoint,
-    ProjectDashboardUserStat, ProjectPromotionRequest, ProjectTokenUsageRecord,
-    PromoteDeliverableInput, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
+    CreateProjectPromotionRequestInput, CreateRuntimeSessionInput, CreateTaskInterventionRequest,
+    CreateTaskRequest, DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ForkDeliverableInput,
+    KnowledgeEntryRecord, LaunchTaskRequest, PetDashboardSummary, ProjectDashboardBreakdownItem,
+    ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSnapshot,
+    ProjectDashboardSummary, ProjectDashboardTrendPoint, ProjectDashboardUserStat,
+    ProjectPromotionRequest, ProjectTaskInterventionRecord, ProjectTaskRecord,
+    ProjectTaskRunRecord, ProjectTokenUsageRecord, PromoteDeliverableInput,
+    ProtectedResourceDescriptor, RerunTaskRequest, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
+    RuntimeRunSnapshot, TaskAnalyticsSummary, TaskContextBundle, TaskDetail,
+    TaskInterventionRecord, TaskRunSummary, TaskStateTransitionSummary, TaskSummary,
+    UpdateTaskRequest,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -676,6 +681,589 @@ pub(crate) fn validate_update_project_request(
     })
 }
 
+fn trim_optional_task_input(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+}
+
+fn normalize_task_context_bundle_input(mut bundle: TaskContextBundle) -> TaskContextBundle {
+    bundle.refs = bundle
+        .refs
+        .into_iter()
+        .map(|mut reference| {
+            reference.kind = reference.kind.trim().to_string();
+            reference.ref_id = reference.ref_id.trim().to_string();
+            reference.title = reference.title.trim().to_string();
+            reference.subtitle = reference.subtitle.trim().to_string();
+            reference.version_ref = trim_optional_task_input(reference.version_ref);
+            reference.pin_mode = reference.pin_mode.trim().to_string();
+            reference
+        })
+        .filter(|reference| {
+            !reference.kind.is_empty()
+                && !reference.ref_id.is_empty()
+                && !reference.title.is_empty()
+        })
+        .collect();
+    bundle.pinned_instructions = bundle.pinned_instructions.trim().to_string();
+    let resolution_mode = bundle.resolution_mode.trim();
+    bundle.resolution_mode = if resolution_mode.is_empty() {
+        "explicit_only".into()
+    } else {
+        resolution_mode.to_string()
+    };
+    bundle
+}
+
+pub(crate) fn validate_create_task_request(
+    request: CreateTaskRequest,
+) -> Result<CreateTaskRequest, ApiError> {
+    let title = request.title.trim();
+    if title.is_empty() {
+        return Err(AppError::invalid_input("task title is required").into());
+    }
+    let goal = request.goal.trim();
+    if goal.is_empty() {
+        return Err(AppError::invalid_input("task goal is required").into());
+    }
+    let brief = request.brief.trim();
+    if brief.is_empty() {
+        return Err(AppError::invalid_input("task brief is required").into());
+    }
+    let default_actor_ref = request.default_actor_ref.trim();
+    if default_actor_ref.is_empty() {
+        return Err(AppError::invalid_input("default actor is required").into());
+    }
+
+    Ok(CreateTaskRequest {
+        title: title.into(),
+        goal: goal.into(),
+        brief: brief.into(),
+        default_actor_ref: default_actor_ref.into(),
+        schedule_spec: trim_optional_task_input(request.schedule_spec),
+        context_bundle: normalize_task_context_bundle_input(request.context_bundle),
+    })
+}
+
+pub(crate) fn validate_update_task_request(
+    request: UpdateTaskRequest,
+) -> Result<UpdateTaskRequest, ApiError> {
+    if let Some(title) = request.title.as_deref() {
+        if title.trim().is_empty() {
+            return Err(AppError::invalid_input("task title must not be empty").into());
+        }
+    }
+    if let Some(goal) = request.goal.as_deref() {
+        if goal.trim().is_empty() {
+            return Err(AppError::invalid_input("task goal must not be empty").into());
+        }
+    }
+    if let Some(brief) = request.brief.as_deref() {
+        if brief.trim().is_empty() {
+            return Err(AppError::invalid_input("task brief must not be empty").into());
+        }
+    }
+    if let Some(default_actor_ref) = request.default_actor_ref.as_deref() {
+        if default_actor_ref.trim().is_empty() {
+            return Err(AppError::invalid_input("default actor must not be empty").into());
+        }
+    }
+
+    Ok(UpdateTaskRequest {
+        title: trim_optional_task_input(request.title),
+        goal: trim_optional_task_input(request.goal),
+        brief: trim_optional_task_input(request.brief),
+        default_actor_ref: trim_optional_task_input(request.default_actor_ref),
+        schedule_spec: request.schedule_spec.map(|value| value.trim().to_string()),
+        context_bundle: request
+            .context_bundle
+            .map(normalize_task_context_bundle_input),
+    })
+}
+
+fn task_summary_from_record(record: &ProjectTaskRecord) -> TaskSummary {
+    TaskSummary {
+        id: record.id.clone(),
+        project_id: record.project_id.clone(),
+        title: record.title.clone(),
+        goal: record.goal.clone(),
+        default_actor_ref: record.default_actor_ref.clone(),
+        status: record.status.clone(),
+        schedule_spec: record.schedule_spec.clone(),
+        next_run_at: record.next_run_at,
+        last_run_at: record.last_run_at,
+        latest_result_summary: record.latest_result_summary.clone(),
+        latest_failure_category: record.latest_failure_category.clone(),
+        latest_transition: record.latest_transition.clone(),
+        view_status: record.view_status.clone(),
+        attention_reasons: record.attention_reasons.clone(),
+        attention_updated_at: record.attention_updated_at,
+        active_task_run_id: record.active_task_run_id.clone(),
+        analytics_summary: record.analytics_summary.clone(),
+        updated_at: record.updated_at,
+    }
+}
+
+fn task_run_summary_from_record(record: &ProjectTaskRunRecord) -> TaskRunSummary {
+    TaskRunSummary {
+        id: record.id.clone(),
+        task_id: record.task_id.clone(),
+        trigger_type: record.trigger_type.clone(),
+        status: record.status.clone(),
+        session_id: record.session_id.clone(),
+        conversation_id: record.conversation_id.clone(),
+        runtime_run_id: record.runtime_run_id.clone(),
+        actor_ref: record.actor_ref.clone(),
+        started_at: record.started_at,
+        completed_at: record.completed_at,
+        result_summary: record.result_summary.clone(),
+        pending_approval_id: record.pending_approval_id.clone(),
+        failure_category: record.failure_category.clone(),
+        failure_summary: record.failure_summary.clone(),
+        view_status: record.view_status.clone(),
+        attention_reasons: record.attention_reasons.clone(),
+        attention_updated_at: record.attention_updated_at,
+        deliverable_refs: record.deliverable_refs.clone(),
+        artifact_refs: record.artifact_refs.clone(),
+        latest_transition: record.latest_transition.clone(),
+    }
+}
+
+fn task_intervention_from_record(record: &ProjectTaskInterventionRecord) -> TaskInterventionRecord {
+    TaskInterventionRecord {
+        id: record.id.clone(),
+        task_id: record.task_id.clone(),
+        task_run_id: record.task_run_id.clone(),
+        r#type: record.r#type.clone(),
+        payload: record.payload.clone(),
+        created_by: record.created_by.clone(),
+        created_at: record.created_at,
+        applied_to_session_id: record.applied_to_session_id.clone(),
+        status: record.status.clone(),
+    }
+}
+
+fn task_detail_from_records(
+    task: &ProjectTaskRecord,
+    runs: &[ProjectTaskRunRecord],
+    interventions: &[ProjectTaskInterventionRecord],
+) -> TaskDetail {
+    let run_history = runs
+        .iter()
+        .map(task_run_summary_from_record)
+        .collect::<Vec<_>>();
+    let active_run = task
+        .active_task_run_id
+        .as_deref()
+        .and_then(|run_id| run_history.iter().find(|run| run.id == run_id).cloned())
+        .or_else(|| run_history.first().cloned());
+
+    TaskDetail {
+        id: task.id.clone(),
+        project_id: task.project_id.clone(),
+        title: task.title.clone(),
+        goal: task.goal.clone(),
+        brief: task.brief.clone(),
+        default_actor_ref: task.default_actor_ref.clone(),
+        status: task.status.clone(),
+        schedule_spec: task.schedule_spec.clone(),
+        next_run_at: task.next_run_at,
+        last_run_at: task.last_run_at,
+        latest_result_summary: task.latest_result_summary.clone(),
+        latest_failure_category: task.latest_failure_category.clone(),
+        latest_transition: task.latest_transition.clone(),
+        view_status: task.view_status.clone(),
+        attention_reasons: task.attention_reasons.clone(),
+        attention_updated_at: task.attention_updated_at,
+        active_task_run_id: task.active_task_run_id.clone(),
+        analytics_summary: task.analytics_summary.clone(),
+        context_bundle: task.context_bundle.clone(),
+        latest_deliverable_refs: task.latest_deliverable_refs.clone(),
+        latest_artifact_refs: task.latest_artifact_refs.clone(),
+        run_history,
+        intervention_history: interventions
+            .iter()
+            .map(task_intervention_from_record)
+            .collect(),
+        active_run,
+        created_by: task.created_by.clone(),
+        updated_by: task.updated_by.clone(),
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+    }
+}
+
+fn task_prompt_from_record(
+    task: &ProjectTaskRecord,
+    trigger_label: &str,
+    source_task_run_id: Option<&str>,
+) -> String {
+    let mut lines = vec![
+        format!("Task title: {}", task.title),
+        format!("Trigger: {trigger_label}"),
+        String::new(),
+        "Goal:".into(),
+        task.goal.clone(),
+        String::new(),
+        "Brief:".into(),
+        task.brief.clone(),
+    ];
+
+    if !task.context_bundle.pinned_instructions.trim().is_empty() {
+        lines.extend([
+            String::new(),
+            "Pinned instructions:".into(),
+            task.context_bundle.pinned_instructions.clone(),
+        ]);
+    }
+
+    if !task.context_bundle.refs.is_empty() {
+        lines.push(String::new());
+        lines.push("Context refs:".into());
+        lines.extend(task.context_bundle.refs.iter().map(|reference| {
+            format!(
+                "- [{}] {} ({})",
+                reference.kind, reference.title, reference.ref_id
+            )
+        }));
+    }
+
+    if let Some(source_task_run_id) = source_task_run_id {
+        lines.extend([String::new(), format!("Source run: {source_task_run_id}")]);
+    }
+
+    lines.join("\n")
+}
+
+fn task_run_status_from_runtime(run: &RuntimeRunSnapshot) -> String {
+    match run.status.as_str() {
+        "queued" | "running" | "waiting_input" | "waiting_approval" | "completed" | "failed"
+        | "canceled" | "skipped" => run.status.clone(),
+        "auth-required" | "blocked" => "waiting_input".into(),
+        _ => "running".into(),
+    }
+}
+
+fn task_run_pending_approval_id(run: &RuntimeRunSnapshot) -> Option<String> {
+    (task_run_status_from_runtime(run) == "waiting_approval")
+        .then(|| {
+            run.approval_target
+                .as_ref()
+                .map(|approval| approval.id.clone())
+        })
+        .flatten()
+}
+
+fn build_task_run_record(
+    task: &ProjectTaskRecord,
+    session: &octopus_core::RuntimeSessionDetail,
+    run: &RuntimeRunSnapshot,
+    trigger_type: &str,
+    actor_ref: &str,
+) -> ProjectTaskRunRecord {
+    let status = task_run_status_from_runtime(run);
+    let completed_at = matches!(
+        status.as_str(),
+        "completed" | "failed" | "canceled" | "skipped"
+    )
+    .then_some(run.updated_at);
+    let failure_category = (status == "failed").then_some("runtime_error".into());
+    let failure_summary = (status == "failed").then_some("Runtime task execution failed.".into());
+    let attention_reasons = match status.as_str() {
+        "waiting_approval" => vec!["needs_approval".into()],
+        "waiting_input" => vec!["waiting_input".into()],
+        "failed" => vec!["failed".into()],
+        _ => Vec::new(),
+    };
+    let latest_transition = Some(TaskStateTransitionSummary {
+        kind: match status.as_str() {
+            "completed" => "completed".into(),
+            "failed" => "failed".into(),
+            "waiting_approval" => "waiting_approval".into(),
+            _ => "launched".into(),
+        },
+        summary: match status.as_str() {
+            "completed" => "Task run completed in the runtime.".into(),
+            "failed" => "Task run failed in the runtime.".into(),
+            "waiting_approval" => "Task run is waiting for approval.".into(),
+            "waiting_input" => "Task run is waiting for input.".into(),
+            _ => "Task run started in the runtime.".into(),
+        },
+        at: completed_at.unwrap_or(run.started_at),
+        run_id: Some(run.id.clone()),
+    });
+
+    ProjectTaskRunRecord {
+        id: format!("task-run-{}", uuid::Uuid::new_v4()),
+        workspace_id: task.workspace_id.clone(),
+        project_id: task.project_id.clone(),
+        task_id: task.id.clone(),
+        trigger_type: trigger_type.into(),
+        status: status.clone(),
+        session_id: Some(session.summary.id.clone()),
+        conversation_id: Some(session.summary.conversation_id.clone()),
+        runtime_run_id: Some(run.id.clone()),
+        actor_ref: actor_ref.into(),
+        started_at: run.started_at,
+        completed_at,
+        result_summary: (status == "completed")
+            .then_some("Task run completed in the runtime.".into()),
+        pending_approval_id: task_run_pending_approval_id(run),
+        failure_category,
+        failure_summary,
+        view_status: if attention_reasons.is_empty() {
+            "healthy".into()
+        } else {
+            "attention".into()
+        },
+        attention_reasons: attention_reasons.clone(),
+        attention_updated_at: if attention_reasons.is_empty() {
+            None
+        } else {
+            Some(completed_at.unwrap_or(run.started_at))
+        },
+        deliverable_refs: run.deliverable_refs.clone(),
+        artifact_refs: Vec::new(),
+        latest_transition,
+    }
+}
+
+fn sync_task_run_record_from_runtime(
+    existing: &ProjectTaskRunRecord,
+    session: &octopus_core::RuntimeSessionDetail,
+    run: &RuntimeRunSnapshot,
+) -> ProjectTaskRunRecord {
+    let status = task_run_status_from_runtime(run);
+    let completed_at = matches!(
+        status.as_str(),
+        "completed" | "failed" | "canceled" | "skipped"
+    )
+    .then_some(run.updated_at);
+    let failure_category = (status == "failed").then_some("runtime_error".into());
+    let failure_summary = (status == "failed").then_some("Runtime task execution failed.".into());
+    let attention_reasons = match status.as_str() {
+        "waiting_approval" => vec!["needs_approval".into()],
+        "waiting_input" => vec!["waiting_input".into()],
+        "failed" => vec!["failed".into()],
+        _ => Vec::new(),
+    };
+    let latest_transition = Some(TaskStateTransitionSummary {
+        kind: match status.as_str() {
+            "completed" => "completed".into(),
+            "failed" => "failed".into(),
+            "waiting_approval" => "waiting_approval".into(),
+            _ => "launched".into(),
+        },
+        summary: match status.as_str() {
+            "completed" => "Task run completed in the runtime.".into(),
+            "failed" => "Task run failed in the runtime.".into(),
+            "waiting_approval" => "Task run is waiting for approval.".into(),
+            "waiting_input" => "Task run is waiting for input.".into(),
+            _ => "Task run started in the runtime.".into(),
+        },
+        at: completed_at.unwrap_or(run.updated_at),
+        run_id: Some(run.id.clone()),
+    });
+
+    ProjectTaskRunRecord {
+        id: existing.id.clone(),
+        workspace_id: existing.workspace_id.clone(),
+        project_id: existing.project_id.clone(),
+        task_id: existing.task_id.clone(),
+        trigger_type: existing.trigger_type.clone(),
+        status,
+        session_id: Some(session.summary.id.clone()),
+        conversation_id: Some(session.summary.conversation_id.clone()),
+        runtime_run_id: Some(run.id.clone()),
+        actor_ref: if run.actor_ref.trim().is_empty() {
+            existing.actor_ref.clone()
+        } else {
+            run.actor_ref.clone()
+        },
+        started_at: run.started_at,
+        completed_at,
+        result_summary: (run.status == "completed")
+            .then_some("Task run completed in the runtime.".into()),
+        pending_approval_id: task_run_pending_approval_id(run),
+        failure_category,
+        failure_summary,
+        view_status: if attention_reasons.is_empty() {
+            "healthy".into()
+        } else {
+            "attention".into()
+        },
+        attention_reasons: attention_reasons.clone(),
+        attention_updated_at: if attention_reasons.is_empty() {
+            None
+        } else {
+            Some(completed_at.unwrap_or(run.updated_at))
+        },
+        deliverable_refs: run.deliverable_refs.clone(),
+        artifact_refs: existing.artifact_refs.clone(),
+        latest_transition,
+    }
+}
+
+fn sync_rejected_task_run_record_from_runtime(
+    existing: &ProjectTaskRunRecord,
+    session: &octopus_core::RuntimeSessionDetail,
+    run: &RuntimeRunSnapshot,
+) -> ProjectTaskRunRecord {
+    let mut synced = sync_task_run_record_from_runtime(existing, session, run);
+    if synced.status == "waiting_input" {
+        synced.result_summary = Some("Approval rejected. Waiting for updated guidance.".into());
+    }
+    synced
+}
+
+fn task_run_duration_ms(run: &ProjectTaskRunRecord) -> u64 {
+    run.completed_at
+        .unwrap_or(run.started_at)
+        .saturating_sub(run.started_at)
+}
+
+fn update_task_analytics_from_run(
+    analytics: &TaskAnalyticsSummary,
+    run: &ProjectTaskRunRecord,
+) -> TaskAnalyticsSummary {
+    let mut updated = analytics.clone();
+    updated.run_count = updated.run_count.saturating_add(1);
+    match run.trigger_type.as_str() {
+        "manual" => updated.manual_run_count = updated.manual_run_count.saturating_add(1),
+        "scheduled" => updated.scheduled_run_count = updated.scheduled_run_count.saturating_add(1),
+        "takeover" => updated.takeover_count = updated.takeover_count.saturating_add(1),
+        _ => {}
+    }
+    if run.status == "completed" {
+        updated.completion_count = updated.completion_count.saturating_add(1);
+        updated.last_successful_run_at = run.completed_at.or(Some(run.started_at));
+    }
+    if run.status == "failed" {
+        updated.failure_count = updated.failure_count.saturating_add(1);
+    }
+    if run.status == "waiting_approval" {
+        updated.approval_required_count = updated.approval_required_count.saturating_add(1);
+    }
+    let duration_ms = run
+        .completed_at
+        .unwrap_or(run.started_at)
+        .saturating_sub(run.started_at);
+    if updated.run_count == 0 {
+        updated.average_run_duration_ms = duration_ms;
+    } else {
+        let previous_total = analytics
+            .average_run_duration_ms
+            .saturating_mul(analytics.run_count);
+        updated.average_run_duration_ms = previous_total
+            .saturating_add(duration_ms)
+            .saturating_div(updated.run_count.max(1));
+    }
+    updated
+}
+
+fn sync_task_analytics_from_run(
+    analytics: &TaskAnalyticsSummary,
+    previous_run: &ProjectTaskRunRecord,
+    run: &ProjectTaskRunRecord,
+) -> TaskAnalyticsSummary {
+    let mut updated = analytics.clone();
+    if previous_run.status != "completed" && run.status == "completed" {
+        updated.completion_count = updated.completion_count.saturating_add(1);
+        updated.last_successful_run_at = run.completed_at.or(Some(run.started_at));
+    }
+    if previous_run.status != "failed" && run.status == "failed" {
+        updated.failure_count = updated.failure_count.saturating_add(1);
+    }
+    if previous_run.status != "waiting_approval" && run.status == "waiting_approval" {
+        updated.approval_required_count = updated.approval_required_count.saturating_add(1);
+    }
+    let run_count = updated.run_count.max(1);
+    let previous_total = analytics.average_run_duration_ms.saturating_mul(run_count);
+    updated.average_run_duration_ms = previous_total
+        .saturating_sub(task_run_duration_ms(previous_run))
+        .saturating_add(task_run_duration_ms(run))
+        .saturating_div(run_count);
+    updated
+}
+
+fn update_task_record_from_run(
+    task: &ProjectTaskRecord,
+    run: &ProjectTaskRunRecord,
+    updated_by: &str,
+) -> ProjectTaskRecord {
+    let attention_reasons = run.attention_reasons.clone();
+    let updated_at = run.completed_at.unwrap_or(run.started_at);
+    ProjectTaskRecord {
+        status: match run.status.as_str() {
+            "completed" => "completed".into(),
+            "failed" | "waiting_approval" | "waiting_input" => "attention".into(),
+            _ => "running".into(),
+        },
+        last_run_at: Some(run.started_at),
+        active_task_run_id: Some(run.id.clone()),
+        latest_result_summary: run.result_summary.clone(),
+        latest_failure_category: run.failure_category.clone(),
+        latest_transition: run.latest_transition.clone(),
+        view_status: if attention_reasons.is_empty() {
+            "healthy".into()
+        } else {
+            "attention".into()
+        },
+        attention_reasons: attention_reasons.clone(),
+        attention_updated_at: if attention_reasons.is_empty() {
+            None
+        } else {
+            Some(updated_at)
+        },
+        analytics_summary: update_task_analytics_from_run(&task.analytics_summary, run),
+        latest_deliverable_refs: run.deliverable_refs.clone(),
+        latest_artifact_refs: run.artifact_refs.clone(),
+        updated_by: Some(updated_by.into()),
+        updated_at,
+        ..task.clone()
+    }
+}
+
+fn sync_task_record_from_run(
+    task: &ProjectTaskRecord,
+    previous_run: &ProjectTaskRunRecord,
+    run: &ProjectTaskRunRecord,
+    updated_by: &str,
+) -> ProjectTaskRecord {
+    let attention_reasons = run.attention_reasons.clone();
+    let updated_at = run.completed_at.unwrap_or(run.started_at);
+    ProjectTaskRecord {
+        status: match run.status.as_str() {
+            "completed" => "completed".into(),
+            "failed" | "waiting_approval" | "waiting_input" => "attention".into(),
+            _ => "running".into(),
+        },
+        last_run_at: Some(run.started_at),
+        active_task_run_id: Some(run.id.clone()),
+        latest_result_summary: run.result_summary.clone(),
+        latest_failure_category: run.failure_category.clone(),
+        latest_transition: run.latest_transition.clone(),
+        view_status: if attention_reasons.is_empty() {
+            "healthy".into()
+        } else {
+            "attention".into()
+        },
+        attention_reasons: attention_reasons.clone(),
+        attention_updated_at: if attention_reasons.is_empty() {
+            None
+        } else {
+            Some(updated_at)
+        },
+        analytics_summary: sync_task_analytics_from_run(&task.analytics_summary, previous_run, run),
+        latest_deliverable_refs: run.deliverable_refs.clone(),
+        latest_artifact_refs: run.artifact_refs.clone(),
+        updated_by: Some(updated_by.into()),
+        updated_at,
+        ..task.clone()
+    }
+}
+
 pub(crate) async fn create_project(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -876,6 +1464,12 @@ pub(crate) async fn project_dashboard(
         .observation
         .project_used_tokens(&project_id)
         .await?;
+    let task_records = state.services.project_tasks.list_tasks(&project_id).await?;
+    let recent_tasks = task_records
+        .iter()
+        .take(8)
+        .map(task_summary_from_record)
+        .collect::<Vec<_>>();
     let total_tokens =
         used_tokens.max(cost_entries.iter().map(|record| record.amount as u64).sum());
     let approval_count = session_details
@@ -907,6 +1501,19 @@ pub(crate) async fn project_dashboard(
         token_record_count: cost_entries.len() as u64,
         total_tokens,
         activity_count: audit_records.len() as u64,
+        task_count: task_records.len() as u64,
+        active_task_count: task_records
+            .iter()
+            .filter(|record| record.status == "running")
+            .count() as u64,
+        attention_task_count: task_records
+            .iter()
+            .filter(|record| record.view_status == "attention")
+            .count() as u64,
+        scheduled_task_count: task_records
+            .iter()
+            .filter(|record| record.schedule_spec.is_some())
+            .count() as u64,
     };
     let resource_breakdown = vec![
         dashboard_breakdown_item("resources", "resources", resources.len() as u64, None),
@@ -939,8 +1546,439 @@ pub(crate) async fn project_dashboard(
         model_breakdown,
         recent_conversations: conversations.into_iter().take(8).collect(),
         recent_activity,
+        recent_tasks,
         used_tokens,
     }))
+}
+
+pub(crate) async fn list_project_tasks(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<Json<Vec<TaskSummary>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "task.view",
+        Some(&project_id),
+        Some("task"),
+        None,
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .project_tasks
+            .list_tasks(&project_id)
+            .await?
+            .iter()
+            .map(task_summary_from_record)
+            .collect(),
+    ))
+}
+
+pub(crate) async fn create_project_task(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(request): Json<CreateTaskRequest>,
+) -> Result<Json<TaskDetail>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "task.manage",
+        Some(&project_id),
+        Some("task"),
+        None,
+    )
+    .await?;
+    let request = validate_create_task_request(request)?;
+    let task = state
+        .services
+        .project_tasks
+        .create_task(&project_id, &session.user_id, request)
+        .await?;
+    Ok(Json(task_detail_from_records(&task, &[], &[])))
+}
+
+pub(crate) async fn get_project_task_detail(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+) -> Result<Json<TaskDetail>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "task.view",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    let task = state
+        .services
+        .project_tasks
+        .get_task(&project_id, &task_id)
+        .await?;
+    let runs = state
+        .services
+        .project_tasks
+        .list_task_runs(&project_id, &task_id)
+        .await?;
+    let interventions = state
+        .services
+        .project_tasks
+        .list_task_interventions(&project_id, &task_id)
+        .await?;
+    Ok(Json(task_detail_from_records(&task, &runs, &interventions)))
+}
+
+pub(crate) async fn update_project_task(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+    Json(request): Json<UpdateTaskRequest>,
+) -> Result<Json<TaskDetail>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "task.manage",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    let request = validate_update_task_request(request)?;
+    let task = state
+        .services
+        .project_tasks
+        .update_task(&project_id, &task_id, &session.user_id, request)
+        .await?;
+    let runs = state
+        .services
+        .project_tasks
+        .list_task_runs(&project_id, &task_id)
+        .await?;
+    let interventions = state
+        .services
+        .project_tasks
+        .list_task_interventions(&project_id, &task_id)
+        .await?;
+    Ok(Json(task_detail_from_records(&task, &runs, &interventions)))
+}
+
+pub(crate) async fn launch_project_task(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+    Json(request): Json<LaunchTaskRequest>,
+) -> Result<Json<TaskRunSummary>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "task.run",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    let task = state
+        .services
+        .project_tasks
+        .get_task(&project_id, &task_id)
+        .await?;
+    let actor_ref = trim_optional_task_input(request.actor_ref)
+        .unwrap_or_else(|| task.default_actor_ref.clone());
+    if actor_ref.is_empty() {
+        return Err(AppError::invalid_input("task actor is required").into());
+    }
+    let owner_permission_ceiling =
+        derive_runtime_owner_permission_ceiling(&state, &session, Some(&project_id)).await?;
+    let runtime_session = state
+        .services
+        .runtime_session
+        .create_session_with_owner_ceiling(
+            CreateRuntimeSessionInput {
+                conversation_id: String::new(),
+                project_id: Some(project_id.clone()),
+                title: task.title.clone(),
+                session_kind: Some("task".into()),
+                selected_actor_ref: actor_ref.clone(),
+                selected_configured_model_id: None,
+                execution_permission_mode: owner_permission_ceiling.clone(),
+            },
+            &session.user_id,
+            Some(&owner_permission_ceiling),
+        )
+        .await?;
+    let runtime_run = state
+        .services
+        .runtime_execution
+        .submit_turn(
+            &runtime_session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: task_prompt_from_record(&task, "manual", None),
+                permission_mode: None,
+                recall_mode: None,
+                ignored_memory_ids: Vec::new(),
+                memory_intent: None,
+            },
+        )
+        .await?;
+    let run = state
+        .services
+        .project_tasks
+        .save_task_run(build_task_run_record(
+            &task,
+            &runtime_session,
+            &runtime_run,
+            "manual",
+            &actor_ref,
+        ))
+        .await?;
+    state
+        .services
+        .project_tasks
+        .save_task(update_task_record_from_run(&task, &run, &session.user_id))
+        .await?;
+    Ok(Json(task_run_summary_from_record(&run)))
+}
+
+pub(crate) async fn rerun_project_task(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+    Json(request): Json<RerunTaskRequest>,
+) -> Result<Json<TaskRunSummary>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "task.run",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    let task = state
+        .services
+        .project_tasks
+        .get_task(&project_id, &task_id)
+        .await?;
+    let actor_ref = trim_optional_task_input(request.actor_ref)
+        .unwrap_or_else(|| task.default_actor_ref.clone());
+    let source_task_run_id = trim_optional_task_input(request.source_task_run_id);
+    let owner_permission_ceiling =
+        derive_runtime_owner_permission_ceiling(&state, &session, Some(&project_id)).await?;
+    let runtime_session = state
+        .services
+        .runtime_session
+        .create_session_with_owner_ceiling(
+            CreateRuntimeSessionInput {
+                conversation_id: String::new(),
+                project_id: Some(project_id.clone()),
+                title: format!("{} rerun", task.title),
+                session_kind: Some("task".into()),
+                selected_actor_ref: actor_ref.clone(),
+                selected_configured_model_id: None,
+                execution_permission_mode: owner_permission_ceiling.clone(),
+            },
+            &session.user_id,
+            Some(&owner_permission_ceiling),
+        )
+        .await?;
+    let runtime_run = state
+        .services
+        .runtime_execution
+        .submit_turn(
+            &runtime_session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: task_prompt_from_record(&task, "rerun", source_task_run_id.as_deref()),
+                permission_mode: None,
+                recall_mode: None,
+                ignored_memory_ids: Vec::new(),
+                memory_intent: None,
+            },
+        )
+        .await?;
+    let run = state
+        .services
+        .project_tasks
+        .save_task_run(build_task_run_record(
+            &task,
+            &runtime_session,
+            &runtime_run,
+            "rerun",
+            &actor_ref,
+        ))
+        .await?;
+    state
+        .services
+        .project_tasks
+        .save_task(update_task_record_from_run(&task, &run, &session.user_id))
+        .await?;
+    Ok(Json(task_run_summary_from_record(&run)))
+}
+
+pub(crate) async fn list_project_task_runs(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+) -> Result<Json<Vec<TaskRunSummary>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "task.view",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    state
+        .services
+        .project_tasks
+        .get_task(&project_id, &task_id)
+        .await?;
+    Ok(Json(
+        state
+            .services
+            .project_tasks
+            .list_task_runs(&project_id, &task_id)
+            .await?
+            .iter()
+            .map(task_run_summary_from_record)
+            .collect(),
+    ))
+}
+
+pub(crate) async fn create_project_task_intervention(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, task_id)): Path<(String, String)>,
+    Json(request): Json<CreateTaskInterventionRequest>,
+) -> Result<Json<TaskInterventionRecord>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "task.intervene",
+        Some(&project_id),
+        Some("task"),
+        Some(&task_id),
+    )
+    .await?;
+    if request.r#type.trim().is_empty() {
+        return Err(AppError::invalid_input("task intervention type is required").into());
+    }
+    let intervention_type = request.r#type.trim();
+    let explicit_approval_id = matches!(intervention_type, "approve" | "reject")
+        .then(|| trim_optional_task_input(request.approval_id.clone()))
+        .flatten();
+    let mut runtime_synced_run = None;
+    if matches!(intervention_type, "approve" | "reject") {
+        let task = state
+            .services
+            .project_tasks
+            .get_task(&project_id, &task_id)
+            .await?;
+        let target_run_id = trim_optional_task_input(request.task_run_id.clone())
+            .or_else(|| task.active_task_run_id.clone());
+        if let Some(target_run_id) = target_run_id {
+            if let Some(target_run) = state
+                .services
+                .project_tasks
+                .list_task_runs(&project_id, &task_id)
+                .await?
+                .into_iter()
+                .find(|run| run.id == target_run_id)
+            {
+                if let Some(session_id) = target_run.session_id.as_deref() {
+                    let runtime_session =
+                        match state.services.runtime_session.get_session(session_id).await {
+                            Ok(detail) => Some(detail),
+                            Err(AppError::NotFound(_)) => None,
+                            Err(error) => return Err(error.into()),
+                        };
+                    if let Some(runtime_session) = runtime_session {
+                        if let Some(approval_id) = explicit_approval_id.clone().or_else(|| {
+                                runtime_session
+                                    .pending_approval
+                                    .as_ref()
+                                    .map(|approval| approval.id.clone())
+                            }) {
+                                let previous_run = target_run.clone();
+                                let runtime_run = state
+                                    .services
+                                    .runtime_execution
+                                    .resolve_approval(
+                                        session_id,
+                                        &approval_id,
+                                        octopus_core::ResolveRuntimeApprovalInput {
+                                            decision: if intervention_type == "approve" {
+                                                "approve".into()
+                                            } else {
+                                                "reject".into()
+                                            },
+                                        },
+                                    )
+                                    .await?;
+                                let refreshed_session = state
+                                    .services
+                                    .runtime_session
+                                    .get_session(session_id)
+                                    .await?;
+                                runtime_synced_run = Some((
+                                    previous_run.clone(),
+                                    if intervention_type == "approve" {
+                                        sync_task_run_record_from_runtime(
+                                            &previous_run,
+                                            &refreshed_session,
+                                            &runtime_run,
+                                        )
+                                    } else {
+                                        sync_rejected_task_run_record_from_runtime(
+                                            &previous_run,
+                                            &refreshed_session,
+                                            &runtime_run,
+                                        )
+                                    },
+                                ));
+                            }
+                    }
+                }
+            }
+        }
+        if runtime_synced_run.is_none() {
+            if let Some(approval_id) = explicit_approval_id.as_deref() {
+                return Err(AppError::conflict(format!(
+                    "task approval `{approval_id}` could not be resolved in runtime"
+                ))
+                .into());
+            }
+        }
+    }
+    let record = state
+        .services
+        .project_tasks
+        .create_task_intervention(&project_id, &task_id, &session.user_id, request)
+        .await?;
+    if let Some((previous_run, run)) = runtime_synced_run {
+        let task = state
+            .services
+            .project_tasks
+            .get_task(&project_id, &task_id)
+            .await?;
+        let run = state.services.project_tasks.save_task_run(run).await?;
+        state
+            .services
+            .project_tasks
+            .save_task(sync_task_record_from_run(
+                &task,
+                &previous_run,
+                &run,
+                &session.user_id,
+            ))
+            .await?;
+    }
+    Ok(Json(task_intervention_from_record(&record)))
 }
 
 pub(crate) async fn workspace_resources(
@@ -4639,7 +5677,29 @@ pub(crate) async fn runtime_events(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+    use std::{
+        collections::HashMap,
+        fs,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
+
+    use octopus_core::{
+        default_connection_stubs, default_host_state, default_preferences,
+        CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest,
+        DesktopBackendConnection, LaunchTaskRequest, ProjectPermissionOverrides,
+        RegisterBootstrapAdminRequest, RerunTaskRequest, SubmitRuntimeTurnInput, TaskContextBundle,
+        TaskContextRef, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    };
+    use octopus_infra::build_infra_bundle;
+    use octopus_platform::PlatformServices;
+    use octopus_runtime_adapter::{MockRuntimeModelDriver, RuntimeAdapter};
+    use rusqlite::{params, Connection};
+    use serde_json::{json, Value};
+
+    const APPROVAL_AGENT_ID: &str = "agent-task-runtime-approval";
+    const APPROVAL_AGENT_REF: &str = "agent:agent-task-runtime-approval";
+    const CHAINED_APPROVAL_TEAM_REF: &str = "team:team-spawn-workflow-approval";
 
     fn sample_session() -> SessionRecord {
         SessionRecord {
@@ -4652,6 +5712,377 @@ mod tests {
             created_at: 1,
             expires_at: None,
         }
+    }
+
+    fn avatar_payload() -> octopus_core::AvatarUploadPayload {
+        octopus_core::AvatarUploadPayload {
+            file_name: "avatar.png".into(),
+            content_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            byte_size: 8,
+        }
+    }
+
+    fn auth_headers(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {token}")).expect("bearer header"),
+        );
+        headers.insert(
+            "x-workspace-id",
+            HeaderValue::from_static(DEFAULT_WORKSPACE_ID),
+        );
+        headers
+    }
+
+    fn test_server_state(root: &Path) -> ServerState {
+        let infra = build_infra_bundle(root).expect("infra bundle");
+        let runtime = Arc::new(RuntimeAdapter::new_with_executor(
+            DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+            Arc::new(MockRuntimeModelDriver),
+        ));
+        let services = PlatformServices {
+            workspace: infra.workspace.clone(),
+            project_tasks: infra.workspace.clone(),
+            access_control: infra.access_control.clone(),
+            auth: infra.auth.clone(),
+            app_registry: infra.app_registry.clone(),
+            authorization: infra.authorization.clone(),
+            runtime_session: runtime.clone(),
+            runtime_execution: runtime.clone(),
+            runtime_config: runtime.clone(),
+            runtime_registry: runtime,
+            artifact: infra.artifact.clone(),
+            inbox: infra.inbox.clone(),
+            knowledge: infra.knowledge.clone(),
+            observation: infra.observation.clone(),
+        };
+
+        ServerState {
+            services,
+            host_auth_token: "host-test-token".into(),
+            transport_security: "loopback".into(),
+            idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
+            auth_rate_limits: Arc::new(Mutex::new(HashMap::new())),
+            host_state: default_host_state("0.1.0-test".into(), true),
+            host_connections: default_connection_stubs(),
+            host_preferences_path: root.join("config").join("shell-preferences.json"),
+            host_workspace_connections_path: root
+                .join("config")
+                .join("shell-workspace-connections.json"),
+            host_default_preferences: default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
+            backend_connection: DesktopBackendConnection {
+                base_url: Some("http://127.0.0.1:43127".into()),
+                auth_token: Some("desktop-test-token".into()),
+                state: "ready".into(),
+                transport: "http".into(),
+            },
+        }
+    }
+
+    async fn bootstrap_owner(state: &ServerState) -> SessionRecord {
+        state
+            .services
+            .auth
+            .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                display_name: "Owner".into(),
+                password: "password123".into(),
+                confirm_password: "password123".into(),
+                avatar: avatar_payload(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+            })
+            .await
+            .expect("bootstrap admin")
+            .session
+    }
+
+    async fn seed_task_run(
+        state: &ServerState,
+        task: &ProjectTaskRecord,
+        user_id: &str,
+        status: &str,
+    ) -> ProjectTaskRunRecord {
+        let started_at = timestamp_now();
+        let attention_reasons = match status {
+            "waiting_approval" => vec!["needs_approval".into()],
+            "waiting_input" => vec!["waiting_input".into()],
+            "failed" => vec!["failed".into()],
+            _ => Vec::new(),
+        };
+        let run = ProjectTaskRunRecord {
+            id: format!("task-run-{}-{status}", task.id),
+            workspace_id: task.workspace_id.clone(),
+            project_id: task.project_id.clone(),
+            task_id: task.id.clone(),
+            trigger_type: "manual".into(),
+            status: status.into(),
+            session_id: Some(format!("runtime-session-{}-{status}", task.id)),
+            conversation_id: Some(format!("conversation-{}-{status}", task.id)),
+            runtime_run_id: Some(format!("runtime-run-{}-{status}", task.id)),
+            actor_ref: task.default_actor_ref.clone(),
+            started_at,
+            completed_at: None,
+            result_summary: None,
+            pending_approval_id: (status == "waiting_approval")
+                .then_some(format!("approval-task-run-{}-{status}", task.id)),
+            failure_category: None,
+            failure_summary: None,
+            view_status: if attention_reasons.is_empty() {
+                "healthy".into()
+            } else {
+                "attention".into()
+            },
+            attention_updated_at: if attention_reasons.is_empty() {
+                None
+            } else {
+                Some(started_at)
+            },
+            attention_reasons,
+            deliverable_refs: Vec::new(),
+            artifact_refs: Vec::new(),
+            latest_transition: Some(TaskStateTransitionSummary {
+                kind: status.into(),
+                summary: match status {
+                    "waiting_approval" => "Task run is waiting for approval.".into(),
+                    "waiting_input" => "Task run is waiting for input.".into(),
+                    "failed" => "Task run failed in the runtime.".into(),
+                    "completed" => "Task run completed in the runtime.".into(),
+                    _ => "Task run started in the runtime.".into(),
+                },
+                at: started_at,
+                run_id: Some(format!("runtime-run-{}-{status}", task.id)),
+            }),
+        };
+        state
+            .services
+            .project_tasks
+            .save_task_run(run.clone())
+            .await
+            .expect("save seeded task run");
+        state
+            .services
+            .project_tasks
+            .save_task(update_task_record_from_run(task, &run, user_id))
+            .await
+            .expect("save seeded task projection");
+        run
+    }
+
+    fn write_runtime_workspace_config(root: &Path) {
+        let path = root.join("config").join("runtime").join("workspace.json");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("runtime config dir");
+        }
+        fs::write(
+            path,
+            serde_json::to_vec_pretty(&json!({
+                "configuredModels": {
+                    "quota-model": {
+                        "configuredModelId": "quota-model",
+                        "name": "Quota Model",
+                        "providerId": "anthropic",
+                        "modelId": "claude-sonnet-4-5",
+                        "credentialRef": "env:ANTHROPIC_API_KEY",
+                        "enabled": true,
+                        "source": "workspace"
+                    }
+                }
+            }))
+            .expect("runtime config json"),
+        )
+        .expect("write runtime config");
+    }
+
+    fn insert_approval_required_agent(root: &Path) {
+        let connection = Connection::open(root.join("data").join("main.db")).expect("db");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+                params![
+                    APPROVAL_AGENT_ID,
+                    DEFAULT_WORKSPACE_ID,
+                    DEFAULT_PROJECT_ID,
+                    "project",
+                    "Task Runtime Approval Agent",
+                    Option::<String>::None,
+                    "Approver",
+                    serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                    "Require approval before model execution starts.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Agent for task runtime approval route tests.",
+                    serde_json::to_string(&json!({})).expect("default model strategy"),
+                    serde_json::to_string(&json!({})).expect("capability policy"),
+                    serde_json::to_string(&json!({})).expect("permission envelope"),
+                    serde_json::to_string(&json!({})).expect("memory policy"),
+                    serde_json::to_string(&json!({})).expect("delegation policy"),
+                    serde_json::to_string(&json!({
+                        "toolExecution": "require-approval",
+                        "memoryWrite": "require-approval",
+                        "mcpAuth": "require-approval",
+                        "teamSpawn": "require-approval",
+                        "workflowEscalation": "require-approval"
+                    }))
+                    .expect("approval preference"),
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert approval-required agent");
+    }
+
+    fn insert_chained_approval_team(root: &Path) {
+        let connection = Connection::open(root.join("data").join("main.db")).expect("db");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    "agent-team-spawn-workflow-leader",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Spawn Workflow Leader",
+                    Option::<String>::None,
+                    "Coordinator",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Lead the team.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Leader for chained workflow approval tests.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert chained leader");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    "agent-team-spawn-workflow-worker",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Spawn Workflow Worker",
+                    Option::<String>::None,
+                    "Executor",
+                    serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                    "Do the delegated work.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Worker for chained workflow approval tests.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert chained worker");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                params![
+                    "team-spawn-workflow-approval",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Spawn Workflow Approval Team",
+                    Option::<String>::None,
+                    "Approval aware team",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Delegate after approval, then continue workflow after approval.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    serde_json::to_string(&json!({
+                        "toolExecution": "auto",
+                        "memoryWrite": "require-approval",
+                        "mcpAuth": "require-approval",
+                        "teamSpawn": "require-approval",
+                        "workflowEscalation": "require-approval"
+                    }))
+                    .expect("approval preference"),
+                    "agent-team-spawn-workflow-leader",
+                    serde_json::to_string(&vec![
+                        "agent-team-spawn-workflow-leader",
+                        "agent-team-spawn-workflow-worker"
+                    ])
+                    .expect("member ids"),
+                    "Team for chained workflow approval tests.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert chained approval team");
+    }
+
+    async fn seed_runtime_pending_approval_task_run(
+        state: &ServerState,
+        task: &ProjectTaskRecord,
+        user_id: &str,
+    ) -> ProjectTaskRunRecord {
+        let runtime_session = state
+            .services
+            .runtime_session
+            .create_session(
+                CreateRuntimeSessionInput {
+                    conversation_id: format!("conversation-{}-approval", task.id),
+                    project_id: Some(task.project_id.clone()),
+                    title: format!("{} runtime approval", task.title),
+                    session_kind: Some("task".into()),
+                    selected_actor_ref: task.default_actor_ref.clone(),
+                    selected_configured_model_id: Some("quota-model".into()),
+                    execution_permission_mode: octopus_core::RUNTIME_PERMISSION_READ_ONLY.into(),
+                },
+                user_id,
+            )
+            .await
+            .expect("create runtime session");
+        let runtime_run = state
+            .services
+            .runtime_execution
+            .submit_turn(
+                &runtime_session.summary.id,
+                SubmitRuntimeTurnInput {
+                    content: task_prompt_from_record(task, "manual", None),
+                    permission_mode: None,
+                    recall_mode: None,
+                    ignored_memory_ids: Vec::new(),
+                    memory_intent: None,
+                },
+            )
+            .await
+            .expect("submit task turn");
+        assert_eq!(runtime_run.status, "waiting_approval");
+        let run = state
+            .services
+            .project_tasks
+            .save_task_run(build_task_run_record(
+                task,
+                &runtime_session,
+                &runtime_run,
+                "manual",
+                &task.default_actor_ref,
+            ))
+            .await
+            .expect("save runtime-backed task run");
+        state
+            .services
+            .project_tasks
+            .save_task(update_task_record_from_run(task, &run, user_id))
+            .await
+            .expect("save runtime-backed task projection");
+        run
     }
 
     fn sample_resource(visibility: &str, owner_user_id: &str) -> WorkspaceResourceRecord {
@@ -5020,6 +6451,1053 @@ mod tests {
             assignments: None,
         })
         .is_err());
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_create_launch_rerun_and_intervene_against_project_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Prepare launch checklist".into(),
+                goal: "Create a launch-ready checklist for the redesign rollout.".into(),
+                brief: "Focus on sequencing, dependencies, and handoff notes.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: Some("0 9 * * 1-5".into()),
+                context_bundle: TaskContextBundle {
+                    refs: vec![TaskContextRef {
+                        kind: "resource".into(),
+                        ref_id: "res-brief".into(),
+                        title: "Project brief".into(),
+                        subtitle: "Source brief".into(),
+                        version_ref: None,
+                        pin_mode: "snapshot".into(),
+                    }],
+                    pinned_instructions: "Keep the output concise.".into(),
+                    resolution_mode: "explicit_only".into(),
+                    last_resolved_at: None,
+                },
+            }),
+        )
+        .await
+        .expect("create task");
+
+        assert_eq!(created.project_id, DEFAULT_PROJECT_ID);
+        assert_eq!(created.run_history.len(), 0);
+
+        let Json(tasks) = list_project_tasks(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+        )
+        .await
+        .expect("list project tasks");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, created.id);
+
+        let Json(launch_run) = launch_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(LaunchTaskRequest {
+                actor_ref: Some("team:team-workspace-core".into()),
+            }),
+        )
+        .await
+        .expect("launch project task");
+        assert_eq!(launch_run.task_id, created.id);
+        assert!(launch_run.session_id.is_some());
+
+        let Json(rerun) = rerun_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(RerunTaskRequest {
+                actor_ref: Some("team:team-workspace-core".into()),
+                source_task_run_id: Some(launch_run.id.clone()),
+            }),
+        )
+        .await
+        .expect("rerun project task");
+        assert_eq!(rerun.task_id, created.id);
+
+        let Json(runs) = list_project_task_runs(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("list project task runs");
+        assert_eq!(runs.len(), 2);
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(rerun.id.clone()),
+                approval_id: None,
+                r#type: "comment".into(),
+                payload: serde_json::json!({
+                    "note": "Please keep the checklist aligned with project handoff rules."
+                }),
+            }),
+        )
+        .await
+        .expect("create project task intervention");
+        assert_eq!(intervention.task_id, created.id);
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get project task detail");
+
+        assert_eq!(detail.run_history.len(), 2);
+        assert_eq!(detail.intervention_history.len(), 1);
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.id.as_str()),
+            Some(rerun.id.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_approve_intervention_updates_waiting_approval_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review launch approval".into(),
+                goal: "Pause the task until an owner approves the plan.".into(),
+                brief: "Route the active run through an approval gate.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run = seed_task_run(&state, &task, &session.user_id, "waiting_approval").await;
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: None,
+                r#type: "approve".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("approve task intervention");
+
+        assert_eq!(intervention.status, "applied");
+        assert_eq!(intervention.r#type, "approve");
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get project task detail");
+
+        assert_eq!(detail.status, "running");
+        assert_eq!(detail.view_status, "healthy");
+        assert!(detail.attention_reasons.is_empty());
+        assert_eq!(
+            detail.latest_result_summary.as_deref(),
+            Some("Approval received. Continuing the active run.")
+        );
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.status.as_str()),
+            Some("running")
+        );
+        assert_eq!(
+            detail
+                .active_run
+                .as_ref()
+                .map(|run| run.view_status.as_str()),
+            Some("healthy")
+        );
+        assert_eq!(
+            detail
+                .active_run
+                .as_ref()
+                .map(|run| run.attention_reasons.clone()),
+            Some(Vec::new())
+        );
+        assert_eq!(detail.intervention_history.len(), 1);
+        assert_eq!(detail.intervention_history[0].status, "applied");
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_approve_intervention_resolves_runtime_pending_approval() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_runtime_workspace_config(temp.path());
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+        insert_approval_required_agent(temp.path());
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review launch approval".into(),
+                goal: "Pause the task until an owner approves the plan.".into(),
+                brief: "Route the active run through an approval gate.".into(),
+                default_actor_ref: APPROVAL_AGENT_REF.into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run =
+            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let runtime_session_id = seeded_run
+            .session_id
+            .clone()
+            .expect("runtime-backed task run session id");
+
+        let runtime_before = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session before intervention");
+        assert!(runtime_before.pending_approval.is_some());
+        let approval_id = runtime_before
+            .pending_approval
+            .as_ref()
+            .map(|approval| approval.id.clone())
+            .expect("runtime pending approval id");
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: Some(approval_id),
+                r#type: "approve".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("approve task intervention");
+
+        assert_eq!(intervention.status, "applied");
+        assert_eq!(intervention.r#type, "approve");
+
+        let runtime_after = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session after intervention");
+        assert!(runtime_after.pending_approval.is_none());
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get project task detail");
+
+        assert_eq!(detail.status, "completed");
+        assert_eq!(detail.view_status, "healthy");
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.status.as_str()),
+            Some("completed")
+        );
+        assert_eq!(
+            detail.latest_result_summary.as_deref(),
+            Some("Task run completed in the runtime.")
+        );
+        assert_eq!(detail.analytics_summary.run_count, 1);
+        assert_eq!(detail.analytics_summary.manual_run_count, 1);
+        assert_eq!(detail.analytics_summary.completion_count, 1);
+        assert_eq!(detail.analytics_summary.approval_required_count, 1);
+        assert_eq!(detail.intervention_history.len(), 1);
+        assert_eq!(detail.intervention_history[0].status, "applied");
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_approve_intervention_keeps_waiting_when_runtime_chains_to_next_approval(
+    ) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_runtime_workspace_config(temp.path());
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+        insert_chained_approval_team(temp.path());
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review chained approvals".into(),
+                goal: "Keep the task blocked until the second approval is resolved.".into(),
+                brief:
+                    "Approve the team spawn first, then wait for workflow continuation approval."
+                        .into(),
+                default_actor_ref: CHAINED_APPROVAL_TEAM_REF.into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run =
+            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let runtime_session_id = seeded_run
+            .session_id
+            .clone()
+            .expect("runtime-backed task run session id");
+
+        let runtime_before = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session before intervention");
+        let first_approval_id = runtime_before
+            .pending_approval
+            .as_ref()
+            .map(|approval| approval.id.clone())
+            .expect("initial runtime pending approval id");
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: Some(first_approval_id.clone()),
+                r#type: "approve".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("approve task intervention");
+
+        assert_eq!(intervention.status, "applied");
+        assert_eq!(intervention.r#type, "approve");
+
+        let runtime_after = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session after intervention");
+        let next_approval = runtime_after
+            .pending_approval
+            .clone()
+            .expect("chained runtime pending approval");
+        assert_ne!(next_approval.id, first_approval_id);
+        assert_eq!(
+            next_approval.target_kind.as_deref(),
+            Some("workflow-continuation")
+        );
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get project task detail");
+
+        assert_eq!(detail.status, "attention");
+        assert_eq!(detail.view_status, "attention");
+        assert_eq!(detail.attention_reasons, vec!["needs_approval"]);
+        assert_eq!(detail.latest_result_summary, None);
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.status.as_str()),
+            Some("waiting_approval")
+        );
+        assert_eq!(
+            detail
+                .active_run
+                .as_ref()
+                .and_then(|run| run.pending_approval_id.clone()),
+            Some(next_approval.id.clone())
+        );
+        assert_eq!(detail.analytics_summary.run_count, 1);
+        assert_eq!(detail.analytics_summary.manual_run_count, 1);
+        assert_eq!(detail.analytics_summary.completion_count, 0);
+        assert_eq!(detail.analytics_summary.approval_required_count, 1);
+        assert_eq!(detail.intervention_history.len(), 1);
+        assert_eq!(detail.intervention_history[0].status, "applied");
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_reject_intervention_resolves_runtime_pending_approval() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_runtime_workspace_config(temp.path());
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+        insert_approval_required_agent(temp.path());
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review launch approval".into(),
+                goal: "Pause the task until an owner approves the plan.".into(),
+                brief: "Route the active run through an approval gate.".into(),
+                default_actor_ref: APPROVAL_AGENT_REF.into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run =
+            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let runtime_session_id = seeded_run
+            .session_id
+            .clone()
+            .expect("runtime-backed task run session id");
+
+        let runtime_before = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session before intervention");
+        let first_approval_id = runtime_before
+            .pending_approval
+            .as_ref()
+            .map(|approval| approval.id.clone())
+            .expect("runtime pending approval id");
+
+        let Json(rejected) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: Some(first_approval_id.clone()),
+                r#type: "reject".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("reject task intervention");
+
+        assert_eq!(rejected.status, "applied");
+        assert_eq!(rejected.r#type, "reject");
+
+        let runtime_after_reject = state
+            .services
+            .runtime_session
+            .get_session(&runtime_session_id)
+            .await
+            .expect("runtime session after reject");
+        assert!(runtime_after_reject.pending_approval.is_none());
+
+        let Json(rejected_detail) = get_project_task_detail(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get rejected task detail");
+
+        assert_eq!(rejected_detail.status, "attention");
+        assert_eq!(rejected_detail.view_status, "attention");
+        assert_eq!(rejected_detail.attention_reasons, vec!["waiting_input"]);
+        assert_eq!(
+            rejected_detail
+                .active_run
+                .as_ref()
+                .map(|run| run.status.as_str()),
+            Some("waiting_input")
+        );
+        assert_eq!(
+            rejected_detail
+                .active_run
+                .as_ref()
+                .and_then(|run| run.pending_approval_id.clone()),
+            None
+        );
+        assert_eq!(
+            rejected_detail.latest_result_summary.as_deref(),
+            Some("Approval rejected. Waiting for updated guidance.")
+        );
+        assert_eq!(rejected_detail.intervention_history.len(), 1);
+        assert_eq!(rejected_detail.intervention_history[0].r#type, "reject");
+        assert_eq!(rejected_detail.intervention_history[0].status, "applied");
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_approve_with_explicit_approval_id_does_not_fall_back_to_projection_only(
+    ) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review launch approval".into(),
+                goal: "Pause the task until an owner approves the plan.".into(),
+                brief: "Route the active run through an approval gate.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run = seed_task_run(&state, &task, &session.user_id, "waiting_approval").await;
+        let approval_id = seeded_run
+            .pending_approval_id
+            .clone()
+            .expect("seeded pending approval id");
+
+        let error = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: Some(approval_id.clone()),
+                r#type: "approve".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect_err("explicit task approval should require runtime resolution");
+
+        assert!(
+            error.source.to_string().contains(&format!(
+                "task approval `{approval_id}` could not be resolved in runtime"
+            )),
+            "unexpected error: {:?}",
+            error
+        );
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get project task detail");
+
+        assert_eq!(detail.status, "attention");
+        assert_eq!(detail.view_status, "attention");
+        assert_eq!(detail.attention_reasons, vec!["needs_approval"]);
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.status.as_str()),
+            Some("waiting_approval")
+        );
+        assert_eq!(detail.intervention_history.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_reject_and_resume_interventions_update_task_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Review launch approval".into(),
+                goal: "Pause the task until an owner approves the plan.".into(),
+                brief: "Route the active run through an approval gate.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run = seed_task_run(&state, &task, &session.user_id, "waiting_approval").await;
+
+        let Json(rejected) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: None,
+                r#type: "reject".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("reject task intervention");
+
+        assert_eq!(rejected.status, "applied");
+
+        let Json(rejected_detail) = get_project_task_detail(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get rejected task detail");
+
+        assert_eq!(rejected_detail.status, "attention");
+        assert_eq!(rejected_detail.view_status, "attention");
+        assert_eq!(rejected_detail.attention_reasons, vec!["waiting_input"]);
+        assert_eq!(
+            rejected_detail.latest_result_summary.as_deref(),
+            Some("Approval rejected. Waiting for updated guidance.")
+        );
+        assert_eq!(
+            rejected_detail
+                .active_run
+                .as_ref()
+                .map(|run| run.status.as_str()),
+            Some("waiting_input")
+        );
+        assert_eq!(
+            rejected_detail
+                .active_run
+                .as_ref()
+                .map(|run| run.attention_reasons.clone()),
+            Some(vec!["waiting_input".into()])
+        );
+
+        let Json(resumed) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: None,
+                r#type: "resume".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("resume task intervention");
+
+        assert_eq!(resumed.status, "applied");
+
+        let Json(resumed_detail) = get_project_task_detail(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get resumed task detail");
+
+        assert_eq!(resumed_detail.status, "running");
+        assert_eq!(resumed_detail.view_status, "healthy");
+        assert!(resumed_detail.attention_reasons.is_empty());
+        assert_eq!(
+            resumed_detail.latest_result_summary.as_deref(),
+            Some("Updated guidance received. Continuing the active run.")
+        );
+        assert_eq!(
+            resumed_detail
+                .active_run
+                .as_ref()
+                .map(|run| run.status.as_str()),
+            Some("running")
+        );
+        assert_eq!(resumed_detail.intervention_history.len(), 2);
+        assert_eq!(resumed_detail.intervention_history[0].r#type, "resume");
+        assert_eq!(resumed_detail.intervention_history[0].status, "applied");
+        assert_eq!(resumed_detail.intervention_history[1].r#type, "reject");
+        assert_eq!(resumed_detail.intervention_history[1].status, "applied");
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_edit_brief_intervention_updates_task_projection() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Prepare release brief".into(),
+                goal: "Keep the release brief aligned with final handoff scope.".into(),
+                brief: "Focus on release sequencing and deliverable links.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run = seed_task_run(&state, &task, &session.user_id, "running").await;
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: None,
+                r#type: "edit_brief".into(),
+                payload: serde_json::json!({
+                    "brief": "Focus on the final release notes and linked deliverables."
+                }),
+            }),
+        )
+        .await
+        .expect("edit brief intervention");
+
+        assert_eq!(intervention.status, "accepted");
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get task detail after brief edit");
+
+        assert_eq!(
+            detail.brief,
+            "Focus on the final release notes and linked deliverables."
+        );
+        assert_eq!(detail.status, "running");
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.kind.as_str()),
+            Some("intervened")
+        );
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.summary.as_str()),
+            Some("Task intervention recorded: edit_brief.")
+        );
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .and_then(|transition| transition.run_id.as_deref()),
+            Some(seeded_run.id.as_str())
+        );
+
+        let Json(tasks) = list_project_tasks(
+            State(state.clone()),
+            headers,
+            Path(DEFAULT_PROJECT_ID.into()),
+        )
+        .await
+        .expect("list project tasks after brief edit");
+
+        assert_eq!(
+            tasks
+                .iter()
+                .find(|record| record.id == created.id)
+                .and_then(|record| record.latest_transition.as_ref())
+                .map(|transition| transition.kind.as_str()),
+            Some("intervened")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_change_actor_intervention_updates_task_and_target_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Prepare release brief".into(),
+                goal: "Keep the release brief aligned with final handoff scope.".into(),
+                brief: "Focus on release sequencing and deliverable links.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let task = state
+            .services
+            .project_tasks
+            .get_task(DEFAULT_PROJECT_ID, &created.id)
+            .await
+            .expect("get created task");
+        let seeded_run = seed_task_run(&state, &task, &session.user_id, "running").await;
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: Some(seeded_run.id.clone()),
+                approval_id: None,
+                r#type: "change_actor".into(),
+                payload: serde_json::json!({
+                    "actorRef": "agent:release-operator"
+                }),
+            }),
+        )
+        .await
+        .expect("change actor intervention");
+
+        assert_eq!(intervention.status, "accepted");
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get task detail after actor change");
+
+        assert_eq!(detail.default_actor_ref, "agent:release-operator");
+        assert_eq!(
+            detail.active_run.as_ref().map(|run| run.actor_ref.as_str()),
+            Some("agent:release-operator")
+        );
+        assert_eq!(
+            detail
+                .run_history
+                .iter()
+                .find(|run| run.id == seeded_run.id)
+                .map(|run| run.actor_ref.as_str()),
+            Some("agent:release-operator")
+        );
+        assert_eq!(detail.status, "running");
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.kind.as_str()),
+            Some("intervened")
+        );
+
+        let Json(runs) = list_project_task_runs(
+            State(state.clone()),
+            headers,
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("list runs after actor change");
+
+        assert_eq!(
+            runs.iter()
+                .find(|run| run.id == seeded_run.id)
+                .map(|run| run.actor_ref.as_str()),
+            Some("agent:release-operator")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_takeover_intervention_surfaces_attention_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let Json(created) = create_project_task(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(CreateTaskRequest {
+                title: "Audit workspace menu".into(),
+                goal: "Review navigation labels and routing consistency.".into(),
+                brief: "Validate the desktop project menu before release.".into(),
+                default_actor_ref: "team:team-workspace-core".into(),
+                schedule_spec: None,
+                context_bundle: TaskContextBundle::default(),
+            }),
+        )
+        .await
+        .expect("create task");
+
+        let Json(intervention) = create_project_task_intervention(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+            Json(CreateTaskInterventionRequest {
+                task_run_id: None,
+                approval_id: None,
+                r#type: "takeover".into(),
+                payload: serde_json::json!({}),
+            }),
+        )
+        .await
+        .expect("takeover intervention");
+
+        assert_eq!(intervention.status, "accepted");
+
+        let Json(detail) = get_project_task_detail(
+            State(state.clone()),
+            headers.clone(),
+            Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
+        )
+        .await
+        .expect("get task detail after takeover");
+
+        assert_eq!(detail.status, "ready");
+        assert_eq!(detail.view_status, "attention");
+        assert_eq!(detail.attention_reasons, vec!["takeover_recommended"]);
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.kind.as_str()),
+            Some("intervened")
+        );
+        assert_eq!(
+            detail
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.summary.as_str()),
+            Some("Task intervention recorded: takeover.")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_respect_project_task_module_denials() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+
+        let project = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects")
+            .into_iter()
+            .find(|record| record.id == DEFAULT_PROJECT_ID)
+            .expect("default project");
+
+        state
+            .services
+            .workspace
+            .update_project(
+                DEFAULT_PROJECT_ID,
+                UpdateProjectRequest {
+                    name: project.name,
+                    description: project.description,
+                    status: project.status,
+                    resource_directory: project.resource_directory,
+                    owner_user_id: Some(project.owner_user_id),
+                    member_user_ids: Some(project.member_user_ids),
+                    permission_overrides: Some(ProjectPermissionOverrides {
+                        tasks: "deny".into(),
+                        ..project.permission_overrides
+                    }),
+                    linked_workspace_assets: Some(project.linked_workspace_assets),
+                    assignments: project.assignments,
+                },
+            )
+            .await
+            .expect("deny task module");
+
+        let error = list_project_tasks(
+            State(state.clone()),
+            auth_headers(&session.token),
+            Path(DEFAULT_PROJECT_ID.into()),
+        )
+        .await
+        .expect_err("task list should be denied");
+
+        assert!(
+            error
+                .source
+                .to_string()
+                .contains("project module tasks is not available"),
+            "unexpected error: {:?}",
+            error
+        );
     }
 
     #[test]

@@ -10,6 +10,7 @@ paths:
     - ./paths/access-control.yaml
     - ./paths/workspace.yaml
     - ./paths/projects.yaml
+    - ./paths/tasks.yaml
     - ./paths/catalog.yaml
     - ./paths/runtime.yaml
     - ./paths/misc.yaml
@@ -22,6 +23,7 @@ components:
       - ./components/schemas/access-control.yaml
       - ./components/schemas/workspace.yaml
       - ./components/schemas/projects.yaml
+      - ./components/schemas/tasks.yaml
       - ./components/schemas/catalog.yaml
       - ./components/schemas/runtime.yaml
       - ./components/schemas/misc.yaml

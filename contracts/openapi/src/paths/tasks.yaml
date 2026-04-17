@@ -1,0 +1,238 @@
+/api/v1/projects/{projectId}/tasks:
+  get:
+    operationId: listProjectTasks
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/TaskSummary"
+              type: array
+        description: Project task list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProjectTask
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateTaskRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskDetail"
+        description: Created project task payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/tasks/{taskId}:
+  get:
+    operationId: getProjectTaskDetail
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskDetail"
+        description: Project task detail payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateProjectTask
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateTaskRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskDetail"
+        description: Updated project task payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/tasks/{taskId}/launch:
+  post:
+    operationId: launchProjectTask
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LaunchTaskRequest"
+      required: false
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskRunSummary"
+        description: Launched task run payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/tasks/{taskId}/rerun:
+  post:
+    operationId: rerunProjectTask
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RerunTaskRequest"
+      required: false
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskRunSummary"
+        description: Rerun task payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/tasks/{taskId}/runs:
+  get:
+    operationId: listProjectTaskRuns
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/TaskRunSummary"
+              type: array
+        description: Project task run history payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/tasks/{taskId}/interventions:
+  post:
+    operationId: createProjectTaskIntervention
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateTaskInterventionRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInterventionRecord"
+        description: Created task intervention payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

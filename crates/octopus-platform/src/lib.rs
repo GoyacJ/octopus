@@ -20,6 +20,7 @@ pub use authorization::AuthorizationService;
 pub use inbox::InboxService;
 pub use knowledge::KnowledgeService;
 pub use observation::ObservationService;
+pub use project::ProjectTaskService;
 pub use runtime::{
     AutomationService, ModelRegistryService, RuntimeConfigService, RuntimeExecutionService,
     RuntimeProjectionService, RuntimeSessionService, ToolExecutionService,
@@ -29,6 +30,7 @@ pub use workspace::WorkspaceService;
 #[derive(Clone)]
 pub struct PlatformServices {
     pub workspace: Arc<dyn WorkspaceService>,
+    pub project_tasks: Arc<dyn ProjectTaskService>,
     pub access_control: Arc<dyn AccessControlService>,
     pub auth: Arc<dyn AuthService>,
     pub app_registry: Arc<dyn AppRegistryService>,

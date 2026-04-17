@@ -319,6 +319,10 @@ ProjectDashboardSnapshot:
       items:
         $ref: "#/components/schemas/ConversationRecord"
       type: array
+    recentTasks:
+      items:
+        $ref: "#/components/schemas/TaskSummary"
+      type: array
     resourceBreakdown:
       items:
         $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
@@ -350,6 +354,7 @@ ProjectDashboardSnapshot:
     - modelBreakdown
     - recentConversations
     - recentActivity
+    - recentTasks
     - usedTokens
   type: object
 ProjectDashboardSummary:
@@ -373,6 +378,12 @@ ProjectDashboardSummary:
     knowledgeCount:
       minimum: 0
       type: integer
+    activeTaskCount:
+      minimum: 0
+      type: integer
+    attentionTaskCount:
+      minimum: 0
+      type: integer
     memberCount:
       minimum: 0
       type: integer
@@ -380,6 +391,12 @@ ProjectDashboardSummary:
       minimum: 0
       type: integer
     resourceCount:
+      minimum: 0
+      type: integer
+    scheduledTaskCount:
+      minimum: 0
+      type: integer
+    taskCount:
       minimum: 0
       type: integer
     teamCount:
@@ -412,6 +429,10 @@ ProjectDashboardSummary:
     - tokenRecordCount
     - totalTokens
     - activityCount
+    - taskCount
+    - activeTaskCount
+    - attentionTaskCount
+    - scheduledTaskCount
   type: object
 ProjectDashboardTrendPoint:
   additionalProperties: false
@@ -603,11 +624,14 @@ ProjectDefaultPermissions:
       $ref: "#/components/schemas/ProjectDefaultPermissionValue"
     resources:
       $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+    tasks:
+      $ref: "#/components/schemas/ProjectDefaultPermissionValue"
     tools:
       $ref: "#/components/schemas/ProjectDefaultPermissionValue"
   required:
     - agents
     - resources
+    - tasks
     - tools
     - knowledge
   type: object
@@ -651,11 +675,14 @@ ProjectPermissionOverrides:
       $ref: "#/components/schemas/ProjectPermissionOverrideValue"
     resources:
       $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+    tasks:
+      $ref: "#/components/schemas/ProjectPermissionOverrideValue"
     tools:
       $ref: "#/components/schemas/ProjectPermissionOverrideValue"
   required:
     - agents
     - resources
+    - tasks
     - tools
     - knowledge
   type: object

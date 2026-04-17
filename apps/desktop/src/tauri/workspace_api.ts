@@ -13,6 +13,8 @@ import type {
   CapabilityManagementProjection,
   ChangeCurrentUserPasswordResponse,
   CreateProjectPromotionRequestInput,
+  CreateTaskInterventionRequest,
+  CreateTaskRequest,
   CredentialBinding,
   DataPolicyRecord,
   EnterpriseAuthSuccess,
@@ -21,6 +23,7 @@ import type {
   FeatureDefinition,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
+  LaunchTaskRequest,
   MenuDefinition,
   MenuGateResult,
   MenuPolicyRecord,
@@ -35,9 +38,15 @@ import type {
   ProtectedResourceMetadataUpsertRequest,
   ResourcePolicyRecord,
   ReviewProjectPromotionRequestInput,
+  RerunTaskRequest,
   RoleBindingRecord,
   SystemAuthStatus,
+  TaskDetail,
+  TaskInterventionRecord,
+  TaskRunSummary,
+  TaskSummary,
   ToolRecord,
+  UpdateTaskRequest,
   UserGroupRecord,
   UserOrgAssignmentRecord,
   WorkspaceMcpServerDocument,
@@ -229,6 +238,123 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             },
           },
         ) as ProjectPromotionRequest
+      },
+    },
+    tasks: {
+      async listProject(projectId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as TaskSummary[]
+      },
+      async createProject(projectId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies CreateTaskRequest),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as TaskDetail
+      },
+      async getDetail(projectId, taskId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskDetail
+      },
+      async updateProject(projectId, taskId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}',
+          'patch',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies UpdateTaskRequest),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskDetail
+      },
+      async launch(projectId, taskId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}/launch',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies LaunchTaskRequest),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskRunSummary
+      },
+      async rerun(projectId, taskId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}/rerun',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies RerunTaskRequest),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskRunSummary
+      },
+      async listRuns(projectId, taskId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}/runs',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskRunSummary[]
+      },
+      async createIntervention(projectId, taskId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/tasks/{taskId}/interventions',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies CreateTaskInterventionRequest),
+            pathParams: {
+              projectId,
+              taskId,
+            },
+          },
+        ) as TaskInterventionRecord
       },
     },
     resources: {

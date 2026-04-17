@@ -163,6 +163,17 @@ const results = computed<SearchResult[]>(() => {
       keywords: ['deliverable', 'deliverables', 'artifact', 'artifacts'],
     },
     {
+      id: 'nav-tasks',
+      title: t('sidebar.navigation.tasks'),
+      subtitle: t('searchOverlay.navigation.tasks'),
+      section: t('searchOverlay.sections.navigation'),
+      kind: 'navigation',
+      to: projectId
+        ? createProjectSurfaceTarget('project-tasks', workspaceId, projectId)
+        : createWorkspaceOverviewTarget(workspaceId),
+      keywords: ['task', 'tasks', 'cowork'],
+    },
+    {
       id: 'nav-resources',
       title: t('sidebar.navigation.resources'),
       subtitle: t('searchOverlay.navigation.resources'),

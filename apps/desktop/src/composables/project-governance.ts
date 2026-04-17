@@ -1,6 +1,6 @@
 import type { ProjectRecord, WorkspaceSummary } from '@octopus/schema'
 
-export type ProjectModulePermissionKey = 'agents' | 'resources' | 'tools' | 'knowledge'
+export type ProjectModulePermissionKey = 'agents' | 'resources' | 'tools' | 'knowledge' | 'tasks'
 
 export function resolveProjectActorUserId(
   sessionUserId?: string | null,
@@ -62,6 +62,8 @@ export function projectModuleForRouteName(
       return 'resources'
     case 'project-knowledge':
       return 'knowledge'
+    case 'project-tasks':
+      return 'tasks'
     default:
       return null
   }

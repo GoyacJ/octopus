@@ -170,6 +170,16 @@ fn system_menu_definitions() -> Vec<MenuDefinition> {
             feature_code: "feature:project-conversations".into(),
         },
         MenuDefinition {
+            id: "menu-project-tasks".into(),
+            parent_id: None,
+            label: "任务".into(),
+            route_name: Some("project-tasks".into()),
+            source: "main-sidebar".into(),
+            status: "active".into(),
+            order: 35,
+            feature_code: "feature:project-tasks".into(),
+        },
+        MenuDefinition {
             id: "menu-project-agents".into(),
             parent_id: None,
             label: "项目数字员工".into(),
@@ -404,6 +414,7 @@ async fn build_access_feature_definitions(
     menus: &[MenuDefinition],
 ) -> Result<Vec<FeatureDefinition>, ApiError> {
     let policy_by_feature = HashMap::from([
+        ("menu-project-tasks", vec!["task.view".into()]),
         (
             "menu-workspace-access-control-users",
             vec!["access.users.read".into()],
@@ -1202,6 +1213,38 @@ fn default_permission_definitions() -> Vec<PermissionDefinition> {
             category: "workspace".into(),
             resource_type: "project".into(),
             actions: vec!["manage".into()],
+        },
+        PermissionDefinition {
+            code: "task.view".into(),
+            name: "Task View".into(),
+            description: "View project tasks and their execution history.".into(),
+            category: "resource".into(),
+            resource_type: "task".into(),
+            actions: vec!["view".into()],
+        },
+        PermissionDefinition {
+            code: "task.manage".into(),
+            name: "Task Manage".into(),
+            description: "Create and update project task definitions.".into(),
+            category: "resource".into(),
+            resource_type: "task".into(),
+            actions: vec!["manage".into()],
+        },
+        PermissionDefinition {
+            code: "task.run".into(),
+            name: "Task Run".into(),
+            description: "Launch and rerun project tasks through the runtime.".into(),
+            category: "resource".into(),
+            resource_type: "task".into(),
+            actions: vec!["run".into()],
+        },
+        PermissionDefinition {
+            code: "task.intervene".into(),
+            name: "Task Intervene".into(),
+            description: "Intervene in active project task execution.".into(),
+            category: "resource".into(),
+            resource_type: "task".into(),
+            actions: vec!["intervene".into()],
         },
         PermissionDefinition {
             code: "team.view".into(),
@@ -3731,6 +3774,7 @@ mod tests {
         ));
         let services = PlatformServices {
             workspace: infra.workspace.clone(),
+            project_tasks: infra.workspace.clone(),
             access_control: infra.access_control.clone(),
             auth: infra.auth.clone(),
             app_registry: infra.app_registry.clone(),
@@ -4087,6 +4131,17 @@ mod tests {
             .section_grants
             .iter()
             .any(|grant| grant.section == "access" && !grant.allowed));
+    }
+
+    #[test]
+    fn system_menu_definitions_include_project_tasks_entry() {
+        let menu = system_menu_definitions()
+            .into_iter()
+            .find(|record| record.id == "menu-project-tasks")
+            .expect("project tasks menu entry");
+
+        assert_eq!(menu.route_name.as_deref(), Some("project-tasks"));
+        assert_eq!(menu.feature_code, "feature:project-tasks");
     }
 
     #[tokio::test]

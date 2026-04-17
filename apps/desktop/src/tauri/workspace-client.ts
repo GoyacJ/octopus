@@ -26,6 +26,8 @@ import type {
   CreateProjectRequest,
   CreateProjectPromotionRequestInput,
   CreateRuntimeSessionInput,
+  CreateTaskInterventionRequest,
+  CreateTaskRequest,
   CreateWorkspaceResourceFolderInput,
   CreateWorkspaceResourceInput,
   CreateWorkspaceSkillInput,
@@ -99,10 +101,17 @@ import type {
   SavePetPresenceInput,
   SubmitRuntimeTurnInput,
   SystemBootstrapStatus,
+  LaunchTaskRequest,
+  RerunTaskRequest,
+  TaskDetail,
+  TaskInterventionRecord,
+  TaskRunSummary,
+  TaskSummary,
   SystemAuthStatus,
   TeamRecord,
   ToolRecord,
   UpdateCurrentUserProfileRequest,
+  UpdateTaskRequest,
   UpdateProjectRequest,
   UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
@@ -182,6 +191,32 @@ export interface WorkspaceClient {
       projectId: string,
       input: CreateProjectPromotionRequestInput,
     ) => Promise<ProjectPromotionRequest>
+  }
+  tasks: {
+    listProject: (projectId: string) => Promise<TaskSummary[]>
+    createProject: (projectId: string, input: CreateTaskRequest) => Promise<TaskDetail>
+    getDetail: (projectId: string, taskId: string) => Promise<TaskDetail>
+    updateProject: (
+      projectId: string,
+      taskId: string,
+      input: UpdateTaskRequest,
+    ) => Promise<TaskDetail>
+    launch: (
+      projectId: string,
+      taskId: string,
+      input: LaunchTaskRequest,
+    ) => Promise<TaskRunSummary>
+    rerun: (
+      projectId: string,
+      taskId: string,
+      input: RerunTaskRequest,
+    ) => Promise<TaskRunSummary>
+    listRuns: (projectId: string, taskId: string) => Promise<TaskRunSummary[]>
+    createIntervention: (
+      projectId: string,
+      taskId: string,
+      input: CreateTaskInterventionRequest,
+    ) => Promise<TaskInterventionRecord>
   }
   resources: {
     listWorkspace: () => Promise<WorkspaceResourceRecord[]>

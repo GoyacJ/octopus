@@ -1470,4 +1470,45 @@ describe('OpenAPI transport helpers', () => {
     expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
     expect(headers.get('X-Workspace-Id')).toBe('ws-local')
   })
+
+  it('keeps project task schemas and routes in the generated transport contract', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('export interface TaskSummary')
+    expect(generated).toContain('export interface TaskDetail')
+    expect(generated).toContain('export interface TaskRunSummary')
+    expect(generated).toContain('export interface TaskContextBundle')
+    expect(generated).toContain('export interface TaskContextRef')
+    expect(generated).toContain('export interface TaskAnalyticsSummary')
+    expect(generated).toContain('export interface TaskStateTransitionSummary')
+    expect(generated).toContain('export type TaskFailureCategory')
+    expect(generated).toContain('approvalId?: string | null')
+    expect(generated).toContain('pendingApprovalId?: string | null')
+    expect(generated).toContain('attentionReasons:')
+    expect(generated).toContain('viewStatus: ViewStatus')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks/{taskId}"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks/{taskId}/launch"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks/{taskId}/rerun"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks/{taskId}/runs"')
+    expect(generated).toContain('"/api/v1/projects/{projectId}/tasks/{taskId}/interventions"')
+  })
+
+  it('keeps task-aware project dashboard summaries and project permission modules in generated transport types', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('recentTasks: TaskSummary[]')
+    expect(generated).toContain('taskCount: number')
+    expect(generated).toContain('activeTaskCount: number')
+    expect(generated).toContain('attentionTaskCount: number')
+    expect(generated).toContain('scheduledTaskCount: number')
+    expect(generated).toContain('tasks: ProjectPermissionOverrideValue')
+    expect(generated).toContain('tasks: ProjectDefaultPermissionValue')
+  })
 })

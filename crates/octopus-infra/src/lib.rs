@@ -7,6 +7,7 @@ mod artifacts_inbox_knowledge;
 mod auth_users;
 mod bootstrap;
 mod infra_state;
+mod project_tasks;
 mod projects_teams;
 mod resources_skills;
 #[cfg(test)]
@@ -47,13 +48,15 @@ use octopus_core::{
     PetConversationBinding, PetMessage, PetPosition, PetPresenceState, PetProfile,
     PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDefaultPermissions,
     ProjectLinkedWorkspaceAssets, ProjectPermissionOverrides, ProjectPromotionRequest,
-    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProjectWorkspaceAssignments,
-    PromoteWorkspaceResourceInput, ProviderCredentialRecord, RegisterBootstrapAdminRequest,
-    RegisterBootstrapAdminResponse, ReviewProjectPromotionRequestInput, SavePetPresenceInput,
-    SessionRecord, SystemBootstrapStatus, TeamRecord, ToolRecord, TraceEventRecord,
-    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
-    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
-    UpsertWorkspaceMcpServerInput, UserRecord, UserRecordSummary, WorkspaceDirectoryBrowserEntry,
+    ProjectRecord, ProjectTaskInterventionRecord, ProjectTaskRecord, ProjectTaskRunRecord,
+    ProjectTaskSchedulerClaimRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
+    ProjectWorkspaceAssignments, PromoteWorkspaceResourceInput, ProviderCredentialRecord,
+    RegisterBootstrapAdminRequest, RegisterBootstrapAdminResponse,
+    ReviewProjectPromotionRequestInput, SavePetPresenceInput, SessionRecord, SystemBootstrapStatus,
+    TeamRecord, ToolRecord, TraceEventRecord, UpdateCurrentUserProfileRequest,
+    UpdateProjectRequest, UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput,
+    UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
+    UserRecord, UserRecordSummary, WorkspaceDirectoryBrowserEntry,
     WorkspaceDirectoryBrowserResponse, WorkspaceDirectoryUploadEntry, WorkspaceMcpServerDocument,
     WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
     WorkspaceResourceFolderUploadEntry, WorkspaceResourceImportInput, WorkspaceResourceRecord,

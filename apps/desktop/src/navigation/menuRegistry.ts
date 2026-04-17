@@ -5,6 +5,7 @@ export type MenuIconKey =
   | 'console'
   | 'conversations'
   | 'deliverables'
+  | 'tasks'
   | 'agents'
   | 'resources'
   | 'knowledge'
@@ -139,6 +140,17 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.deliverables',
     icon: 'deliverables',
     order: 35,
+  },
+  {
+    id: 'menu-project-tasks',
+    source: 'main-sidebar',
+    section: 'project',
+    routeName: 'project-tasks',
+    routeNames: ['project-tasks'],
+    defaultLabel: '任务',
+    labelKey: 'sidebar.navigation.tasks',
+    icon: 'tasks',
+    order: 38,
   },
   {
     id: 'menu-project-agents',

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import type {
@@ -86,6 +89,25 @@ describe('workspace client transport', () => {
     expect(createVersionInput.previewKind).toBe('markdown')
     expect(promoteInput.summary).toContain('project knowledge')
     expect(forkInput.title).toContain('follow-up')
+  })
+
+  it('adds project task schema exports to the canonical @octopus/schema surfaces', () => {
+    const repoRoot = resolve(import.meta.dirname, '../../..')
+    const taskSchemaPath = resolve(repoRoot, 'packages/schema/src/task.ts')
+    const indexSchemaPath = resolve(repoRoot, 'packages/schema/src/index.ts')
+
+    expect(existsSync(taskSchemaPath)).toBe(true)
+
+    const taskSchema = readFileSync(taskSchemaPath, 'utf8')
+    const indexSchema = readFileSync(indexSchemaPath, 'utf8')
+
+    expect(taskSchema).toContain('TaskSummary as OpenApiTaskSummary')
+    expect(taskSchema).toContain('TaskDetail as OpenApiTaskDetail')
+    expect(taskSchema).toContain('TaskRunSummary as OpenApiTaskRunSummary')
+    expect(taskSchema).toContain('TaskContextBundle as OpenApiTaskContextBundle')
+    expect(taskSchema).toContain('TaskFailureCategory as OpenApiTaskFailureCategory')
+    expect(taskSchema).toContain('TaskAnalyticsSummary as OpenApiTaskAnalyticsSummary')
+    expect(indexSchema).toContain("export * from './task'")
   })
 
   it('requires a workspace session token before workspace-plane calls can be made', async () => {
@@ -419,6 +441,370 @@ describe('workspace client transport', () => {
     expect(fetchSpy).toHaveBeenNthCalledWith(
       4,
       'http://127.0.0.1:43127/api/v1/workspace/promotion-requests/promotion-2/review',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+  })
+
+  it('calls project task endpoints through the workspace client adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            id: 'task-1',
+            projectId: 'proj-redesign',
+            title: 'Prepare launch checklist',
+            goal: 'Create a launch-ready checklist.',
+            defaultActorRef: 'agent:workspace-core',
+            status: 'running',
+            scheduleSpec: '0 9 * * 1-5',
+            nextRunAt: 20,
+            lastRunAt: 10,
+            latestResultSummary: null,
+            latestFailureCategory: null,
+            latestTransition: null,
+            viewStatus: 'healthy',
+            attentionReasons: [],
+            attentionUpdatedAt: null,
+            activeTaskRunId: 'task-run-1',
+            analyticsSummary: {
+              runCount: 1,
+              manualRunCount: 1,
+              scheduledRunCount: 0,
+              completionCount: 0,
+              failureCount: 0,
+              takeoverCount: 0,
+              approvalRequiredCount: 0,
+              averageRunDurationMs: 0,
+              lastSuccessfulRunAt: null,
+            },
+            updatedAt: 10,
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'task-1',
+          projectId: 'proj-redesign',
+          title: 'Prepare launch checklist',
+          goal: 'Create a launch-ready checklist.',
+          brief: 'Focus on dependencies and sequencing.',
+          defaultActorRef: 'agent:workspace-core',
+          status: 'ready',
+          scheduleSpec: null,
+          nextRunAt: null,
+          lastRunAt: null,
+          latestResultSummary: null,
+          latestFailureCategory: null,
+          latestTransition: null,
+          viewStatus: 'configured',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          activeTaskRunId: null,
+          analyticsSummary: {
+            runCount: 0,
+            manualRunCount: 0,
+            scheduledRunCount: 0,
+            completionCount: 0,
+            failureCount: 0,
+            takeoverCount: 0,
+            approvalRequiredCount: 0,
+            averageRunDurationMs: 0,
+            lastSuccessfulRunAt: null,
+          },
+          contextBundle: {
+            refs: [],
+            pinnedInstructions: '',
+            resolutionMode: 'explicit_only',
+            lastResolvedAt: null,
+          },
+          latestDeliverableRefs: [],
+          latestArtifactRefs: [],
+          runHistory: [],
+          interventionHistory: [],
+          activeRun: null,
+          createdBy: 'user-owner',
+          updatedBy: null,
+          createdAt: 10,
+          updatedAt: 10,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'task-1',
+          projectId: 'proj-redesign',
+          title: 'Prepare launch checklist',
+          goal: 'Create a launch-ready checklist.',
+          brief: 'Focus on dependencies and sequencing.',
+          defaultActorRef: 'agent:workspace-core',
+          status: 'ready',
+          scheduleSpec: null,
+          nextRunAt: null,
+          lastRunAt: null,
+          latestResultSummary: null,
+          latestFailureCategory: null,
+          latestTransition: null,
+          viewStatus: 'configured',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          activeTaskRunId: null,
+          analyticsSummary: {
+            runCount: 0,
+            manualRunCount: 0,
+            scheduledRunCount: 0,
+            completionCount: 0,
+            failureCount: 0,
+            takeoverCount: 0,
+            approvalRequiredCount: 0,
+            averageRunDurationMs: 0,
+            lastSuccessfulRunAt: null,
+          },
+          contextBundle: {
+            refs: [],
+            pinnedInstructions: '',
+            resolutionMode: 'explicit_only',
+            lastResolvedAt: null,
+          },
+          latestDeliverableRefs: [],
+          latestArtifactRefs: [],
+          runHistory: [],
+          interventionHistory: [],
+          activeRun: null,
+          createdBy: 'user-owner',
+          updatedBy: null,
+          createdAt: 10,
+          updatedAt: 10,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'task-1',
+          projectId: 'proj-redesign',
+          title: 'Prepare launch checklist',
+          goal: 'Create a launch-ready checklist.',
+          brief: 'Updated brief.',
+          defaultActorRef: 'agent:workspace-core',
+          status: 'ready',
+          scheduleSpec: null,
+          nextRunAt: null,
+          lastRunAt: null,
+          latestResultSummary: null,
+          latestFailureCategory: null,
+          latestTransition: null,
+          viewStatus: 'configured',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          activeTaskRunId: null,
+          analyticsSummary: {
+            runCount: 0,
+            manualRunCount: 0,
+            scheduledRunCount: 0,
+            completionCount: 0,
+            failureCount: 0,
+            takeoverCount: 0,
+            approvalRequiredCount: 0,
+            averageRunDurationMs: 0,
+            lastSuccessfulRunAt: null,
+          },
+          contextBundle: {
+            refs: [],
+            pinnedInstructions: '',
+            resolutionMode: 'explicit_only',
+            lastResolvedAt: null,
+          },
+          latestDeliverableRefs: [],
+          latestArtifactRefs: [],
+          runHistory: [],
+          interventionHistory: [],
+          activeRun: null,
+          createdBy: 'user-owner',
+          updatedBy: 'user-owner',
+          createdAt: 10,
+          updatedAt: 11,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'task-run-1',
+          taskId: 'task-1',
+          triggerType: 'manual',
+          status: 'running',
+          sessionId: 'rt-1',
+          conversationId: 'conv-1',
+          runtimeRunId: 'run-1',
+          actorRef: 'agent:workspace-core',
+          startedAt: 12,
+          completedAt: null,
+          resultSummary: null,
+          failureCategory: null,
+          failureSummary: null,
+          viewStatus: 'healthy',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          deliverableRefs: [],
+          artifactRefs: [],
+          latestTransition: null,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'task-run-2',
+          taskId: 'task-1',
+          triggerType: 'rerun',
+          status: 'running',
+          sessionId: 'rt-2',
+          conversationId: 'conv-2',
+          runtimeRunId: 'run-2',
+          actorRef: 'agent:workspace-core',
+          startedAt: 13,
+          completedAt: null,
+          resultSummary: null,
+          failureCategory: null,
+          failureSummary: null,
+          viewStatus: 'healthy',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          deliverableRefs: [],
+          artifactRefs: [],
+          latestTransition: null,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            id: 'task-run-2',
+            taskId: 'task-1',
+            triggerType: 'rerun',
+            status: 'running',
+            sessionId: 'rt-2',
+            conversationId: 'conv-2',
+            runtimeRunId: 'run-2',
+            actorRef: 'agent:workspace-core',
+            startedAt: 13,
+            completedAt: null,
+            resultSummary: null,
+            failureCategory: null,
+            failureSummary: null,
+            viewStatus: 'healthy',
+            attentionReasons: [],
+            attentionUpdatedAt: null,
+            deliverableRefs: [],
+            artifactRefs: [],
+            latestTransition: null,
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'intervention-1',
+          taskId: 'task-1',
+          taskRunId: 'task-run-2',
+          type: 'comment',
+          payload: {
+            note: 'Please keep the checklist concise.',
+          },
+          createdBy: 'user-owner',
+          createdAt: 14,
+          appliedToSessionId: null,
+          status: 'accepted',
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    await workspaceClient.tasks.listProject('proj-redesign')
+    await workspaceClient.tasks.createProject('proj-redesign', {
+      title: 'Prepare launch checklist',
+      goal: 'Create a launch-ready checklist.',
+      brief: 'Focus on dependencies and sequencing.',
+      defaultActorRef: 'agent:workspace-core',
+      scheduleSpec: null,
+      contextBundle: {
+        refs: [],
+        pinnedInstructions: '',
+        resolutionMode: 'explicit_only',
+        lastResolvedAt: null,
+      },
+    })
+    await workspaceClient.tasks.getDetail('proj-redesign', 'task-1')
+    await workspaceClient.tasks.updateProject('proj-redesign', 'task-1', {
+      brief: 'Updated brief.',
+    })
+    await workspaceClient.tasks.launch('proj-redesign', 'task-1', {
+      actorRef: 'agent:workspace-core',
+    })
+    await workspaceClient.tasks.rerun('proj-redesign', 'task-1', {
+      actorRef: 'agent:workspace-core',
+      sourceTaskRunId: 'task-run-1',
+    })
+    await workspaceClient.tasks.listRuns('proj-redesign', 'task-1')
+    await workspaceClient.tasks.createIntervention('proj-redesign', 'task-1', {
+      approvalId: 'approval-task-run-2',
+      taskRunId: 'task-run-2',
+      type: 'comment',
+      payload: {
+        note: 'Please keep the checklist concise.',
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1',
+      expect.objectContaining({ method: 'PATCH', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1/launch',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      6,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1/rerun',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      7,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1/runs',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      8,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/tasks/task-1/interventions',
       expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
     )
   })

@@ -83,6 +83,7 @@ export function createProjectConversationTarget(workspaceId: string, projectId: 
 export function createProjectSurfaceTarget(
   routeName:
     | 'project-deliverables'
+    | 'project-tasks'
     | 'project-agents'
     | 'project-resources'
     | 'project-knowledge'

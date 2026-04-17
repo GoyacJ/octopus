@@ -1,4 +1,8 @@
 use super::*;
+use crate::project_tasks::{
+    load_project_task_interventions, load_project_task_runs, load_project_task_scheduler_claims,
+    load_project_tasks,
+};
 use octopus_core::ArtifactVersionReference;
 use octopus_core::{
     default_agent_asset_role, BundleAssetDescriptorRecord, ProjectModelAssignments,
@@ -41,6 +45,7 @@ pub(super) fn default_project_default_permissions() -> ProjectDefaultPermissions
         resources: "allow".into(),
         tools: "allow".into(),
         knowledge: "allow".into(),
+        tasks: "allow".into(),
     }
 }
 
@@ -50,6 +55,7 @@ pub(super) fn default_project_permission_overrides() -> ProjectPermissionOverrid
         resources: "inherit".into(),
         tools: "inherit".into(),
         knowledge: "inherit".into(),
+        tasks: "inherit".into(),
     }
 }
 
@@ -137,6 +143,14 @@ pub(super) struct InfraState {
     pub(super) project_promotion_requests: Mutex<Vec<ProjectPromotionRequest>>,
     pub(super) resources: Mutex<Vec<WorkspaceResourceRecord>>,
     pub(super) knowledge_records: Mutex<Vec<KnowledgeRecord>>,
+    #[allow(dead_code)]
+    pub(super) project_tasks: Mutex<Vec<ProjectTaskRecord>>,
+    #[allow(dead_code)]
+    pub(super) project_task_runs: Mutex<Vec<ProjectTaskRunRecord>>,
+    #[allow(dead_code)]
+    pub(super) project_task_interventions: Mutex<Vec<ProjectTaskInterventionRecord>>,
+    #[allow(dead_code)]
+    pub(super) project_task_scheduler_claims: Mutex<Vec<ProjectTaskSchedulerClaimRecord>>,
     pub(super) agents: Mutex<Vec<AgentRecord>>,
     pub(super) project_agent_links: Mutex<Vec<ProjectAgentLinkRecord>>,
     pub(super) teams: Mutex<Vec<TeamRecord>>,
@@ -196,6 +210,7 @@ pub(super) fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), 
             resources: "allow".into(),
             tools: "allow".into(),
             knowledge: "allow".into(),
+            tasks: "allow".into(),
         },
     };
     fs::write(&paths.workspace_config, toml::to_string_pretty(&config)?)?;
@@ -289,6 +304,88 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL,
               reviewed_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS project_tasks (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              goal TEXT NOT NULL,
+              brief TEXT NOT NULL,
+              default_actor_ref TEXT NOT NULL,
+              status TEXT NOT NULL,
+              schedule_spec TEXT,
+              next_run_at INTEGER,
+              last_run_at INTEGER,
+              active_task_run_id TEXT,
+              latest_result_summary TEXT,
+              latest_failure_category TEXT,
+              latest_transition_json TEXT,
+              view_status TEXT NOT NULL,
+              attention_reasons_json TEXT NOT NULL DEFAULT '[]',
+              attention_updated_at INTEGER,
+              analytics_summary_json TEXT NOT NULL DEFAULT '{}',
+              context_bundle_json TEXT NOT NULL DEFAULT '{}',
+              latest_deliverable_refs_json TEXT NOT NULL DEFAULT '[]',
+              latest_artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+              created_by TEXT NOT NULL,
+              updated_by TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS project_tasks_project_updated_idx
+              ON project_tasks (project_id, updated_at DESC, id ASC);
+            CREATE TABLE IF NOT EXISTS project_task_runs (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              task_id TEXT NOT NULL,
+              trigger_type TEXT NOT NULL,
+              status TEXT NOT NULL,
+              session_id TEXT,
+              conversation_id TEXT,
+              runtime_run_id TEXT,
+              actor_ref TEXT NOT NULL,
+              started_at INTEGER NOT NULL,
+              completed_at INTEGER,
+              result_summary TEXT,
+              pending_approval_id TEXT,
+              failure_category TEXT,
+              failure_summary TEXT,
+              view_status TEXT NOT NULL,
+              attention_reasons_json TEXT NOT NULL DEFAULT '[]',
+              attention_updated_at INTEGER,
+              deliverable_refs_json TEXT NOT NULL DEFAULT '[]',
+              artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+              latest_transition_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS project_task_runs_task_started_idx
+              ON project_task_runs (task_id, started_at DESC, id ASC);
+            CREATE TABLE IF NOT EXISTS project_task_interventions (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              task_id TEXT NOT NULL,
+              task_run_id TEXT,
+              type TEXT NOT NULL,
+              payload_json TEXT NOT NULL DEFAULT '{}',
+              created_by TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              applied_to_session_id TEXT,
+              status TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS project_task_interventions_task_created_idx
+              ON project_task_interventions (task_id, created_at DESC, id ASC);
+            CREATE TABLE IF NOT EXISTS project_task_scheduler_claims (
+              task_id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              claim_token TEXT,
+              claimed_by TEXT,
+              claim_until INTEGER,
+              last_dispatched_at INTEGER,
+              last_evaluated_at INTEGER,
+              updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS resources (
               id TEXT PRIMARY KEY,
@@ -905,6 +1002,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_project_promotion_request_table(&connection)?;
     ensure_project_agent_link_table(&connection)?;
     ensure_project_team_link_table(&connection)?;
+    ensure_project_task_run_columns(&connection)?;
     ensure_runtime_config_snapshot_columns(&connection)?;
     ensure_runtime_session_projection_columns(&connection)?;
     ensure_runtime_run_projection_columns(&connection)?;
@@ -939,6 +1037,7 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
             resources: "inherit".into(),
             tools: "inherit".into(),
             knowledge: "inherit".into(),
+            tasks: "inherit".into(),
         })?;
         let default_linked_assets = serde_json::to_string(&ProjectLinkedWorkspaceAssets {
             agent_ids: Vec::new(),
@@ -1208,6 +1307,10 @@ pub(super) fn ensure_user_avatar_columns(connection: &Connection) -> Result<(), 
             ("avatar_content_hash", "TEXT"),
         ],
     )
+}
+
+pub(super) fn ensure_project_task_run_columns(connection: &Connection) -> Result<(), AppError> {
+    ensure_columns(connection, "project_task_runs", &[("pending_approval_id", "TEXT")])
 }
 
 fn json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -3054,6 +3157,10 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let sessions = load_sessions(&connection)?;
     let resources = load_resources(&connection)?;
     let knowledge_records = load_knowledge_records(&connection)?;
+    let project_tasks = load_project_tasks(&connection)?;
+    let project_task_runs = load_project_task_runs(&connection)?;
+    let project_task_interventions = load_project_task_interventions(&connection)?;
+    let project_task_scheduler_claims = load_project_task_scheduler_claims(&connection)?;
     let artifacts = load_artifact_records(&connection)?;
     let agents = load_agents(&connection)?;
     let project_agent_links = load_project_agent_links(&connection)?;
@@ -3079,6 +3186,10 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         project_promotion_requests: Mutex::new(project_promotion_requests),
         resources: Mutex::new(resources),
         knowledge_records: Mutex::new(knowledge_records),
+        project_tasks: Mutex::new(project_tasks),
+        project_task_runs: Mutex::new(project_task_runs),
+        project_task_interventions: Mutex::new(project_task_interventions),
+        project_task_scheduler_claims: Mutex::new(project_task_scheduler_claims),
         agents: Mutex::new(agents),
         project_agent_links: Mutex::new(project_agent_links),
         teams: Mutex::new(teams),
@@ -4800,6 +4911,217 @@ mod tests {
         assert_eq!(
             columns.get("summary_json").map(String::as_str),
             Some("TEXT")
+        );
+    }
+
+    #[test]
+    fn load_state_hydrates_project_task_projections_from_sqlite() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        super::initialize_workspace_config(&paths).expect("workspace config");
+        super::initialize_app_registry(&paths).expect("app registry");
+        super::initialize_database(&paths).expect("database");
+        super::seed_defaults(&paths).expect("seed defaults");
+
+        let connection = Connection::open(&paths.db_path).expect("db");
+        connection
+            .execute(
+                "INSERT INTO project_tasks (
+                    id, workspace_id, project_id, title, goal, brief, default_actor_ref, status,
+                    schedule_spec, next_run_at, last_run_at, active_task_run_id,
+                    latest_result_summary, latest_failure_category, latest_transition_json,
+                    view_status, attention_reasons_json, attention_updated_at,
+                    analytics_summary_json, context_bundle_json,
+                    latest_deliverable_refs_json, latest_artifact_refs_json,
+                    created_by, updated_by, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                    ?9, ?10, ?11, ?12,
+                    ?13, ?14, ?15,
+                    ?16, ?17, ?18,
+                    ?19, ?20,
+                    ?21, ?22,
+                    ?23, ?24, ?25, ?26
+                )",
+                rusqlite::params![
+                    "task-1",
+                    DEFAULT_WORKSPACE_ID,
+                    DEFAULT_PROJECT_ID,
+                    "Daily Review",
+                    "Summarize project state",
+                    "Review the latest outputs and prepare a crisp summary.",
+                    "actor-ops",
+                    "running",
+                    Some("manual"),
+                    Some(1_711_234_567_i64),
+                    Some(1_711_200_000_i64),
+                    Some("task-run-1"),
+                    Some("Latest summary"),
+                    Some("runtime_error"),
+                    Some(
+                        r#"{"kind":"progressed","summary":"Run is active","at":1711201234,"runId":"task-run-1"}"#
+                    ),
+                    "attention",
+                    r#"["waiting_input"]"#,
+                    Some(1_711_201_235_i64),
+                    r#"{"runCount":3,"manualRunCount":2,"scheduledRunCount":1,"completionCount":1,"failureCount":1,"takeoverCount":0,"approvalRequiredCount":1,"averageRunDurationMs":1200,"lastSuccessfulRunAt":1711200000}"#,
+                    r#"{"refs":[{"kind":"resource","refId":"res-handbook","title":"Workspace Handbook","pinMode":"snapshot"}],"pinnedInstructions":"Always cite the latest state.","resolutionMode":"explicit_only","lastResolvedAt":1711201000}"#,
+                    r#"[{"artifactId":"artifact-deliverable","version":2,"title":"Weekly Summary","previewKind":"markdown","updatedAt":1711201100,"contentType":"text/markdown"}]"#,
+                    r#"[{"artifactId":"artifact-trace","version":1,"title":"Execution Trace","previewKind":"trace","updatedAt":1711201120,"contentType":"application/json"}]"#,
+                    "user-owner",
+                    Some("user-editor"),
+                    1_711_100_000_i64,
+                    1_711_201_300_i64,
+                ],
+            )
+            .expect("insert project task");
+        connection
+            .execute(
+                "INSERT INTO project_task_runs (
+                    id, workspace_id, project_id, task_id, trigger_type, status,
+                    session_id, conversation_id, runtime_run_id, actor_ref,
+                    started_at, completed_at, result_summary,
+                    failure_category, failure_summary,
+                    view_status, attention_reasons_json, attention_updated_at,
+                    deliverable_refs_json, artifact_refs_json, latest_transition_json
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6,
+                    ?7, ?8, ?9, ?10,
+                    ?11, ?12, ?13,
+                    ?14, ?15,
+                    ?16, ?17, ?18,
+                    ?19, ?20, ?21
+                )",
+                rusqlite::params![
+                    "task-run-1",
+                    DEFAULT_WORKSPACE_ID,
+                    DEFAULT_PROJECT_ID,
+                    "task-1",
+                    "manual",
+                    "running",
+                    Some("session-1"),
+                    Some("conversation-1"),
+                    Some("runtime-run-1"),
+                    "actor-ops",
+                    1_711_200_100_i64,
+                    Option::<i64>::None,
+                    Some("Interim result"),
+                    Option::<String>::None,
+                    Option::<String>::None,
+                    "attention",
+                    r#"["waiting_input"]"#,
+                    Some(1_711_200_900_i64),
+                    r#"[{"artifactId":"artifact-deliverable","version":2,"title":"Weekly Summary","previewKind":"markdown","updatedAt":1711201100,"contentType":"text/markdown"}]"#,
+                    r#"[{"artifactId":"artifact-trace","version":1,"title":"Execution Trace","previewKind":"trace","updatedAt":1711201120,"contentType":"application/json"}]"#,
+                    Some(
+                        r#"{"kind":"progressed","summary":"Waiting for user input","at":1711200900,"runId":"task-run-1"}"#
+                    ),
+                ],
+            )
+            .expect("insert project task run");
+        connection
+            .execute(
+                "INSERT INTO project_task_interventions (
+                    id, workspace_id, project_id, task_id, task_run_id, type,
+                    payload_json, created_by, created_at, applied_to_session_id, status
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6,
+                    ?7, ?8, ?9, ?10, ?11
+                )",
+                rusqlite::params![
+                    "task-intervention-1",
+                    DEFAULT_WORKSPACE_ID,
+                    DEFAULT_PROJECT_ID,
+                    "task-1",
+                    Some("task-run-1"),
+                    "edit_brief",
+                    r#"{"brief":"Focus on blockers first."}"#,
+                    "user-owner",
+                    1_711_200_950_i64,
+                    Some("session-1"),
+                    "applied",
+                ],
+            )
+            .expect("insert project task intervention");
+        connection
+            .execute(
+                "INSERT INTO project_task_scheduler_claims (
+                    task_id, workspace_id, project_id, claim_token, claimed_by,
+                    claim_until, last_dispatched_at, last_evaluated_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5,
+                    ?6, ?7, ?8, ?9
+                )",
+                rusqlite::params![
+                    "task-1",
+                    DEFAULT_WORKSPACE_ID,
+                    DEFAULT_PROJECT_ID,
+                    Some("claim-token-1"),
+                    Some("scheduler-worker-1"),
+                    Some(1_711_201_500_i64),
+                    Some(1_711_201_000_i64),
+                    Some(1_711_201_200_i64),
+                    1_711_201_300_i64,
+                ],
+            )
+            .expect("insert project task scheduler claim");
+
+        let state = load_state(paths).expect("load state");
+
+        let project_tasks = state.project_tasks.lock().expect("project tasks lock");
+        assert_eq!(project_tasks.len(), 1);
+        let project_task = &project_tasks[0];
+        assert_eq!(project_task.id, "task-1");
+        assert_eq!(project_task.context_bundle.refs.len(), 1);
+        assert_eq!(project_task.context_bundle.refs[0].ref_id, "res-handbook");
+        assert_eq!(project_task.attention_reasons, vec!["waiting_input"]);
+        assert_eq!(
+            project_task
+                .latest_transition
+                .as_ref()
+                .map(|transition| transition.run_id.as_deref()),
+            Some(Some("task-run-1"))
+        );
+        assert_eq!(project_task.analytics_summary.run_count, 3);
+        drop(project_tasks);
+
+        let project_task_runs = state.project_task_runs.lock().expect("task runs lock");
+        assert_eq!(project_task_runs.len(), 1);
+        assert_eq!(project_task_runs[0].task_id, "task-1");
+        assert_eq!(
+            project_task_runs[0].session_id.as_deref(),
+            Some("session-1")
+        );
+        assert_eq!(
+            project_task_runs[0].deliverable_refs[0].artifact_id,
+            "artifact-deliverable"
+        );
+        drop(project_task_runs);
+
+        let project_task_interventions = state
+            .project_task_interventions
+            .lock()
+            .expect("task interventions lock");
+        assert_eq!(project_task_interventions.len(), 1);
+        assert_eq!(project_task_interventions[0].task_id, "task-1");
+        assert_eq!(
+            project_task_interventions[0]
+                .payload
+                .get("brief")
+                .and_then(serde_json::Value::as_str),
+            Some("Focus on blockers first.")
+        );
+
+        let project_task_scheduler_claims = state
+            .project_task_scheduler_claims
+            .lock()
+            .expect("task scheduler claims lock");
+        assert_eq!(project_task_scheduler_claims.len(), 1);
+        assert_eq!(project_task_scheduler_claims[0].task_id, "task-1");
+        assert_eq!(
+            project_task_scheduler_claims[0].claimed_by.as_deref(),
+            Some("scheduler-worker-1")
         );
     }
 }

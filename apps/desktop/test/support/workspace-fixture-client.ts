@@ -16,6 +16,8 @@ import type {
   KnowledgeEntryRecord,
   CopyWorkspaceSkillToManagedInput,
   CreateProjectPromotionRequestInput,
+  CreateTaskInterventionRequest,
+  CreateTaskRequest,
   CreateWorkspaceResourceFolderInput,
   CreateWorkspaceResourceInput,
   CreateWorkspaceSkillInput,
@@ -26,6 +28,7 @@ import type {
   ImportWorkspaceAgentBundlePreviewInput,
   ImportWorkspaceAgentBundleResult,
   KnowledgeRecord,
+  LaunchTaskRequest,
   PetConversationBinding,
   ProjectAgentLinkRecord,
   ProjectPromotionRequest,
@@ -34,6 +37,7 @@ import type {
   PromoteDeliverableInput,
   PromoteWorkspaceResourceInput,
   ResourcePreviewKind,
+  RerunTaskRequest,
   RuntimeApprovalRequest,
   RuntimeBootstrap,
   RuntimeConfigPatch,
@@ -44,9 +48,14 @@ import type {
   RuntimeRunSnapshot,
   RuntimeSessionSummary,
   SavePetPresenceInput,
+  TaskDetail,
+  TaskInterventionRecord,
+  TaskRunSummary,
+  TaskSummary,
   UpsertAgentInput,
   UpsertTeamInput,
   UpdateCurrentUserProfileRequest,
+  UpdateTaskRequest,
   UpdateProjectRequest,
   UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
@@ -570,6 +579,263 @@ export function createWorkspaceClientFixture(
     }
     return project
   }
+
+  const taskDetailByKey = workspaceState.taskDetailsByKey
+  const taskRunsByKey = workspaceState.taskRunsByKey
+  const taskInterventionsByKey = workspaceState.taskInterventionsByKey
+
+  const taskKey = (projectId: string, taskId: string) => `${projectId}:${taskId}`
+  const taskInputError = (message: string, requestId: string) =>
+    new WorkspaceApiError({
+      message,
+      status: 400,
+      requestId,
+      retryable: false,
+      code: 'INVALID_INPUT',
+    })
+  const normalizeRequiredTaskText = (
+    value: string | null | undefined,
+    fieldLabel: string,
+    requestId: string,
+  ) => {
+    const trimmed = value?.trim() ?? ''
+    if (!trimmed) {
+      throw taskInputError(`${fieldLabel} is required`, requestId)
+    }
+    return trimmed
+  }
+  const normalizeOptionalTaskText = (value: string | null | undefined) => {
+    const trimmed = value?.trim() ?? ''
+    return trimmed.length > 0 ? trimmed : null
+  }
+  const normalizeTaskContextBundle = (
+    bundle?: TaskDetail['contextBundle'] | CreateTaskRequest['contextBundle'],
+  ): TaskDetail['contextBundle'] => ({
+    refs: (bundle?.refs ?? [])
+      .map(reference => ({
+        kind: reference.kind.trim(),
+        refId: reference.refId.trim(),
+        title: reference.title.trim(),
+        subtitle: reference.subtitle?.trim() || undefined,
+        versionRef: normalizeOptionalTaskText(reference.versionRef),
+        pinMode: reference.pinMode?.trim() || 'snapshot',
+      }))
+      .filter(reference => reference.kind && reference.refId && reference.title),
+    pinnedInstructions: bundle?.pinnedInstructions?.trim() ?? '',
+    resolutionMode: normalizeOptionalTaskText(bundle?.resolutionMode) ?? 'explicit_only',
+    lastResolvedAt: bundle?.lastResolvedAt ?? null,
+  })
+  const emptyTaskAnalytics = (): TaskDetail['analyticsSummary'] => ({
+    runCount: 0,
+    manualRunCount: 0,
+    scheduledRunCount: 0,
+    completionCount: 0,
+    failureCount: 0,
+    takeoverCount: 0,
+    approvalRequiredCount: 0,
+    averageRunDurationMs: 0,
+    lastSuccessfulRunAt: null,
+  })
+  const updateTaskAnalyticsForRun = (
+    analytics: TaskDetail['analyticsSummary'],
+    triggerType: TaskRunSummary['triggerType'],
+  ): TaskDetail['analyticsSummary'] => {
+    const updated = {
+      ...clone(analytics),
+      runCount: analytics.runCount + 1,
+    }
+    if (triggerType === 'manual') {
+      updated.manualRunCount += 1
+    } else if (triggerType === 'scheduled') {
+      updated.scheduledRunCount += 1
+    } else if (triggerType === 'takeover') {
+      updated.takeoverCount += 1
+    }
+    return updated
+  }
+
+  const taskSummaryFromDetail = (detail: TaskDetail): TaskSummary => ({
+    id: detail.id,
+    projectId: detail.projectId,
+    title: detail.title,
+    goal: detail.goal,
+    defaultActorRef: detail.defaultActorRef,
+    status: detail.status,
+    scheduleSpec: detail.scheduleSpec ?? null,
+    nextRunAt: detail.nextRunAt ?? null,
+    lastRunAt: detail.lastRunAt ?? null,
+    latestResultSummary: detail.latestResultSummary ?? null,
+    latestFailureCategory: detail.latestFailureCategory ?? null,
+    latestTransition: detail.latestTransition ?? null,
+    viewStatus: detail.viewStatus,
+    attentionReasons: clone(detail.attentionReasons),
+    attentionUpdatedAt: detail.attentionUpdatedAt ?? null,
+    activeTaskRunId: detail.activeTaskRunId ?? null,
+    analyticsSummary: clone(detail.analyticsSummary),
+    updatedAt: detail.updatedAt,
+  })
+
+  const syncProjectTaskProjection = (projectId: string) => {
+    const dashboard = workspaceState.dashboards[projectId]
+    if (!dashboard) {
+      return
+    }
+
+    const recentTasks = [...(dashboard.recentTasks ?? [])].sort((left, right) =>
+      right.updatedAt - left.updatedAt || left.id.localeCompare(right.id))
+
+    dashboard.recentTasks = recentTasks
+    dashboard.overview = {
+      ...dashboard.overview,
+      taskCount: recentTasks.length,
+      activeTaskCount: recentTasks.filter(task => task.status === 'running').length,
+      attentionTaskCount: recentTasks.filter(task => task.viewStatus === 'attention').length,
+      scheduledTaskCount: recentTasks.filter(task => typeof task.scheduleSpec === 'string' && task.scheduleSpec.length > 0).length,
+    }
+  }
+
+  const storeTaskDetail = (detail: TaskDetail) => {
+    const key = taskKey(detail.projectId, detail.id)
+    taskDetailByKey.set(key, clone(detail))
+    taskRunsByKey.set(key, clone(detail.runHistory))
+    taskInterventionsByKey.set(key, clone(detail.interventionHistory))
+
+    const dashboard = workspaceState.dashboards[detail.projectId]
+    if (!dashboard) {
+      return
+    }
+
+    const summary = taskSummaryFromDetail(detail)
+    const existingIndex = (dashboard.recentTasks ?? []).findIndex(task => task.id === detail.id)
+    if (existingIndex >= 0) {
+      dashboard.recentTasks = dashboard.recentTasks.map(task =>
+        task.id === detail.id ? summary : task)
+    } else {
+      dashboard.recentTasks = [summary, ...(dashboard.recentTasks ?? [])]
+    }
+    syncProjectTaskProjection(detail.projectId)
+  }
+
+  const findTaskSummary = (projectId: string, taskId: string) => {
+    findProjectRecord(projectId)
+    const task = (workspaceState.dashboards[projectId]?.recentTasks ?? [])
+      .find(record => record.id === taskId)
+    if (!task) {
+      throw new WorkspaceApiError({
+        message: 'task not found',
+        status: 404,
+        requestId: 'req-task-not-found',
+        retryable: false,
+        code: 'NOT_FOUND',
+      })
+    }
+    return task
+  }
+
+  const ensureTaskDetail = (projectId: string, taskId: string): TaskDetail => {
+    const key = taskKey(projectId, taskId)
+    const existing = taskDetailByKey.get(key)
+    if (existing) {
+      return clone(existing)
+    }
+
+    const summary = findTaskSummary(projectId, taskId)
+    const detail: TaskDetail = {
+      id: summary.id,
+      projectId: summary.projectId,
+      title: summary.title,
+      goal: summary.goal,
+      brief: '',
+      defaultActorRef: summary.defaultActorRef,
+      status: summary.status,
+      scheduleSpec: summary.scheduleSpec ?? null,
+      nextRunAt: summary.nextRunAt ?? null,
+      lastRunAt: summary.lastRunAt ?? null,
+      latestResultSummary: summary.latestResultSummary ?? null,
+      latestFailureCategory: summary.latestFailureCategory ?? null,
+      latestTransition: summary.latestTransition ?? null,
+      viewStatus: summary.viewStatus,
+      attentionReasons: clone(summary.attentionReasons),
+      attentionUpdatedAt: summary.attentionUpdatedAt ?? null,
+      activeTaskRunId: summary.activeTaskRunId ?? null,
+      analyticsSummary: clone(summary.analyticsSummary),
+      contextBundle: {
+        refs: [],
+        pinnedInstructions: '',
+        resolutionMode: 'explicit_only',
+        lastResolvedAt: null,
+      },
+      latestDeliverableRefs: [],
+      latestArtifactRefs: [],
+      runHistory: [],
+      interventionHistory: [],
+      activeRun: null,
+      createdBy: getCurrentUserId(),
+      updatedBy: null,
+      createdAt: summary.updatedAt,
+      updatedAt: summary.updatedAt,
+    }
+    storeTaskDetail(detail)
+    return clone(detail)
+  }
+  const buildTaskRunSummary = (
+    detail: TaskDetail,
+    triggerType: TaskRunSummary['triggerType'],
+    actorRef: string,
+  ): TaskRunSummary => {
+    workspaceState.taskRunIdSequence += 1
+    const startedAt = Date.now()
+    const runtimeRunId = `runtime-run-${workspaceState.taskRunIdSequence}`
+
+    return {
+      id: `task-run-${workspaceState.taskRunIdSequence}`,
+      taskId: detail.id,
+      triggerType,
+      status: 'running',
+      sessionId: `task-session-${workspaceState.taskRunIdSequence}`,
+      conversationId: `task-conversation-${workspaceState.taskRunIdSequence}`,
+      runtimeRunId,
+      actorRef,
+      startedAt,
+      completedAt: null,
+      resultSummary: null,
+      failureCategory: null,
+      failureSummary: null,
+      viewStatus: 'healthy',
+      attentionReasons: [],
+      attentionUpdatedAt: null,
+      deliverableRefs: [],
+      artifactRefs: [],
+      latestTransition: {
+        kind: 'launched',
+        summary: 'Task run started in the runtime.',
+        at: startedAt,
+        runId: runtimeRunId,
+      },
+    }
+  }
+  const applyTaskRunToDetail = (
+    detail: TaskDetail,
+    run: TaskRunSummary,
+  ): TaskDetail => ({
+    ...clone(detail),
+    status: 'running',
+    lastRunAt: run.startedAt,
+    activeTaskRunId: run.id,
+    latestResultSummary: run.resultSummary ?? null,
+    latestFailureCategory: run.failureCategory ?? null,
+    latestTransition: clone(run.latestTransition),
+    viewStatus: 'healthy',
+    attentionReasons: [],
+    attentionUpdatedAt: null,
+    analyticsSummary: updateTaskAnalyticsForRun(detail.analyticsSummary, run.triggerType),
+    latestDeliverableRefs: clone(run.deliverableRefs),
+    latestArtifactRefs: clone(run.artifactRefs),
+    runHistory: [clone(run), ...detail.runHistory.filter(existing => existing.id !== run.id)],
+    activeRun: clone(run),
+    updatedBy: getCurrentUserId(),
+    updatedAt: run.startedAt,
+  })
 
   const listWorkspaceResources = () => [
     ...workspaceState.workspaceResources,
@@ -2094,8 +2360,35 @@ export function createWorkspaceClientFixture(
           project: clone(project),
           usedTokens: 0,
           metrics: [],
+          overview: {
+            memberCount: project.memberUserIds.length,
+            activeUserCount: project.memberUserIds.length,
+            agentCount: 0,
+            teamCount: 0,
+            conversationCount: 0,
+            messageCount: 0,
+            toolCallCount: 0,
+            approvalCount: 0,
+            resourceCount: 0,
+            knowledgeCount: 0,
+            toolCount: 0,
+            tokenRecordCount: 0,
+            totalTokens: 0,
+            activityCount: 0,
+            taskCount: 0,
+            activeTaskCount: 0,
+            attentionTaskCount: 0,
+            scheduledTaskCount: 0,
+          },
+          trend: [],
+          userStats: [],
+          conversationInsights: [],
+          toolRanking: [],
+          resourceBreakdown: [],
+          modelBreakdown: [],
           recentConversations: [],
           recentActivity: [],
+          recentTasks: [],
         }
         workspaceState.projectResources[project.id] = []
         workspaceState.projectKnowledge[project.id] = []
@@ -2188,6 +2481,254 @@ export function createWorkspaceClientFixture(
         }
         workspaceState.projectPromotionRequests = [record, ...workspaceState.projectPromotionRequests]
         return clone(record)
+      },
+    },
+    tasks: {
+      async listProject(projectId: string) {
+        findProjectRecord(projectId)
+        return clone(workspaceState.dashboards[projectId]?.recentTasks ?? [])
+      },
+      async createProject(projectId: string, input: CreateTaskRequest) {
+        findProjectRecord(projectId)
+        workspaceState.taskIdSequence += 1
+        const now = Date.now()
+        const detail: TaskDetail = {
+          id: `task-${workspaceState.taskIdSequence}`,
+          projectId,
+          title: normalizeRequiredTaskText(input.title, 'task title', 'req-task-title-required'),
+          goal: normalizeRequiredTaskText(input.goal, 'task goal', 'req-task-goal-required'),
+          brief: normalizeRequiredTaskText(input.brief, 'task brief', 'req-task-brief-required'),
+          defaultActorRef: normalizeRequiredTaskText(
+            input.defaultActorRef,
+            'default actor',
+            'req-task-actor-required',
+          ),
+          status: 'ready',
+          scheduleSpec: normalizeOptionalTaskText(input.scheduleSpec),
+          nextRunAt: null,
+          lastRunAt: null,
+          latestResultSummary: null,
+          latestFailureCategory: null,
+          latestTransition: null,
+          viewStatus: 'configured',
+          attentionReasons: [],
+          attentionUpdatedAt: null,
+          activeTaskRunId: null,
+          analyticsSummary: emptyTaskAnalytics(),
+          contextBundle: normalizeTaskContextBundle(input.contextBundle),
+          latestDeliverableRefs: [],
+          latestArtifactRefs: [],
+          runHistory: [],
+          interventionHistory: [],
+          activeRun: null,
+          createdBy: getCurrentUserId(),
+          updatedBy: null,
+          createdAt: now,
+          updatedAt: now,
+        }
+        storeTaskDetail(detail)
+        return clone(detail)
+      },
+      async getDetail(projectId: string, taskId: string) {
+        return ensureTaskDetail(projectId, taskId)
+      },
+      async updateProject(projectId: string, taskId: string, input: UpdateTaskRequest) {
+        const detail = ensureTaskDetail(projectId, taskId)
+        const now = Date.now()
+        const updated: TaskDetail = {
+          ...clone(detail),
+          title: input.title === undefined
+            ? detail.title
+            : normalizeRequiredTaskText(input.title, 'task title', 'req-task-title-empty'),
+          goal: input.goal === undefined
+            ? detail.goal
+            : normalizeRequiredTaskText(input.goal, 'task goal', 'req-task-goal-empty'),
+          brief: input.brief === undefined
+            ? detail.brief
+            : normalizeRequiredTaskText(input.brief, 'task brief', 'req-task-brief-empty'),
+          defaultActorRef: input.defaultActorRef === undefined
+            ? detail.defaultActorRef
+            : normalizeRequiredTaskText(
+                input.defaultActorRef,
+                'default actor',
+                'req-task-actor-empty',
+              ),
+          scheduleSpec: input.scheduleSpec === undefined
+            ? detail.scheduleSpec ?? null
+            : normalizeOptionalTaskText(input.scheduleSpec),
+          contextBundle: input.contextBundle === undefined
+            ? clone(detail.contextBundle)
+            : normalizeTaskContextBundle(input.contextBundle),
+          updatedBy: getCurrentUserId(),
+          updatedAt: now,
+        }
+        storeTaskDetail(updated)
+        return clone(updated)
+      },
+      async launch(projectId: string, taskId: string, input: LaunchTaskRequest) {
+        const detail = ensureTaskDetail(projectId, taskId)
+        const actorRef = normalizeOptionalTaskText(input.actorRef) ?? detail.defaultActorRef
+        const run = buildTaskRunSummary(detail, 'manual', actorRef)
+        storeTaskDetail(applyTaskRunToDetail(detail, run))
+        return clone(run)
+      },
+      async rerun(projectId: string, taskId: string, input: RerunTaskRequest) {
+        const detail = ensureTaskDetail(projectId, taskId)
+        const actorRef = normalizeOptionalTaskText(input.actorRef) ?? detail.defaultActorRef
+        const run = buildTaskRunSummary(detail, 'rerun', actorRef)
+        storeTaskDetail(applyTaskRunToDetail(detail, run))
+        return clone(run)
+      },
+      async listRuns(projectId: string, taskId: string) {
+        const key = taskKey(projectId, taskId)
+        ensureTaskDetail(projectId, taskId)
+        return clone(taskRunsByKey.get(key) ?? [])
+      },
+      async createIntervention(projectId: string, taskId: string, input: CreateTaskInterventionRequest) {
+        const detail = ensureTaskDetail(projectId, taskId)
+        const type = normalizeRequiredTaskText(input.type, 'task intervention type', 'req-task-intervention-type')
+        workspaceState.taskInterventionIdSequence += 1
+        const createdAt = Date.now()
+        const appliesRunState = type === 'approve' || type === 'reject' || type === 'resume'
+        const intervention: TaskInterventionRecord = {
+          id: `task-intervention-${workspaceState.taskInterventionIdSequence}`,
+          taskId: detail.id,
+          taskRunId: normalizeOptionalTaskText(input.taskRunId),
+          type,
+          payload: clone(input.payload ?? {}),
+          createdBy: getCurrentUserId(),
+          createdAt,
+          appliedToSessionId: null,
+          status: appliesRunState ? 'applied' : 'accepted',
+        }
+        const payloadBrief = intervention.payload && typeof intervention.payload === 'object'
+          ? intervention.payload.brief
+          : undefined
+        const payloadActorRef = intervention.payload && typeof intervention.payload === 'object'
+          ? normalizeOptionalTaskText(
+              typeof intervention.payload.actorRef === 'string' ? intervention.payload.actorRef : null,
+            )
+          : null
+        const nextActorRef = type === 'change_actor' ? payloadActorRef : null
+        const targetRunId = intervention.taskRunId ?? detail.activeTaskRunId ?? detail.activeRun?.id ?? null
+        const transitionSummary = type === 'approve'
+          ? 'Approval received. Task run resumed.'
+          : type === 'reject'
+            ? 'Approval rejected. Task run is waiting for updated guidance.'
+            : type === 'resume'
+              ? 'Task run resumed after updated guidance.'
+              : `Task intervention recorded: ${type}.`
+        const latestResultSummary = type === 'approve'
+          ? 'Approval received. Continuing the active run.'
+          : type === 'reject'
+            ? 'Approval rejected. Waiting for updated guidance.'
+            : type === 'resume'
+              ? 'Updated guidance received. Continuing the active run.'
+              : detail.latestResultSummary
+        const runTransition = (runId: string | null, runtimeRunId: string | null) => ({
+          kind: 'intervened' as const,
+          summary: transitionSummary,
+          at: createdAt,
+          runId: runtimeRunId ?? runId,
+        })
+        const updateTargetRun = (run: TaskRunSummary) => {
+          if (run.id !== targetRunId) {
+            return clone(run)
+          }
+
+          if (nextActorRef) {
+            return {
+              ...clone(run),
+              actorRef: nextActorRef,
+            }
+          }
+
+          if (type === 'approve' || type === 'resume') {
+            return {
+              ...clone(run),
+              status: 'running',
+              resultSummary: latestResultSummary,
+              pendingApprovalId: null,
+              failureCategory: null,
+              failureSummary: null,
+              viewStatus: 'healthy',
+              attentionReasons: [],
+              attentionUpdatedAt: null,
+              latestTransition: runTransition(run.id, run.runtimeRunId ?? null),
+            }
+          }
+
+          if (type === 'reject') {
+            return {
+              ...clone(run),
+              status: 'waiting_input',
+              resultSummary: latestResultSummary,
+              pendingApprovalId: null,
+              failureCategory: null,
+              failureSummary: null,
+              viewStatus: 'attention',
+              attentionReasons: ['waiting_input'],
+              attentionUpdatedAt: createdAt,
+              latestTransition: runTransition(run.id, run.runtimeRunId ?? null),
+            }
+          }
+
+          return clone(run)
+        }
+        const nextActiveRun = detail.activeRun
+          ? updateTargetRun(detail.activeRun)
+          : null
+        const nextRunHistory = detail.runHistory.map(run => updateTargetRun(run))
+        const nextAttentionReasons = type === 'takeover'
+          ? ['takeover_recommended']
+          : type === 'reject'
+            ? ['waiting_input']
+            : type === 'approve' || type === 'resume'
+              ? []
+              : detail.attentionReasons
+        const nextStatus = type === 'approve' || type === 'resume'
+          ? 'running'
+          : type === 'reject'
+            ? 'attention'
+            : detail.status
+        const nextViewStatus = nextAttentionReasons.length > 0
+          ? 'attention'
+          : type === 'approve' || type === 'resume'
+            ? 'healthy'
+            : detail.viewStatus
+        const updated: TaskDetail = {
+          ...clone(detail),
+          brief: type === 'edit_brief' && typeof payloadBrief === 'string' && payloadBrief.trim()
+            ? payloadBrief.trim()
+            : detail.brief,
+          defaultActorRef: nextActorRef
+            ? nextActorRef
+            : detail.defaultActorRef,
+          status: nextStatus,
+          latestResultSummary,
+          latestFailureCategory: type === 'approve' || type === 'reject' || type === 'resume'
+            ? null
+            : detail.latestFailureCategory,
+          latestTransition: {
+            kind: 'intervened',
+            summary: transitionSummary,
+            at: createdAt,
+            runId: targetRunId,
+          },
+          viewStatus: nextViewStatus,
+          attentionReasons: clone(nextAttentionReasons),
+          attentionUpdatedAt: nextAttentionReasons.length > 0 ? createdAt : null,
+          runHistory: nextRunHistory,
+          interventionHistory: [
+            clone(intervention),
+            ...detail.interventionHistory.filter(record => record.id !== intervention.id),
+          ],
+          activeRun: nextActiveRun ? clone(nextActiveRun) : null,
+          updatedBy: getCurrentUserId(),
+          updatedAt: createdAt,
+        }
+        storeTaskDetail(updated)
+        return clone(intervention)
       },
     },
     resources: {

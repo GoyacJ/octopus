@@ -149,6 +149,7 @@ export function createProjectRecord(
       resources: 'inherit',
       tools: 'inherit',
       knowledge: 'inherit',
+      tasks: 'inherit',
     },
     linkedWorkspaceAssets: input.linkedWorkspaceAssets ?? {
       agentIds: [],

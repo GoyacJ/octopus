@@ -86,6 +86,58 @@ fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
 }
 
 #[test]
+fn workspace_bootstrap_seeds_task_projection_tables_and_task_permission_defaults() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let initialized = bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
+    let connection = Connection::open(&initialized.db_path).expect("db");
+
+    for table in [
+        "project_tasks",
+        "project_task_runs",
+        "project_task_interventions",
+        "project_task_scheduler_claims",
+    ] {
+        let exists: Option<String> = connection
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table lookup");
+        assert_eq!(exists.as_deref(), Some(table));
+    }
+
+    let workspace_config: toml::Value = toml::from_str(
+        &std::fs::read_to_string(&initialized.workspace_config).expect("read workspace config"),
+    )
+    .expect("parse workspace config");
+    assert_eq!(
+        workspace_config
+            .get("project_default_permissions")
+            .and_then(|value| value.get("tasks"))
+            .and_then(toml::Value::as_str),
+        Some("allow")
+    );
+
+    let default_project_permission_overrides_json: String = connection
+        .query_row(
+            "SELECT permission_overrides_json FROM projects WHERE id = 'proj-redesign'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("default project permission overrides");
+    let default_project_permission_overrides: serde_json::Value =
+        serde_json::from_str(&default_project_permission_overrides_json)
+            .expect("parse permission overrides json");
+    assert_eq!(
+        default_project_permission_overrides
+            .get("tasks")
+            .and_then(serde_json::Value::as_str),
+        Some("inherit")
+    );
+}
+
+#[test]
 fn workspace_bootstrap_hard_resets_legacy_sessions_table_shape() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = workspace_paths::WorkspacePaths::new(temp.path());

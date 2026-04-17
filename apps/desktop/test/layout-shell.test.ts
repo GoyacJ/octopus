@@ -1026,6 +1026,24 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
+  it('shows the project tasks menu item in each project module list', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]') !== null)
+
+    const tasksLink = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="sidebar-project-module-proj-redesign-tasks"]')
+    expect(tasksLink).not.toBeNull()
+
+    tasksLink?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-tasks')
+    expect(router.currentRoute.value.name).toBe('project-tasks')
+
+    mounted.destroy()
+  })
+
   it('only expands the selected project and opens another project when its collapsed card is clicked', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()

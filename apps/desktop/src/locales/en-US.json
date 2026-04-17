@@ -228,6 +228,7 @@
       "conversation": "Open the current conversation",
       "agents": "Open the agent center",
       "deliverables": "Open deliverables",
+      "tasks": "Open tasks",
       "resources": "Open resources",
       "knowledge": "Open knowledge",
       "trace": "Open trace",
@@ -286,6 +287,7 @@
       "dashboard": "Dashboard",
       "conversation": "Conversation",
       "deliverables": "Deliverables",
+      "tasks": "Tasks",
       "resources": "Resources",
       "knowledge": "Knowledge",
       "trace": "Trace",
@@ -996,6 +998,137 @@
       "resource": "Resource",
       "trace": "Trace",
       "unknown": "Unknown"
+    }
+  },
+  "tasks": {
+    "header": {
+      "eyebrow": "Project Tasks",
+      "titleFallback": "Project Tasks",
+      "subtitle": "Track reusable async work, schedule intent, and recent execution state for the current project."
+    },
+    "actions": {
+      "create": "New task",
+      "launch": "Launch task",
+      "rerun": "Rerun",
+      "approve": "Approve",
+      "reject": "Reject",
+      "resume": "Resume",
+      "comment": "Add comment",
+      "changeActor": "Change actor",
+      "editBrief": "Adjust brief",
+      "takeover": "Take over"
+    },
+    "filters": {
+      "searchPlaceholder": "Search tasks, goals, actors, or attention reasons"
+    },
+    "form": {
+      "titleLabel": "Task title",
+      "titlePlaceholder": "Prepare launch checklist",
+      "goalPlaceholder": "Describe the outcome this task should produce.",
+      "briefLabel": "Execution brief",
+      "briefPlaceholder": "Add constraints, references, and expected output shape.",
+      "briefValidationMessage": "Add the updated brief before continuing.",
+      "commentLabel": "Comment",
+      "commentPlaceholder": "Leave a note for the next pass or the current run.",
+      "commentValidationMessage": "Add a comment before continuing.",
+      "actorLabel": "Default actor",
+      "actorPlaceholder": "agent:workspace-core",
+      "actorValidationMessage": "Add the updated actor before continuing.",
+      "scheduleLabel": "Schedule",
+      "schedulePlaceholder": "FREQ=DAILY;BYHOUR=9;BYMINUTE=0",
+      "scheduleHint": "Leave empty to keep this task manual-only.",
+      "validationMessage": "Fill in the title, goal, brief, and default actor before continuing."
+    },
+    "dialogs": {
+      "create": {
+        "title": "Create task",
+        "description": "Define a reusable async task for this project."
+      },
+      "edit": {
+        "title": "Edit task",
+        "description": "Update the task brief, actor, and scheduling intent."
+      },
+      "comment": {
+        "title": "Add comment",
+        "description": "Record a task intervention note for the current task or active run."
+      },
+      "changeActor": {
+        "title": "Change actor",
+        "description": "Record a task intervention that updates the default actor and active run actor."
+      },
+      "brief": {
+        "title": "Adjust brief",
+        "description": "Record a task intervention that updates the active execution brief."
+      }
+    },
+    "list": {
+      "scheduled": "Scheduled"
+    },
+    "empty": {
+      "title": "No tasks yet",
+      "description": "Create or sync a task to start structured project execution."
+    },
+    "detail": {
+      "emptyTitle": "Select a task",
+      "emptyDescription": "Choose a task from the list to inspect its goal, schedule, and latest execution state.",
+      "briefLabel": "Brief",
+      "noBrief": "No execution brief yet.",
+      "latestResultTitle": "Latest Result",
+      "noResult": "No result summary yet.",
+      "noTransition": "No state transition has been recorded yet.",
+      "scheduleTitle": "Schedule",
+      "unscheduled": "Manual only",
+      "nextRunLabel": "Next run",
+      "lastRunLabel": "Last run",
+      "actorLabel": "Default actor",
+      "executionActorLabel": "Run as",
+      "executionActorHint": "Applies to the next launch or rerun without changing the task default actor.",
+      "attentionTitle": "Attention",
+      "attentionSubtitle": "This task currently needs follow-up.",
+      "noAttention": "No attention flags right now.",
+      "contextTitle": "Context Bundle",
+      "contextSubtitle": "{count} refs bound",
+      "contextInstructionsLabel": "Pinned instructions",
+      "contextNoInstructions": "No pinned instructions were recorded.",
+      "contextResolutionLabel": "Resolution mode",
+      "contextResolvedAtLabel": "Last resolved",
+      "contextNotResolved": "Not resolved yet",
+      "contextVersionBadge": "Version {version}",
+      "contextNoRefs": "No context refs are bound yet.",
+      "runsTitle": "Recent Runs",
+      "runsSubtitle": "{count} runs loaded",
+      "runsEmptyTitle": "No runs yet",
+      "runsEmptyDescription": "This task has not produced any recorded runs yet.",
+      "runActorLabel": "Actor",
+      "interventionsTitle": "Interventions",
+      "interventionsSubtitle": "{count} interventions recorded",
+      "interventionsEmptyTitle": "No interventions yet",
+      "interventionsEmptyDescription": "Comments, brief edits, approvals, and takeovers will appear here.",
+      "interventionRunLabel": "Linked run {runId}",
+      "interventionNoPayload": "No extra notes were recorded for this intervention.",
+      "noRunSummary": "No run summary yet.",
+      "openConversation": "Open conversation",
+      "context": {
+        "resolutionModes": {
+          "explicit_only": "Explicit refs only",
+          "explicit_plus_project_defaults": "Explicit + project defaults"
+        },
+        "refKinds": {
+          "resource": "Resource",
+          "knowledge": "Knowledge",
+          "deliverable": "Deliverable"
+        },
+        "pinModes": {
+          "snapshot": "Snapshot",
+          "follow_latest": "Follow latest"
+        }
+      }
+    },
+    "status": {
+      "createFailed": "Could not create the task right now.",
+      "saveFailed": "Could not save the task right now.",
+      "rerunFailed": "Could not rerun the task right now.",
+      "interventionFailed": "Could not record the task intervention right now."
     }
   },
   "deliverables": {
@@ -1994,6 +2127,60 @@
       "healthy": "Healthy",
       "attention": "Inactive",
       "configured": "Configured"
+    },
+    "taskLifecycleStatus": {
+      "draft": "Draft",
+      "ready": "Ready",
+      "running": "Running",
+      "attention": "Needs attention",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "taskRunStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "waiting_input": "Waiting for input",
+      "waiting_approval": "Waiting for approval",
+      "completed": "Completed",
+      "failed": "Failed",
+      "canceled": "Canceled",
+      "skipped": "Skipped"
+    },
+    "taskFailureCategory": {
+      "context_unavailable": "Context unavailable",
+      "permission_blocked": "Permission blocked",
+      "approval_timeout": "Approval timeout",
+      "runtime_error": "Runtime error",
+      "model_failure": "Model failure",
+      "user_canceled": "User canceled"
+    },
+    "taskAttentionReason": {
+      "updated": "Updated",
+      "needs_approval": "Needs approval",
+      "failed": "Failed",
+      "waiting_input": "Waiting input",
+      "schedule_blocked": "Schedule blocked",
+      "takeover_recommended": "Takeover recommended"
+    },
+    "taskTriggerType": {
+      "manual": "Manual",
+      "scheduled": "Scheduled",
+      "rerun": "Rerun",
+      "takeover": "Takeover"
+    },
+    "taskInterventionType": {
+      "takeover": "Take over",
+      "resume": "Resume",
+      "comment": "Comment",
+      "approve": "Approve",
+      "reject": "Reject",
+      "edit_brief": "Adjust brief",
+      "change_actor": "Change actor"
+    },
+    "taskInterventionStatus": {
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "applied": "Applied"
     },
     "resourceScope": {
       "personal": "Personal",

@@ -12,6 +12,7 @@ import ProjectDeliverablesView from '@/views/project/ProjectDeliverablesView.vue
 import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
 import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
+import ProjectTasksView from '@/views/project/ProjectTasksView.vue'
 import TraceView from '@/views/project/TraceView.vue'
 import AccessControlView from '@/views/workspace/AccessControlView.vue'
 import ModelsView from '@/views/workspace/ModelsView.vue'
@@ -351,6 +352,11 @@ function createRoutes(): RouteRecordRaw[] {
       path: '/workspaces/:workspaceId/projects/:projectId/deliverables',
       name: 'project-deliverables',
       component: ProjectDeliverablesView,
+    },
+    {
+      path: '/workspaces/:workspaceId/projects/:projectId/tasks',
+      name: 'project-tasks',
+      component: ProjectTasksView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/agents',

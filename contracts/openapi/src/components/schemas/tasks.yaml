@@ -1,0 +1,522 @@
+TaskLifecycleStatus:
+  enum:
+    - draft
+    - ready
+    - running
+    - attention
+    - completed
+    - archived
+  type: string
+TaskAttentionReason:
+  enum:
+    - updated
+    - needs_approval
+    - failed
+    - waiting_input
+    - schedule_blocked
+    - takeover_recommended
+  type: string
+TaskFailureCategory:
+  enum:
+    - context_unavailable
+    - permission_blocked
+    - approval_timeout
+    - runtime_error
+    - model_failure
+    - user_canceled
+  type: string
+TaskTriggerType:
+  enum:
+    - manual
+    - scheduled
+    - rerun
+    - takeover
+  type: string
+TaskRunStatus:
+  enum:
+    - queued
+    - running
+    - waiting_input
+    - waiting_approval
+    - completed
+    - failed
+    - canceled
+    - skipped
+  type: string
+TaskContextRefKind:
+  enum:
+    - resource
+    - knowledge
+    - deliverable
+  type: string
+TaskContextPinMode:
+  enum:
+    - snapshot
+    - follow_latest
+  type: string
+TaskContextResolutionMode:
+  enum:
+    - explicit_only
+    - explicit_plus_project_defaults
+  type: string
+TaskTransitionKind:
+  enum:
+    - created
+    - launched
+    - progressed
+    - waiting_approval
+    - completed
+    - failed
+    - intervened
+    - skipped
+  type: string
+TaskInterventionType:
+  enum:
+    - takeover
+    - resume
+    - comment
+    - approve
+    - reject
+    - edit_brief
+    - change_actor
+  type: string
+TaskInterventionStatus:
+  enum:
+    - accepted
+    - rejected
+    - applied
+  type: string
+TaskContextRef:
+  additionalProperties: false
+  properties:
+    kind:
+      $ref: "#/components/schemas/TaskContextRefKind"
+    refId:
+      type: string
+    title:
+      type: string
+    subtitle:
+      type: string
+    versionRef:
+      type: string
+      nullable: true
+    pinMode:
+      $ref: "#/components/schemas/TaskContextPinMode"
+  required:
+    - kind
+    - refId
+    - title
+    - pinMode
+  type: object
+TaskContextBundle:
+  additionalProperties: false
+  properties:
+    refs:
+      items:
+        $ref: "#/components/schemas/TaskContextRef"
+      type: array
+    pinnedInstructions:
+      type: string
+    resolutionMode:
+      $ref: "#/components/schemas/TaskContextResolutionMode"
+    lastResolvedAt:
+      type: integer
+      nullable: true
+  required:
+    - refs
+    - pinnedInstructions
+    - resolutionMode
+  type: object
+TaskStateTransitionSummary:
+  additionalProperties: false
+  properties:
+    kind:
+      $ref: "#/components/schemas/TaskTransitionKind"
+    summary:
+      type: string
+    at:
+      type: integer
+    runId:
+      type: string
+      nullable: true
+  required:
+    - kind
+    - summary
+    - at
+  type: object
+TaskAnalyticsSummary:
+  additionalProperties: false
+  properties:
+    runCount:
+      type: integer
+    manualRunCount:
+      type: integer
+    scheduledRunCount:
+      type: integer
+    completionCount:
+      type: integer
+    failureCount:
+      type: integer
+    takeoverCount:
+      type: integer
+    approvalRequiredCount:
+      type: integer
+    averageRunDurationMs:
+      type: integer
+    lastSuccessfulRunAt:
+      type: integer
+      nullable: true
+  required:
+    - runCount
+    - manualRunCount
+    - scheduledRunCount
+    - completionCount
+    - failureCount
+    - takeoverCount
+    - approvalRequiredCount
+    - averageRunDurationMs
+  type: object
+TaskRunSummary:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    taskId:
+      type: string
+    triggerType:
+      $ref: "#/components/schemas/TaskTriggerType"
+    status:
+      $ref: "#/components/schemas/TaskRunStatus"
+    sessionId:
+      type: string
+      nullable: true
+    conversationId:
+      type: string
+      nullable: true
+    runtimeRunId:
+      type: string
+      nullable: true
+    actorRef:
+      type: string
+    startedAt:
+      type: integer
+    completedAt:
+      type: integer
+      nullable: true
+    resultSummary:
+      type: string
+      nullable: true
+    pendingApprovalId:
+      type: string
+      nullable: true
+    failureCategory:
+      allOf:
+        - $ref: "#/components/schemas/TaskFailureCategory"
+      nullable: true
+    failureSummary:
+      type: string
+      nullable: true
+    viewStatus:
+      $ref: "#/components/schemas/ViewStatus"
+    attentionReasons:
+      items:
+        $ref: "#/components/schemas/TaskAttentionReason"
+      type: array
+    attentionUpdatedAt:
+      type: integer
+      nullable: true
+    deliverableRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
+    artifactRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
+    latestTransition:
+      allOf:
+        - $ref: "#/components/schemas/TaskStateTransitionSummary"
+      nullable: true
+  required:
+    - id
+    - taskId
+    - triggerType
+    - status
+    - actorRef
+    - startedAt
+    - viewStatus
+    - attentionReasons
+    - deliverableRefs
+    - artifactRefs
+  type: object
+TaskInterventionRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    taskId:
+      type: string
+    taskRunId:
+      type: string
+      nullable: true
+    type:
+      $ref: "#/components/schemas/TaskInterventionType"
+    payload:
+      additionalProperties: true
+      type: object
+    createdBy:
+      type: string
+    createdAt:
+      type: integer
+    appliedToSessionId:
+      type: string
+      nullable: true
+    status:
+      $ref: "#/components/schemas/TaskInterventionStatus"
+  required:
+    - id
+    - taskId
+    - type
+    - payload
+    - createdBy
+    - createdAt
+    - status
+  type: object
+TaskSummary:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    projectId:
+      type: string
+    title:
+      type: string
+    goal:
+      type: string
+    defaultActorRef:
+      type: string
+    status:
+      $ref: "#/components/schemas/TaskLifecycleStatus"
+    scheduleSpec:
+      type: string
+      nullable: true
+    nextRunAt:
+      type: integer
+      nullable: true
+    lastRunAt:
+      type: integer
+      nullable: true
+    latestResultSummary:
+      type: string
+      nullable: true
+    latestFailureCategory:
+      allOf:
+        - $ref: "#/components/schemas/TaskFailureCategory"
+      nullable: true
+    latestTransition:
+      allOf:
+        - $ref: "#/components/schemas/TaskStateTransitionSummary"
+      nullable: true
+    viewStatus:
+      $ref: "#/components/schemas/ViewStatus"
+    attentionReasons:
+      items:
+        $ref: "#/components/schemas/TaskAttentionReason"
+      type: array
+    attentionUpdatedAt:
+      type: integer
+      nullable: true
+    activeTaskRunId:
+      type: string
+      nullable: true
+    analyticsSummary:
+      $ref: "#/components/schemas/TaskAnalyticsSummary"
+    updatedAt:
+      type: integer
+  required:
+    - id
+    - projectId
+    - title
+    - goal
+    - defaultActorRef
+    - status
+    - viewStatus
+    - attentionReasons
+    - analyticsSummary
+    - updatedAt
+  type: object
+TaskDetail:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    projectId:
+      type: string
+    title:
+      type: string
+    goal:
+      type: string
+    brief:
+      type: string
+    defaultActorRef:
+      type: string
+    status:
+      $ref: "#/components/schemas/TaskLifecycleStatus"
+    scheduleSpec:
+      type: string
+      nullable: true
+    nextRunAt:
+      type: integer
+      nullable: true
+    lastRunAt:
+      type: integer
+      nullable: true
+    latestResultSummary:
+      type: string
+      nullable: true
+    latestFailureCategory:
+      allOf:
+        - $ref: "#/components/schemas/TaskFailureCategory"
+      nullable: true
+    latestTransition:
+      allOf:
+        - $ref: "#/components/schemas/TaskStateTransitionSummary"
+      nullable: true
+    viewStatus:
+      $ref: "#/components/schemas/ViewStatus"
+    attentionReasons:
+      items:
+        $ref: "#/components/schemas/TaskAttentionReason"
+      type: array
+    attentionUpdatedAt:
+      type: integer
+      nullable: true
+    activeTaskRunId:
+      type: string
+      nullable: true
+    analyticsSummary:
+      $ref: "#/components/schemas/TaskAnalyticsSummary"
+    contextBundle:
+      $ref: "#/components/schemas/TaskContextBundle"
+    latestDeliverableRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
+    latestArtifactRefs:
+      items:
+        $ref: "#/components/schemas/ArtifactVersionReference"
+      type: array
+    runHistory:
+      items:
+        $ref: "#/components/schemas/TaskRunSummary"
+      type: array
+    interventionHistory:
+      items:
+        $ref: "#/components/schemas/TaskInterventionRecord"
+      type: array
+    activeRun:
+      allOf:
+        - $ref: "#/components/schemas/TaskRunSummary"
+      nullable: true
+    createdBy:
+      type: string
+    updatedBy:
+      type: string
+      nullable: true
+    createdAt:
+      type: integer
+    updatedAt:
+      type: integer
+  required:
+    - id
+    - projectId
+    - title
+    - goal
+    - brief
+    - defaultActorRef
+    - status
+    - viewStatus
+    - attentionReasons
+    - analyticsSummary
+    - contextBundle
+    - latestDeliverableRefs
+    - latestArtifactRefs
+    - runHistory
+    - interventionHistory
+    - createdBy
+    - createdAt
+    - updatedAt
+  type: object
+CreateTaskRequest:
+  additionalProperties: false
+  properties:
+    title:
+      type: string
+    goal:
+      type: string
+    brief:
+      type: string
+    defaultActorRef:
+      type: string
+    scheduleSpec:
+      type: string
+      nullable: true
+    contextBundle:
+      $ref: "#/components/schemas/TaskContextBundle"
+  required:
+    - title
+    - goal
+    - brief
+    - defaultActorRef
+    - contextBundle
+  type: object
+UpdateTaskRequest:
+  additionalProperties: false
+  properties:
+    title:
+      type: string
+    goal:
+      type: string
+    brief:
+      type: string
+    defaultActorRef:
+      type: string
+    scheduleSpec:
+      type: string
+      nullable: true
+    contextBundle:
+      $ref: "#/components/schemas/TaskContextBundle"
+  type: object
+LaunchTaskRequest:
+  additionalProperties: false
+  properties:
+    actorRef:
+      type: string
+  type: object
+RerunTaskRequest:
+  additionalProperties: false
+  properties:
+    actorRef:
+      type: string
+    sourceTaskRunId:
+      type: string
+      nullable: true
+  type: object
+CreateTaskInterventionRequest:
+  additionalProperties: false
+  properties:
+    taskRunId:
+      type: string
+      nullable: true
+    approvalId:
+      type: string
+      nullable: true
+    type:
+      $ref: "#/components/schemas/TaskInterventionType"
+    payload:
+      additionalProperties: true
+      type: object
+  required:
+    - type
+    - payload
+  type: object

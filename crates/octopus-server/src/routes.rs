@@ -365,6 +365,30 @@ pub fn build_router(state: ServerState) -> Router {
             get(project_dashboard),
         )
         .route(
+            "/api/v1/projects/:project_id/tasks",
+            get(list_project_tasks).post(create_project_task),
+        )
+        .route(
+            "/api/v1/projects/:project_id/tasks/:task_id",
+            get(get_project_task_detail).patch(update_project_task),
+        )
+        .route(
+            "/api/v1/projects/:project_id/tasks/:task_id/launch",
+            post(launch_project_task),
+        )
+        .route(
+            "/api/v1/projects/:project_id/tasks/:task_id/rerun",
+            post(rerun_project_task),
+        )
+        .route(
+            "/api/v1/projects/:project_id/tasks/:task_id/runs",
+            get(list_project_task_runs),
+        )
+        .route(
+            "/api/v1/projects/:project_id/tasks/:task_id/interventions",
+            post(create_project_task_intervention),
+        )
+        .route(
             "/api/v1/projects/:project_id/runtime-config",
             get(get_project_runtime_config_route).patch(save_project_runtime_config_route),
         )

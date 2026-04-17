@@ -40,6 +40,7 @@ async fn main() -> Result<(), AppError> {
     ));
     let services = PlatformServices {
         workspace: infra.workspace.clone(),
+        project_tasks: infra.workspace.clone(),
         access_control: infra.access_control.clone(),
         auth: infra.auth.clone(),
         app_registry: infra.app_registry.clone(),

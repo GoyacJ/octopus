@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: fa8c654d994e87632df4c2a04d913dfd56649eadac570597b0be69397717affe
+// Source hash: abb0e61ac2eb4f98f572952acc55d0d80b2ecd6077e065305165a531c4cb9bf0
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "fa8c654d994e87632df4c2a04d913dfd56649eadac570597b0be69397717affe"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "abb0e61ac2eb4f98f572952acc55d0d80b2ecd6077e065305165a531c4cb9bf0"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -577,6 +577,22 @@ export interface CreateRuntimeSessionInput {
   title: string
 }
 
+export interface CreateTaskInterventionRequest {
+  approvalId?: string | null
+  payload: Record<string, unknown>
+  taskRunId?: string | null
+  type: TaskInterventionType
+}
+
+export interface CreateTaskRequest {
+  brief: string
+  contextBundle: TaskContextBundle
+  defaultActorRef: string
+  goal: string
+  scheduleSpec?: string | null
+  title: string
+}
+
 export interface CreateWorkspaceResourceFolderInput {
   files: WorkspaceResourceFolderUploadEntry[]
   projectId?: string
@@ -1049,6 +1065,10 @@ export type KnowledgeStatus = "candidate" | "reviewed" | "shared" | "archived"
 
 export type KnowledgeVisibilityMode = "private" | "public"
 
+export interface LaunchTaskRequest {
+  actorRef?: string
+}
+
 export type Locale = "zh-CN" | "en-US"
 
 export interface MailboxPolicy {
@@ -1370,6 +1390,7 @@ export interface ProjectDashboardSnapshot {
   project: ProjectRecord
   recentActivity: WorkspaceActivityRecord[]
   recentConversations: ConversationRecord[]
+  recentTasks: TaskSummary[]
   resourceBreakdown: ProjectDashboardBreakdownItem[]
   toolRanking: ProjectDashboardRankingItem[]
   trend: ProjectDashboardTrendPoint[]
@@ -1378,15 +1399,19 @@ export interface ProjectDashboardSnapshot {
 }
 
 export interface ProjectDashboardSummary {
+  activeTaskCount: number
   activeUserCount: number
   activityCount: number
   agentCount: number
   approvalCount: number
+  attentionTaskCount: number
   conversationCount: number
   knowledgeCount: number
   memberCount: number
   messageCount: number
   resourceCount: number
+  scheduledTaskCount: number
+  taskCount: number
   teamCount: number
   tokenRecordCount: number
   toolCallCount: number
@@ -1422,6 +1447,7 @@ export interface ProjectDefaultPermissions {
   agents: ProjectDefaultPermissionValue
   knowledge: ProjectDefaultPermissionValue
   resources: ProjectDefaultPermissionValue
+  tasks: ProjectDefaultPermissionValue
   tools: ProjectDefaultPermissionValue
 }
 
@@ -1443,6 +1469,7 @@ export interface ProjectPermissionOverrides {
   agents: ProjectPermissionOverrideValue
   knowledge: ProjectPermissionOverrideValue
   resources: ProjectPermissionOverrideValue
+  tasks: ProjectPermissionOverrideValue
   tools: ProjectPermissionOverrideValue
 }
 
@@ -1561,6 +1588,11 @@ export interface RegisterBootstrapAdminRequest {
   password: string
   username: string
   workspaceId?: string
+}
+
+export interface RerunTaskRequest {
+  actorRef?: string
+  sourceTaskRunId?: string | null
 }
 
 export interface ResolvedExecutionTarget {
@@ -2408,6 +2440,150 @@ export interface SystemBootstrapStatus {
   workspace: WorkspaceSummary
 }
 
+export interface TaskAnalyticsSummary {
+  approvalRequiredCount: number
+  averageRunDurationMs: number
+  completionCount: number
+  failureCount: number
+  lastSuccessfulRunAt?: number | null
+  manualRunCount: number
+  runCount: number
+  scheduledRunCount: number
+  takeoverCount: number
+}
+
+export type TaskAttentionReason = "updated" | "needs_approval" | "failed" | "waiting_input" | "schedule_blocked" | "takeover_recommended"
+
+export interface TaskContextBundle {
+  lastResolvedAt?: number | null
+  pinnedInstructions: string
+  refs: TaskContextRef[]
+  resolutionMode: TaskContextResolutionMode
+}
+
+export type TaskContextPinMode = "snapshot" | "follow_latest"
+
+export interface TaskContextRef {
+  kind: TaskContextRefKind
+  pinMode: TaskContextPinMode
+  refId: string
+  subtitle?: string
+  title: string
+  versionRef?: string | null
+}
+
+export type TaskContextRefKind = "resource" | "knowledge" | "deliverable"
+
+export type TaskContextResolutionMode = "explicit_only" | "explicit_plus_project_defaults"
+
+export interface TaskDetail {
+  activeRun?: TaskRunSummary | null
+  activeTaskRunId?: string | null
+  analyticsSummary: TaskAnalyticsSummary
+  attentionReasons: TaskAttentionReason[]
+  attentionUpdatedAt?: number | null
+  brief: string
+  contextBundle: TaskContextBundle
+  createdAt: number
+  createdBy: string
+  defaultActorRef: string
+  goal: string
+  id: string
+  interventionHistory: TaskInterventionRecord[]
+  lastRunAt?: number | null
+  latestArtifactRefs: ArtifactVersionReference[]
+  latestDeliverableRefs: ArtifactVersionReference[]
+  latestFailureCategory?: TaskFailureCategory | null
+  latestResultSummary?: string | null
+  latestTransition?: TaskStateTransitionSummary | null
+  nextRunAt?: number | null
+  projectId: string
+  runHistory: TaskRunSummary[]
+  scheduleSpec?: string | null
+  status: TaskLifecycleStatus
+  title: string
+  updatedAt: number
+  updatedBy?: string | null
+  viewStatus: ViewStatus
+}
+
+export type TaskFailureCategory = "context_unavailable" | "permission_blocked" | "approval_timeout" | "runtime_error" | "model_failure" | "user_canceled"
+
+export interface TaskInterventionRecord {
+  appliedToSessionId?: string | null
+  createdAt: number
+  createdBy: string
+  id: string
+  payload: Record<string, unknown>
+  status: TaskInterventionStatus
+  taskId: string
+  taskRunId?: string | null
+  type: TaskInterventionType
+}
+
+export type TaskInterventionStatus = "accepted" | "rejected" | "applied"
+
+export type TaskInterventionType = "takeover" | "resume" | "comment" | "approve" | "reject" | "edit_brief" | "change_actor"
+
+export type TaskLifecycleStatus = "draft" | "ready" | "running" | "attention" | "completed" | "archived"
+
+export type TaskRunStatus = "queued" | "running" | "waiting_input" | "waiting_approval" | "completed" | "failed" | "canceled" | "skipped"
+
+export interface TaskRunSummary {
+  actorRef: string
+  artifactRefs: ArtifactVersionReference[]
+  attentionReasons: TaskAttentionReason[]
+  attentionUpdatedAt?: number | null
+  completedAt?: number | null
+  conversationId?: string | null
+  deliverableRefs: ArtifactVersionReference[]
+  failureCategory?: TaskFailureCategory | null
+  failureSummary?: string | null
+  id: string
+  latestTransition?: TaskStateTransitionSummary | null
+  pendingApprovalId?: string | null
+  resultSummary?: string | null
+  runtimeRunId?: string | null
+  sessionId?: string | null
+  startedAt: number
+  status: TaskRunStatus
+  taskId: string
+  triggerType: TaskTriggerType
+  viewStatus: ViewStatus
+}
+
+export interface TaskStateTransitionSummary {
+  at: number
+  kind: TaskTransitionKind
+  runId?: string | null
+  summary: string
+}
+
+export interface TaskSummary {
+  activeTaskRunId?: string | null
+  analyticsSummary: TaskAnalyticsSummary
+  attentionReasons: TaskAttentionReason[]
+  attentionUpdatedAt?: number | null
+  defaultActorRef: string
+  goal: string
+  id: string
+  lastRunAt?: number | null
+  latestFailureCategory?: TaskFailureCategory | null
+  latestResultSummary?: string | null
+  latestTransition?: TaskStateTransitionSummary | null
+  nextRunAt?: number | null
+  projectId: string
+  scheduleSpec?: string | null
+  status: TaskLifecycleStatus
+  title: string
+  updatedAt: number
+  viewStatus: ViewStatus
+}
+
+export type TaskTransitionKind = "created" | "launched" | "progressed" | "waiting_approval" | "completed" | "failed" | "intervened" | "skipped"
+
+export type TaskTriggerType = "manual" | "scheduled" | "rerun" | "takeover"
+
 export interface TeamRecord {
   approvalPreference: ApprovalPreference
   artifactHandoffPolicy: ArtifactHandoffPolicy
@@ -2502,6 +2678,15 @@ export interface UpdateProjectRequest {
   permissionOverrides?: ProjectPermissionOverrides
   resourceDirectory: string
   status: "active" | "archived"
+}
+
+export interface UpdateTaskRequest {
+  brief?: string
+  contextBundle?: TaskContextBundle
+  defaultActorRef?: string
+  goal?: string
+  scheduleSpec?: string | null
+  title?: string
 }
 
 export interface UpdateWorkspaceResourceInput {
@@ -3198,6 +3383,26 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/runtime-config/validate": {
     post: { operationId: "validateProjectRuntimeConfig"; response: RuntimeConfigValidationResult; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks": {
+    get: { operationId: "listProjectTasks"; response: TaskSummary[]; error: ApiErrorEnvelope }
+    post: { operationId: "createProjectTask"; response: TaskDetail; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks/{taskId}": {
+    get: { operationId: "getProjectTaskDetail"; response: TaskDetail; error: ApiErrorEnvelope }
+    patch: { operationId: "updateProjectTask"; response: TaskDetail; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks/{taskId}/interventions": {
+    post: { operationId: "createProjectTaskIntervention"; response: TaskInterventionRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks/{taskId}/launch": {
+    post: { operationId: "launchProjectTask"; response: TaskRunSummary; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks/{taskId}/rerun": {
+    post: { operationId: "rerunProjectTask"; response: TaskRunSummary; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/tasks/{taskId}/runs": {
+    get: { operationId: "listProjectTaskRuns"; response: TaskRunSummary[]; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/team-links": {
     get: { operationId: "listProjectTeamLinks"; response: ProjectTeamLinkRecord[]; error: ApiErrorEnvelope }

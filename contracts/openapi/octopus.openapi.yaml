@@ -2386,6 +2386,244 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/projects/{projectId}/tasks:
+    get:
+      operationId: listProjectTasks
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/TaskSummary"
+                type: array
+          description: Project task list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectTask
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDetail"
+          description: Created project task payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/tasks/{taskId}:
+    get:
+      operationId: getProjectTaskDetail
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDetail"
+          description: Project task detail payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: updateProjectTask
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDetail"
+          description: Updated project task payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/tasks/{taskId}/interventions:
+    post:
+      operationId: createProjectTaskIntervention
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskInterventionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskInterventionRecord"
+          description: Created task intervention payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/tasks/{taskId}/launch:
+    post:
+      operationId: launchProjectTask
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LaunchTaskRequest"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunSummary"
+          description: Launched task run payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/tasks/{taskId}/rerun:
+    post:
+      operationId: rerunProjectTask
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RerunTaskRequest"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunSummary"
+          description: Rerun task payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/tasks/{taskId}/runs:
+    get:
+      operationId: listProjectTaskRuns
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/TaskRunSummary"
+                type: array
+          description: Project task run history payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/projects/{projectId}/team-links:
     get:
       operationId: listProjectTeamLinks
@@ -5942,6 +6180,47 @@ components:
         - selectedActorRef
         - executionPermissionMode
       type: object
+    CreateTaskInterventionRequest:
+      additionalProperties: false
+      properties:
+        approvalId:
+          nullable: true
+          type: string
+        payload:
+          additionalProperties: true
+          type: object
+        taskRunId:
+          nullable: true
+          type: string
+        type:
+          $ref: "#/components/schemas/TaskInterventionType"
+      required:
+        - type
+        - payload
+      type: object
+    CreateTaskRequest:
+      additionalProperties: false
+      properties:
+        brief:
+          type: string
+        contextBundle:
+          $ref: "#/components/schemas/TaskContextBundle"
+        defaultActorRef:
+          type: string
+        goal:
+          type: string
+        scheduleSpec:
+          nullable: true
+          type: string
+        title:
+          type: string
+      required:
+        - title
+        - goal
+        - brief
+        - defaultActorRef
+        - contextBundle
+      type: object
     CreateWorkspaceResourceFolderInput:
       additionalProperties: false
       properties:
@@ -7268,6 +7547,12 @@ components:
         - private
         - public
       type: string
+    LaunchTaskRequest:
+      additionalProperties: false
+      properties:
+        actorRef:
+          type: string
+      type: object
     Locale:
       enum:
         - zh-CN
@@ -8186,6 +8471,10 @@ components:
           items:
             $ref: "#/components/schemas/ConversationRecord"
           type: array
+        recentTasks:
+          items:
+            $ref: "#/components/schemas/TaskSummary"
+          type: array
         resourceBreakdown:
           items:
             $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
@@ -8217,11 +8506,15 @@ components:
         - modelBreakdown
         - recentConversations
         - recentActivity
+        - recentTasks
         - usedTokens
       type: object
     ProjectDashboardSummary:
       additionalProperties: false
       properties:
+        activeTaskCount:
+          minimum: 0
+          type: integer
         activeUserCount:
           minimum: 0
           type: integer
@@ -8232,6 +8525,9 @@ components:
           minimum: 0
           type: integer
         approvalCount:
+          minimum: 0
+          type: integer
+        attentionTaskCount:
           minimum: 0
           type: integer
         conversationCount:
@@ -8247,6 +8543,12 @@ components:
           minimum: 0
           type: integer
         resourceCount:
+          minimum: 0
+          type: integer
+        scheduledTaskCount:
+          minimum: 0
+          type: integer
+        taskCount:
           minimum: 0
           type: integer
         teamCount:
@@ -8279,6 +8581,10 @@ components:
         - tokenRecordCount
         - totalTokens
         - activityCount
+        - taskCount
+        - activeTaskCount
+        - attentionTaskCount
+        - scheduledTaskCount
       type: object
     ProjectDashboardTrendPoint:
       additionalProperties: false
@@ -8371,11 +8677,14 @@ components:
           $ref: "#/components/schemas/ProjectDefaultPermissionValue"
         resources:
           $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+        tasks:
+          $ref: "#/components/schemas/ProjectDefaultPermissionValue"
         tools:
           $ref: "#/components/schemas/ProjectDefaultPermissionValue"
       required:
         - agents
         - resources
+        - tasks
         - tools
         - knowledge
       type: object
@@ -8431,11 +8740,14 @@ components:
           $ref: "#/components/schemas/ProjectPermissionOverrideValue"
         resources:
           $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+        tasks:
+          $ref: "#/components/schemas/ProjectPermissionOverrideValue"
         tools:
           $ref: "#/components/schemas/ProjectPermissionOverrideValue"
       required:
         - agents
         - resources
+        - tasks
         - tools
         - knowledge
       type: object
@@ -8723,6 +9035,15 @@ components:
         - password
         - confirmPassword
         - avatar
+      type: object
+    RerunTaskRequest:
+      additionalProperties: false
+      properties:
+        actorRef:
+          type: string
+        sourceTaskRunId:
+          nullable: true
+          type: string
       type: object
     ResolvedExecutionTarget:
       additionalProperties: false
@@ -11054,6 +11375,455 @@ components:
         - authMode
         - capabilities
       type: object
+    TaskAnalyticsSummary:
+      additionalProperties: false
+      properties:
+        approvalRequiredCount:
+          type: integer
+        averageRunDurationMs:
+          type: integer
+        completionCount:
+          type: integer
+        failureCount:
+          type: integer
+        lastSuccessfulRunAt:
+          nullable: true
+          type: integer
+        manualRunCount:
+          type: integer
+        runCount:
+          type: integer
+        scheduledRunCount:
+          type: integer
+        takeoverCount:
+          type: integer
+      required:
+        - runCount
+        - manualRunCount
+        - scheduledRunCount
+        - completionCount
+        - failureCount
+        - takeoverCount
+        - approvalRequiredCount
+        - averageRunDurationMs
+      type: object
+    TaskAttentionReason:
+      enum:
+        - updated
+        - needs_approval
+        - failed
+        - waiting_input
+        - schedule_blocked
+        - takeover_recommended
+      type: string
+    TaskContextBundle:
+      additionalProperties: false
+      properties:
+        lastResolvedAt:
+          nullable: true
+          type: integer
+        pinnedInstructions:
+          type: string
+        refs:
+          items:
+            $ref: "#/components/schemas/TaskContextRef"
+          type: array
+        resolutionMode:
+          $ref: "#/components/schemas/TaskContextResolutionMode"
+      required:
+        - refs
+        - pinnedInstructions
+        - resolutionMode
+      type: object
+    TaskContextPinMode:
+      enum:
+        - snapshot
+        - follow_latest
+      type: string
+    TaskContextRef:
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/TaskContextRefKind"
+        pinMode:
+          $ref: "#/components/schemas/TaskContextPinMode"
+        refId:
+          type: string
+        subtitle:
+          type: string
+        title:
+          type: string
+        versionRef:
+          nullable: true
+          type: string
+      required:
+        - kind
+        - refId
+        - title
+        - pinMode
+      type: object
+    TaskContextRefKind:
+      enum:
+        - resource
+        - knowledge
+        - deliverable
+      type: string
+    TaskContextResolutionMode:
+      enum:
+        - explicit_only
+        - explicit_plus_project_defaults
+      type: string
+    TaskDetail:
+      additionalProperties: false
+      properties:
+        activeRun:
+          allOf:
+            - $ref: "#/components/schemas/TaskRunSummary"
+          nullable: true
+        activeTaskRunId:
+          nullable: true
+          type: string
+        analyticsSummary:
+          $ref: "#/components/schemas/TaskAnalyticsSummary"
+        attentionReasons:
+          items:
+            $ref: "#/components/schemas/TaskAttentionReason"
+          type: array
+        attentionUpdatedAt:
+          nullable: true
+          type: integer
+        brief:
+          type: string
+        contextBundle:
+          $ref: "#/components/schemas/TaskContextBundle"
+        createdAt:
+          type: integer
+        createdBy:
+          type: string
+        defaultActorRef:
+          type: string
+        goal:
+          type: string
+        id:
+          type: string
+        interventionHistory:
+          items:
+            $ref: "#/components/schemas/TaskInterventionRecord"
+          type: array
+        lastRunAt:
+          nullable: true
+          type: integer
+        latestArtifactRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
+        latestDeliverableRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
+        latestFailureCategory:
+          allOf:
+            - $ref: "#/components/schemas/TaskFailureCategory"
+          nullable: true
+        latestResultSummary:
+          nullable: true
+          type: string
+        latestTransition:
+          allOf:
+            - $ref: "#/components/schemas/TaskStateTransitionSummary"
+          nullable: true
+        nextRunAt:
+          nullable: true
+          type: integer
+        projectId:
+          type: string
+        runHistory:
+          items:
+            $ref: "#/components/schemas/TaskRunSummary"
+          type: array
+        scheduleSpec:
+          nullable: true
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskLifecycleStatus"
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        updatedBy:
+          nullable: true
+          type: string
+        viewStatus:
+          $ref: "#/components/schemas/ViewStatus"
+      required:
+        - id
+        - projectId
+        - title
+        - goal
+        - brief
+        - defaultActorRef
+        - status
+        - viewStatus
+        - attentionReasons
+        - analyticsSummary
+        - contextBundle
+        - latestDeliverableRefs
+        - latestArtifactRefs
+        - runHistory
+        - interventionHistory
+        - createdBy
+        - createdAt
+        - updatedAt
+      type: object
+    TaskFailureCategory:
+      enum:
+        - context_unavailable
+        - permission_blocked
+        - approval_timeout
+        - runtime_error
+        - model_failure
+        - user_canceled
+      type: string
+    TaskInterventionRecord:
+      additionalProperties: false
+      properties:
+        appliedToSessionId:
+          nullable: true
+          type: string
+        createdAt:
+          type: integer
+        createdBy:
+          type: string
+        id:
+          type: string
+        payload:
+          additionalProperties: true
+          type: object
+        status:
+          $ref: "#/components/schemas/TaskInterventionStatus"
+        taskId:
+          type: string
+        taskRunId:
+          nullable: true
+          type: string
+        type:
+          $ref: "#/components/schemas/TaskInterventionType"
+      required:
+        - id
+        - taskId
+        - type
+        - payload
+        - createdBy
+        - createdAt
+        - status
+      type: object
+    TaskInterventionStatus:
+      enum:
+        - accepted
+        - rejected
+        - applied
+      type: string
+    TaskInterventionType:
+      enum:
+        - takeover
+        - resume
+        - comment
+        - approve
+        - reject
+        - edit_brief
+        - change_actor
+      type: string
+    TaskLifecycleStatus:
+      enum:
+        - draft
+        - ready
+        - running
+        - attention
+        - completed
+        - archived
+      type: string
+    TaskRunStatus:
+      enum:
+        - queued
+        - running
+        - waiting_input
+        - waiting_approval
+        - completed
+        - failed
+        - canceled
+        - skipped
+      type: string
+    TaskRunSummary:
+      additionalProperties: false
+      properties:
+        actorRef:
+          type: string
+        artifactRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
+        attentionReasons:
+          items:
+            $ref: "#/components/schemas/TaskAttentionReason"
+          type: array
+        attentionUpdatedAt:
+          nullable: true
+          type: integer
+        completedAt:
+          nullable: true
+          type: integer
+        conversationId:
+          nullable: true
+          type: string
+        deliverableRefs:
+          items:
+            $ref: "#/components/schemas/ArtifactVersionReference"
+          type: array
+        failureCategory:
+          allOf:
+            - $ref: "#/components/schemas/TaskFailureCategory"
+          nullable: true
+        failureSummary:
+          nullable: true
+          type: string
+        id:
+          type: string
+        latestTransition:
+          allOf:
+            - $ref: "#/components/schemas/TaskStateTransitionSummary"
+          nullable: true
+        pendingApprovalId:
+          nullable: true
+          type: string
+        resultSummary:
+          nullable: true
+          type: string
+        runtimeRunId:
+          nullable: true
+          type: string
+        sessionId:
+          nullable: true
+          type: string
+        startedAt:
+          type: integer
+        status:
+          $ref: "#/components/schemas/TaskRunStatus"
+        taskId:
+          type: string
+        triggerType:
+          $ref: "#/components/schemas/TaskTriggerType"
+        viewStatus:
+          $ref: "#/components/schemas/ViewStatus"
+      required:
+        - id
+        - taskId
+        - triggerType
+        - status
+        - actorRef
+        - startedAt
+        - viewStatus
+        - attentionReasons
+        - deliverableRefs
+        - artifactRefs
+      type: object
+    TaskStateTransitionSummary:
+      additionalProperties: false
+      properties:
+        at:
+          type: integer
+        kind:
+          $ref: "#/components/schemas/TaskTransitionKind"
+        runId:
+          nullable: true
+          type: string
+        summary:
+          type: string
+      required:
+        - kind
+        - summary
+        - at
+      type: object
+    TaskSummary:
+      additionalProperties: false
+      properties:
+        activeTaskRunId:
+          nullable: true
+          type: string
+        analyticsSummary:
+          $ref: "#/components/schemas/TaskAnalyticsSummary"
+        attentionReasons:
+          items:
+            $ref: "#/components/schemas/TaskAttentionReason"
+          type: array
+        attentionUpdatedAt:
+          nullable: true
+          type: integer
+        defaultActorRef:
+          type: string
+        goal:
+          type: string
+        id:
+          type: string
+        lastRunAt:
+          nullable: true
+          type: integer
+        latestFailureCategory:
+          allOf:
+            - $ref: "#/components/schemas/TaskFailureCategory"
+          nullable: true
+        latestResultSummary:
+          nullable: true
+          type: string
+        latestTransition:
+          allOf:
+            - $ref: "#/components/schemas/TaskStateTransitionSummary"
+          nullable: true
+        nextRunAt:
+          nullable: true
+          type: integer
+        projectId:
+          type: string
+        scheduleSpec:
+          nullable: true
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskLifecycleStatus"
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        viewStatus:
+          $ref: "#/components/schemas/ViewStatus"
+      required:
+        - id
+        - projectId
+        - title
+        - goal
+        - defaultActorRef
+        - status
+        - viewStatus
+        - attentionReasons
+        - analyticsSummary
+        - updatedAt
+      type: object
+    TaskTransitionKind:
+      enum:
+        - created
+        - launched
+        - progressed
+        - waiting_approval
+        - completed
+        - failed
+        - intervened
+        - skipped
+      type: string
+    TaskTriggerType:
+      enum:
+        - manual
+        - scheduled
+        - rerun
+        - takeover
+      type: string
     TeamRecord:
       additionalProperties: false
       properties:
@@ -11341,6 +12111,23 @@ components:
         - description
         - resourceDirectory
         - status
+      type: object
+    UpdateTaskRequest:
+      additionalProperties: false
+      properties:
+        brief:
+          type: string
+        contextBundle:
+          $ref: "#/components/schemas/TaskContextBundle"
+        defaultActorRef:
+          type: string
+        goal:
+          type: string
+        scheduleSpec:
+          nullable: true
+          type: string
+        title:
+          type: string
       type: object
     UpdateWorkspaceResourceInput:
       additionalProperties: false

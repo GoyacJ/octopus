@@ -22,6 +22,10 @@ import type {
   ProjectPromotionRequest,
   ProjectRecord,
   ProjectTeamLinkRecord,
+  TaskDetail,
+  TaskInterventionRecord,
+  TaskRunSummary,
+  TaskSummary,
   DeliverableVersionContent,
   DeliverableVersionSummary,
   RoleBindingRecord,
@@ -90,6 +94,12 @@ export interface WorkspaceFixtureState {
   projects: ProjectRecord[]
   projectPromotionRequests: ProjectPromotionRequest[]
   dashboards: Record<string, ProjectDashboardSnapshot>
+  taskIdSequence: number
+  taskRunIdSequence: number
+  taskInterventionIdSequence: number
+  taskDetailsByKey: Map<string, TaskDetail>
+  taskRunsByKey: Map<string, TaskRunSummary[]>
+  taskInterventionsByKey: Map<string, TaskInterventionRecord[]>
   workspaceResources: WorkspaceResourceRecord[]
   projectResources: Record<string, WorkspaceResourceRecord[]>
   resourceContents: Record<string, WorkspaceResourceContentDocument>
@@ -224,6 +234,7 @@ export function createWorkspaceFixtureState(
       resources: 'allow',
       tools: local ? 'allow' : 'deny',
       knowledge: 'allow',
+      tasks: 'allow',
     },
     host: local ? '127.0.0.1' : 'enterprise.example.test',
     listenAddress: connection.baseUrl,
@@ -246,6 +257,7 @@ export function createWorkspaceFixtureState(
             resources: 'inherit',
             tools: 'inherit',
             knowledge: 'inherit',
+            tasks: 'inherit',
           },
           linkedWorkspaceAssets: {
             agentIds: ['agent-architect'],
@@ -281,6 +293,7 @@ export function createWorkspaceFixtureState(
             resources: 'inherit',
             tools: 'inherit',
             knowledge: 'inherit',
+            tasks: 'inherit',
           },
           linkedWorkspaceAssets: {
             agentIds: [],
@@ -305,6 +318,7 @@ export function createWorkspaceFixtureState(
             resources: 'inherit',
             tools: 'inherit',
             knowledge: 'inherit',
+            tasks: 'inherit',
           },
           linkedWorkspaceAssets: {
             agentIds: [],
@@ -448,6 +462,173 @@ export function createWorkspaceFixtureState(
         },
       ]
 
+  const recentTasksByProjectId: Record<string, TaskSummary[]> = local
+    ? {
+        'proj-redesign': [
+          {
+            id: 'task-redesign-release-brief',
+            projectId: 'proj-redesign',
+            title: 'Release Brief Refresh',
+            goal: 'Refresh the release brief from the latest design and runtime changes.',
+            defaultActorRef: 'agent-architect',
+            status: 'running',
+            latestResultSummary: 'Drafting the updated brief and collecting deliverable links.',
+            latestTransition: {
+              kind: 'progressed',
+              summary: 'Compiled the latest deliverables into the release brief draft.',
+              at: 100,
+              runId: 'task-run-redesign-release-brief',
+            },
+            viewStatus: 'attention',
+            attentionReasons: ['updated'],
+            attentionUpdatedAt: 100,
+            activeTaskRunId: 'task-run-redesign-release-brief',
+            analyticsSummary: {
+              runCount: 4,
+              manualRunCount: 2,
+              scheduledRunCount: 2,
+              completionCount: 3,
+              failureCount: 0,
+              takeoverCount: 1,
+              approvalRequiredCount: 1,
+              averageRunDurationMs: 420000,
+              lastSuccessfulRunAt: 96,
+            },
+            updatedAt: 100,
+          },
+          {
+            id: 'task-redesign-regression-sweep',
+            projectId: 'proj-redesign',
+            title: 'Regression Sweep',
+            goal: 'Run the desktop regression checklist and summarize failures.',
+            defaultActorRef: 'agent-architect',
+            status: 'attention',
+            scheduleSpec: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0',
+            nextRunAt: 108,
+            lastRunAt: 94,
+            latestResultSummary: 'Hit a runtime error while validating the workspace overview flow.',
+            latestFailureCategory: 'runtime_error',
+            latestTransition: {
+              kind: 'failed',
+              summary: 'The last regression sweep failed during overview validation.',
+              at: 94,
+              runId: 'task-run-redesign-regression-sweep',
+            },
+            viewStatus: 'attention',
+            attentionReasons: ['failed', 'takeover_recommended'],
+            attentionUpdatedAt: 94,
+            analyticsSummary: {
+              runCount: 6,
+              manualRunCount: 1,
+              scheduledRunCount: 5,
+              completionCount: 5,
+              failureCount: 1,
+              takeoverCount: 1,
+              approvalRequiredCount: 0,
+              averageRunDurationMs: 510000,
+              lastSuccessfulRunAt: 92,
+            },
+            updatedAt: 94,
+          },
+          {
+            id: 'task-redesign-approval-gate',
+            projectId: 'proj-redesign',
+            title: 'Approval Gate Review',
+            goal: 'Pause before publishing the release brief update and wait for operator approval.',
+            defaultActorRef: 'agent-architect',
+            status: 'attention',
+            lastRunAt: 89,
+            latestResultSummary: 'Waiting for approval before publishing the release brief update.',
+            latestTransition: {
+              kind: 'waiting_approval',
+              summary: 'The active run is paused until approval is recorded for the publish step.',
+              at: 89,
+              runId: 'task-run-redesign-approval-gate',
+            },
+            viewStatus: 'attention',
+            attentionReasons: ['needs_approval'],
+            attentionUpdatedAt: 89,
+            activeTaskRunId: 'task-run-redesign-approval-gate',
+            analyticsSummary: {
+              runCount: 2,
+              manualRunCount: 2,
+              scheduledRunCount: 0,
+              completionCount: 1,
+              failureCount: 0,
+              takeoverCount: 0,
+              approvalRequiredCount: 1,
+              averageRunDurationMs: 300000,
+              lastSuccessfulRunAt: 82,
+            },
+            updatedAt: 89,
+          },
+        ],
+        'proj-governance': [
+          {
+            id: 'task-governance-menu-audit',
+            projectId: 'proj-governance',
+            title: 'Menu Policy Audit',
+            goal: 'Validate the menu policy matrix for operator and owner roles.',
+            defaultActorRef: 'agent-architect',
+            status: 'ready',
+            latestTransition: {
+              kind: 'created',
+              summary: 'Task is ready for the next manual launch.',
+              at: 90,
+              runId: null,
+            },
+            viewStatus: 'configured',
+            attentionReasons: [],
+            analyticsSummary: {
+              runCount: 1,
+              manualRunCount: 1,
+              scheduledRunCount: 0,
+              completionCount: 1,
+              failureCount: 0,
+              takeoverCount: 0,
+              approvalRequiredCount: 0,
+              averageRunDurationMs: 180000,
+              lastSuccessfulRunAt: 90,
+            },
+            updatedAt: 90,
+          },
+        ],
+      }
+    : {
+        'proj-launch': [
+          {
+            id: 'task-launch-cutover-checklist',
+            projectId: 'proj-launch',
+            title: 'Cutover Checklist',
+            goal: 'Prepare the enterprise cutover checklist and note blockers.',
+            defaultActorRef: 'agent-launch',
+            status: 'running',
+            latestResultSummary: 'Collecting final blocker notes from launch resources.',
+            latestTransition: {
+              kind: 'launched',
+              summary: 'Scheduled launch run started for the current cutover window.',
+              at: 120,
+              runId: 'task-run-launch-cutover-checklist',
+            },
+            viewStatus: 'healthy',
+            attentionReasons: [],
+            activeTaskRunId: 'task-run-launch-cutover-checklist',
+            analyticsSummary: {
+              runCount: 3,
+              manualRunCount: 0,
+              scheduledRunCount: 3,
+              completionCount: 2,
+              failureCount: 0,
+              takeoverCount: 0,
+              approvalRequiredCount: 1,
+              averageRunDurationMs: 360000,
+              lastSuccessfulRunAt: 110,
+            },
+            updatedAt: 120,
+          },
+        ],
+      }
+
   const projectTokenUsage = projects
     .map(project => ({
       projectId: project.id,
@@ -494,6 +675,10 @@ export function createWorkspaceFixtureState(
             tokenRecordCount: 7,
             totalTokens: 125000,
             activityCount: 24,
+            taskCount: recentTasksByProjectId[project.id]?.length ?? 0,
+            activeTaskCount: recentTasksByProjectId[project.id]?.filter(task => task.status === 'running').length ?? 0,
+            attentionTaskCount: recentTasksByProjectId[project.id]?.filter(task => task.viewStatus === 'attention').length ?? 0,
+            scheduledTaskCount: recentTasksByProjectId[project.id]?.filter(task => typeof task.scheduleSpec === 'string').length ?? 0,
           }
         : {
             memberCount: 1,
@@ -510,6 +695,10 @@ export function createWorkspaceFixtureState(
             tokenRecordCount: 3,
             totalTokens: 24000,
             activityCount: 6,
+            taskCount: recentTasksByProjectId[project.id]?.length ?? 0,
+            activeTaskCount: recentTasksByProjectId[project.id]?.filter(task => task.status === 'running').length ?? 0,
+            attentionTaskCount: recentTasksByProjectId[project.id]?.filter(task => task.viewStatus === 'attention').length ?? 0,
+            scheduledTaskCount: recentTasksByProjectId[project.id]?.filter(task => typeof task.scheduleSpec === 'string').length ?? 0,
           },
       trend: project.id === 'proj-redesign'
         ? [
@@ -654,6 +843,7 @@ export function createWorkspaceFixtureState(
           ],
       recentConversations: recentConversations.filter(item => item.projectId === project.id),
       recentActivity: recentActivity.filter(item => project.id === 'proj-redesign' || item.id === 'activity-launch'),
+      recentTasks: recentTasksByProjectId[project.id] ?? [],
     },
   ]))
 
@@ -2383,6 +2573,12 @@ export function createWorkspaceFixtureState(
     projects,
     projectPromotionRequests,
     dashboards,
+    taskIdSequence: 0,
+    taskRunIdSequence: 0,
+    taskInterventionIdSequence: 0,
+    taskDetailsByKey: new Map(),
+    taskRunsByKey: new Map(),
+    taskInterventionsByKey: new Map(),
     workspaceResources,
     projectResources,
     resourceContents,
@@ -2429,6 +2625,119 @@ export function createWorkspaceFixtureState(
     projectPetPresences,
     workspacePetBinding: undefined,
     projectPetBindings: {},
+  }
+
+  if (local) {
+    const approvalRun: TaskRunSummary = {
+      id: 'task-run-redesign-approval-gate',
+      taskId: 'task-redesign-approval-gate',
+      triggerType: 'manual',
+      status: 'waiting_approval',
+      sessionId: 'task-session-redesign-approval-gate',
+      conversationId: 'task-conversation-approval',
+      runtimeRunId: 'runtime-run-redesign-approval-gate',
+      actorRef: 'agent-architect',
+      startedAt: 88,
+      completedAt: null,
+      resultSummary: 'Waiting for approval before publishing the release brief update.',
+      pendingApprovalId: 'approval-task-run-redesign-approval-gate',
+      failureCategory: null,
+      failureSummary: null,
+      viewStatus: 'attention',
+      attentionReasons: ['needs_approval'],
+      attentionUpdatedAt: 89,
+      deliverableRefs: [
+        {
+          artifactId: 'artifact-run-conv-approval',
+          title: 'Approval Command Output',
+          version: 1,
+          previewKind: 'text',
+          contentType: 'text/plain',
+          updatedAt: 89,
+        },
+      ],
+      artifactRefs: [],
+      latestTransition: {
+        kind: 'waiting_approval',
+        summary: 'The run is paused for approval before the publish step.',
+        at: 89,
+        runId: 'runtime-run-redesign-approval-gate',
+      },
+    }
+
+    const approvalDetail: TaskDetail = {
+      id: 'task-redesign-approval-gate',
+      projectId: 'proj-redesign',
+      title: 'Approval Gate Review',
+      goal: 'Pause before publishing the release brief update and wait for operator approval.',
+      brief: 'Only publish the refreshed release brief after operator approval is recorded for the final wording.',
+      defaultActorRef: 'agent-architect',
+      status: 'attention',
+      scheduleSpec: null,
+      nextRunAt: null,
+      lastRunAt: 89,
+      latestResultSummary: 'Waiting for approval before publishing the release brief update.',
+      latestFailureCategory: null,
+      latestTransition: {
+        kind: 'waiting_approval',
+        summary: 'The active run is paused until approval is recorded for the publish step.',
+        at: 89,
+        runId: 'task-run-redesign-approval-gate',
+      },
+      viewStatus: 'attention',
+      attentionReasons: ['needs_approval'],
+      attentionUpdatedAt: 89,
+      activeTaskRunId: 'task-run-redesign-approval-gate',
+      analyticsSummary: {
+        runCount: 2,
+        manualRunCount: 2,
+        scheduledRunCount: 0,
+        completionCount: 1,
+        failureCount: 0,
+        takeoverCount: 0,
+        approvalRequiredCount: 1,
+        averageRunDurationMs: 300000,
+        lastSuccessfulRunAt: 82,
+      },
+      contextBundle: {
+        refs: [
+          {
+            kind: 'deliverable',
+            refId: 'artifact-run-conv-redesign',
+            title: 'Runtime Delivery Summary',
+            subtitle: 'Latest release brief draft',
+            versionRef: 'v3',
+            pinMode: 'snapshot',
+          },
+        ],
+        pinnedInstructions: 'Hold the publish step until an operator approves the final release wording.',
+        resolutionMode: 'explicit_plus_project_defaults',
+        lastResolvedAt: 89,
+      },
+      latestDeliverableRefs: [
+        {
+          artifactId: 'artifact-run-conv-approval',
+          title: 'Approval Command Output',
+          version: 1,
+          previewKind: 'text',
+          contentType: 'text/plain',
+          updatedAt: 89,
+        },
+      ],
+      latestArtifactRefs: [],
+      runHistory: [approvalRun],
+      interventionHistory: [],
+      activeRun: approvalRun,
+      createdBy: 'user-owner',
+      updatedBy: 'user-operator',
+      createdAt: 84,
+      updatedAt: 89,
+    }
+
+    const approvalKey = 'proj-redesign:task-redesign-approval-gate'
+    state.taskDetailsByKey.set(approvalKey, clone(approvalDetail))
+    state.taskRunsByKey.set(approvalKey, clone(approvalDetail.runHistory))
+    state.taskInterventionsByKey.set(approvalKey, [])
   }
 
   return state
