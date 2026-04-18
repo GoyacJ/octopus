@@ -23,7 +23,12 @@ impl ProviderClient {
         anthropic_auth: Option<AuthSource>,
     ) -> Result<Self, ApiError> {
         let resolved_model = providers::resolve_model_alias(model);
-        match providers::detect_provider_kind(&resolved_model) {
+        let metadata = providers::metadata_for_model(&resolved_model).ok_or_else(|| {
+            ApiError::UnsupportedModel {
+                model: resolved_model.clone(),
+            }
+        })?;
+        match metadata.provider {
             ProviderKind::Anthropic => Ok(Self::Anthropic(match anthropic_auth {
                 Some(auth) => AnthropicClient::from_auth(auth),
                 None => AnthropicClient::from_env()?,
@@ -32,10 +37,8 @@ impl ProviderClient {
                 OpenAiCompatConfig::xai(),
             )?)),
             ProviderKind::OpenAi => {
-                let config = match providers::metadata_for_model(&resolved_model) {
-                    Some(meta) if meta.auth_env == "DASHSCOPE_API_KEY" => {
-                        OpenAiCompatConfig::dashscope()
-                    }
+                let config = match metadata.auth_env {
+                    "DASHSCOPE_API_KEY" => OpenAiCompatConfig::dashscope(),
                     _ => OpenAiCompatConfig::openai(),
                 };
                 Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
@@ -141,7 +144,7 @@ pub fn read_xai_base_url() -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::providers::{detect_provider_kind, resolve_model_alias, ProviderKind};
+    use crate::providers::{metadata_for_model, resolve_model_alias, ProviderKind};
 
     #[test]
     fn resolves_existing_and_grok_aliases() {
@@ -153,10 +156,13 @@ mod tests {
 
     #[test]
     fn provider_detection_prefers_model_family() {
-        assert_eq!(detect_provider_kind("grok-3"), ProviderKind::Xai);
         assert_eq!(
-            detect_provider_kind("claude-sonnet-4-5"),
-            ProviderKind::Anthropic
+            metadata_for_model("grok-3").map(|metadata| metadata.provider),
+            Some(ProviderKind::Xai)
+        );
+        assert_eq!(
+            metadata_for_model("claude-sonnet-4-5").map(|metadata| metadata.provider),
+            Some(ProviderKind::Anthropic)
         );
     }
 }

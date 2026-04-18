@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next'
 
-import { UiButton, UiPageHeader, UiPageShell } from '@octopus/ui'
+import {
+  UiButton,
+  UiInput,
+  UiListDetailWorkspace,
+  UiPageHeader,
+  UiPageShell,
+  UiSelect,
+  UiToolbarRow,
+} from '@octopus/ui'
 
 import CreateModelDialog from './CreateModelDialog.vue'
-import ModelDetailsDialog from './ModelDetailsDialog.vue'
-import ModelsTablePanel from './ModelsTablePanel.vue'
+import ModelDetailsPanel from './ModelDetailsPanel.vue'
+import ModelsListPane from './ModelsListPane.vue'
 import { useModelsDraft } from './useModelsDraft'
 
 const props = withDefaults(defineProps<{
@@ -22,7 +30,6 @@ const {
   surfaceFilter,
   capabilityFilter,
   page,
-  detailDialogOpen,
   createDialogOpen,
   createName,
   createProviderType,
@@ -37,15 +44,19 @@ const {
   pagedRows,
   filteredRows,
   pageCount,
+  selectedConfiguredModelId,
   selectedRow,
   selectedConfiguredModel,
   selectedModel,
   selectedProvider,
   selectedApiKey,
+  selectedCredentialSourceLabel,
+  selectedCredentialSourceDescription,
   selectedCredentialStatusLabel,
   selectedCredentialStatusDescription,
   selectedCredentialStatusTone,
   selectedCredentialBlocked,
+  selectedCanClearCredentialOverride,
   selectedIsCustomManaged,
   selectedProbeResult,
   validationErrors,
@@ -54,12 +65,12 @@ const {
   createUsesFreeformModel,
   createRequiresCustomProviderName,
   createUpstreamModelOptions,
-  columns,
   updateSelectedConfiguredModel,
   updateSelectedApiKey,
   updateSelectedTokenQuota,
   updateSelectedBaseUrl,
   updateSelectedCustomProviderLabel,
+  clearSelectedCredentialOverride,
   deleteSelectedConfiguredModel,
   openCreateDialog,
   createConfiguredModel,
@@ -82,72 +93,103 @@ const {
       :eyebrow="t('models.header.eyebrow')"
       :title="t('models.header.title')"
       :description="t('models.header.subtitle')"
+    />
+
+    <UiListDetailWorkspace
+      :has-selection="true"
+      :detail-title="selectedConfiguredModel?.name ?? ''"
+      :detail-subtitle="selectedProvider && selectedModel ? `${selectedProvider.label} · ${selectedModel.label}` : ''"
+      list-class="p-3"
+      detail-class="p-3"
     >
-      <template #actions>
-        <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
-          <Plus :size="14" />
-          {{ t('models.actions.create') }}
-        </UiButton>
+      <template #toolbar>
+        <UiToolbarRow test-id="workspace-models-toolbar" layout="inline">
+          <template #search>
+            <UiInput
+              v-model="searchQuery"
+              data-testid="models-search-input"
+              :placeholder="t('models.filters.searchPlaceholder')"
+            />
+          </template>
+
+          <template #filters>
+            <UiSelect
+              v-model="providerFilter"
+              data-testid="models-provider-filter"
+              class="min-w-[150px]"
+              :options="[{ value: '', label: t('models.filters.allProviders') }, ...localFilterOptions.providers]"
+            />
+            <UiSelect
+              v-model="surfaceFilter"
+              data-testid="models-surface-filter"
+              class="min-w-[150px]"
+              :options="[{ value: '', label: t('models.filters.allSurfaces') }, ...localFilterOptions.surfaces]"
+            />
+            <UiSelect
+              v-model="capabilityFilter"
+              data-testid="models-capability-filter"
+              class="min-w-[150px]"
+              :options="[{ value: '', label: t('models.filters.allCapabilities') }, ...localFilterOptions.capabilities]"
+            />
+          </template>
+
+          <template #actions>
+            <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
+              <Plus :size="14" />
+              {{ t('models.actions.create') }}
+            </UiButton>
+          </template>
+        </UiToolbarRow>
       </template>
-    </UiPageHeader>
 
-    <div v-else class="flex justify-end">
-      <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
-        <Plus :size="14" />
-        {{ t('models.actions.create') }}
-      </UiButton>
-    </div>
+      <template #list>
+        <ModelsListPane
+          :paged-rows="pagedRows"
+          :selected-configured-model-id="selectedConfiguredModelId"
+          :filtered-rows-length="filteredRows.length"
+          :page="page"
+          :page-count="pageCount"
+          :t="t"
+          @update:page="page = $event"
+          @select-row="selectRow"
+        />
+      </template>
 
-    <ModelsTablePanel
-      :paged-rows="pagedRows"
-      :columns="columns"
-      :search-query="searchQuery"
-      :provider-filter="providerFilter"
-      :surface-filter="surfaceFilter"
-      :capability-filter="capabilityFilter"
-      :local-filter-options="localFilterOptions"
-      :filtered-rows-length="filteredRows.length"
-      :page="page"
-      :page-count="pageCount"
-      :t="t"
-      @update:search-query="searchQuery = $event"
-      @update:provider-filter="providerFilter = $event"
-      @update:surface-filter="surfaceFilter = $event"
-      @update:capability-filter="capabilityFilter = $event"
-      @update:page="page = $event"
-      @select-row="selectRow"
-    />
-
-    <ModelDetailsDialog
-      :open="detailDialogOpen"
-      :selected-row="selectedRow"
-      :selected-configured-model="selectedConfiguredModel"
-      :selected-model="selectedModel"
-      :selected-provider="selectedProvider"
-      :selected-api-key="selectedApiKey"
-      :selected-credential-status-label="selectedCredentialStatusLabel"
-      :selected-credential-status-description="selectedCredentialStatusDescription"
-      :selected-credential-status-tone="selectedCredentialStatusTone"
-      :selected-credential-blocked="selectedCredentialBlocked"
-      :selected-is-custom-managed="selectedIsCustomManaged"
-      :selected-probe-result="selectedProbeResult"
-      :runtime-config-validating="runtime.configValidating"
-      :runtime-configured-model-probing="runtime.configuredModelProbing"
-      :runtime-config-saving="runtime.configSaving"
-      :validation-errors="validationErrors"
-      :validation-warnings="validationWarnings"
-      :t="t"
-      @update:open="detailDialogOpen = $event"
-      @update:name="updateSelectedConfiguredModel({ name: $event })"
-      @update:custom-provider-label="updateSelectedCustomProviderLabel"
-      @update:api-key="updateSelectedApiKey"
-      @update:base-url="updateSelectedBaseUrl"
-      @update:total-tokens="updateSelectedTokenQuota"
-      @update:enabled="updateSelectedConfiguredModel({ enabled: $event })"
-      @validate="validateSelectedConfiguredModel"
-      @save="saveWorkspacePatch"
-      @delete="deleteSelectedConfiguredModel"
-    />
+      <template #detail>
+        <ModelDetailsPanel
+          :selected-row="selectedRow"
+          :selected-configured-model="selectedConfiguredModel"
+          :selected-model="selectedModel"
+          :selected-provider="selectedProvider"
+          :selected-api-key="selectedApiKey"
+          :selected-credential-source-label="selectedCredentialSourceLabel"
+          :selected-credential-source-description="selectedCredentialSourceDescription"
+          :selected-credential-status-label="selectedCredentialStatusLabel"
+          :selected-credential-status-description="selectedCredentialStatusDescription"
+          :selected-credential-status-tone="selectedCredentialStatusTone"
+          :selected-credential-blocked="selectedCredentialBlocked"
+          :selected-can-clear-credential-override="selectedCanClearCredentialOverride"
+          :selected-is-custom-managed="selectedIsCustomManaged"
+          :selected-probe-result="selectedProbeResult"
+          :runtime-config-validating="runtime.configValidating"
+          :runtime-configured-model-probing="runtime.configuredModelProbing"
+          :runtime-config-saving="runtime.configSaving"
+          :validation-errors="validationErrors"
+          :validation-warnings="validationWarnings"
+          :t="t"
+          @update:name="updateSelectedConfiguredModel({ name: $event })"
+          @update:custom-provider-label="updateSelectedCustomProviderLabel"
+          @update:api-key="updateSelectedApiKey"
+          @update:base-url="updateSelectedBaseUrl"
+          @update:total-tokens="updateSelectedTokenQuota"
+          @update:enabled="updateSelectedConfiguredModel({ enabled: $event })"
+          @clear-credential-override="clearSelectedCredentialOverride"
+          @validate="validateSelectedConfiguredModel"
+          @save="saveWorkspacePatch"
+          @delete="deleteSelectedConfiguredModel"
+        />
+      </template>
+    </UiListDetailWorkspace>
 
     <CreateModelDialog
       :open="createDialogOpen"

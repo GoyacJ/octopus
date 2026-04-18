@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use octopus_core::{
     CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestAuth, ResolvedRequestAuthMode,
@@ -305,7 +308,7 @@ fn target(provider_id: &str, protocol_family: &str) -> ResolvedExecutionTarget {
 fn request_policy(base_url: String, auth: ResolvedRequestAuth) -> ResolvedRequestPolicy {
     ResolvedRequestPolicy {
         base_url,
-        headers: Default::default(),
+        headers: BTreeMap::default(),
         auth,
         timeout_ms: None,
     }

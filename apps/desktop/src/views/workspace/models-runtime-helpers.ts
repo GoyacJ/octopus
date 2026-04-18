@@ -50,6 +50,15 @@ function toRuntimeExecutionSupport(value: unknown): RuntimeExecutionSupport {
   }
 }
 
+export function hasRuntimeExecutionSupport(runtimeSupport?: Partial<RuntimeExecutionSupport> | null) {
+  return Boolean(
+    runtimeSupport?.prompt
+    || runtimeSupport?.conversation
+    || runtimeSupport?.toolLoop
+    || runtimeSupport?.streaming,
+  )
+}
+
 export function toConfiguredModelMap(value: unknown): Record<string, ConfiguredModelRecord> {
   const record = toRecord(value)
   const next: Record<string, ConfiguredModelRecord> = {}

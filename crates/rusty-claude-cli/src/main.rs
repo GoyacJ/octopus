@@ -685,7 +685,7 @@ fn levenshtein_distance(left: &str, right: &str) -> usize {
 }
 
 fn resolve_model_alias(model: &str) -> std::borrow::Cow<'_, str> {
-    octopus_model_policy::CanonicalModelPolicy::default().canonical_model(model)
+    octopus_model_policy::CanonicalModelPolicy.canonical_model(model)
 }
 
 fn normalize_allowed_tools(values: &[String]) -> Result<Option<AllowedToolSet>, String> {

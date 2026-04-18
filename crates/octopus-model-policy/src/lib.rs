@@ -134,7 +134,7 @@ impl CanonicalModelPolicy {
     }
 
     #[must_use]
-    pub fn canonical_model<'a>(self, model: &'a str) -> Cow<'a, str> {
+    pub fn canonical_model(self, model: &str) -> Cow<'_, str> {
         match self.resolve_alias(model) {
             Some(canonical) => Cow::Borrowed(canonical),
             None => Cow::Borrowed(model.trim()),

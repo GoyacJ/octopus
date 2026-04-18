@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use octopus_core::{
@@ -119,7 +119,7 @@ fn target(protocol_family: &str) -> ResolvedExecutionTarget {
 fn request_policy() -> ResolvedRequestPolicy {
     ResolvedRequestPolicy {
         base_url: "https://example.test".into(),
-        headers: Default::default(),
+        headers: BTreeMap::default(),
         auth: ResolvedRequestAuth {
             mode: ResolvedRequestAuthMode::BearerToken,
             name: None,

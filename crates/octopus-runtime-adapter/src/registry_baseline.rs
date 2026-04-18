@@ -907,7 +907,7 @@ pub(super) fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
 }
 
 pub(super) fn baseline_default_selections() -> BTreeMap<String, DefaultSelection> {
-    crate::model_runtime::CanonicalModelPolicy::default()
+    crate::model_runtime::CanonicalModelPolicy
         .default_selections()
         .iter()
         .map(|selection| {

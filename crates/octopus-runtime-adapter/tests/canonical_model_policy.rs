@@ -15,7 +15,7 @@ fn test_root() -> std::path::PathBuf {
 
 #[tokio::test]
 async fn canonical_policy_and_registry_defaults_match() {
-    let policy = CanonicalModelPolicy::default();
+    let policy = CanonicalModelPolicy;
     assert_eq!(policy.default_conversation_model(), "claude-sonnet-4-5");
     assert_eq!(policy.resolve_alias("sonnet"), Some("claude-sonnet-4-5"));
     assert_eq!(

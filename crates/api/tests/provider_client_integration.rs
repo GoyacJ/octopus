@@ -67,6 +67,23 @@ fn provider_client_routes_qwen_models_through_dashscope_config() {
     assert_eq!(client.provider_kind(), ProviderKind::OpenAi);
 }
 
+#[test]
+fn provider_client_does_not_fallback_unknown_models_to_env_backends() {
+    let _lock = env_lock();
+    let _anthropic_api_key = EnvVarGuard::set("ANTHROPIC_API_KEY", None);
+    let _anthropic_auth_token = EnvVarGuard::set("ANTHROPIC_AUTH_TOKEN", None);
+    let _openai_api_key = EnvVarGuard::set("OPENAI_API_KEY", Some("openai-test-key"));
+    let _xai_api_key = EnvVarGuard::set("XAI_API_KEY", Some("xai-test-key"));
+
+    let error = ProviderClient::from_model("custom-model")
+        .expect_err("unknown models must fail closed instead of routing via env fallback");
+
+    assert!(
+        error.to_string().contains("unsupported model"),
+        "expected unsupported model error, got {error}"
+    );
+}
+
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))

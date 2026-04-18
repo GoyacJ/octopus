@@ -24,6 +24,7 @@ import {
   createWorkspaceRequestToken,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
+import { resolveProjectPreferredActorValue } from './project_setup'
 
 const DEFAULT_PET_PERMISSION_MODE = 'read-only'
 const DEFAULT_REMINDER_TTL_MINUTES = 180
@@ -255,18 +256,21 @@ export const usePetStore = defineStore('pet', () => {
   })
   const preferredActor = computed(() => {
     const projectSettings = workspaceStore.getProjectSettings()
-    const preferredTeamId = projectSettings.agents?.enabledTeamIds?.[0] ?? ''
-    if (preferredTeamId) {
-      return {
-        kind: 'team' as const,
-        id: preferredTeamId,
-      }
+    const preferredActorValue = resolveProjectPreferredActorValue({
+      project: workspaceStore.projects.find(project => project.id === activeProjectId.value) ?? null,
+      projectSettings,
+      grantedAgents: agentStore.effectiveProjectAgents,
+      grantedTeams: teamStore.effectiveProjectTeams,
+    })
+    if (!preferredActorValue) {
+      return null
     }
-    const preferredAgentId = projectSettings.agents?.enabledAgentIds?.[0] ?? ''
-    if (preferredAgentId) {
+
+    const [kind, id] = preferredActorValue.split(':')
+    if ((kind === 'agent' || kind === 'team') && id) {
       return {
-        kind: 'agent' as const,
-        id: preferredAgentId,
+        kind,
+        id,
       }
     }
     return null

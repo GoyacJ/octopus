@@ -2,9 +2,11 @@ use super::*;
 
 pub(crate) fn worker_actor_refs(team: &actor_manifest::CompiledTeamManifest) -> Vec<String> {
     let refs = if team.record.member_refs.is_empty() {
-        (!team.record.leader_ref.trim().is_empty())
-            .then(|| vec![team.record.leader_ref.clone()])
-            .unwrap_or_default()
+        if team.record.leader_ref.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![team.record.leader_ref.clone()]
+        }
     } else {
         team.record.member_refs.clone()
     };

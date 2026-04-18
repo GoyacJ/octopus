@@ -163,136 +163,42 @@ fn looks_like_unsupported_reference(reference: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::Arc};
-
-    use crate::{secret_store::MemoryRuntimeSecretStore, MockRuntimeModelDriver, RuntimeAdapter};
-    use octopus_core::{CapabilityDescriptor, ResolvedExecutionTarget, DEFAULT_WORKSPACE_ID};
-    use octopus_infra::build_infra_bundle;
-
     use super::{
-        resolve_model_auth_source, ResolvedModelAuthMode,
-        CREDENTIAL_SOURCE_CONFIGURED_MODEL_OVERRIDE, CREDENTIAL_SOURCE_PROVIDER_INHERITED,
+        parse_model_credential_reference, validate_runtime_credential_reference,
+        CredentialReference,
     };
 
-    fn test_root() -> std::path::PathBuf {
-        std::env::set_var("ANTHROPIC_API_KEY", "sk-ant-env");
-        let root = std::env::temp_dir().join(format!(
-            "octopus-runtime-adapter-model-auth-resolution-{}",
-            uuid::Uuid::new_v4()
+    #[test]
+    fn classifies_supported_credential_reference_kinds() {
+        assert!(matches!(
+            parse_model_credential_reference(Some("env:ANTHROPIC_API_KEY")),
+            Ok(Some(CredentialReference::Env("ANTHROPIC_API_KEY")))
         ));
-        fs::create_dir_all(&root).expect("test root");
-        root
-    }
-
-    fn target(reference: Option<&str>, credential_source: &str) -> ResolvedExecutionTarget {
-        ResolvedExecutionTarget {
-            configured_model_id: "configured-model".into(),
-            configured_model_name: "Configured Model".into(),
-            provider_id: "anthropic".into(),
-            registry_model_id: "claude-sonnet-4-5".into(),
-            model_id: "claude-sonnet-4-5".into(),
-            surface: "conversation".into(),
-            protocol_family: "anthropic_messages".into(),
-            credential_ref: reference.map(ToOwned::to_owned),
-            credential_source: credential_source.into(),
-            request_policy: octopus_core::ResolvedRequestPolicyInput {
-                auth_strategy: "x_api_key".into(),
-                base_url_policy: "allow_override".into(),
-                default_base_url: "https://api.anthropic.com".into(),
-                provider_base_url: None,
-                configured_base_url: None,
-            },
-            base_url: Some("https://api.anthropic.com".into()),
-            max_output_tokens: Some(4096),
-            capabilities: vec![CapabilityDescriptor {
-                capability_id: "reasoning".into(),
-                label: "reasoning".into(),
-            }],
-        }
-    }
-
-    #[tokio::test]
-    async fn resolves_secret_ref_and_env_ref_into_runtime_auth() {
-        let root = test_root();
-        let infra = build_infra_bundle(&root).expect("infra bundle");
-        let adapter = RuntimeAdapter::new_with_executor_and_secret_store(
-            DEFAULT_WORKSPACE_ID,
-            infra.paths.clone(),
-            infra.observation.clone(),
-            infra.authorization.clone(),
-            Arc::new(MockRuntimeModelDriver),
-            Arc::new(MemoryRuntimeSecretStore::default()),
-        );
-
-        let stored_reference = adapter.configured_model_secret_reference("configured-model");
-        adapter
-            .state
-            .secret_store
-            .put_secret(&stored_reference, "sk-ant-secret")
-            .expect("store managed secret");
-
-        let managed_auth = adapter
-            .resolve_model_auth(&target(
-                Some(&stored_reference),
-                CREDENTIAL_SOURCE_CONFIGURED_MODEL_OVERRIDE,
-            ))
-            .expect("resolve managed secret auth");
-        assert_eq!(managed_auth.mode, ResolvedModelAuthMode::BearerToken);
-        assert_eq!(managed_auth.credential, "sk-ant-secret");
-        assert_eq!(
-            managed_auth.source,
-            CREDENTIAL_SOURCE_CONFIGURED_MODEL_OVERRIDE
-        );
-
-        let inherited_auth = adapter
-            .resolve_model_auth(&target(
-                Some("env:ANTHROPIC_API_KEY"),
-                CREDENTIAL_SOURCE_PROVIDER_INHERITED,
-            ))
-            .expect("resolve inherited env auth");
-        assert_eq!(inherited_auth.mode, ResolvedModelAuthMode::BearerToken);
-        assert_eq!(inherited_auth.credential, "sk-ant-env");
-        assert_eq!(inherited_auth.source, CREDENTIAL_SOURCE_PROVIDER_INHERITED);
-
-        fs::remove_dir_all(root).expect("cleanup temp dir");
-    }
-
-    #[tokio::test]
-    async fn rejects_unsupported_reference_schemes_fail_closed() {
-        let root = test_root();
-        let infra = build_infra_bundle(&root).expect("infra bundle");
-        let adapter = RuntimeAdapter::new_with_executor_and_secret_store(
-            DEFAULT_WORKSPACE_ID,
-            infra.paths.clone(),
-            infra.observation.clone(),
-            infra.authorization.clone(),
-            Arc::new(MockRuntimeModelDriver),
-            Arc::new(MemoryRuntimeSecretStore::default()),
-        );
-
-        let error = adapter
-            .resolve_model_auth(&target(
-                Some("op://vault/item"),
-                CREDENTIAL_SOURCE_PROVIDER_INHERITED,
-            ))
-            .expect_err("unsupported references must fail closed");
-
-        assert!(error
-            .to_string()
-            .contains("unsupported credential reference"));
-
-        fs::remove_dir_all(root).expect("cleanup temp dir");
+        assert!(matches!(
+            parse_model_credential_reference(Some("secret-ref:workspace:test")),
+            Ok(Some(CredentialReference::ManagedSecret(
+                "secret-ref:workspace:test"
+            )))
+        ));
+        assert!(matches!(
+            parse_model_credential_reference(Some("sk-inline")),
+            Ok(Some(CredentialReference::Inline("sk-inline")))
+        ));
     }
 
     #[test]
-    fn reports_provider_inherited_auth_source_explicitly() {
-        let auth_source = resolve_model_auth_source(&target(
-            Some("env:ANTHROPIC_API_KEY"),
-            CREDENTIAL_SOURCE_PROVIDER_INHERITED,
-        ))
-        .expect("resolve auth source");
+    fn rejects_inline_values_when_runtime_config_requires_references() {
+        assert_eq!(
+            validate_runtime_credential_reference("env:ANTHROPIC_API_KEY", "credentialRef")
+                .expect("env reference should be preserved")
+                .as_deref(),
+            Some("env:ANTHROPIC_API_KEY")
+        );
 
-        assert_eq!(auth_source.source, CREDENTIAL_SOURCE_PROVIDER_INHERITED);
-        assert_eq!(auth_source.reference_kind, "env");
+        let error = validate_runtime_credential_reference("sk-inline", "credentialRef")
+            .expect_err("inline values must be rejected");
+        assert!(error
+            .to_string()
+            .contains("inline credentials are not allowed"));
     }
 }

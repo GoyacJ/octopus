@@ -16,6 +16,7 @@ import {
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
 import { useWorkspaceStore } from './workspace'
+import { resolveProjectGrantedTeams } from './project_setup'
 
 function withIntegrationSource(
   record: TeamRecord,
@@ -79,12 +80,11 @@ export const useTeamStore = defineStore('team', () => {
     builtinTemplateTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
   )
   const effectiveProjectTeams = computed(() => {
-    const merged = [
-      ...projectOwnedTeams.value,
-      ...assignedWorkspaceTeams.value,
-      ...assignedBuiltinTeams.value,
-    ]
-    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+    return resolveProjectGrantedTeams(
+      currentProject.value,
+      workspaceTeams.value,
+      projectOwnedTeams.value,
+    )
   })
   const projectTeams = computed(() => effectiveProjectTeams.value)
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
@@ -275,8 +275,6 @@ export const useTeamStore = defineStore('team', () => {
     builtinTemplateTeams,
     projectOwnedTeams,
     integratedProjectTeams,
-    assignedWorkspaceTeams,
-    assignedBuiltinTeams,
     effectiveProjectTeams,
     projectTeams,
     currentProjectLinks,

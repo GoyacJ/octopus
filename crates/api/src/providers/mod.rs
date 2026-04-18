@@ -56,9 +56,7 @@ pub struct ModelTokenLimit {
 
 #[must_use]
 pub fn resolve_model_alias(model: &str) -> String {
-    CanonicalModelPolicy::default()
-        .canonical_model(model)
-        .into_owned()
+    CanonicalModelPolicy.canonical_model(model).into_owned()
 }
 
 #[must_use]
@@ -100,23 +98,6 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
 }
 
 #[must_use]
-pub fn detect_provider_kind(model: &str) -> ProviderKind {
-    if let Some(metadata) = metadata_for_model(model) {
-        return metadata.provider;
-    }
-    if anthropic::has_auth_from_env_or_saved().unwrap_or(false) {
-        return ProviderKind::Anthropic;
-    }
-    if openai_compat::has_api_key("OPENAI_API_KEY") {
-        return ProviderKind::OpenAi;
-    }
-    if openai_compat::has_api_key("XAI_API_KEY") {
-        return ProviderKind::Xai;
-    }
-    ProviderKind::Anthropic
-}
-
-#[must_use]
 pub fn max_tokens_for_model(model: &str) -> u32 {
     model_token_limit(model).map_or_else(
         || {
@@ -139,10 +120,12 @@ pub fn model_token_limit(model: &str) -> Option<ModelTokenLimit> {
             max_output_tokens: 32_000,
             context_window_tokens: 200_000,
         }),
-        "claude-sonnet-4-5" | "claude-haiku-4-5-20251213" => Some(ModelTokenLimit {
-            max_output_tokens: 64_000,
-            context_window_tokens: 200_000,
-        }),
+        "claude-sonnet-4-5" | "claude-sonnet-4-6" | "claude-haiku-4-5-20251213" => {
+            Some(ModelTokenLimit {
+                max_output_tokens: 64_000,
+                context_window_tokens: 200_000,
+            })
+        }
         "grok-3" | "grok-3-mini" => Some(ModelTokenLimit {
             max_output_tokens: 64_000,
             context_window_tokens: 131_072,
@@ -291,8 +274,8 @@ mod tests {
     };
 
     use super::{
-        anthropic_missing_credentials, anthropic_missing_credentials_hint, detect_provider_kind,
-        load_dotenv_file, max_tokens_for_model, model_token_limit, parse_dotenv,
+        anthropic_missing_credentials, anthropic_missing_credentials_hint, load_dotenv_file,
+        max_tokens_for_model, metadata_for_model, model_token_limit, parse_dotenv,
         preflight_message_request, resolve_model_alias, ProviderKind,
     };
 
@@ -337,28 +320,28 @@ mod tests {
 
     #[test]
     fn detects_provider_from_model_name_first() {
-        assert_eq!(detect_provider_kind("grok"), ProviderKind::Xai);
         assert_eq!(
-            detect_provider_kind("claude-sonnet-4-6"),
-            ProviderKind::Anthropic
+            metadata_for_model("grok").map(|metadata| metadata.provider),
+            Some(ProviderKind::Xai)
+        );
+        assert_eq!(
+            metadata_for_model("claude-sonnet-4-6").map(|metadata| metadata.provider),
+            Some(ProviderKind::Anthropic)
         );
     }
 
     #[test]
     fn openai_namespaced_model_routes_to_openai_not_anthropic() {
-        let kind = super::metadata_for_model("openai/gpt-4.1-mini")
-            .map(|m| m.provider)
-            .unwrap_or_else(|| detect_provider_kind("openai/gpt-4.1-mini"));
+        let kind =
+            super::metadata_for_model("openai/gpt-4.1-mini").map(|metadata| metadata.provider);
         assert_eq!(
             kind,
-            ProviderKind::OpenAi,
+            Some(ProviderKind::OpenAi),
             "openai/ prefix must route to OpenAi regardless of other auth env vars"
         );
 
-        let kind2 = super::metadata_for_model("gpt-4o")
-            .map(|m| m.provider)
-            .unwrap_or_else(|| detect_provider_kind("gpt-4o"));
-        assert_eq!(kind2, ProviderKind::OpenAi);
+        let kind2 = super::metadata_for_model("gpt-4o").map(|metadata| metadata.provider);
+        assert_eq!(kind2, Some(ProviderKind::OpenAi));
     }
 
     #[test]
@@ -378,12 +361,17 @@ mod tests {
         assert_eq!(meta2.provider, ProviderKind::OpenAi);
         assert_eq!(meta2.auth_env, "DASHSCOPE_API_KEY");
 
-        let kind = detect_provider_kind("qwen/qwen3-coder");
+        let kind = metadata_for_model("qwen/qwen3-coder").map(|metadata| metadata.provider);
         assert_eq!(
             kind,
-            ProviderKind::OpenAi,
+            Some(ProviderKind::OpenAi),
             "qwen/ prefix must win over auth-sniffer order"
         );
+    }
+
+    #[test]
+    fn unknown_model_has_no_provider_metadata() {
+        assert!(metadata_for_model("custom-model").is_none());
     }
 
     #[test]

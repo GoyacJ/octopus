@@ -1,4 +1,4 @@
-import { computed, h, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type {
@@ -10,7 +10,7 @@ import type {
   RuntimeConfigSource,
 } from '@octopus/schema'
 
-import { enumLabel, formatList } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import type { CatalogConfiguredModelRow, CatalogFilterOption } from '@/stores/catalog'
 import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
@@ -24,9 +24,9 @@ import {
   createCustomProviderId,
   CUSTOM_BASE_URL_PLACEHOLDER,
   CUSTOM_PROVIDER_MODE,
+  hasRuntimeExecutionSupport,
   isManagedByPage,
   isSpecialProviderType,
-  OLLAMA_PROVIDER_ID,
   PAGE_SIZE,
   PROVIDER_TYPE_METADATA_KEY,
   resolveProviderType,
@@ -37,23 +37,21 @@ import {
   toProviderRegistryMap,
   toRecord,
   updateProviderBaseUrl,
-  VLLM_PROVIDER_ID,
 } from './models-runtime-helpers'
 import {
   getConfiguredModelCredentialStatus,
   isModelCredentialBlocked,
   localizeModelCredentialDescription,
   localizeModelCredentialLabel,
+  localizeModelCredentialSourceDescription,
+  localizeModelCredentialSourceLabel,
   localizeModelRuntimeMessage,
   localizeModelRuntimeMessages,
   resolveModelCredentialSecurityState,
+  resolveModelCredentialSourceKind,
   resolveModelCredentialTone,
 } from './models-security'
 import { useWorkspaceModelNotifications } from './useWorkspaceModelNotifications'
-
-function genericTableFallback(value?: string | null) {
-  return value?.trim() || '—'
-}
 
 export function useModelsDraft() {
   const { t } = useI18n()
@@ -68,7 +66,6 @@ export function useModelsDraft() {
   const capabilityFilter = ref('')
   const page = ref(1)
   const selectedConfiguredModelId = ref('')
-  const detailDialogOpen = ref(false)
   const selectedApiKey = ref('')
 
   const createDialogOpen = ref(false)
@@ -142,18 +139,26 @@ export function useModelsDraft() {
           ?? catalogStore.getProviderById(configuredModel.providerId)
         const model = draftModelOverrides.value[configuredModel.modelId]
           ?? catalogStore.getModelById(configuredModel.modelId)
+        const providerCredential = catalogStore.getCredentialByProviderId(configuredModel.providerId)
         const totalTokens = configuredModel.tokenQuota?.totalTokens ?? liveConfiguredModel?.tokenQuota?.totalTokens
         const usedTokens = liveConfiguredModel?.tokenUsage.usedTokens ?? configuredModel.tokenUsage.usedTokens ?? 0
         const hasDiagnostics = catalogStore.diagnostics.warnings.some(item =>
           item.includes(configuredModel.configuredModelId) || item.includes(configuredModel.providerId) || item.includes(configuredModel.modelId))
           || catalogStore.diagnostics.errors.some(item =>
             item.includes(configuredModel.configuredModelId) || item.includes(configuredModel.providerId) || item.includes(configuredModel.modelId))
+        const credentialSourceKind = resolveModelCredentialSourceKind({
+          configuredCredentialRef: configuredModel.credentialRef,
+          providerCredential,
+        })
+        const effectiveCredentialRef = configuredModel.credentialRef ?? providerCredential?.credentialRef
         const credentialSecurityState = resolveModelCredentialSecurityState({
-          credentialRef: configuredModel.credentialRef,
-          secretStatus: getConfiguredModelCredentialStatus(
-            secretReferences.value,
-            configuredModel.configuredModelId,
-          ),
+          credentialRef: effectiveCredentialRef,
+          referenceStatus: configuredModel.credentialRef
+            ? getConfiguredModelCredentialStatus(
+                secretReferences.value,
+                configuredModel.configuredModelId,
+              )?.status
+            : providerCredential?.status,
         })
 
         return {
@@ -168,15 +173,19 @@ export function useModelsDraft() {
           track: model?.track ?? '',
           enabled: configuredModel.enabled,
           source: configuredModel.source,
-          surfaces: model?.surfaceBindings.filter(binding => binding.enabled).map(binding => binding.surface) ?? [],
+          surfaces: model?.surfaceBindings
+            .filter(binding => binding.enabled && hasRuntimeExecutionSupport(binding.runtimeSupport))
+            .map(binding => binding.surface)
+            ?? [],
           capabilities: model?.capabilities.map(capability => capability.capabilityId) ?? [],
           defaultSurfaces: [],
           contextWindow: model?.contextWindow,
           maxOutputTokens: model?.maxOutputTokens,
           credentialRef: configuredModel.credentialRef,
-          credentialStatus: (configuredModel.credentialRef ? 'configured' : 'unconfigured') as CatalogConfiguredModelRow['credentialStatus'],
-          credentialConfigured: Boolean(configuredModel.credentialRef),
-          credentialDisplayLabel: localizeModelCredentialLabel(t, credentialSecurityState),
+          credentialStatus: (providerCredential?.status ?? (effectiveCredentialRef ? 'configured' : 'unconfigured')) as CatalogConfiguredModelRow['credentialStatus'],
+          credentialConfigured: Boolean(effectiveCredentialRef),
+          credentialDisplayLabel: localizeModelCredentialSourceLabel(t, credentialSourceKind),
+          credentialHealthLabel: localizeModelCredentialLabel(t, credentialSecurityState),
           baseUrl: configuredModel.baseUrl,
           totalTokens,
           usedTokens,
@@ -286,19 +295,42 @@ export function useModelsDraft() {
       ? runtime.configuredModelProbeResult
       : null,
   )
+  const selectedProviderCredential = computed(() =>
+    selectedProvider.value
+      ? catalogStore.getCredentialByProviderId(selectedProvider.value.providerId) ?? null
+      : null,
+  )
   const selectedCredentialStatusEntry = computed(() =>
     getConfiguredModelCredentialStatus(
       secretReferences.value,
       selectedConfiguredModel.value?.configuredModelId,
     ),
   )
+  const selectedCredentialSourceKind = computed(() =>
+    resolveModelCredentialSourceKind({
+      configuredCredentialRef: selectedConfiguredModel.value?.credentialRef,
+      providerCredential: selectedProviderCredential.value,
+    }),
+  )
+  const selectedEffectiveCredentialRef = computed(() =>
+    selectedConfiguredModel.value?.credentialRef ?? selectedProviderCredential.value?.credentialRef ?? '')
   const selectedCredentialSecurityState = computed(() =>
     resolveModelCredentialSecurityState({
-      credentialRef: selectedConfiguredModel.value?.credentialRef,
-      secretStatus: selectedCredentialStatusEntry.value,
+      credentialRef: selectedEffectiveCredentialRef.value,
+      referenceStatus: selectedConfiguredModel.value?.credentialRef
+        ? selectedCredentialStatusEntry.value?.status
+        : selectedProviderCredential.value?.status,
       hasPendingApiKey: Boolean(selectedApiKey.value.trim()),
     }),
   )
+  const selectedCredentialSourceLabel = computed(() =>
+    localizeModelCredentialSourceLabel(t, selectedCredentialSourceKind.value))
+  const selectedCredentialSourceDescription = computed(() =>
+    localizeModelCredentialSourceDescription(
+      t,
+      selectedCredentialSourceKind.value,
+      selectedProvider.value ? { provider: selectedProvider.value.label } : undefined,
+    ))
   const selectedCredentialStatusLabel = computed(() =>
     localizeModelCredentialLabel(t, selectedCredentialSecurityState.value))
   const selectedCredentialStatusDescription = computed(() =>
@@ -307,6 +339,8 @@ export function useModelsDraft() {
     resolveModelCredentialTone(selectedCredentialSecurityState.value))
   const selectedCredentialBlocked = computed(() =>
     isModelCredentialBlocked(selectedCredentialSecurityState.value))
+  const selectedCanClearCredentialOverride = computed(() =>
+    Boolean(selectedConfiguredModel.value?.credentialRef))
 
   const patchDocument = computed<Record<string, JsonValue>>(() => {
     const patch: Record<string, JsonValue> = {}
@@ -506,7 +540,6 @@ export function useModelsDraft() {
       return
     }
 
-    detailDialogOpen.value = false
     await refreshWorkspaceModels()
     await notifications.notifyDeleteSuccess(removedModelName)
   }
@@ -632,7 +665,6 @@ export function useModelsDraft() {
 
     await refreshWorkspaceModels()
     createDialogOpen.value = false
-    detailDialogOpen.value = true
     createApiKey.value = ''
     createFormError.value = ''
     await notifications.notifyCreateSuccess(name)
@@ -729,68 +761,25 @@ export function useModelsDraft() {
     await notifications.notifySaveSuccess(selectedConfiguredModel.value.name)
   }
 
+  function clearSelectedCredentialOverride() {
+    if (!selectedConfiguredModel.value?.credentialRef) {
+      return
+    }
+
+    runtime.clearConfiguredModelProbeResult()
+    selectedApiKey.value = ''
+    updateSelectedConfiguredModel({
+      credentialRef: undefined,
+      configured: false,
+      status: 'unconfigured',
+    })
+  }
+
   function selectRow(row: CatalogConfiguredModelRow) {
     runtime.clearConfiguredModelProbeResult()
     selectedApiKey.value = ''
     selectedConfiguredModelId.value = row.configuredModelId
-    detailDialogOpen.value = true
   }
-
-  const columns = computed(() => [
-    {
-      id: 'name',
-      header: t('models.table.columns.name'),
-      accessorKey: 'name',
-      cell: ({ row }: { row: { original: CatalogConfiguredModelRow } }) => h('div', { class: 'space-y-1 min-w-[220px]' }, [
-        h('div', { class: 'font-semibold text-text-primary' }, row.original.name),
-        h('div', { class: 'text-xs text-text-secondary' }, `${row.original.modelLabel} · ${row.original.providerLabel}`),
-      ]),
-    },
-    {
-      id: 'provider',
-      header: t('models.table.columns.provider'),
-      accessorKey: 'providerLabel',
-    },
-    {
-      id: 'upstream',
-      header: t('models.table.columns.upstreamModel'),
-      accessorKey: 'modelLabel',
-    },
-    {
-      id: 'surfaces',
-      header: t('models.table.columns.surfaces'),
-      accessorFn: (row: CatalogConfiguredModelRow) => formatList(
-        row.surfaces.map(surface => enumLabel('modelSurface', surface)),
-      ) || '—',
-    },
-    {
-      id: 'usedTokens',
-      header: t('models.table.columns.usedTokens'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.usedTokens.toLocaleString(),
-    },
-    {
-      id: 'totalTokens',
-      header: t('models.table.columns.totalTokens'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.totalTokens?.toLocaleString() || t('models.quota.unlimited'),
-    },
-    {
-      id: 'quotaStatus',
-      header: t('models.table.columns.quotaStatus'),
-      accessorFn: (row: CatalogConfiguredModelRow) => row.totalTokens
-        ? (row.quotaExhausted ? t('models.quota.exhausted') : t('models.quota.available'))
-        : t('models.quota.unlimited'),
-    },
-    {
-      id: 'credentialRef',
-      header: t('models.table.columns.credentialRef'),
-      accessorFn: (row: CatalogConfiguredModelRow) => genericTableFallback(String(row.credentialDisplayLabel ?? '')),
-    },
-    {
-      id: 'baseUrl',
-      header: t('models.table.columns.baseUrl'),
-      accessorFn: (row: CatalogConfiguredModelRow) => genericTableFallback(row.baseUrl),
-    },
-  ])
 
   watch(
     () => shell.activeWorkspaceConnectionId,
@@ -849,12 +838,6 @@ export function useModelsDraft() {
     selectedApiKey.value = ''
   })
 
-  watch(detailDialogOpen, (open) => {
-    if (!open) {
-      selectedApiKey.value = ''
-    }
-  })
-
   return {
     t,
     catalogStore,
@@ -864,7 +847,7 @@ export function useModelsDraft() {
     surfaceFilter,
     capabilityFilter,
     page,
-    detailDialogOpen,
+    selectedConfiguredModelId,
     createDialogOpen,
     createName,
     createProviderType,
@@ -883,11 +866,16 @@ export function useModelsDraft() {
     selectedConfiguredModel,
     selectedModel,
     selectedProvider,
+    selectedProviderCredential,
     selectedApiKey,
+    selectedCredentialSourceKind,
+    selectedCredentialSourceLabel,
+    selectedCredentialSourceDescription,
     selectedCredentialStatusLabel,
     selectedCredentialStatusDescription,
     selectedCredentialStatusTone,
     selectedCredentialBlocked,
+    selectedCanClearCredentialOverride,
     selectedIsCustomManaged,
     selectedProbeResult,
     validationErrors,
@@ -897,12 +885,12 @@ export function useModelsDraft() {
     createUsesFreeformModel,
     createRequiresCustomProviderName,
     createUpstreamModelOptions,
-    columns,
     updateSelectedConfiguredModel,
     updateSelectedApiKey,
     updateSelectedTokenQuota,
     updateSelectedBaseUrl,
     updateSelectedCustomProviderLabel,
+    clearSelectedCredentialOverride,
     deleteSelectedConfiguredModel,
     openCreateDialog,
     createConfiguredModel,

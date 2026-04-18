@@ -68,7 +68,11 @@ async function waitForText(container: HTMLElement, value: string, timeoutMs = 20
 }
 
 function modelRows(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>('[data-testid^="models-table-row-"]'))
+  return Array.from(container.querySelectorAll<HTMLElement>('[data-testid^="models-list-row-"]'))
+}
+
+function detailPane(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[data-testid="workspace-models-detail-pane"]')
 }
 
 function configureWorkspaceClient(
@@ -136,6 +140,8 @@ describe('Models view', () => {
     const mounted = await mountView()
 
     await waitForText(mounted.container, '工作区模型中心')
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-models-list-pane"]') !== null, 2000, 'list pane')
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-models-detail-pane"]') !== null, 2000, 'detail pane')
     await waitFor(() => modelRows(mounted.container).length === 0, 2000, 'empty model rows')
 
     expect(mounted.container.textContent).toContain('还没有创建模型')
@@ -167,6 +173,8 @@ describe('Models view', () => {
     const mounted = await mountView()
 
     await waitForText(mounted.container, 'GPT-4o Workspace 1')
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-models-list-pane"]') !== null, 2000, 'list pane')
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-models-detail-pane"]') !== null, 2000, 'detail pane')
     await waitFor(() => modelRows(mounted.container).length === 10, 2000, 'first page configured model rows')
 
     expect(mounted.container.querySelector('[data-testid="models-pagination"]')?.textContent).toContain('1 / 2')
@@ -187,6 +195,60 @@ describe('Models view', () => {
     expect(nextPageButton).not.toBeNull()
     nextPageButton?.click()
     await waitForText(mounted.container, 'GPT-4o Workspace 11')
+
+    mounted.destroy()
+  })
+
+  it('renders the workspace models page as persistent list-detail state instead of modal-only editing', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'openai-primary': {
+          configuredModelId: 'openai-primary',
+          name: 'GPT-4o Primary',
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          credentialRef: 'env:OPENAI_API_KEY',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'GPT-4o Primary')
+    expect(mounted.container.querySelector('[data-testid="workspace-models-list-pane"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="workspace-models-detail-pane"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="models-detail-dialog"]')).toBeNull()
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
+    expect(mounted.container.textContent).toContain('鉴权')
+    expect(mounted.container.textContent).toContain('校验')
+
+    mounted.destroy()
+  })
+
+  it('shows provider-inherited credential state in the persistent detail pane', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'openai-primary': {
+          configuredModelId: 'openai-primary',
+          name: 'GPT-4o Primary',
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'GPT-4o Primary')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
+    expect(mounted.container.textContent).toContain('继承厂商凭据')
+    expect(mounted.container.textContent).toContain('环境变量引用')
+    expect(mounted.container.textContent).not.toContain('env:OPENAI_API_KEY')
 
     mounted.destroy()
   })
@@ -309,8 +371,7 @@ describe('Models view', () => {
 
     await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'auto save call')
     await waitForText(mounted.container, 'Local Gateway Model')
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-panel"]') !== null, 2000, 'detail panel')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
     expect(validateSpy.mock.calls.length).toBeGreaterThanOrEqual(1)
 
     const savedPatch = saveSpy.mock.calls[0]?.[0]
@@ -386,10 +447,10 @@ describe('Models view', () => {
 
     await waitForText(mounted.container, 'Claude Primary')
     modelRows(mounted.container)[0]?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
 
-    setInputValue(document.body, 'models-detail-base-url', 'https://anthropic.alt.example.test')
-    const validateButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-validate-button"]')
+    setInputValue(mounted.container, 'models-detail-base-url', 'https://anthropic.alt.example.test')
+    const validateButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-validate-button"]')
     expect(validateButton).not.toBeNull()
     validateButton?.click()
 
@@ -405,7 +466,7 @@ describe('Models view', () => {
         },
       },
     })
-    await waitFor(() => document.body.textContent?.includes('已完成真实请求校验') ?? false, 2000, 'probe success message')
+    await waitFor(() => mounted.container.textContent?.includes('已完成真实请求校验') ?? false, 2000, 'probe success message')
 
     mounted.destroy()
   })
@@ -433,9 +494,9 @@ describe('Models view', () => {
     expect(mounted.container.textContent).not.toContain('env:OPENAI_API_KEY')
 
     modelRows(mounted.container)[0]?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
-    expect(document.body.textContent).toContain('ApiKey')
-    expect(document.body.textContent).not.toContain('env:OPENAI_API_KEY')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
+    expect(mounted.container.textContent).toContain('ApiKey')
+    expect(mounted.container.textContent).not.toContain('env:OPENAI_API_KEY')
 
     const createButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-create-button"]')
     expect(createButton).not.toBeNull()
@@ -486,10 +547,10 @@ describe('Models view', () => {
 
     await waitForText(mounted.container, 'Claude Primary')
     modelRows(mounted.container)[0]?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
 
     const notificationStore = useNotificationStore()
-    const validateButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-validate-button"]')
+    const validateButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-validate-button"]')
     expect(validateButton).not.toBeNull()
     validateButton?.click()
 
@@ -535,10 +596,10 @@ describe('Models view', () => {
 
     await waitForText(mounted.container, 'Claude Primary')
     modelRows(mounted.container)[0]?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
 
-    setInputValue(document.body, 'models-detail-credential-ref', 'sk-ant-replacement-secret')
-    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-save-button"]')
+    setInputValue(mounted.container, 'models-detail-credential-ref', 'sk-ant-replacement-secret')
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-save-button"]')
     expect(saveButton).not.toBeNull()
     saveButton?.click()
 
@@ -648,9 +709,9 @@ describe('Models view', () => {
 
     await waitForText(mounted.container, 'Claude Primary')
     modelRows(mounted.container)[0]?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="models-detail-dialog"]') !== null, 2000, 'detail dialog')
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
 
-    const deleteButton = document.body.querySelector<HTMLButtonElement>('[data-testid="models-delete-button"]')
+    const deleteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-delete-button"]')
     expect(deleteButton).not.toBeNull()
     deleteButton?.click()
 

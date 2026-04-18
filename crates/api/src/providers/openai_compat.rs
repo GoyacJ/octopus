@@ -293,14 +293,6 @@ impl MessageStream {
 }
 
 #[must_use]
-pub fn has_api_key(key: &str) -> bool {
-    read_env_non_empty(key)
-        .ok()
-        .and_then(std::convert::identity)
-        .is_some()
-}
-
-#[must_use]
 pub fn read_base_url(config: OpenAiCompatConfig) -> String {
     read_base_url_from_env(config.base_url_env, config.default_base_url)
 }

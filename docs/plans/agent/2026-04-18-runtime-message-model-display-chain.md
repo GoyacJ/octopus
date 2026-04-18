@@ -7,7 +7,7 @@
 1. 消息从哪里进入系统。
 2. 消息如何穿过前端 store、adapter、HTTP handler、runtime adapter 和 model driver。
 3. 运行中间状态如何以事件、投影和持久化形式落地。
-4. 最终 UI 为什么能同时显示正文、thinking/process、tool calls、approval、artifact、workflow 和 mailbox 状态。
+4. 最终 UI 为什么能同时显示正文、thinking/process、tool calls、approval、artifact，以及页面级 workflow / mailbox / background / auth / memory 中介状态。
 
 本文聚焦主链路与运行时设计，不展开以下主题：
 
@@ -27,7 +27,9 @@ Octopus 的对话链路不是“前端直接请求模型然后把文本塞回页
 - 后端在 `RuntimeAdapter` 内构建 `RunContext`，做权限与鉴权中介，再进入 capability planning + model/tool loop
 - loop 结果不会只以“一个最终字符串”返回，而是被拆成 `run/message/trace/approval/workflow` 等 runtime event
 - event 被持久化到 SQLite + JSONL + runtime/data 文件，并通过 SSE 或 polling 回流到前端
-- 前端 store 再把 `RuntimeMessage` 投影成 UI `Message`，渲染正文、thinking、tool 状态、审批、artifact 与 orchestration badges
+- 前端 store 再把 `RuntimeMessage` 投影成 UI `Message`，渲染正文、thinking、tool 状态、审批与 artifact
+- 页面级的 orchestration badges 与 approval/auth/memory mediation callout 则由 `ConversationView.vue` 基于 `activeSession/activeRun` 继续组合
+- 模型显示字段同时落在 `RuntimeRunSnapshot` 与 `RuntimeMessage` 上；消息侧会先把 `configuredModelName ?? modelId` 归一成前端 `Message.modelId`
 
 这条链路的核心设计目标是：**同一份 runtime contract 同时服务 UI、恢复、审计、重放、审批、team/subrun orchestration 与 host parity**。
 
@@ -53,7 +55,7 @@ flowchart TD
     N --> O["SQLite projections + runtime/events JSONL + artifacts/runtime state"]
     N --> P["Broadcast/SSE/Polling"]
     P --> B
-    B --> Q["ConversationMessageBubble.vue<br/>正文/process/tool/approval/artifact"]
+    B --> Q["ConversationView.vue + ConversationMessageBubble.vue<br/>消息气泡 + orchestration badges + mediation callout"]
 ```
 
 ---
@@ -66,7 +68,7 @@ flowchart TD
   - 负责把当前 route 绑定到 `workspaceId/projectId/conversationId`
   - 负责通过 `ensureRuntimeSession()` 建立或加载 runtime session
   - 负责 `submitRuntimeTurn()`，即真正的“发送消息”动作
-  - 负责把 runtime store 的消息、审批、workflow、mailbox、background 状态组装进页面
+  - 负责把 runtime store 的消息、approval/auth/memory 中介、workflow、mailbox、background 状态组装进页面
 
 ### 2. 前端 runtime 聚合层
 
@@ -154,9 +156,18 @@ flowchart TD
   - `execute_runtime_turn_loop()`
   - team/subrun/workflow continuation
 
-- `crates/octopus-runtime-adapter/src/executor.rs`
-  - provider family 分发
-  - model response -> `AssistantEvent` 转换
+- `crates/octopus-runtime-adapter/src/execution_service.rs`
+  - `RuntimeExecutionService` trait 实现，连接 platform facade 与 runtime core
+
+- `crates/octopus-runtime-adapter/src/model_runtime/mod.rs`
+  - model runtime 模块出口与 re-export
+
+- `crates/octopus-runtime-adapter/src/model_runtime/driver.rs`
+  - `RuntimeModelDriver` / `ProtocolDriver` / `RuntimeConversationExecution`
+  - model response -> `AssistantEvent` 转换与能力边界校验
+
+- `crates/octopus-runtime-adapter/src/model_runtime/driver_registry.rs`
+  - `ModelDriverRegistry` 安装与选择 `anthropic_messages/openai_chat/openai_responses/gemini_native`
 
 - `crates/octopus-runtime-adapter/src/execution_events.rs`
   - turn 提交后的 runtime event 构造与发射
@@ -170,8 +181,10 @@ flowchart TD
 ### 6. team / workflow / mailbox 扩展
 
 - `crates/octopus-runtime-adapter/src/team_runtime.rs`
+- `crates/octopus-runtime-adapter/src/worker_runtime.rs`
 - `crates/octopus-runtime-adapter/src/workflow_runtime.rs`
 - `crates/octopus-runtime-adapter/src/mailbox_runtime.rs`
+- `crates/octopus-runtime-adapter/src/handoff_runtime.rs`
 - `crates/octopus-runtime-adapter/src/subrun_orchestrator.rs`
 - `crates/octopus-runtime-adapter/src/background_runtime.rs`
 
@@ -213,7 +226,7 @@ sequenceDiagram
     Bus-->>Store: SSE or polling events
     Store->>Store: applyRuntimeEvent()
     Store-->>UI: activeMessages / activeRun / badges
-    UI->>UI: ConversationMessageBubble render
+    UI->>UI: ConversationView / ConversationMessageBubble render
 ```
 
 ---
@@ -261,7 +274,7 @@ sequenceDiagram
 
 - `activeSession`：当前 session detail
 - `activeRun`：当前 run snapshot
-- `activeMessages`：把 `RuntimeMessage` 转成 UI `Message`
+- `activeMessages`：把 `RuntimeMessage` 转成 UI `Message`，并把 `configuredModelName ?? modelId` 归一到前端消息的 `modelId`
 - `pendingApproval`：优先取 `run.approvalTarget`，否则回退到 session pending approval
 - `pendingMediation` / `authTarget` / `pendingMemoryProposal`：统一暴露阻塞执行的中介状态
 - `isBusy`：不仅看 `run.status`，还看是否存在 optimistic assistant placeholder
@@ -361,6 +374,7 @@ trace 对 UI 的价值：
 `runtime_messages.ts` 的 `toConversationMessage()` 完成最终 UI 适配：
 
 - `RuntimeMessage.senderType=assistant` 被映射成 UI `senderType='agent'`
+- `Message.modelId` 不直接透传 `RuntimeMessage.modelId`，而是优先采用 `configuredModelName ?? modelId`
 - 透传：
   - `content`
   - `status`
@@ -372,11 +386,17 @@ trace 对 UI 的价值：
   - `attachments`
 - 对 `waiting_approval` 且匹配 pending approval 的 assistant message，额外挂上 `approval` 结构，供 message bubble 直接渲染审批卡片
 
-这也是为什么 message bubble 基本不需要理解后端 event taxonomy，它只需要消费已经投影好的 `Message`。
+这里要特别区分“消息字段归一”和“页面真正显示模型标签”：
+
+- message 级别：`toConversationMessage()` 会把 `configuredModelName ?? modelId` 写进 `Message.modelId`
+- run 级别：当前真正可见的模型 badge 主要在 `apps/desktop/src/views/project/TraceView.vue`，使用 `runtime.activeRun.configuredModelName ?? runtime.activeRun.modelId`
+- conversation bubble 当前并不会单独渲染 `message.modelId`
+
+这也是为什么 message bubble 基本不需要理解后端 event taxonomy，它只需要消费已经投影好的 `Message`；而模型标签展示则分成 message 归一和 run badge 两条 UI 路径。
 
 ---
 
-### 页面最终渲染：`ConversationMessageBubble.vue`
+### 页面最终渲染：`ConversationView.vue` + `ConversationMessageBubble.vue`
 
 `ConversationMessageBubble.vue` 对每条消息渲染以下层次：
 
@@ -389,17 +409,24 @@ trace 对 UI 的价值：
   - 来源：`message.toolCalls`
 - inline approval callout
   - 来源：`message.approval`
-- resources / attachments / artifacts
-  - 来源：`resourceIds / attachments / deliverableRefs`
+- resources / artifacts
+  - 来源：`resourceIds / deliverableRefs`
 - usage footer
   - 来源：`message.usage.totalTokens`
 
-页面顶层还会根据 `runtime.activeSession` 生成 orchestration badges：
+补充两点当前实现细节：
 
-- `session.workflow`
-- `session.subrunCount`
-- `session.pendingMailbox`
-- `session.backgroundRun`
+- `attachments` 确实会从 `ConversationView.vue` 透传给 bubble，并参与“是否显示资源区”的判断
+- 但 bubble 模板当前没有单独渲染 attachment chips，所以“附件字段已进入 UI message”与“气泡中已有独立附件展示”不是一回事
+
+真正的页面级运行态由 `ConversationView.vue` 继续补齐：
+
+- message list：`renderedMessages -> runtime.activeMessages`
+- queue list：`runtime.activeQueue`
+- orchestration badges：`runtime.activeSession.workflow / subrunCount / pendingMailbox / backgroundRun`
+- global mediation callout：`runtime.pendingMediation / pendingApproval / authTarget / pendingMemoryProposal`
+
+所以“正文 / process / tool / approval / artifacts”属于 bubble 责任，而“workflow / mailbox / background / auth / memory proposal”属于页面级状态拼装责任。
 
 这些字段不是页面计算的，而是 runtime adapter 直接投影出来的结果。
 
@@ -705,13 +732,20 @@ loop 会从 events 中提取：
 
 ---
 
-## 模型调用实现：`executor.rs`
+## 模型调用实现：`model_runtime/*`
 
-`executor.rs` 抽象了：
+当前模型执行层已经不再是单个 `executor.rs`，而是拆成 `model_runtime` 子模块：
 
-- `RuntimeModelDriver`
-- `LiveRuntimeModelDriver`
-- `MockRuntimeModelDriver`
+- `model_runtime/mod.rs`
+  - 对外 re-export model runtime 能力
+- `model_runtime/driver.rs`
+  - `RuntimeModelDriver`
+  - `LiveRuntimeModelDriver`
+  - `MockRuntimeModelDriver`
+  - `ProtocolDriver`
+  - `RuntimeConversationExecution`
+- `model_runtime/driver_registry.rs`
+  - `ModelDriverRegistry::installed()`
 
 当前 provider family 分支包括：
 
@@ -720,7 +754,7 @@ loop 会从 events 中提取：
 - `openai_responses`
 - `gemini_native`
 
-但要注意：
+真正的能力边界由各 driver 的 `ProtocolDriverCapability` 决定。当前要注意：
 
 - `anthropic_messages`
 - `openai_chat`
@@ -732,7 +766,7 @@ loop 会从 events 中提取：
 - `openai_responses`
 - `gemini_native`
 
-在 `request.tools` 非空的 conversation loop 下仍有限制；代码里会直接报“tool-enabled turns not supported yet”。
+在 `request.tools` 非空的 conversation loop 下仍有限制；`model_runtime/driver.rs` 会直接报“tool-enabled turns not supported yet”。
 
 这是一条非常重要的当前能力边界。
 
@@ -967,7 +1001,7 @@ SQLite + JSONL + 磁盘文件的组合，使 runtime 同时满足：
 
 ### 1. provider family 的工具循环支持不完全一致
 
-`executor.rs` 里已经明确：
+`model_runtime/driver.rs` 与 `model_runtime/drivers/*` 里已经明确：
 
 - `anthropic_messages`
 - `openai_chat`
@@ -1025,7 +1059,11 @@ SQLite + JSONL + 磁盘文件的组合，使 runtime 同时满足：
    - `toolCalls`
    - `approval`
    - `deliverableRefs`
-10. 若是 team 会话，再检查：
+10. `ConversationView.vue` 是否同时拿到了：
+   - `runtimeOrchestrationBadges`
+   - `activeMediationKind`
+   - `pendingMemoryProposal`
+11. 若是 team 会话，再检查：
     - `subrun_count`
     - `workflow`
     - `pending_mailbox`
@@ -1038,6 +1076,7 @@ SQLite + JSONL + 磁盘文件的组合，使 runtime 同时满足：
 ### 前端
 
 - `apps/desktop/src/views/project/ConversationView.vue`
+- `apps/desktop/src/views/project/TraceView.vue`
 - `apps/desktop/src/stores/runtime.ts`
 - `apps/desktop/src/stores/runtime_sessions.ts`
 - `apps/desktop/src/stores/runtime_actions.ts`
@@ -1059,7 +1098,10 @@ SQLite + JSONL + 磁盘文件的组合，使 runtime 同时满足：
 - `crates/octopus-runtime-adapter/src/execution_service.rs`
 - `crates/octopus-runtime-adapter/src/run_context.rs`
 - `crates/octopus-runtime-adapter/src/agent_runtime_core.rs`
-- `crates/octopus-runtime-adapter/src/executor.rs`
+- `crates/octopus-runtime-adapter/src/model_runtime/mod.rs`
+- `crates/octopus-runtime-adapter/src/model_runtime/driver.rs`
+- `crates/octopus-runtime-adapter/src/model_runtime/driver_registry.rs`
+- `crates/octopus-runtime-adapter/src/model_runtime/drivers/*`
 - `crates/octopus-runtime-adapter/src/execution_events.rs`
 - `crates/octopus-runtime-adapter/src/event_bus.rs`
 - `crates/octopus-runtime-adapter/src/persistence.rs`

@@ -3564,6 +3564,7 @@ mod tests {
                     status TEXT NOT NULL,
                     description TEXT NOT NULL,
                     resource_directory TEXT NOT NULL,
+                    leader_agent_id TEXT,
                     assignments_json TEXT,
                     owner_user_id TEXT,
                     member_user_ids_json TEXT,

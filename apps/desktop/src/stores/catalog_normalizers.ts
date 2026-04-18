@@ -69,6 +69,8 @@ export interface CatalogConfiguredModelRow extends Record<string, unknown> {
   credentialRef?: string
   credentialStatus: CredentialBinding['status'] | 'missing'
   credentialConfigured: boolean
+  credentialDisplayLabel?: string
+  credentialHealthLabel?: string
   baseUrl?: string
   totalTokens?: number
   usedTokens: number

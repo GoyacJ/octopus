@@ -255,7 +255,7 @@ impl EffectiveModelRegistry {
     }
 
     pub fn default_provider_config(&self) -> ProviderConfig {
-        let policy = CanonicalModelPolicy::default();
+        let policy = CanonicalModelPolicy;
         let fallback_selection = policy.default_conversation_selection();
         let fallback = ProviderConfig {
             provider_id: fallback_selection.provider_id.into(),

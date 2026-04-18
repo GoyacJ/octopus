@@ -20,6 +20,7 @@ import {
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
 import { useWorkspaceStore } from './workspace'
+import { resolveProjectGrantedAgents } from './project_setup'
 
 function withIntegrationSource(
   record: AgentRecord,
@@ -83,12 +84,11 @@ export const useAgentStore = defineStore('agent', () => {
     builtinTemplateAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
   )
   const effectiveProjectAgents = computed(() => {
-    const merged = [
-      ...projectOwnedAgents.value,
-      ...assignedWorkspaceAgents.value,
-      ...assignedBuiltinAgents.value,
-    ]
-    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+    return resolveProjectGrantedAgents(
+      currentProject.value,
+      workspaceAgents.value,
+      projectOwnedAgents.value,
+    )
   })
   const projectAgents = computed(() => effectiveProjectAgents.value)
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
@@ -299,8 +299,6 @@ export const useAgentStore = defineStore('agent', () => {
     builtinTemplateAgents,
     projectOwnedAgents,
     integratedProjectAgents,
-    assignedWorkspaceAgents,
-    assignedBuiltinAgents,
     effectiveProjectAgents,
     projectAgents,
     currentProjectLinks,

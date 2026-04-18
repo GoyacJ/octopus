@@ -24,6 +24,9 @@ pub enum ApiError {
         env_vars: &'static [&'static str],
         hint: Option<String>,
     },
+    UnsupportedModel {
+        model: String,
+    },
     ContextWindowExceeded {
         model: String,
         estimated_input_tokens: u32,
@@ -109,6 +112,7 @@ impl ApiError {
             Self::Api { retryable, .. } => *retryable,
             Self::RetriesExhausted { last_error, .. } => last_error.is_retryable(),
             Self::MissingCredentials { .. }
+            | Self::UnsupportedModel { .. }
             | Self::ContextWindowExceeded { .. }
             | Self::ExpiredOAuthToken
             | Self::Auth(_)
@@ -126,6 +130,7 @@ impl ApiError {
             Self::Api { request_id, .. } => request_id.as_deref(),
             Self::RetriesExhausted { last_error, .. } => last_error.request_id(),
             Self::MissingCredentials { .. }
+            | Self::UnsupportedModel { .. }
             | Self::ContextWindowExceeded { .. }
             | Self::ExpiredOAuthToken
             | Self::Auth(_)
@@ -149,6 +154,7 @@ impl ApiError {
             Self::MissingCredentials { .. } | Self::ExpiredOAuthToken | Self::Auth(_) => {
                 "provider_auth"
             }
+            Self::UnsupportedModel { .. } => "unsupported_model",
             Self::Api { status, .. } if matches!(status.as_u16(), 401 | 403) => "provider_auth",
             Self::ContextWindowExceeded { .. } => "context_window",
             Self::Api { .. } if self.is_context_window_failure() => "context_window",
@@ -173,6 +179,7 @@ impl ApiError {
             }
             Self::RetriesExhausted { last_error, .. } => last_error.is_generic_fatal_wrapper(),
             Self::MissingCredentials { .. }
+            | Self::UnsupportedModel { .. }
             | Self::ContextWindowExceeded { .. }
             | Self::ExpiredOAuthToken
             | Self::Auth(_)
@@ -203,6 +210,7 @@ impl ApiError {
             }
             Self::RetriesExhausted { last_error, .. } => last_error.is_context_window_failure(),
             Self::MissingCredentials { .. }
+            | Self::UnsupportedModel { .. }
             | Self::ExpiredOAuthToken
             | Self::Auth(_)
             | Self::InvalidApiKeyEnv(_)
@@ -233,6 +241,10 @@ impl Display for ApiError {
                 }
                 Ok(())
             }
+            Self::UnsupportedModel { model } => write!(
+                f,
+                "unsupported model `{model}`; provider routing requires a canonical model family or explicit provider-prefixed model id"
+            ),
             Self::ContextWindowExceeded {
                 model,
                 estimated_input_tokens,
