@@ -1,4 +1,4 @@
-import type { RuntimeSecretReferenceStatus } from '@octopus/schema'
+import type { CredentialBinding, RuntimeSecretReferenceStatus } from '@octopus/schema'
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
@@ -13,6 +13,11 @@ export type ModelCredentialSecurityState =
   | 'migration-failed'
   | 'inline-redacted'
   | 'reference-error'
+
+export type ModelCredentialSourceKind =
+  | 'configured-model-override'
+  | 'provider-inherited'
+  | 'missing'
 
 const SECRET_REFERENCE_PREFIXES = ['env:', 'secret-ref:', 'keychain:', 'op://', 'vault:']
 
@@ -29,25 +34,40 @@ export function getConfiguredModelCredentialStatus(
     ?? null
 }
 
+export function resolveModelCredentialSourceKind(input: {
+  configuredCredentialRef?: string | null
+  providerCredential?: CredentialBinding | null
+}): ModelCredentialSourceKind {
+  if (input.configuredCredentialRef?.trim()) {
+    return 'configured-model-override'
+  }
+
+  if (input.providerCredential?.configured) {
+    return 'provider-inherited'
+  }
+
+  return 'missing'
+}
+
 export function resolveModelCredentialSecurityState(input: {
   credentialRef?: string | null
-  secretStatus?: RuntimeSecretReferenceStatus | null
+  referenceStatus?: RuntimeSecretReferenceStatus['status'] | CredentialBinding['status'] | null
   hasPendingApiKey?: boolean
 }): ModelCredentialSecurityState {
   const credentialRef = input.credentialRef?.trim() ?? ''
-  const secretStatus = input.secretStatus?.status
+  const referenceStatus = input.referenceStatus ?? null
 
   if (input.hasPendingApiKey) {
     return 'pending-save'
   }
 
-  if (secretStatus === 'migration-failed') {
+  if (referenceStatus === 'migration-failed') {
     return 'migration-failed'
   }
-  if (secretStatus === 'reference-error') {
+  if (referenceStatus === 'reference-error') {
     return 'reference-error'
   }
-  if (secretStatus === 'inline-redacted') {
+  if (referenceStatus === 'inline-redacted') {
     return 'inline-redacted'
   }
 
@@ -55,16 +75,24 @@ export function resolveModelCredentialSecurityState(input: {
     return 'missing'
   }
 
+  const missingReference = referenceStatus === 'reference-missing'
+    || referenceStatus === 'unconfigured'
+    || referenceStatus === 'error'
+
   if (credentialRef.startsWith('env:')) {
-    return secretStatus === 'reference-missing'
+    return missingReference
       ? 'environment-variable-missing'
       : 'environment-variable'
   }
 
   if (credentialRef.startsWith('secret-ref:')) {
-    return secretStatus === 'reference-missing'
+    return missingReference
       ? 'system-managed-missing'
       : 'system-managed'
+  }
+
+  if (referenceStatus === 'error') {
+    return 'configured'
   }
 
   if (SECRET_REFERENCE_PREFIXES.some(prefix => credentialRef.startsWith(prefix))) {
@@ -109,6 +137,21 @@ export function localizeModelCredentialDescription(
   state: ModelCredentialSecurityState,
 ): string {
   return t(`models.security.descriptions.${state}`)
+}
+
+export function localizeModelCredentialSourceLabel(
+  t: Translate,
+  sourceKind: ModelCredentialSourceKind,
+): string {
+  return t(`models.security.sources.${sourceKind}`)
+}
+
+export function localizeModelCredentialSourceDescription(
+  t: Translate,
+  sourceKind: ModelCredentialSourceKind,
+  params?: Record<string, unknown>,
+): string {
+  return t(`models.security.sourceDescriptions.${sourceKind}`, params)
 }
 
 export function localizeModelRuntimeMessage(
@@ -169,6 +212,14 @@ export function localizeModelRuntimeMessage(
 
   if (/failed to save runtime config/i.test(trimmed)) {
     return t('models.messages.saveFailed')
+  }
+
+  if (/managed credential `([^`]+)` is missing from (secure storage|local encrypted secret store) after saving/i.test(trimmed)) {
+    return t('models.messages.secureStorageWriteFailed')
+  }
+
+  if (/managed credential `([^`]+)` could not be verified after saving to (secure storage|local encrypted secret store)/i.test(trimmed)) {
+    return t('models.messages.secureStorageWriteFailed')
   }
 
   if (/no active workspace connection selected/i.test(trimmed)) {

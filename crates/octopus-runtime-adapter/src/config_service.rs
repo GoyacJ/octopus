@@ -34,18 +34,18 @@ impl RuntimeAdapter {
         ))
     }
 
-    fn workspace_target_document_mut<'a>(
-        documents: &'a mut [RuntimeConfigDocumentRecord],
-    ) -> Result<&'a mut RuntimeConfigDocumentRecord, AppError> {
+    fn workspace_target_document_mut(
+        documents: &mut [RuntimeConfigDocumentRecord],
+    ) -> Result<&mut RuntimeConfigDocumentRecord, AppError> {
         documents
             .iter_mut()
             .find(|document| document.scope == RuntimeConfigScopeKind::Workspace)
             .ok_or_else(|| AppError::not_found("workspace runtime config document"))
     }
 
-    fn workspace_target_document<'a>(
-        documents: &'a [RuntimeConfigDocumentRecord],
-    ) -> Result<&'a RuntimeConfigDocumentRecord, AppError> {
+    fn workspace_target_document(
+        documents: &[RuntimeConfigDocumentRecord],
+    ) -> Result<&RuntimeConfigDocumentRecord, AppError> {
         documents
             .iter()
             .find(|document| document.scope == RuntimeConfigScopeKind::Workspace)
@@ -143,6 +143,22 @@ impl RuntimeAdapter {
             self.state
                 .secret_store
                 .put_secret(&write.credential_ref, &write.api_key)?;
+            let stored_secret = self.state.secret_store.get_secret(&write.credential_ref)?;
+            match stored_secret.as_deref() {
+                Some(value) if value == write.api_key => {}
+                Some(_) => {
+                    return Err(AppError::runtime(format!(
+                        "managed credential `{}` could not be verified after saving to local encrypted secret store",
+                        write.credential_ref
+                    )));
+                }
+                None => {
+                    return Err(AppError::runtime(format!(
+                        "managed credential `{}` is missing from local encrypted secret store after saving",
+                        write.credential_ref
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -649,6 +665,24 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::secret_store::RuntimeSecretStore;
+
+    #[derive(Debug, Default)]
+    struct WriteOnlyRuntimeSecretStore;
+
+    impl RuntimeSecretStore for WriteOnlyRuntimeSecretStore {
+        fn put_secret(&self, _reference: &str, _value: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        fn get_secret(&self, _reference: &str) -> Result<Option<String>, AppError> {
+            Ok(None)
+        }
+
+        fn delete_secret(&self, _reference: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
 
     fn test_root() -> PathBuf {
         let root =
@@ -819,7 +853,16 @@ mod tests {
         let mut reset_permissions = fs::metadata(&workspace_config_path)
             .expect("workspace config metadata after save")
             .permissions();
-        reset_permissions.set_readonly(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            reset_permissions.set_mode(0o600);
+        }
+        #[cfg(not(unix))]
+        {
+            reset_permissions.set_readonly(false);
+        }
         fs::set_permissions(&workspace_config_path, reset_permissions)
             .expect("reset workspace config permissions");
 
@@ -908,6 +951,62 @@ mod tests {
                 .resolve_secret_reference(&managed_reference)
                 .expect("resolve deleted secret"),
             None
+        );
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn save_config_rejects_managed_model_credentials_when_secret_store_readback_is_missing() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+        let configured_model_id = "anthropic-inline";
+        let adapter = RuntimeAdapter::new_with_executor_and_secret_store(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+            Arc::new(MockRuntimeModelDriver),
+            Arc::new(WriteOnlyRuntimeSecretStore),
+        );
+
+        let save_result = adapter
+            .save_config(
+                "workspace",
+                RuntimeConfigPatch {
+                    scope: "workspace".into(),
+                    patch: json!({
+                        "configuredModels": {
+                            configured_model_id: {
+                                "configuredModelId": configured_model_id,
+                                "name": "Claude Inline",
+                                "providerId": "anthropic",
+                                "modelId": "claude-sonnet-4-5",
+                                "enabled": true,
+                                "source": "workspace"
+                            }
+                        }
+                    }),
+                    configured_model_credentials: vec![RuntimeConfiguredModelCredentialInput {
+                        configured_model_id: configured_model_id.into(),
+                        api_key: "sk-ant-saved-secret".into(),
+                    }],
+                },
+            )
+            .await;
+
+        assert!(
+            save_result.is_err(),
+            "workspace save should fail when a managed credential cannot be read back from secure storage"
+        );
+
+        let stored_document =
+            RuntimeAdapter::read_optional_runtime_document(&workspace_config_path)
+                .expect("read workspace document");
+        assert!(
+            stored_document.is_none(),
+            "failed managed credential write must not persist a broken secret-ref into runtime config"
         );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");

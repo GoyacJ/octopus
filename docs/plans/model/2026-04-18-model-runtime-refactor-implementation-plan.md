@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+> **Supersession Note (2026-04-18):** The canonical execution plan for model execution architecture, upstream streaming, tool-loop symmetry, and budget governance is now `docs/plans/model/2026-04-18-model-runtime-end-state-rebuild-plan.md`. Keep this older plan only for unrelated completed work and still-active tasks such as managed secret storage.
+
 **Goal:** Rebuild Octopus's model runtime into a registry-first, driver-based, policy-separated architecture with no compatibility shims and no unsupported catalog/runtime drift.
 
 **Architecture:** Keep the existing `catalog -> configured model -> session policy -> runtime loop` backbone, but split provider-specific execution out of `executor.rs` into explicit protocol drivers. Add first-class `canonical model policy`, `auth resolution`, and `request policy` layers so the runtime loop only manages turn state, tool state, approvals, and event projection.
@@ -16,6 +18,46 @@
 - Completed in code: Team transport and persistence are now refs-only end-to-end. `TeamRecord` and `UpsertTeamInput`, infra persistence, runtime-adapter consumers, OpenAPI, generated TypeScript schema, and the desktop team management surface no longer expose `leaderAgentId` or `memberAgentIds`.
 - Completed in code: the project settings document page now routes its summary-row triggers through shared `UiButton` controls, clearing the previous frontend-governance violation in `apps/desktop/src/views/project/ProjectSettingsView.vue`.
 - Verified in the merged branch candidate: `cargo test -p octopus-runtime-adapter --tests`, `cargo test -p octopus-runtime-adapter --lib`, `cargo test -p octopus-infra --lib`, `cargo test -p octopus-server project_task_routes_approve_intervention_keeps_waiting_when_runtime_chains_to_next_approval` with provider env stubs, `pnpm schema:check`, and `pnpm check:frontend`.
+- Approved for the current execution batch: replace OS keyring-backed managed secret storage with encrypted SQLite in `data/main.db` plus a local master key file under the workspace data directory. Legacy keyring import and compatibility migration are explicitly out of scope for this batch.
+
+## Current Status
+
+- Plan: `docs/plans/model/2026-04-18-model-runtime-refactor-implementation-plan.md`
+- Task: `Task 4A`
+- Step: `Step 5`
+- Status: `done`
+
+## Active Work
+
+- Objective: remove the OS keyring dependency from managed model credentials while preserving the existing `secret-ref:*` contract surface.
+- Files in progress:
+  - `crates/octopus-runtime-adapter/src/secret_store.rs`
+  - `crates/octopus-runtime-adapter/src/lib.rs`
+  - `crates/octopus-runtime-adapter/src/config_service.rs`
+  - `crates/octopus-infra/src/workspace_paths.rs`
+  - `crates/octopus-infra/src/infra_state.rs`
+  - `apps/desktop/src/views/workspace/models-security.ts`
+  - `apps/desktop/src/locales/en-US.json`
+  - `apps/desktop/src/locales/zh-CN.json`
+- Preconditions checked:
+  - Workspace persistence governance allows queryable secret metadata in SQLite and file-backed local master key material under the workspace.
+  - User accepted direct refactor with no legacy keyring migration handling.
+  - Existing runtime config keeps `credentialRef` as `secret-ref:*`; only the managed secret backend changes.
+
+## Acceptance
+
+- Done when:
+  - Default managed credential persistence no longer uses OS keyring APIs.
+  - Managed secrets round-trip through encrypted SQLite using a workspace-local master key file.
+  - Missing managed secrets report local encrypted store failures instead of system secure-storage failures.
+- Verification commands:
+  - `cargo test -p octopus-runtime-adapter secret_store`
+  - `cargo test -p octopus-runtime-adapter config_service`
+  - `cargo test -p octopus-infra --lib`
+- Stop if:
+  - The new secret backend requires changing runtime config public contracts instead of staying behind `RuntimeSecretStore`.
+  - Workspace bootstrap policy requires a different canonical master key location than `data/secrets/`.
+  - The encrypted store cannot provide compensating write/delete behavior needed by config save rollback.
 ## Design Decisions
 
 1. `octopus-core` remains the source of truth for catalog contracts and resolved execution targets.
@@ -179,7 +221,7 @@ The desktop design baseline already says model management belongs to the `List /
 ### Required Credential Architecture Rules
 
 1. Runtime config files remain reference-only for secrets. No new plaintext `credentialRef` write path is allowed.
-2. OS secure storage plus `secret-ref:*` remains the managed-secret baseline.
+2. Encrypted local secret storage plus `secret-ref:*` remains the managed-secret baseline. The implementation stores ciphertext in `data/main.db` and keeps the master key in a workspace-local file under `data/secrets/`.
 3. Auth source must become explicit domain data, at minimum distinguishing:
    - managed secret
    - environment reference
@@ -188,7 +230,7 @@ The desktop design baseline already says model management belongs to the `List /
 4. Provider credential fallback and model override precedence must be visible in contracts and UI, not hidden only inside registry resolution.
 5. Unsupported reference kinds must not appear as supported UX choices until the runtime resolver can actually execute them.
 6. Managed credential write plus config persistence must be atomic or compensating. Failed config save must not leave orphaned secure-store entries behind.
-7. Inline plaintext migration remains one-way and fail-closed. The UI must surface migration failure or blocked state explicitly.
+7. Legacy keyring import is out of scope for this refactor. If a `secret-ref:*` entry cannot be resolved from the encrypted local store, the UI must surface it as missing and require re-entry instead of attempting fallback to system keyring state.
 
 These rules apply to both:
 
@@ -200,11 +242,14 @@ In this plan, `provider-inherited credential` means the runtime-config-backed pr
 ### Planning Consequences
 
 - Task 4 must cover auth source modeling, secret lifecycle, and atomic or compensating credential persistence.
+- Task 4A must replace the keyring-backed secret backend with encrypted SQLite plus workspace-local master key bootstrap before follow-up UI copy cleanup lands.
 - Task 10 must cover the workspace console model page restructure into `list/detail`, plus explicit credential source and validation-health presentation.
 - Task 4 must add fail-closed tests for unsupported reference schemes instead of only happy-path env or managed-secret resolution.
 - Any contract change required for credential source, secret presence, or validation metadata must follow the existing OpenAPI and schema generation order in this plan.
 
 ### Task 1: Create the New Runtime Driver Skeleton
+
+Status: `done`
 
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/mod.rs`
@@ -257,6 +302,8 @@ git commit -m "refactor: add model runtime driver skeleton"
 ```
 
 ### Task 2: Make Execution Support Explicit in the Catalog Contract
+
+Status: `pending`
 
 **Files:**
 - Modify: `crates/octopus-core/src/lib.rs`
@@ -329,6 +376,8 @@ git commit -m "refactor: expose executable runtime support in model catalog"
 
 ### Task 3: Centralize Canonical Model Policy and Remove Alias Drift
 
+Status: `pending`
+
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/canonical_model_policy.rs`
 - Modify: `crates/octopus-runtime-adapter/src/registry_baseline.rs`
@@ -388,6 +437,8 @@ git commit -m "refactor: centralize canonical model policy"
 ```
 
 ### Task 4: Introduce a Dedicated Model Auth Resolution Layer
+
+Status: `pending`
 
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/auth.rs`
@@ -475,7 +526,80 @@ git add crates/octopus-runtime-adapter/src/model_runtime/auth.rs \
 git commit -m "refactor: add dedicated model auth resolution"
 ```
 
+### Task 4A: Replace Keyring-Backed Managed Secret Storage With Encrypted SQLite
+
+Status: `done`
+
+**Files:**
+- Modify: `crates/octopus-runtime-adapter/Cargo.toml`
+- Modify: `crates/octopus-runtime-adapter/src/secret_store.rs`
+- Modify: `crates/octopus-runtime-adapter/src/lib.rs`
+- Modify: `crates/octopus-runtime-adapter/src/config_service.rs`
+- Modify: `crates/octopus-infra/src/workspace_paths.rs`
+- Modify: `crates/octopus-infra/src/infra_state.rs`
+- Test: `crates/octopus-runtime-adapter/src/secret_store.rs`
+- Test: `crates/octopus-runtime-adapter/src/config_service.rs`
+- Test: `crates/octopus-infra/src/workspace_paths.rs`
+
+**Preconditions:**
+- Keep the existing `secret-ref:*` contract so callers do not need a new credential reference format.
+- Do not implement keyring import, secret migration, or legacy compatibility fallbacks.
+- Keep the in-memory test override path available for narrow unit tests that do not need SQLite.
+
+**Step 1**
+- Action: Write failing store tests for encrypted SQLite round-trip, missing-record resolution, and master-key bootstrap under the workspace data directory.
+- Done when: Tests prove the current keyring-only implementation is insufficient and clearly specify the new storage behavior.
+- Verify: `cargo test -p octopus-runtime-adapter secret_store -- --nocapture`
+- Stop if: The tests require exposing secret-store internals across crate boundaries instead of validating through the existing module boundary.
+
+**Step 2**
+- Action: Add workspace path/bootstrap support for `data/secrets/` and SQLite schema support for encrypted runtime secret records in `data/main.db`.
+- Done when: Workspace layout creation creates the secrets directory and infra bootstrap creates the runtime secret records table needed by the new store.
+- Verify: `cargo test -p octopus-infra --lib`
+- Stop if: Infra bootstrap for `main.db` is no longer the canonical place to add workspace-local SQLite tables.
+
+**Step 3**
+- Action: Implement `SqliteEncryptedRuntimeSecretStore` behind `RuntimeSecretStore`, including master-key file load-or-create behavior, nonce generation, encryption, decryption, and delete semantics.
+- Done when: `put_secret`, `get_secret`, and `delete_secret` work against encrypted SQLite records without keyring dependencies.
+- Verify: `cargo test -p octopus-runtime-adapter secret_store -- --nocapture`
+- Stop if: The repository already has an approved encryption utility that should own key generation or AEAD primitives instead of this module.
+
+**Step 4**
+- Action: Switch `RuntimeAdapter::new_with_executor` to use the encrypted SQLite store by default and keep only the explicit in-memory override for tests.
+- Done when: Production construction no longer instantiates `KeyringRuntimeSecretStore`.
+- Verify: `cargo test -p octopus-runtime-adapter secret_store default_runtime_secret_store -- --nocapture`
+- Stop if: Runtime adapter construction depends on keyring behavior in other modules that have to be redesigned first.
+
+**Step 5**
+- Action: Preserve compensating secret writes in config save flows so failed runtime config persistence rolls back encrypted secret mutations cleanly.
+- Done when: Managed credential save/rollback tests continue to pass against the SQLite-backed store.
+- Verify: `cargo test -p octopus-runtime-adapter config_service -- --nocapture`
+- Stop if: Config save rollback needs a transactional boundary spanning SQLite plus file writes that is not currently available.
+
+## Checkpoint 2026-04-18 23:52 CST
+
+- Batch: `Task 4A Step 1 -> Step 5`
+- Completed:
+  - Added workspace-local `data/secrets/runtime-master.key` path bootstrap.
+  - Added `runtime_secret_records` encrypted secret table in `data/main.db`.
+  - Replaced keyring-backed managed secret storage with `SqliteEncryptedRuntimeSecretStore`.
+  - Switched default `RuntimeAdapter` secret backend to encrypted SQLite, leaving only the explicit in-memory env override.
+  - Updated workspace model security copy from system secure storage wording to local encrypted secret store wording.
+- Verification:
+  - `cargo test -p octopus-runtime-adapter secret_store::tests::sqlite_secret_store_round_trips_encrypted_values -- --exact` -> pass
+  - `cargo test -p octopus-runtime-adapter secret_store::tests::sqlite_secret_store_returns_none_for_missing_reference -- --exact` -> pass
+  - `cargo test -p octopus-runtime-adapter secret_store::tests::sqlite_secret_store_rejects_invalid_master_key_files -- --exact` -> pass
+  - `cargo test -p octopus-runtime-adapter --lib` -> pass
+  - `cargo test -p octopus-infra --lib` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Resume `Task 4` and `Task 10` when continuing the broader model-runtime workbench refactor.
+
 ### Task 5: Introduce a Dedicated Request Policy Layer
+
+Status: `pending`
 
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/request_policy.rs`
@@ -535,6 +659,8 @@ git commit -m "refactor: add request policy resolution layer"
 
 ### Task 6: Replace `executor.rs` with Protocol Drivers for Anthropic and OpenAI Chat
 
+Status: `pending`
+
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/drivers/anthropic_messages.rs`
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/drivers/openai_chat.rs`
@@ -593,6 +719,8 @@ git commit -m "refactor: replace monolithic executor with protocol drivers"
 ```
 
 ### Task 7: Add `simple completion` and Non-Tool Drivers for OpenAI Responses and Gemini
+
+Status: `pending`
 
 **Files:**
 - Create: `crates/octopus-runtime-adapter/src/model_runtime/simple_completion.rs`
@@ -657,6 +785,8 @@ git commit -m "refactor: separate simple completion from tool loop runtime"
 
 ### Task 8: Rewire the Runtime Turn Loop to Depend Only on Driver Capabilities
 
+Status: `pending`
+
 **Files:**
 - Modify: `crates/octopus-runtime-adapter/src/agent_runtime_core.rs`
 - Modify: `crates/octopus-runtime-adapter/src/execution_target.rs`
@@ -708,6 +838,8 @@ git commit -m "refactor: make runtime turn loop driver-capability based"
 ```
 
 ### Task 9: Move Adapter Tests Out of the Monolith and Delete Dead Runtime Code
+
+Status: `pending`
 
 **Files:**
 - Create: `crates/octopus-runtime-adapter/tests/`
@@ -763,6 +895,8 @@ git commit -m "refactor: split runtime adapter tests by component"
 ```
 
 ### Task 10: Final Contract, UI, and Governance Cleanup
+
+Status: `pending`
 
 **Files:**
 - Modify: `contracts/openapi/src/components/schemas/catalog.yaml`

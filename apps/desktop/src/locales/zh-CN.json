@@ -693,6 +693,7 @@
       "saveError": "保存项目工具权限失败。",
       "emptyTitle": "当前没有已分配工具",
       "emptyDescription": "请先在工作区项目管理里为当前项目分配工具，再回到这里做细化配置。",
+      "projectOwnedHint": "项目内自带的 skill 与 MCP 会自动归属于当前项目，不受工作区授予开关控制。",
       "groups": {
         "builtin": "builtin",
         "skill": "skill",
@@ -741,11 +742,29 @@
       "nextTitle": "建议下一步",
       "nextDone": "当前关键配置项已经完成。"
     },
+    "leader": {
+      "dialogTitle": "编辑项目 Leader",
+      "dialogDescription": "Leader 只影响会话默认编排优先级，不改变项目 ACL。",
+      "hint": "只能选择当前工作区中处于激活状态，且仍在项目有效授权范围内的数字员工。",
+      "editAction": "编辑 Leader",
+      "invalid": "当前选择的 Leader 已不再属于可用工作区数字员工。",
+      "saveError": "保存项目 Leader 失败。",
+      "mustRemainEnabled": "当前 Leader 必须保持可授予且未被禁用，请先选择新的 Leader。",
+      "selectPlaceholder": "请选择一个工作区数字员工"
+    },
     "labels": {
       "workspaceGrant": "工作区授予",
+      "inherited": "继承工作区",
+      "projectOwned": "项目自有",
       "projectEnablement": "项目启用",
       "projectOverride": "项目覆盖",
       "members": "成员与访问"
+    },
+    "search": {
+      "tools": "搜索工具名称或 source key",
+      "actors": "搜索数字员工或团队",
+      "emptyTitle": "没有匹配结果",
+      "emptyDescription": "试试切换 tab 或调整搜索关键词。"
     },
     "sections": {
       "overview": {
@@ -1506,6 +1525,11 @@
       "allSurfaces": "全部接口",
       "allCapabilities": "全部能力"
     },
+    "list": {
+      "hasDiagnostics": "存在诊断",
+      "usedTokens": "已消耗 Token：{count}",
+      "tokenQuota": "Token 总量：{count}"
+    },
     "table": {
       "columns": {
         "name": "名称",
@@ -1538,7 +1562,20 @@
       "surfaces": "接口",
       "noSurfaces": "当前模型没有启用的接口。",
       "enabled": "启用该模型实例",
-      "noDescription": "当前模型没有额外说明。"
+      "noDescription": "当前模型没有额外说明。",
+      "sections": {
+        "overview": "概览",
+        "overviewDescription": "维护该工作区模型实例的基础标识与来源信息。",
+        "authentication": "鉴权",
+        "authenticationDescription": "区分当前凭据来自模型覆盖、厂商继承还是缺失，并展示安全存储健康状态。",
+        "routing": "路由",
+        "routingDescription": "查看并调整运行时可执行接口与 Base URL 路由。",
+        "quota": "配额",
+        "quotaDescription": "维护工作区级 Token 配额与当前使用投影。",
+        "validation": "校验",
+        "validationDescription": "执行真实请求校验，并保留最近一次结果而不是只依赖瞬时提示。",
+        "capabilitiesDescription": "列出该模型声明的能力，供运行时选择与编排参考。"
+      }
     },
     "providerModes": {
       "custom": "自定义"
@@ -1569,29 +1606,39 @@
       }
     },
     "security": {
-      "inputHint": "输入新的 ApiKey 后只会写入系统安全存储，运行时配置文件只保存安全引用。",
-      "createHint": "创建后 ApiKey 会写入系统安全存储，不会以明文写入 runtime JSON。",
+      "inputHint": "输入新的 ApiKey 后只会写入本地加密密钥库，运行时配置文件只保存安全引用。",
+      "createHint": "创建后 ApiKey 会写入本地加密密钥库，不会以明文写入 runtime JSON。",
+      "sources": {
+        "configured-model-override": "模型覆盖凭据",
+        "provider-inherited": "继承厂商凭据",
+        "missing": "未配置凭据"
+      },
+      "sourceDescriptions": {
+        "configured-model-override": "当前模型实例显式覆盖了厂商级凭据，保存后会以模型级安全引用生效。",
+        "provider-inherited": "当前模型实例没有单独覆盖凭据，运行时会继承 {provider} 的厂商级凭据。",
+        "missing": "当前模型实例和所属厂商都没有可用凭据，保存或校验前需要先补充。"
+      },
       "states": {
         "missing": "未配置",
         "configured": "已配置",
         "pending-save": "待保存",
         "environment-variable": "环境变量引用",
         "environment-variable-missing": "环境变量缺失",
-        "system-managed": "系统安全存储",
-        "system-managed-missing": "系统安全存储缺失",
+        "system-managed": "本地加密密钥库",
+        "system-managed-missing": "本地加密密钥缺失",
         "migration-failed": "明文迁移失败",
         "inline-redacted": "检测到旧式明文配置",
         "reference-error": "安全引用异常"
       },
       "descriptions": {
         "missing": "当前模型还没有可用的 ApiKey。",
-        "configured": "当前 ApiKey 已隐藏。建议重新输入并保存到系统安全存储。",
-        "pending-save": "检测到新的 ApiKey 输入，保存后会写入系统安全存储。",
+        "configured": "当前 ApiKey 已隐藏。建议重新输入并保存到本地加密密钥库。",
+        "pending-save": "检测到新的 ApiKey 输入，保存后会写入本地加密密钥库。",
         "environment-variable": "当前模型通过环境变量提供 ApiKey。",
         "environment-variable-missing": "当前引用的环境变量不存在，校验和保存前请先修复。",
-        "system-managed": "当前模型的 ApiKey 已存放在系统安全存储中。",
-        "system-managed-missing": "系统安全存储中未找到当前 ApiKey，请重新输入后保存。",
-        "migration-failed": "检测到旧式明文 ApiKey，但迁移到系统安全存储失败。请重新输入 ApiKey 后再继续。",
+        "system-managed": "当前模型的 ApiKey 已存放在本地加密密钥库中。",
+        "system-managed-missing": "本地加密密钥库中未找到当前 ApiKey，请重新输入后保存。",
+        "migration-failed": "检测到旧式明文 ApiKey，但写入本地加密密钥库失败。请重新输入 ApiKey 后再继续。",
         "inline-redacted": "检测到旧式明文 ApiKey，当前页面已隐藏原值。请重新输入 ApiKey 后再继续。",
         "reference-error": "当前安全引用无法解析，请重新输入 ApiKey 后再继续。"
       }
@@ -1600,6 +1647,7 @@
       "create": "创建模型",
       "validate": "校验",
       "save": "保存",
+      "clearOverride": "清除模型覆盖",
       "delete": "删除模型配置",
       "cancel": "取消",
       "confirmCreate": "创建"
@@ -1612,6 +1660,11 @@
       "disabled": "已停用"
     },
     "validation": {
+      "lastSuccessTitle": "最近一次校验成功",
+      "lastFailureTitle": "最近一次校验失败",
+      "lastWarningTitle": "最近一次校验有警告",
+      "idleTitle": "尚未执行真实校验",
+      "idleDescription": "点击“校验”后，这里会显示最近一次请求探测的结果。",
       "success": "已完成真实请求校验，模型“{name}”可用，本次消耗 {tokens} Token。",
       "requestId": "请求 ID：{requestId}"
     },
@@ -1624,6 +1677,7 @@
       "runtimePatchMustBeObject": "运行时配置补丁必须是 JSON 对象。",
       "validateFailed": "模型校验失败。",
       "saveFailed": "保存模型配置失败。",
+      "secureStorageWriteFailed": "本地加密密钥库写入失败，请检查工作区数据目录是否可写后重试。",
       "createFailed": "创建模型配置失败。",
       "deleteFailed": "删除模型配置失败。",
       "secretCleanupFailed": "模型已删除，但 ApiKey 清理未完成。",
@@ -1656,7 +1710,7 @@
         "successTitle": "模型已删除",
         "successBody": "“{name}”已从工作区模型配置中删除。",
         "warningTitle": "模型已删除，ApiKey 仍需处理",
-        "warningBody": "“{name}”已删除，但系统安全存储中的 ApiKey 清理未完成：{message}",
+        "warningBody": "“{name}”已删除，但本地加密密钥库中的 ApiKey 清理未完成：{message}",
         "errorTitle": "删除模型失败",
         "errorBody": "“{name}”未删除成功：{message}"
       }
@@ -2109,6 +2163,7 @@
     },
     "fields": {
       "name": "项目名称",
+      "leader": "项目 Leader",
       "description": "项目说明",
       "resourceDirectory": "资源目录",
       "preset": "初始化预设",
@@ -2176,6 +2231,7 @@
       "title": "配置摘要",
       "currentDescription": "这里只看摘要，不在此页编辑高级能力配置。",
       "createDescription": "先完成最小创建；高级能力配置稍后在项目配置页细化。",
+      "inheritanceDescription": "工具默认继承工作区启用项，数字员工和团队默认继承工作区激活项；项目配置页再叠加排除和禁用细化。",
       "advancedTitle": "高级配置入口",
       "advancedDescription": "模型、工具、数字员工、成员与访问都统一在项目配置页编辑。",
       "models": "模型",
@@ -2183,9 +2239,15 @@
       "actors": "数字员工",
       "members": "成员",
       "modelsValue": "已授予 {granted} 个，项目启用 {enabled} 个，默认 {defaultModel}",
+      "toolsInheritedValue": "默认继承 {count} 个工作区工具",
       "toolsValue": "已授予 {granted} 个，项目启用 {enabled} 个，{overrides} 个覆盖",
+      "actorsInheritedValue": "默认继承 {count} 个工作区数字员工 / 团队",
       "actorsValue": "已授予 {granted} 个，已启用 {enabled} 个",
       "membersValue": "{members} 人，其中 {editors} 人可编辑"
+    },
+    "leader": {
+      "hint": "可选。只允许选择当前工作区处于激活状态的数字员工，创建后也可在项目配置页调整。",
+      "none": "暂未设置"
     }
   },
   "teams": {

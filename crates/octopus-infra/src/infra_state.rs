@@ -281,6 +281,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               status TEXT NOT NULL,
               description TEXT NOT NULL,
               resource_directory TEXT NOT NULL,
+              leader_agent_id TEXT,
               assignments_json TEXT,
               owner_user_id TEXT,
               member_user_ids_json TEXT,
@@ -728,6 +729,15 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               created_at INTEGER NOT NULL,
               effective_config_json TEXT
             );
+            CREATE TABLE IF NOT EXISTS runtime_secret_records (
+              reference TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              ciphertext BLOB NOT NULL,
+              nonce BLOB NOT NULL,
+              key_version INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS runtime_session_projections (
               id TEXT PRIMARY KEY,
               conversation_id TEXT NOT NULL,
@@ -1045,8 +1055,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         connection
             .execute(
                 "INSERT INTO projects
-                 (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 (id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     DEFAULT_PROJECT_ID,
                     DEFAULT_WORKSPACE_ID,
@@ -1054,6 +1064,7 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                     "active",
                     "Bootstrap project for the local workspace.",
                     default_project_resource_directory,
+                    Option::<String>::None,
                     Some(default_project_assignments),
                     "user-owner",
                     default_member_user_ids,
@@ -1797,6 +1808,7 @@ pub(super) fn ensure_project_assignment_columns(connection: &Connection) -> Resu
         connection,
         "projects",
         &[
+            ("leader_agent_id", "TEXT"),
             ("assignments_json", "TEXT"),
             ("resource_directory", "TEXT"),
             ("owner_user_id", "TEXT"),
@@ -3195,12 +3207,13 @@ fn reset_legacy_sessions_table(connection: &Connection) -> Result<(), AppError> 
 pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
+            "SELECT id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let assignments_json: Option<String> = row.get(6)?;
+            let leader_agent_id: Option<String> = row.get(6)?;
+            let assignments_json: Option<String> = row.get(7)?;
             let assignments = assignments_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3208,31 +3221,17 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        6,
+                        7,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?;
-            let owner_user_id: Option<String> = row.get(7)?;
-            let member_user_ids_json: Option<String> = row.get(8)?;
+            let owner_user_id: Option<String> = row.get(8)?;
+            let member_user_ids_json: Option<String> = row.get(9)?;
             let member_user_ids = member_user_ids_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
                 .map(serde_json::from_str::<Vec<String>>)
-                .transpose()
-                .map_err(|error| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        8,
-                        rusqlite::types::Type::Text,
-                        Box::new(error),
-                    )
-                })?
-                .unwrap_or_default();
-            let permission_overrides_json: Option<String> = row.get(9)?;
-            let permission_overrides = permission_overrides_json
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .map(serde_json::from_str::<ProjectPermissionOverrides>)
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -3241,8 +3240,22 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                         Box::new(error),
                     )
                 })?
+                .unwrap_or_default();
+            let permission_overrides_json: Option<String> = row.get(10)?;
+            let permission_overrides = permission_overrides_json
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str::<ProjectPermissionOverrides>)
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?
                 .unwrap_or_else(default_project_permission_overrides);
-            let linked_workspace_assets_json: Option<String> = row.get(10)?;
+            let linked_workspace_assets_json: Option<String> = row.get(11)?;
             let linked_workspace_assets = linked_workspace_assets_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3250,7 +3263,7 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        10,
+                        11,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
@@ -3264,6 +3277,7 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 status: row.get(3)?,
                 description: row.get(4)?,
                 resource_directory: row.get(5)?,
+                leader_agent_id,
                 owner_user_id: owner_user_id.clone(),
                 member_user_ids: normalized_project_member_user_ids(
                     &owner_user_id,
@@ -4676,6 +4690,40 @@ mod tests {
         assert_eq!(
             columns.get("summary_json").map(String::as_str),
             Some("TEXT")
+        );
+    }
+
+    #[test]
+    fn initialize_database_creates_runtime_secret_records_table() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        super::initialize_database(&paths).expect("database");
+
+        let connection = Connection::open(&paths.db_path).expect("db");
+        let mut statement = connection
+            .prepare("PRAGMA table_info(runtime_secret_records)")
+            .expect("table info statement");
+        let columns = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })
+            .expect("table info rows")
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .expect("collect columns");
+
+        assert_eq!(
+            columns.get("reference").map(String::as_str),
+            Some("TEXT")
+        );
+        assert_eq!(
+            columns.get("ciphertext").map(String::as_str),
+            Some("BLOB")
+        );
+        assert_eq!(columns.get("nonce").map(String::as_str), Some("BLOB"));
+        assert_eq!(
+            columns.get("key_version").map(String::as_str),
+            Some("INTEGER")
         );
     }
 

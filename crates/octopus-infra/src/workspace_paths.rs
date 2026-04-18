@@ -18,6 +18,8 @@ pub struct WorkspacePaths {
     pub runtime_project_config_dir: PathBuf,
     pub runtime_user_config_dir: PathBuf,
     pub db_path: PathBuf,
+    pub runtime_secrets_dir: PathBuf,
+    pub runtime_secret_master_key_path: PathBuf,
     pub blobs_dir: PathBuf,
     pub user_avatars_dir: PathBuf,
     pub workspace_resources_dir: PathBuf,
@@ -50,6 +52,7 @@ impl WorkspacePaths {
         let runtime_config_dir = config_dir.join("runtime");
         let runtime_project_config_dir = runtime_config_dir.join("projects");
         let runtime_user_config_dir = runtime_config_dir.join("users");
+        let runtime_secrets_dir = data_dir.join("secrets");
         let blobs_dir = data_dir.join("blobs");
         let user_avatars_dir = blobs_dir.join("avatars");
         let workspace_resources_dir = data_dir.join("resources").join("workspace");
@@ -78,6 +81,8 @@ impl WorkspacePaths {
             runtime_project_config_dir,
             runtime_user_config_dir,
             db_path: data_dir.join("main.db"),
+            runtime_secrets_dir: runtime_secrets_dir.clone(),
+            runtime_secret_master_key_path: runtime_secrets_dir.join("runtime-master.key"),
             root,
             config_dir,
             data_dir,
@@ -114,6 +119,7 @@ impl WorkspacePaths {
             &self.runtime_project_config_dir,
             &self.runtime_user_config_dir,
             &self.data_dir,
+            &self.runtime_secrets_dir,
             &self.runtime_dir,
             &self.logs_dir,
             &self.tmp_dir,
@@ -160,5 +166,36 @@ impl WorkspacePaths {
 
     pub fn workspace_resources_display_path(&self) -> String {
         "data/resources/workspace".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use uuid::Uuid;
+
+    use super::WorkspacePaths;
+
+    fn test_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("octopus-workspace-paths-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test root");
+        root
+    }
+
+    #[test]
+    fn ensure_layout_creates_runtime_secret_paths() {
+        let root = test_root();
+        let paths = WorkspacePaths::new(&root);
+
+        paths.ensure_layout().expect("layout");
+
+        assert!(paths.runtime_secrets_dir.is_dir());
+        assert_eq!(
+            paths.runtime_secret_master_key_path,
+            root.join("data").join("secrets").join("runtime-master.key")
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 }

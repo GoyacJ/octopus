@@ -1,24 +1,36 @@
 mod actor_context;
 mod actor_manifest;
+#[cfg(test)]
+mod actor_runtime_tests;
 mod adapter_state;
 #[cfg(test)]
-mod adapter_tests;
+mod adapter_test_support;
 mod agent_runtime_core;
 mod approval_broker;
 mod approval_flow;
+#[cfg(test)]
+mod approval_runtime_tests;
 mod auth_mediation;
 mod background_runtime;
 mod capability_executor_bridge;
 mod capability_planner_bridge;
+#[cfg(test)]
+mod capability_runtime_tests;
 mod capability_state;
 mod config_service;
+#[cfg(test)]
+mod deliverable_runtime_tests;
 mod event_bus;
 mod execution_events;
 mod execution_service;
 mod execution_target;
 mod handoff_runtime;
 mod mailbox_runtime;
+#[cfg(test)]
+mod mcp_runtime_tests;
 mod memory_runtime;
+#[cfg(test)]
+mod memory_runtime_tests;
 mod memory_selector;
 mod memory_writer;
 mod model_runtime;
@@ -27,13 +39,23 @@ mod persistence;
 mod policy_compiler;
 mod registry;
 mod run_context;
+#[cfg(test)]
+mod runtime_compatibility_tests;
 mod runtime_config;
+#[cfg(test)]
+mod runtime_config_tests;
+#[cfg(test)]
+mod runtime_contract_tests;
+#[cfg(test)]
+mod runtime_persistence_tests;
 mod secret_store;
 mod session_policy;
 mod session_service;
 mod snapshot_store;
 mod subrun_orchestrator;
 mod team_runtime;
+#[cfg(test)]
+mod token_usage_tests;
 mod trace_context;
 mod worker_runtime;
 mod workflow_runtime;
@@ -100,11 +122,12 @@ pub use model_runtime::{
 };
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
-#[cfg(not(test))]
-use secret_store::KeyringRuntimeSecretStore;
-#[cfg(test)]
+const IN_MEMORY_SECRET_STORE_ENV: &str = "OCTOPUS_TEST_USE_IN_MEMORY_SECRET_STORE";
+
 use secret_store::MemoryRuntimeSecretStore;
 use secret_store::RuntimeSecretStore;
+use secret_store::SqliteEncryptedRuntimeSecretStore;
+use secret_store::UnavailableRuntimeSecretStore;
 
 #[derive(Clone)]
 pub struct RuntimeAdapter {
@@ -135,12 +158,15 @@ impl RuntimeAdapter {
         executor: Arc<dyn RuntimeModelDriver>,
     ) -> Self {
         let workspace_id = workspace_id.into();
-        #[cfg(test)]
         let secret_store: Arc<dyn RuntimeSecretStore> =
-            Arc::new(MemoryRuntimeSecretStore::default());
-        #[cfg(not(test))]
-        let secret_store: Arc<dyn RuntimeSecretStore> =
-            Arc::new(KeyringRuntimeSecretStore::new(&workspace_id));
+            if std::env::var_os(IN_MEMORY_SECRET_STORE_ENV).is_some() {
+                Arc::new(MemoryRuntimeSecretStore::default())
+            } else {
+                match SqliteEncryptedRuntimeSecretStore::new(&workspace_id, &paths) {
+                    Ok(store) => Arc::new(store),
+                    Err(error) => Arc::new(UnavailableRuntimeSecretStore::new(error.to_string())),
+                }
+            };
         Self::new_with_executor_and_secret_store(
             workspace_id,
             paths,

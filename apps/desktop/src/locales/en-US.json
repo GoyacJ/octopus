@@ -693,6 +693,7 @@
       "saveError": "Failed to save project tool permissions.",
       "emptyTitle": "No assigned tools are available",
       "emptyDescription": "Assign workspace tools to this project first, then return here to refine the enabled set.",
+      "projectOwnedHint": "Project-owned skills and MCP servers stay attached to this project automatically and are not controlled by workspace grants.",
       "groups": {
         "builtin": "builtin",
         "skill": "skill",
@@ -741,11 +742,29 @@
       "nextTitle": "Suggested next step",
       "nextDone": "The core setup items are already complete."
     },
+    "leader": {
+      "dialogTitle": "Edit Project Leader",
+      "dialogDescription": "The leader only affects runtime orchestration priority and does not change project ACLs.",
+      "hint": "Choose an active workspace agent that still remains inside the project's effective granted scope.",
+      "editAction": "Edit Leader",
+      "invalid": "The selected leader is no longer a valid workspace agent for this project.",
+      "saveError": "Failed to save the project leader.",
+      "mustRemainEnabled": "The current leader must remain granted and enabled. Choose a replacement leader first.",
+      "selectPlaceholder": "Choose a workspace agent"
+    },
     "labels": {
       "workspaceGrant": "Workspace grant",
+      "inherited": "Inherited",
+      "projectOwned": "Project-owned",
       "projectEnablement": "Project enablement",
       "projectOverride": "Project override",
       "members": "Members & access"
+    },
+    "search": {
+      "tools": "Search tools or source keys",
+      "actors": "Search agents or teams",
+      "emptyTitle": "No matching results",
+      "emptyDescription": "Try another tab or adjust the search query."
     },
     "sections": {
       "overview": {
@@ -1506,6 +1525,11 @@
       "allSurfaces": "All surfaces",
       "allCapabilities": "All capabilities"
     },
+    "list": {
+      "hasDiagnostics": "Has diagnostics",
+      "usedTokens": "Used tokens: {count}",
+      "tokenQuota": "Token quota: {count}"
+    },
     "table": {
       "columns": {
         "name": "Name",
@@ -1538,7 +1562,20 @@
       "surfaces": "Surfaces",
       "noSurfaces": "This model has no enabled surfaces.",
       "enabled": "Enable this model instance",
-      "noDescription": "This model does not include a description."
+      "noDescription": "This model does not include a description.",
+      "sections": {
+        "overview": "Overview",
+        "overviewDescription": "Maintain the base identity and source information for this workspace model instance.",
+        "authentication": "Authentication",
+        "authenticationDescription": "Distinguish whether credentials come from a model override, provider inheritance, or are missing, and show secure-storage health.",
+        "routing": "Routing",
+        "routingDescription": "Inspect and adjust executable runtime surfaces and base URL routing.",
+        "quota": "Quota",
+        "quotaDescription": "Maintain the workspace token quota and current usage projection.",
+        "validation": "Validation",
+        "validationDescription": "Run a real request validation and keep the latest result instead of relying on transient toasts only.",
+        "capabilitiesDescription": "List the capabilities declared by this model for runtime selection and orchestration."
+      }
     },
     "providerModes": {
       "custom": "Custom"
@@ -1569,29 +1606,39 @@
       }
     },
     "security": {
-      "inputHint": "A new ApiKey is written only to secure system storage. Runtime JSON keeps the generated secret reference only.",
-      "createHint": "After creation, the ApiKey is stored in secure system storage and never written to runtime JSON in plaintext.",
+      "inputHint": "A new ApiKey is written only to the local encrypted secret store. Runtime JSON keeps only the generated secret reference.",
+      "createHint": "After creation, the ApiKey is stored in the local encrypted secret store and never written to runtime JSON in plaintext.",
+      "sources": {
+        "configured-model-override": "Model override credential",
+        "provider-inherited": "Provider inherited credential",
+        "missing": "Missing credential"
+      },
+      "sourceDescriptions": {
+        "configured-model-override": "This model instance explicitly overrides the provider credential. After save it will resolve through a model-level secure reference.",
+        "provider-inherited": "This model instance does not override credentials, so runtime inherits the provider credential from {provider}.",
+        "missing": "Neither this model instance nor its provider currently has an available credential. Add one before saving or validating."
+      },
       "states": {
         "missing": "Not configured",
         "configured": "Configured",
         "pending-save": "Pending save",
         "environment-variable": "Environment variable reference",
         "environment-variable-missing": "Environment variable missing",
-        "system-managed": "Secure system storage",
-        "system-managed-missing": "Secure storage missing",
+        "system-managed": "Local encrypted secret store",
+        "system-managed-missing": "Local secret missing",
         "migration-failed": "Plaintext migration failed",
         "inline-redacted": "Legacy plaintext detected",
         "reference-error": "Secure reference error"
       },
       "descriptions": {
         "missing": "No ApiKey is currently configured for this model.",
-        "configured": "The current ApiKey is hidden. Re-enter and save it to secure system storage.",
-        "pending-save": "A new ApiKey has been entered and will be written to secure system storage after save.",
+        "configured": "The current ApiKey is hidden. Re-enter and save it to the local encrypted secret store.",
+        "pending-save": "A new ApiKey has been entered and will be written to the local encrypted secret store after save.",
         "environment-variable": "This model currently resolves its ApiKey from an environment variable.",
         "environment-variable-missing": "The referenced environment variable is missing. Fix it before validating or saving.",
-        "system-managed": "This model's ApiKey is already stored in secure system storage.",
-        "system-managed-missing": "Secure system storage no longer has this ApiKey. Enter a new one and save.",
-        "migration-failed": "A legacy plaintext ApiKey was detected, but migration into secure system storage failed. Enter a new ApiKey before continuing.",
+        "system-managed": "This model's ApiKey is already stored in the local encrypted secret store.",
+        "system-managed-missing": "The local encrypted secret store no longer has this ApiKey. Enter a new one and save.",
+        "migration-failed": "A legacy plaintext ApiKey was detected, but writing it into the local encrypted secret store failed. Enter a new ApiKey before continuing.",
         "inline-redacted": "A legacy plaintext ApiKey was detected and hidden. Enter a new ApiKey before continuing.",
         "reference-error": "The current secure reference cannot be resolved. Enter a new ApiKey before continuing."
       }
@@ -1600,6 +1647,7 @@
       "create": "Create model",
       "validate": "Validate",
       "save": "Save",
+      "clearOverride": "Clear override",
       "delete": "Delete model configuration",
       "cancel": "Cancel",
       "confirmCreate": "Create"
@@ -1612,6 +1660,11 @@
       "disabled": "Disabled"
     },
     "validation": {
+      "lastSuccessTitle": "Latest validation succeeded",
+      "lastFailureTitle": "Latest validation failed",
+      "lastWarningTitle": "Latest validation has warnings",
+      "idleTitle": "No real validation run yet",
+      "idleDescription": "After you click Validate, the latest probe result will be shown here.",
       "success": "Real request completed. Model \"{name}\" is available and this check consumed {tokens} tokens.",
       "requestId": "Request ID: {requestId}"
     },
@@ -1624,6 +1677,7 @@
       "runtimePatchMustBeObject": "The runtime config patch must be a JSON object.",
       "validateFailed": "Model validation failed.",
       "saveFailed": "Failed to save the model configuration.",
+      "secureStorageWriteFailed": "Writing the ApiKey to the local encrypted secret store failed. Verify that the workspace data directory is writable and try again.",
       "createFailed": "Failed to create the model configuration.",
       "deleteFailed": "Failed to delete the model configuration.",
       "secretCleanupFailed": "The model was deleted, but ApiKey cleanup did not finish.",
@@ -1656,7 +1710,7 @@
         "successTitle": "Model deleted",
         "successBody": "\"{name}\" was removed from the workspace model configuration.",
         "warningTitle": "Model deleted, ApiKey cleanup pending",
-        "warningBody": "\"{name}\" was deleted, but the ApiKey cleanup in secure system storage did not finish: {message}",
+        "warningBody": "\"{name}\" was deleted, but the ApiKey cleanup in the local encrypted secret store did not finish: {message}",
         "errorTitle": "Delete model failed",
         "errorBody": "\"{name}\" was not deleted: {message}"
       }
@@ -2109,6 +2163,7 @@
     },
     "fields": {
       "name": "Project name",
+      "leader": "Project leader",
       "description": "Description",
       "resourceDirectory": "Resource directory",
       "preset": "Setup preset",
@@ -2176,6 +2231,7 @@
       "title": "Configuration Summary",
       "currentDescription": "This page only shows the summary. Advanced capability editing lives in Project Settings.",
       "createDescription": "Create the project with the minimum required fields first. Refine advanced capability settings afterward.",
+      "inheritanceDescription": "Tools inherit the workspace enabled set by default, while agents and teams inherit the workspace active set. Project settings then apply exclusions and runtime disables.",
       "advancedTitle": "Advanced configuration",
       "advancedDescription": "Models, tools, actors, members, and access are edited from Project Settings.",
       "models": "Models",
@@ -2183,9 +2239,15 @@
       "actors": "Actors",
       "members": "Members",
       "modelsValue": "{granted} granted, {enabled} enabled, default {defaultModel}",
+      "toolsInheritedValue": "{count} workspace tools inherited by default",
       "toolsValue": "{granted} granted, {enabled} enabled, {overrides} overrides",
+      "actorsInheritedValue": "{count} workspace actors / teams inherited by default",
       "actorsValue": "{granted} granted, {enabled} enabled",
       "membersValue": "{members} members, {editors} editors"
+    },
+    "leader": {
+      "hint": "Optional. Choose an active workspace agent now, or update it later from Project Settings.",
+      "none": "Not set"
     }
   },
   "teams": {

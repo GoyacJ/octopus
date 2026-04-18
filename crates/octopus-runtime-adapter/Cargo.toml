@@ -12,7 +12,8 @@ workspace = true
 api = { path = "../api" }
 async-trait.workspace = true
 base64 = "0.22"
-keyring = "3"
+chacha20poly1305 = "0.10"
+getrandom = "0.2"
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
 octopus-model-policy = { path = "../octopus-model-policy" }
