@@ -230,8 +230,6 @@ CreateProjectRequest:
       $ref: "#/components/schemas/ProjectWorkspaceAssignments"
     description:
       type: string
-    leaderAgentId:
-      type: string
     linkedWorkspaceAssets:
       $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
     memberUserIds:
@@ -254,17 +252,17 @@ CreateProjectRequest:
 ProjectAgentAssignments:
   additionalProperties: false
   properties:
-    excludedAgentIds:
+    agentIds:
       items:
         type: string
       type: array
-    excludedTeamIds:
+    teamIds:
       items:
         type: string
       type: array
   required:
-    - excludedAgentIds
-    - excludedTeamIds
+    - agentIds
+    - teamIds
   type: object
 ProjectAgentLinkInput:
   additionalProperties: false
@@ -747,8 +745,6 @@ ProjectRecord:
       type: string
     id:
       type: string
-    leaderAgentId:
-      type: string
     linkedWorkspaceAssets:
       $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
     memberUserIds:
@@ -825,12 +821,12 @@ ProjectTeamLinkRecord:
 ProjectToolAssignments:
   additionalProperties: false
   properties:
-    excludedSourceKeys:
+    sourceKeys:
       items:
         type: string
       type: array
   required:
-    - excludedSourceKeys
+    - sourceKeys
   type: object
 ProjectWorkspaceAssignments:
   additionalProperties: false
@@ -847,8 +843,6 @@ UpdateProjectRequest:
   properties:
     assignments:
       $ref: "#/components/schemas/ProjectWorkspaceAssignments"
-    leaderAgentId:
-      type: string
     linkedWorkspaceAssets:
       $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
     memberUserIds:

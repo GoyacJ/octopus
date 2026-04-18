@@ -10,7 +10,6 @@ import type {
   ArtifactVersionReference,
   BindPetConversationInput,
   CreateDeliverableVersionInput,
-  CreateProjectRequest,
   DeliverableDetail,
   DeliverableSummary,
   DeliverableVersionContent,
@@ -19,7 +18,6 @@ import type {
   PromoteDeliverableInput,
   RegisterBootstrapAdminRequest,
   SavePetPresenceInput,
-  UpdateProjectRequest,
 } from '@octopus/schema'
 
 import {
@@ -110,144 +108,6 @@ describe('workspace client transport', () => {
     expect(taskSchema).toContain('TaskFailureCategory as OpenApiTaskFailureCategory')
     expect(taskSchema).toContain('TaskAnalyticsSummary as OpenApiTaskAnalyticsSummary')
     expect(indexSchema).toContain("export * from './task'")
-  })
-
-  it('exposes project leader and live-inheritance assignment fields through the canonical schema surfaces', () => {
-    const repoRoot = resolve(import.meta.dirname, '../../..')
-    const generatedSchemaPath = resolve(repoRoot, 'packages/schema/src/generated.ts')
-    const workspaceSchemaPath = resolve(repoRoot, 'packages/schema/src/workspace.ts')
-
-    const generatedSchema = readFileSync(generatedSchemaPath, 'utf8')
-    const workspaceSchema = readFileSync(workspaceSchemaPath, 'utf8')
-
-    expect(generatedSchema).toContain('leaderAgentId?: string')
-    expect(generatedSchema).toContain('excludedSourceKeys: string[]')
-    expect(generatedSchema).toContain('excludedAgentIds: string[]')
-    expect(generatedSchema).toContain('excludedTeamIds: string[]')
-    expect(workspaceSchema).toContain('ProjectAgentAssignments as OpenApiProjectAgentAssignments')
-    expect(workspaceSchema).toContain('ProjectToolAssignments as OpenApiProjectToolAssignments')
-  })
-
-  it('routes agent promotion and project bundle import-export through the workspace client adapter', async () => {
-    invokeSpy.mockResolvedValue(createHostBootstrap())
-    fetchSpy
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-        json: async () => ({
-          failureCount: 0,
-          agentCount: 1,
-          teamCount: 0,
-          skillCount: 0,
-          mcpCount: 0,
-          avatarCount: 0,
-          issueCount: 0,
-          issues: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-        json: async () => ({
-          failureCount: 0,
-          agentCount: 1,
-          teamCount: 1,
-          skillCount: 0,
-          mcpCount: 0,
-          avatarCount: 0,
-          issueCount: 0,
-          issues: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-        json: async () => ({
-          failureCount: 0,
-          agentCount: 1,
-          teamCount: 1,
-          skillCount: 0,
-          mcpCount: 0,
-          avatarCount: 0,
-          issueCount: 0,
-          issues: [],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-        json: async () => ({
-          rootDirName: 'promotion-bundle',
-          fileCount: 2,
-          agentCount: 1,
-          teamCount: 1,
-          skillCount: 0,
-          mcpCount: 0,
-          avatarCount: 0,
-          files: [],
-          issues: [],
-        }),
-      })
-
-    const client = await loadClientModule()
-    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
-    const connection = payload.workspaceConnections?.[0]
-    const session = createWorkspaceSession(connection!)
-    const workspaceClient = client.createWorkspaceClient({
-      connection: connection!,
-      session,
-    })
-
-    const importInput = {
-      files: [
-        {
-          relativePath: 'bundle/member.md',
-          fileName: 'member.md',
-          contentType: 'text/markdown',
-          dataBase64: 'IyBNZW1iZXI=',
-          byteSize: 8,
-        },
-      ],
-    }
-    const exportInput = {
-      mode: 'single',
-      agentIds: [],
-      teamIds: ['team-project-owned'],
-    }
-
-    await workspaceClient.agents.copyToWorkspace('agent-project-owned')
-    await workspaceClient.teams.copyToWorkspace('team-project-owned')
-    await workspaceClient.agents.importBundle(importInput, 'proj-redesign')
-    await workspaceClient.agents.exportBundle(exportInput, 'proj-redesign')
-
-    expect(fetchSpy).toHaveBeenNthCalledWith(
-      1,
-      'http://127.0.0.1:43127/api/v1/workspace/agents/agent-project-owned/copy-to-workspace',
-      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
-    )
-    expect(fetchSpy).toHaveBeenNthCalledWith(
-      2,
-      'http://127.0.0.1:43127/api/v1/workspace/teams/team-project-owned/copy-to-workspace',
-      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
-    )
-    expect(fetchSpy).toHaveBeenNthCalledWith(
-      3,
-      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/agents/import',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.any(Headers),
-        body: JSON.stringify(importInput),
-      }),
-    )
-    expect(fetchSpy).toHaveBeenNthCalledWith(
-      4,
-      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/agents/export',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.any(Headers),
-        body: JSON.stringify(exportInput),
-      }),
-    )
   })
 
   it('requires a workspace session token before workspace-plane calls can be made', async () => {
@@ -1591,23 +1451,10 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    const input: CreateProjectRequest = {
+    await workspaceClient.projects.create({
       name: 'New Project',
       description: 'Created from the workspace surface.',
-      resourceDirectory: 'data/projects/proj-new/resources',
-      leaderAgentId: 'agent-leader',
-      assignments: {
-        tools: {
-          excludedSourceKeys: ['builtin:bash', 'skill:ops'],
-        },
-        agents: {
-          excludedAgentIds: ['agent-shadow'],
-          excludedTeamIds: ['team-review'],
-        },
-      },
-    }
-
-    await workspaceClient.projects.create(input)
+    })
 
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://127.0.0.1:43127/api/v1/projects',
@@ -1616,21 +1463,6 @@ describe('workspace client transport', () => {
         headers: expect.any(Headers),
       }),
     )
-    expect(JSON.parse(String(firstRequest().body))).toMatchObject({
-      name: 'New Project',
-      description: 'Created from the workspace surface.',
-      resourceDirectory: 'data/projects/proj-new/resources',
-      leaderAgentId: 'agent-leader',
-      assignments: {
-        tools: {
-          excludedSourceKeys: ['builtin:bash', 'skill:ops'],
-        },
-        agents: {
-          excludedAgentIds: ['agent-shadow'],
-          excludedTeamIds: ['team-review'],
-        },
-      },
-    })
   })
 
   it('uses authenticated project update endpoint for archive/restore actions', async () => {
@@ -1655,24 +1487,11 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    const input: UpdateProjectRequest = {
+    await workspaceClient.projects.update('proj-redesign', {
       name: 'Desktop Redesign',
       description: 'Archived project.',
       status: 'archived',
-      resourceDirectory: 'data/projects/proj-redesign/resources',
-      leaderAgentId: 'agent-strategist',
-      assignments: {
-        tools: {
-          excludedSourceKeys: ['mcp:browser'],
-        },
-        agents: {
-          excludedAgentIds: ['agent-shadow', 'agent-scout'],
-          excludedTeamIds: [],
-        },
-      },
-    }
-
-    await workspaceClient.projects.update('proj-redesign', input)
+    })
 
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://127.0.0.1:43127/api/v1/projects/proj-redesign',
@@ -1681,22 +1500,6 @@ describe('workspace client transport', () => {
         headers: expect.any(Headers),
       }),
     )
-    expect(JSON.parse(String(firstRequest().body))).toMatchObject({
-      name: 'Desktop Redesign',
-      description: 'Archived project.',
-      status: 'archived',
-      resourceDirectory: 'data/projects/proj-redesign/resources',
-      leaderAgentId: 'agent-strategist',
-      assignments: {
-        tools: {
-          excludedSourceKeys: ['mcp:browser'],
-        },
-        agents: {
-          excludedAgentIds: ['agent-shadow', 'agent-scout'],
-          excludedTeamIds: [],
-        },
-      },
-    })
   })
 
   it('fetches the formal capability management projection through the workspace catalog adapter', async () => {

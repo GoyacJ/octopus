@@ -19,8 +19,6 @@ import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { resolveEnabledProjectAgentIds } from './project_settings'
-import { resolveProjectGrantedActorIds } from './project_setup'
 import {
   activeWorkspaceConnectionId,
   createWorkspaceRequestToken,
@@ -257,25 +255,14 @@ export const usePetStore = defineStore('pet', () => {
   })
   const preferredActor = computed(() => {
     const projectSettings = workspaceStore.getProjectSettings()
-    const currentProject = workspaceStore.projects.find(project => project.id === activeProjectId.value)
-    const grantedActors = resolveProjectGrantedActorIds(
-      currentProject?.assignments,
-      agentStore.workspaceAgents.map(agent => agent.id),
-      teamStore.workspaceTeams.map(team => team.id),
-    )
-    const enabledActors = resolveEnabledProjectAgentIds(
-      projectSettings,
-      grantedActors.assignedAgentIds,
-      grantedActors.assignedTeamIds,
-    )
-    const preferredTeamId = enabledActors.enabledTeamIds[0] ?? ''
+    const preferredTeamId = projectSettings.agents?.enabledTeamIds?.[0] ?? ''
     if (preferredTeamId) {
       return {
         kind: 'team' as const,
         id: preferredTeamId,
       }
     }
-    const preferredAgentId = enabledActors.enabledAgentIds[0] ?? ''
+    const preferredAgentId = projectSettings.agents?.enabledAgentIds?.[0] ?? ''
     if (preferredAgentId) {
       return {
         kind: 'agent' as const,

@@ -8,6 +8,7 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useAgentStore } from '@/stores/agent'
+import { useCatalogStore } from '@/stores/catalog'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
@@ -106,6 +107,137 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
+  it('keeps grant dialogs inside the shared scrollable dialog shell', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+
+    const dialogContent = document.body.querySelector<HTMLElement>('[data-testid="project-settings-grants-models-dialog"]')
+    const dialogBody = document.body.querySelector<HTMLElement>('[data-testid="ui-dialog-body"]')
+
+    expect(dialogContent).not.toBeNull()
+    expect(dialogContent?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(dialogBody).not.toBeNull()
+    expect(dialogBody?.className).toContain('overflow-y-auto')
+
+    mounted.destroy()
+  })
+
+  it('supports select all and clear all actions across grant dialogs', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+    const catalogStore = useCatalogStore()
+    const agentStore = useAgentStore()
+    const teamStore = useTeamStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    const workspaceModelCount = catalogStore.configuredModelOptions.length
+    const workspaceToolCount = catalogStore.managementProjection.assets.filter(entry => entry.enabled).length
+    const workspaceAgentCount = agentStore.workspaceOwnedAgents.length + agentStore.builtinTemplateAgents.length
+    const workspaceTeamCount = teamStore.workspaceOwnedTeams.length + teamStore.builtinTemplateTeams.length
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+
+    const selectAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-select-all"]')
+    const clearAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-clear-all"]')
+
+    expect(selectAllModelsButton).not.toBeNull()
+    expect(clearAllModelsButton).not.toBeNull()
+
+    selectAllModelsButton?.click()
+    await nextTick()
+
+    const modelCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-model-option-"] input[type="checkbox"]'),
+    )
+
+    expect(modelCheckboxes).toHaveLength(workspaceModelCount)
+    expect(modelCheckboxes.every(input => input.checked)).toBe(true)
+
+    clearAllModelsButton?.click()
+    await nextTick()
+
+    expect(modelCheckboxes.every(input => !input.checked)).toBe(true)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-dialog-close"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') === null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+
+    const selectAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-select-all"]')
+    const clearAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')
+    const saveGrantToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')
+
+    expect(selectAllToolsButton).not.toBeNull()
+    expect(clearAllToolsButton).not.toBeNull()
+    expect(saveGrantToolsButton).not.toBeNull()
+
+    selectAllToolsButton?.click()
+    await nextTick()
+    saveGrantToolsButton?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      return project?.assignments?.tools?.sourceKeys.length === workspaceToolCount
+    })
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')?.click()
+    await nextTick()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      return project?.assignments?.tools == null
+    })
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
+
+    const selectAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-select-all"]')
+    const clearAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-clear-all"]')
+    const selectAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-select-all"]')
+    const clearAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-clear-all"]')
+
+    expect(selectAllAgentsButton).not.toBeNull()
+    expect(clearAllAgentsButton).not.toBeNull()
+    expect(selectAllTeamsButton).not.toBeNull()
+    expect(clearAllTeamsButton).not.toBeNull()
+
+    selectAllAgentsButton?.click()
+    selectAllTeamsButton?.click()
+    await nextTick()
+
+    const agentCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-agent-option-"] input[type="checkbox"]'),
+    )
+    const teamCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-team-option-"] input[type="checkbox"]'),
+    )
+
+    expect(agentCheckboxes).toHaveLength(workspaceAgentCount)
+    expect(teamCheckboxes).toHaveLength(workspaceTeamCount)
+    expect(agentCheckboxes.every(input => input.checked)).toBe(true)
+    expect(teamCheckboxes.every(input => input.checked)).toBe(true)
+
+    clearAllAgentsButton?.click()
+    clearAllTeamsButton?.click()
+    await nextTick()
+
+    expect(agentCheckboxes.every(input => !input.checked)).toBe(true)
+    expect(teamCheckboxes.every(input => !input.checked)).toBe(true)
+
+    mounted.destroy()
+  })
+
   it('shows grant and runtime summaries separately on the document page', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
@@ -121,175 +253,6 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
-  it('edits the project leader from overview and persists the selected workspace agent', async () => {
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign fixture project')
-        }
-
-        project.leaderAgentId = 'agent-architect'
-      },
-    })
-
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-    const workspaceStore = useWorkspaceStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    expect(mounted.container.querySelector('[data-testid="project-settings-overview-leader-card"]')?.textContent).toContain('Architect Agent')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-overview"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-overview-dialog"]') !== null)
-
-    const leaderSelect = document.body.querySelector<HTMLSelectElement>('[data-testid="project-settings-overview-leader-select"]')
-    const leaderHint = document.body.querySelector<HTMLElement>('[data-testid="project-settings-overview-leader-hint"]')
-    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-overview-save-button"]')
-
-    expect(leaderSelect).not.toBeNull()
-    expect(leaderHint?.textContent).toContain('Leader')
-    expect(saveButton).not.toBeNull()
-
-    const leaderOptionLabels = Array.from(leaderSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
-    expect(leaderOptionLabels).toContain('Architect Agent')
-    expect(leaderOptionLabels).toContain('Coder Agent')
-    expect(leaderOptionLabels).not.toContain('Finance Planner Template')
-
-    leaderSelect!.value = 'agent-coder'
-    leaderSelect!.dispatchEvent(new Event('change', { bubbles: true }))
-    saveButton?.click()
-
-    await waitFor(() =>
-      workspaceStore.projects.find(item => item.id === 'proj-redesign')?.leaderAgentId === 'agent-coder',
-    )
-
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.leaderAgentId).toBe('agent-coder')
-
-    mounted.destroy()
-  })
-
-  it('supports tabbed tool dialogs with search and tab-scoped bulk actions', async () => {
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign fixture project')
-        }
-
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          tools: {
-            excludedSourceKeys: [],
-          },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (!projectSource) {
-          throw new Error('Expected proj-redesign runtime project source')
-        }
-
-        ;(projectSource as any).document = {
-          ...((projectSource as any).document ?? {}),
-          projectSettings: {
-            ...((projectSource as any).document?.projectSettings ?? {}),
-            tools: {
-              disabledSourceKeys: [],
-              overrides: {},
-            },
-          },
-        }
-      },
-    })
-
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-    const workspaceStore = useWorkspaceStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
-
-    const grantSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grant-tools-search-input"]')
-    const grantClearButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grant-tools-clear-visible-button"]')
-    const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')
-
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-builtin"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-skill"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-mcp"]')).not.toBeNull()
-    expect(grantSearchInput).not.toBeNull()
-    expect(grantClearButton).not.toBeNull()
-    expect(grantSaveButton).not.toBeNull()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-skill"]')?.click()
-    await nextTick()
-
-    grantSearchInput!.value = 'external-checks'
-    grantSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(
-      document.body.querySelector('[data-testid="project-grant-tool-option-skill:.codex/skills/external-checks/SKILL.md"]'),
-    ).not.toBeNull()
-    expect(
-      document.body.querySelector('[data-testid="project-grant-tool-option-skill:.claude/skills/external-help/SKILL.md"]'),
-    ).toBeNull()
-
-    grantClearButton?.click()
-    await nextTick()
-
-    grantSaveButton?.click()
-
-    await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      return project?.assignments?.tools?.excludedSourceKeys?.includes('skill:.codex/skills/external-checks/SKILL.md') === true
-    })
-
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.tools?.excludedSourceKeys).toEqual([
-      'skill:.codex/skills/external-checks/SKILL.md',
-    ])
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-tools"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-tools-dialog"]') !== null)
-
-    const runtimeSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-runtime-tools-search-input"]')
-    const runtimeClearButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-tools-clear-visible-button"]')
-    const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-tools-save-button"]')
-
-    expect(runtimeSearchInput).not.toBeNull()
-    expect(runtimeClearButton).not.toBeNull()
-    expect(runtimeSaveButton).not.toBeNull()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-skill"]')?.click()
-    await nextTick()
-    runtimeClearButton?.click()
-    await nextTick()
-
-    runtimeSaveButton?.click()
-
-    await waitFor(() =>
-      workspaceStore.getProjectSettings('proj-redesign').tools?.disabledSourceKeys?.length === 4,
-    )
-
-    expect(workspaceStore.getProjectSettings('proj-redesign').tools?.disabledSourceKeys).toEqual([
-      'skill:data/skills/help/SKILL.md',
-      'skill:.claude/skills/external-help/SKILL.md',
-      'skill:builtin-assets/skills/financial-calculator/SKILL.md',
-      'skill:data/projects/proj-redesign/skills/redesign-review/SKILL.md',
-    ])
-
-    mounted.destroy()
-  })
-
   it('saves project grants and runtime actor refinement through separate flows', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
@@ -299,32 +262,16 @@ describe('Project settings view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
 
-    const grantSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grant-actors-search-input"]')
-    const grantSelectAllButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grant-actors-select-all-visible-button"]')
+    const grantBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-agent-option-agent-template-finance"]')
+    const grantBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-team-option-team-template-finance"]')
     const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
 
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-agents"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-teams"]')).not.toBeNull()
-    expect(grantSearchInput).not.toBeNull()
-    expect(grantSelectAllButton).not.toBeNull()
+    expect(grantBuiltinAgent).not.toBeNull()
+    expect(grantBuiltinTeam).not.toBeNull()
     expect(grantSaveButton).not.toBeNull()
 
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
-    await nextTick()
-
-    grantSearchInput!.value = 'Finance Ops Template'
-    grantSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-    grantSelectAllButton?.click()
-    await nextTick()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await nextTick()
-
-    grantSearchInput!.value = 'Finance Planner Template'
-    grantSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-    grantSelectAllButton?.click()
+    grantBuiltinAgent?.click()
+    grantBuiltinTeam?.click()
     await nextTick()
     grantSaveButton?.click()
 
@@ -332,144 +279,49 @@ describe('Project settings view', () => {
       const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
       const assignments = project?.assignments?.agents
       return Boolean(
-        assignments?.excludedAgentIds
-        && assignments.excludedTeamIds,
+        assignments?.agentIds.includes('agent-template-finance')
+        && assignments?.teamIds.includes('team-template-finance'),
       )
     })
 
-    const projectAfterGrant = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-    expect(projectAfterGrant?.assignments?.agents?.excludedAgentIds).toEqual(['agent-coder'])
-    expect(projectAfterGrant?.assignments?.agents?.excludedTeamIds).toEqual([])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio'])
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-actors"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-actors-dialog"]') !== null)
 
-    const runtimeSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-runtime-actors-search-input"]')
-    const runtimeSelectAllButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-select-all-visible-button"]')
+    const runtimeBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-agent-option-agent-template-finance"]')
+    const runtimeBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-team-option-team-template-finance"]')
     const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-save-button"]')
 
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-agents"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="ui-tabs-trigger-teams"]')).not.toBeNull()
-    expect(runtimeSearchInput).not.toBeNull()
-    expect(runtimeSelectAllButton).not.toBeNull()
+    expect(runtimeBuiltinAgent).not.toBeNull()
+    expect(runtimeBuiltinTeam).not.toBeNull()
     expect(runtimeSaveButton).not.toBeNull()
 
-    runtimeSearchInput!.value = 'Finance Planner Template'
-    runtimeSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-    runtimeSelectAllButton?.click()
-    await nextTick()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
-    await nextTick()
-
-    runtimeSearchInput!.value = 'Finance Ops Template'
-    runtimeSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-    runtimeSelectAllButton?.click()
+    runtimeBuiltinAgent?.click()
+    runtimeBuiltinTeam?.click()
     await nextTick()
     runtimeSaveButton?.click()
 
     await waitFor(() => {
       const settings = workspaceStore.getProjectSettings('proj-redesign').agents
       return Boolean(
-        settings?.disabledAgentIds
-        && settings?.disabledTeamIds,
+        settings?.enabledAgentIds.includes('agent-template-finance')
+        && settings?.enabledTeamIds.includes('team-template-finance'),
       )
     })
 
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).toEqual([])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledTeamIds).toEqual([])
-
-    mounted.destroy()
-  })
-
-  it('keeps the current leader granted and enabled inside actor dialogs', async () => {
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign fixture project')
-        }
-
-        project.leaderAgentId = 'agent-architect'
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          agents: {
-            excludedAgentIds: [],
-            excludedTeamIds: [],
-          },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (!projectSource) {
-          throw new Error('Expected proj-redesign runtime project source')
-        }
-
-        ;(projectSource as any).document = {
-          ...((projectSource as any).document ?? {}),
-          projectSettings: {
-            ...((projectSource as any).document?.projectSettings ?? {}),
-            agents: {
-              disabledAgentIds: [],
-              disabledTeamIds: [],
-            },
-          },
-        }
-      },
-    })
-
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-    const workspaceStore = useWorkspaceStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
-
-    const grantSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grant-actors-search-input"]')
-    const grantClearButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grant-actors-clear-visible-button"]')
-    const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
-
-    grantSearchInput!.value = 'Architect Agent'
-    grantSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="project-grant-agent-leader-badge-agent-architect"]')).not.toBeNull()
-
-    grantClearButton?.click()
-    await nextTick()
-    grantSaveButton?.click()
-
-    await waitFor(() => Array.isArray(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.excludedAgentIds))
-
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.excludedAgentIds).not.toContain('agent-architect')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-actors-dialog"]') !== null)
-
-    const runtimeSearchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-runtime-actors-search-input"]')
-    const runtimeClearButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-clear-visible-button"]')
-    const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-save-button"]')
-
-    runtimeSearchInput!.value = 'Architect Agent'
-    runtimeSearchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="project-runtime-agent-leader-badge-agent-architect"]')).not.toBeNull()
-
-    runtimeClearButton?.click()
-    await nextTick()
-    runtimeSaveButton?.click()
-
-    await waitFor(() => Array.isArray(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds))
-
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).not.toContain('agent-architect')
+    const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+    expect(project?.assignments?.agents?.agentIds).toEqual(['agent-architect', 'agent-template-finance'])
+    expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual([
+      'agent-architect',
+      'agent-template-finance',
+    ])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual([
+      'team-studio',
+      'team-template-finance',
+    ])
 
     mounted.destroy()
   })
@@ -540,94 +392,6 @@ describe('Project settings view', () => {
       'anthropic-alt',
     ])
     expect(workspaceStore.getProjectSettings('proj-redesign').models?.allowedConfiguredModelIds).toEqual(['anthropic-primary'])
-
-    mounted.destroy()
-  })
-
-  it('shows promoted project assets as selectable workspace candidates in other project settings', async () => {
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-governance')
-        if (!project) {
-          throw new Error('Expected proj-governance fixture project')
-        }
-
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          agents: {
-            agentIds: [],
-            teamIds: [],
-          },
-        }
-      },
-    })
-
-    const promotedAssetsApp = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/agents')
-    const agentStore = useAgentStore()
-    const teamStore = useTeamStore()
-
-    await waitFor(() => agentStore.projectOwnedAgents.some(agent => agent.id === 'agent-redesign'))
-    await waitFor(() => teamStore.projectOwnedTeams.some(team => team.id === 'team-redesign'))
-
-    await agentStore.copyToWorkspace('agent-redesign')
-    await teamStore.copyToWorkspace('team-redesign')
-
-    promotedAssetsApp.destroy()
-
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings')
-    const workspaceStore = useWorkspaceStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
-
-    const searchInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grant-actors-search-input"]')
-    const selectAllButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grant-actors-select-all-visible-button"]')
-    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
-    expect(searchInput).not.toBeNull()
-    expect(selectAllButton).not.toBeNull()
-    expect(saveButton).not.toBeNull()
-
-    searchInput!.value = 'Redesign Copilot'
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="project-grant-agent-option-agent-workspace-redesign-copilot-copy"]')).not.toBeNull()
-    selectAllButton?.click()
-    await nextTick()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
-    await nextTick()
-
-    searchInput!.value = 'Redesign Tiger Team'
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="project-grant-team-option-team-workspace-redesign-tiger-team-copy"]')).not.toBeNull()
-    selectAllButton?.click()
-    await nextTick()
-
-    saveButton?.click()
-
-    await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-governance')
-      const assignments = project?.assignments?.agents
-      return Boolean(
-        assignments?.excludedAgentIds
-        && assignments?.excludedTeamIds
-        && !assignments.excludedAgentIds.includes('agent-workspace-redesign-copilot-copy')
-        && !assignments.excludedTeamIds.includes('team-workspace-redesign-tiger-team-copy'),
-      )
-    })
-
-    const projectAssignments = workspaceStore.projects.find(item => item.id === 'proj-governance')?.assignments?.agents
-    expect(projectAssignments?.excludedAgentIds).not.toContain('agent-workspace-redesign-copilot-copy')
-    expect(projectAssignments?.excludedTeamIds).not.toContain('team-workspace-redesign-tiger-team-copy')
 
     mounted.destroy()
   })

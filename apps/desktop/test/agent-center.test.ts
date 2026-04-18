@@ -10,7 +10,6 @@ import { router } from '@/router'
 import { useAgentStore } from '@/stores/agent'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTeamStore } from '@/stores/team'
-import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -265,116 +264,6 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('lets project-owned agents and teams stay editable, copyable, and promotable inside the project scope', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
-    await router.isReady()
-
-    const mounted = mountApp()
-    try {
-      await waitForText(mounted.container, 'Redesign Copilot')
-
-      const projectAgentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-redesign"]') as HTMLButtonElement | null
-      expect(projectAgentOpenButton).not.toBeNull()
-      projectAgentOpenButton?.click()
-
-      await waitForText(document.body, '员工配置')
-      const projectAgentNameInput = document.body.querySelector('input[placeholder="例如: 研发专家"]') as HTMLInputElement | null
-      const projectAgentStatusSelect = document.body.querySelector('[data-testid="agent-center-agent-dialog"] select') as HTMLSelectElement | null
-      expect(projectAgentNameInput).not.toBeNull()
-      expect(projectAgentNameInput?.disabled).toBe(false)
-      expect(projectAgentStatusSelect).not.toBeNull()
-      expect(projectAgentStatusSelect?.disabled).toBe(false)
-      expect(findButton(document.body, '保存配置')).toBeDefined()
-      expect(document.body.querySelector('[data-testid="agent-center-copy-agent-button"]')).not.toBeNull()
-      expect(document.body.querySelector('[data-testid="agent-center-promote-agent-button"]')).not.toBeNull()
-
-      const closeAgentDialogButton = document.body.querySelector('[data-testid="ui-dialog-close"]') as HTMLButtonElement | null
-      expect(closeAgentDialogButton).not.toBeNull()
-      closeAgentDialogButton?.click()
-      await waitForCondition(() => document.body.querySelector('[data-testid="agent-center-agent-dialog"]') === null)
-
-      const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
-      expect(teamTab).not.toBeNull()
-      teamTab?.click()
-      await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
-      await waitForText(mounted.container, 'Redesign Tiger Team')
-
-      const projectTeamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-redesign"]') as HTMLButtonElement | null
-      expect(projectTeamOpenButton).not.toBeNull()
-      projectTeamOpenButton?.click()
-
-      await waitForText(document.body, '数字团队配置')
-      const projectTeamNameInput = document.body.querySelector('input[placeholder="例如: 核心研发组"]') as HTMLInputElement | null
-      expect(projectTeamNameInput).not.toBeNull()
-      expect(projectTeamNameInput?.disabled).toBe(false)
-      expect(findButton(document.body, '保存配置')).toBeDefined()
-      expect(document.body.querySelector('[data-testid="agent-center-copy-team-button"]')).not.toBeNull()
-      expect(document.body.querySelector('[data-testid="agent-center-promote-team-button"]')).not.toBeNull()
-    } finally {
-      mounted.destroy()
-    }
-  })
-
-  it('keeps assigned workspace agents and teams readonly in project scope but allows copying them into project assets', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
-    await router.isReady()
-
-    const mounted = mountApp()
-    try {
-      await waitForText(mounted.container, 'Architect Agent')
-
-      const workspaceAgentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-architect"]') as HTMLButtonElement | null
-      expect(workspaceAgentOpenButton).not.toBeNull()
-      workspaceAgentOpenButton?.click()
-
-      await waitForText(document.body, '员工配置')
-      const workspaceAgentNameInput = document.body.querySelector('input[placeholder="例如: 研发专家"]') as HTMLInputElement | null
-      const workspaceAgentStatusSelect = document.body.querySelector('[data-testid="agent-center-agent-dialog"] select') as HTMLSelectElement | null
-      expect(workspaceAgentNameInput).not.toBeNull()
-      expect(workspaceAgentNameInput?.disabled).toBe(true)
-      expect(workspaceAgentStatusSelect).not.toBeNull()
-      expect(workspaceAgentStatusSelect?.disabled).toBe(true)
-      expect(findButton(document.body, '保存配置')).toBeUndefined()
-
-      const workspaceAgentCopyButton = document.body.querySelector('[data-testid="agent-center-copy-agent-button"]') as HTMLButtonElement | null
-      expect(workspaceAgentCopyButton).not.toBeNull()
-      workspaceAgentCopyButton?.click()
-
-      await waitForCondition(() =>
-        mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-project-architect-agent-copy"]') !== null,
-      )
-
-      const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
-      expect(teamTab).not.toBeNull()
-      teamTab?.click()
-      await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
-      await waitForText(mounted.container, 'Studio Direction Team')
-
-      const workspaceTeamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
-      expect(workspaceTeamOpenButton).not.toBeNull()
-      workspaceTeamOpenButton?.click()
-
-      await waitForText(document.body, '数字团队配置')
-      const workspaceTeamNameInput = document.body.querySelector('input[placeholder="例如: 核心研发组"]') as HTMLInputElement | null
-      const workspaceTeamStatusSelect = document.body.querySelector('[data-testid="agent-center-team-dialog"] select') as HTMLSelectElement | null
-      expect(workspaceTeamNameInput).not.toBeNull()
-      expect(workspaceTeamNameInput?.disabled).toBe(true)
-      expect(workspaceTeamStatusSelect).not.toBeNull()
-      expect(workspaceTeamStatusSelect?.disabled).toBe(true)
-      expect(findButton(document.body, '保存配置')).toBeUndefined()
-
-      const workspaceTeamCopyButton = document.body.querySelector('[data-testid="agent-center-copy-team-button"]') as HTMLButtonElement | null
-      expect(workspaceTeamCopyButton).not.toBeNull()
-      workspaceTeamCopyButton?.click()
-
-      await waitForCondition(() =>
-        mounted.container.querySelector('[data-testid="agent-center-remove-team-team-project-studio-direction-team-copy"]') !== null,
-      )
-    } finally {
-      mounted.destroy()
-    }
-  })
-
   it('shows delete actions for workspace agent and team cards and keeps digital team relationships inside dialog', async () => {
     await router.push('/workspaces/ws-local/agents')
     await router.isReady()
@@ -403,52 +292,25 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('keeps existing workspace teams editable and copyable from the workspace scope', async () => {
+  it('shows the leader name in the readonly team leader display for existing workspace teams', async () => {
     await router.push('/workspaces/ws-local/agents?tab=team')
     await router.isReady()
 
     const mounted = mountApp()
-    try {
-      const teamStore = useTeamStore()
-      const notificationStore = useNotificationStore()
-      await waitForText(mounted.container, 'Studio Direction Team')
+    await waitForText(mounted.container, 'Studio Direction Team')
 
-      const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
-      expect(teamOpenButton).not.toBeNull()
-      expect(teamOpenButton?.textContent).toContain('编辑')
-      teamOpenButton?.click()
-      await waitForCondition(() =>
-        document.body.querySelector('[data-testid="agent-center-team-dialog"]') !== null,
-      )
+    const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
+    expect(teamOpenButton).not.toBeNull()
+    teamOpenButton?.click()
+    await waitForCondition(() =>
+      document.body.querySelector('[data-testid="agent-center-team-dialog"]') !== null,
+    )
 
-      const nameInput = document.body.querySelector('input[placeholder="例如: 核心研发组"]') as HTMLInputElement | null
-      const leaderInput = document.body.querySelector('[data-testid="agent-center-team-leader-display"]') as HTMLInputElement | null
-      const statusSelect = document.body.querySelector('[data-testid="agent-center-team-dialog"] select') as HTMLSelectElement | null
-      const copyButton = document.body.querySelector('[data-testid="agent-center-copy-team-button"]') as HTMLButtonElement | null
-      expect(nameInput).not.toBeNull()
-      expect(nameInput?.disabled).toBe(false)
-      expect(leaderInput).toBeNull()
-      expect(statusSelect).not.toBeNull()
-      expect(statusSelect?.disabled).toBe(false)
-      expect(copyButton).not.toBeNull()
-      expect(findButton(document.body, '保存配置')).toBeDefined()
+    const leaderInput = document.body.querySelector('[data-testid="agent-center-team-leader-display"]') as HTMLInputElement | null
+    expect(leaderInput).not.toBeNull()
+    expect(leaderInput?.value).toBe('Architect Agent')
 
-      nameInput!.value = 'Studio Direction Team Revised'
-      nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-      await nextTick()
-
-      findButton(document.body, '保存配置')?.click()
-
-      await waitForCondition(() => teamStore.teams.find(team => team.id === 'team-studio')?.name === 'Studio Direction Team Revised')
-      await waitForCondition(() =>
-        notificationStore.notificationsState.some(notification =>
-          notification.title.includes('保存完成')
-          && (notification.body?.includes('Studio Direction Team Revised') ?? false),
-        ),
-      )
-    } finally {
-      mounted.destroy()
-    }
+    mounted.destroy()
   })
 
   it('does not keep the save action when switching from editable agent to builtin agent', async () => {
@@ -482,57 +344,47 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('keeps existing workspace agents editable and copyable with localized status labels', async () => {
+  it('keeps existing workspace agents content readonly but allows saving status changes with localized labels', async () => {
     await router.push('/workspaces/ws-local/agents')
     await router.isReady()
 
     const mounted = mountApp()
-    try {
-      const agentStore = useAgentStore()
-      const notificationStore = useNotificationStore()
-      await waitForText(mounted.container, 'Architect Agent')
+    const agentStore = useAgentStore()
+    const notificationStore = useNotificationStore()
+    await waitForText(mounted.container, 'Architect Agent')
 
-      const openButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-architect"]') as HTMLButtonElement | null
-      expect(openButton).not.toBeNull()
-      expect(openButton?.textContent).toContain('编辑')
-      expect(mounted.container.textContent).toContain('启用')
-      openButton?.click()
+    const openButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-architect"]') as HTMLButtonElement | null
+    expect(openButton).not.toBeNull()
+    expect(openButton?.textContent).toContain('查看')
+    expect(mounted.container.textContent).toContain('启用')
+    openButton?.click()
 
-      await waitForText(document.body, '员工配置')
+    await waitForText(document.body, '员工配置')
 
-      const nameInput = document.body.querySelector('input[placeholder="例如: 研发专家"]') as HTMLInputElement | null
-      const statusSelect = document.body.querySelector('[data-testid="agent-center-agent-dialog"] select') as HTMLSelectElement | null
-      const copyButton = document.body.querySelector('[data-testid="agent-center-copy-agent-button"]') as HTMLButtonElement | null
-      expect(nameInput).not.toBeNull()
-      expect(nameInput?.disabled).toBe(false)
-      expect(statusSelect).not.toBeNull()
-      expect(statusSelect?.disabled).toBe(false)
-      expect(copyButton).not.toBeNull()
-      expect(findButton(document.body, '保存配置')).toBeDefined()
+    const nameInput = document.body.querySelector('input[placeholder="例如: 研发专家"]') as HTMLInputElement | null
+    const statusSelect = document.body.querySelector('[data-testid="agent-center-agent-dialog"] select') as HTMLSelectElement | null
+    expect(nameInput).not.toBeNull()
+    expect(nameInput?.disabled).toBe(true)
+    expect(statusSelect).not.toBeNull()
+    expect(statusSelect?.disabled).toBe(false)
+    expect(findButton(document.body, '保存配置')).toBeDefined()
 
-      nameInput!.value = 'Architect Agent Revised'
-      nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-      await nextTick()
+    statusSelect!.value = 'archived'
+    statusSelect!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
 
-      statusSelect!.value = 'archived'
-      statusSelect!.dispatchEvent(new Event('change', { bubbles: true }))
-      await nextTick()
+    findButton(document.body, '保存配置')?.click()
 
-      findButton(document.body, '保存配置')?.click()
+    await waitForCondition(() => agentStore.agents.find(agent => agent.id === 'agent-architect')?.status === 'archived')
+    await waitForCondition(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.title.includes('保存完成')
+        && (notification.body?.includes('Architect Agent') ?? false),
+      ),
+    )
+    await waitForText(mounted.container, '禁用')
 
-      await waitForCondition(() => agentStore.agents.find(agent => agent.id === 'agent-architect')?.status === 'archived')
-      await waitForCondition(() => agentStore.agents.find(agent => agent.id === 'agent-architect')?.name === 'Architect Agent Revised')
-      await waitForCondition(() =>
-        notificationStore.notificationsState.some(notification =>
-          notification.title.includes('保存完成')
-          && (notification.body?.includes('Architect Agent Revised') ?? false),
-        ),
-      )
-      await waitForText(mounted.container, 'Architect Agent Revised')
-      await waitForText(mounted.container, '禁用')
-    } finally {
-      mounted.destroy()
-    }
+    mounted.destroy()
   })
 
   it('keeps import and batch export actions on the embedded workspace page', async () => {
@@ -667,7 +519,7 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('keeps existing project teams editable and allows saving status changes', async () => {
+  it('keeps existing project teams content readonly but allows saving status changes', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents?tab=team')
     await router.isReady()
 
@@ -678,7 +530,7 @@ describe('workspace and project agents pages', () => {
 
     const openButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-redesign"]') as HTMLButtonElement | null
     expect(openButton).not.toBeNull()
-    expect(openButton?.textContent).toContain('编辑')
+    expect(openButton?.textContent).toContain('查看')
     openButton?.click()
 
     await waitForText(document.body, '数字团队配置')
@@ -687,8 +539,9 @@ describe('workspace and project agents pages', () => {
     const leaderDisplay = document.body.querySelector('[data-testid="agent-center-team-leader-display"]') as HTMLInputElement | null
     const statusSelect = document.body.querySelector('[data-testid="agent-center-team-dialog"] select') as HTMLSelectElement | null
     expect(nameInput).not.toBeNull()
-    expect(nameInput?.disabled).toBe(false)
-    expect(leaderDisplay).toBeNull()
+    expect(nameInput?.disabled).toBe(true)
+    expect(leaderDisplay).not.toBeNull()
+    expect(leaderDisplay?.disabled).toBe(true)
     expect(statusSelect).not.toBeNull()
     expect(statusSelect?.disabled).toBe(false)
     expect(findButton(document.body, '保存配置')).toBeDefined()
@@ -857,153 +710,44 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('imports bundles into project scope as project-owned assets instead of workspace assets', async () => {
-    await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
+  it('exports selected teams from the team tab in one batch payload', async () => {
+    const saveSpy = vi.spyOn(tauriClient, 'saveAgentBundleExport')
+
+    await router.push('/workspaces/ws-local/console/agents')
     await router.isReady()
 
     const mounted = mountApp()
-    const agentStore = useAgentStore()
-    await waitForText(mounted.container, 'Redesign Copilot')
-
-    const imported = await agentStore.importBundle(
-      {
-        files: [
-          {
-            relativePath: 'agent-bundle/manifest.json',
-            name: 'manifest.json',
-            content: btoa(JSON.stringify({ version: 2 })),
-            contentType: 'application/json',
-          },
-        ],
-      },
-      'proj-redesign',
-    )
-
-    expect(imported.agentCount).toBeGreaterThan(0)
-    expect(imported.teamCount).toBeGreaterThan(0)
-
-    await waitForCondition(() =>
-      mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-imported-project"]') !== null,
-    )
-    expect(mounted.container.textContent).toContain('Imported Project Agent')
-    expect(mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-imported-project"]')).not.toBeNull()
-
-    const importedAgentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-imported-project"]') as HTMLButtonElement | null
-    expect(importedAgentOpenButton).not.toBeNull()
-    importedAgentOpenButton?.click()
-
-    await waitForText(document.body, '员工配置')
-    const importedAgentNameInput = document.body.querySelector('input[placeholder="例如: 研发专家"]') as HTMLInputElement | null
-    expect(importedAgentNameInput?.disabled).toBe(false)
-    expect(document.body.querySelector('[data-testid="agent-center-promote-agent-button"]')).not.toBeNull()
-
-    const closeAgentDialogButton = document.body.querySelector('[data-testid="ui-dialog-close"]') as HTMLButtonElement | null
-    closeAgentDialogButton?.click()
-    await waitForCondition(() => document.body.querySelector('[data-testid="agent-center-agent-dialog"]') === null)
+    await waitForText(mounted.container, 'Studio Direction Team')
 
     const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
     expect(teamTab).not.toBeNull()
     teamTab?.click()
     await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
-    await waitForText(mounted.container, 'Imported Project Team')
+    await waitForText(mounted.container, 'Studio Direction Team')
 
-    expect(mounted.container.querySelector('[data-testid="agent-center-remove-team-team-imported-project"]')).not.toBeNull()
+    const teamCheckbox = mounted.container.querySelector('[data-testid="agent-center-select-team-team-studio"]') as HTMLLabelElement | null
+    expect(teamCheckbox).not.toBeNull()
+    teamCheckbox?.click()
+    await nextTick()
 
-    await router.push('/workspaces/ws-local/agents')
-    await waitForText(mounted.container, 'Architect Agent')
-    expect(mounted.container.textContent).not.toContain('Imported Project Agent')
-    expect(mounted.container.textContent).not.toContain('Imported Project Team')
+    const exportTrigger = mounted.container.querySelector('[data-testid="agent-center-export-teams-trigger"]') as HTMLButtonElement | null
+    expect(exportTrigger).not.toBeNull()
+    exportTrigger?.click()
+    await waitForCondition(() => document.body.querySelector('[data-testid="ui-dropdown-item-export-folder"]') !== null)
 
-    mounted.destroy()
-  })
+    const exportFolderButton = document.body.querySelector('[data-testid="ui-dropdown-item-export-folder"]') as HTMLElement | null
+    expect(exportFolderButton).not.toBeNull()
+    exportFolderButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-  it('exports only effective project assets from live inheritance and keeps team member agents bundled', async () => {
-    vi.restoreAllMocks()
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
+    await waitForCondition(() => saveSpy.mock.calls.length > 0)
 
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign project fixture')
-        }
-
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          agents: {
-            excludedAgentIds: ['agent-coder'],
-            excludedTeamIds: ['team-template-finance'],
-          },
-        }
-        project.linkedWorkspaceAssets.agentIds = []
-        state.projectAgentLinks['proj-redesign'] = []
-        state.projectTeamLinks['proj-redesign'] = []
-      },
-    })
-
-    await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
-    await router.isReady()
-
-    const mounted = mountApp()
-    const agentStore = useAgentStore()
-    await waitForText(mounted.container, 'Architect Agent')
-
-    const allowedBuiltinAgentExport = await agentStore.exportBundle(
-      {
-        mode: 'single',
-        agentIds: ['agent-template-finance'],
-        teamIds: [],
-      },
-      'proj-redesign',
+    expect(saveSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentCount: 0,
+        teamCount: 1,
+      }),
+      'folder',
     )
-    expect(allowedBuiltinAgentExport.agentCount).toBe(1)
-    expect(allowedBuiltinAgentExport.teamCount).toBe(0)
-
-    const blockedWorkspaceAgentExport = await agentStore.exportBundle(
-      {
-        mode: 'single',
-        agentIds: ['agent-coder'],
-        teamIds: [],
-      },
-      'proj-redesign',
-    )
-    expect(blockedWorkspaceAgentExport.agentCount).toBe(0)
-    expect(blockedWorkspaceAgentExport.teamCount).toBe(0)
-    expect(blockedWorkspaceAgentExport.fileCount).toBe(0)
-
-    const allowedWorkspaceTeamExport = await agentStore.exportBundle(
-      {
-        mode: 'single',
-        agentIds: [],
-        teamIds: ['team-studio'],
-      },
-      'proj-redesign',
-    )
-    expect(allowedWorkspaceTeamExport.teamCount).toBe(1)
-    expect(allowedWorkspaceTeamExport.agentCount).toBe(2)
-
-    mounted.destroy()
-  })
-
-  it('exports selected teams in one batch payload and includes member agents', async () => {
-    await router.push('/workspaces/ws-local/console/agents')
-    await router.isReady()
-
-    const mounted = mountApp()
-    const agentStore = useAgentStore()
-    const workspaceStore = useWorkspaceStore()
-    await workspaceStore.ensureWorkspaceBootstrap('conn-local')
-
-    const exported = await agentStore.exportBundle({
-      mode: 'batch',
-      agentIds: [],
-      teamIds: ['team-studio'],
-    })
-
-    expect(exported.agentCount).toBe(2)
-    expect(exported.teamCount).toBe(1)
 
     mounted.destroy()
   })

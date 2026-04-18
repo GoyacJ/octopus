@@ -747,20 +747,11 @@
       "projectOverride": "Project override",
       "members": "Members & access"
     },
-    "leader": {
-      "hint": "The Leader keeps the highest project permissions and must remain available in the granted and enabled actor lists.",
-      "validation": {
-        "required": "Choose a Leader agent.",
-        "invalid": "The selected Leader is not available in the current workspace agent scope.",
-        "mustRemainEnabled": "The project Leader must stay granted and enabled."
-      }
-    },
     "sections": {
       "overview": {
         "title": "Configuration Overview",
         "description": "This section mirrors the project registry. Name, description, and resource directory only change in Projects.",
-        "editHint": "To edit the project name, description, resource directory, or archive state, go back to Projects.",
-        "saveError": "Failed to save the project overview."
+        "editHint": "To edit the project name, description, resource directory, or archive state, go back to Projects."
       },
       "grants": {
         "title": "Available To This Project",
@@ -796,21 +787,6 @@
       }
     },
     "dialogs": {
-      "overview": {
-        "title": "Edit project overview",
-        "description": "Update the project Leader here. Name, description, and resource directory stay managed in Projects."
-      },
-      "assetPicker": {
-        "searchTools": "Search name, description, or key",
-        "searchActors": "Search name, description, or ID",
-        "results": "{count} items in this tab",
-        "selectVisible": "Select current tab",
-        "clearVisible": "Clear current tab",
-        "emptyTabTitle": "No items are available in this tab",
-        "emptyTabDescription": "Switch tabs or adjust the upstream grant scope and try again.",
-        "emptySearchTitle": "No matching results",
-        "emptySearchDescription": "Try a different keyword or clear the search."
-      },
       "grantModels": {
         "title": "Edit model grants",
         "description": "Choose which workspace models this project can see at all.",
@@ -834,17 +810,13 @@
       },
       "runtimeTools": {
         "title": "Edit tool enablement & overrides",
-        "description": "Within the granted tool scope, choose the enabled tools and project-level overrides.",
-        "inheritVisible": "Set current tab to inherit",
-        "denyVisible": "Disable current tab"
+        "description": "Within the granted tool scope, choose the enabled tools and project-level overrides."
       },
       "runtimeActors": {
         "title": "Edit actor enablement",
         "description": "Within the granted scope, choose which agents and teams are actually enabled in this project.",
         "agentsHint": "Only agents already granted to this project appear here.",
         "teamsHint": "Only teams already granted to this project appear here.",
-        "enableVisible": "Enable current tab",
-        "disableVisible": "Disable current tab",
         "projectOwnedTitle": "Project-owned actors",
         "projectOwnedDescription": "Agents and teams created inside this project already belong to it and do not need an extra grant."
       },
@@ -2140,8 +2112,6 @@
       "description": "Description",
       "resourceDirectory": "Resource directory",
       "preset": "Setup preset",
-      "leader": "Leader agent",
-      "leaderHint": "Choose the project owner from active workspace agents. New conversations prefer the Leader by default, and the project follows workspace changes live.",
       "totalTokens": "Token quota",
       "usedTokens": "Used tokens",
       "models": "Assigned models",
@@ -2180,7 +2150,6 @@
       "saveMetadata": "Failed to save project basics.",
       "seedRuntime": "The project was created, but the initial advanced configuration could not be saved."
     },
-    "inheritanceHint": "New projects live-inherit enabled workspace tools, agents, and teams by default. Nothing is explicitly preselected here; project settings can exclude or override later.",
     "presets": {
       "hint": "Presets only seed suggested values for a new project. You can still refine everything later in Project Settings.",
       "editHint": "Use Project Settings for advanced edits on an existing project. Presets only apply during creation.",

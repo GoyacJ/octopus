@@ -11,11 +11,6 @@ describe('OpenAPI parity collectors', () => {
     expect(routes).toContain('/api/v1/host/health')
     expect(routes).toContain('/api/v1/runtime/sessions')
     expect(routes).toContain('/api/v1/runtime/sessions/{param}/events')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/import-preview')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/import')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/export')
-    expect(routes).toContain('/api/v1/workspace/agents/{param}/copy-to-workspace')
-    expect(routes).toContain('/api/v1/workspace/teams/{param}/copy-to-workspace')
   })
 
   it('collects normalized adapter routes from the active desktop API modules', async () => {
@@ -25,11 +20,6 @@ describe('OpenAPI parity collectors', () => {
     expect(routes).toContain('/api/v1/runtime/sessions/{param}/events')
     expect(routes).toContain('/api/v1/workspace/catalog/skills/{param}/files/{param}')
     expect(routes).toContain('/api/v1/host/notifications/{param}/read')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/import-preview')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/import')
-    expect(routes).toContain('/api/v1/projects/{param}/agents/export')
-    expect(routes).toContain('/api/v1/workspace/agents/{param}/copy-to-workspace')
-    expect(routes).toContain('/api/v1/workspace/teams/{param}/copy-to-workspace')
     expect(routes).not.toContain('/api/v1/workspace/automations')
     expect(routes).not.toContain('/api/v1/workspace/automations/{param}')
   })

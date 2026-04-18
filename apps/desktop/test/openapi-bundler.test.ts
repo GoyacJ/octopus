@@ -89,24 +89,6 @@ describe('OpenAPI bundler', () => {
     expect(bundledContract).toContain('- change_actor')
   })
 
-  it('keeps project agent bundle and workspace promotion routes in the bundled contract', () => {
-    const bundledContract = readFileSync(
-      path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'),
-      'utf8',
-    )
-
-    expect(bundledContract).toContain('/api/v1/projects/{projectId}/agents/import-preview:')
-    expect(bundledContract).toContain('/api/v1/projects/{projectId}/agents/import:')
-    expect(bundledContract).toContain('/api/v1/projects/{projectId}/agents/export:')
-    expect(bundledContract).toContain('/api/v1/workspace/agents/{agentId}/copy-to-workspace:')
-    expect(bundledContract).toContain('/api/v1/workspace/teams/{teamId}/copy-to-workspace:')
-    expect(bundledContract).toContain('operationId: previewProjectAgentBundleImport')
-    expect(bundledContract).toContain('operationId: importProjectAgentBundle')
-    expect(bundledContract).toContain('operationId: exportProjectAgentBundle')
-    expect(bundledContract).toContain('operationId: copyWorkspaceAgentToWorkspace')
-    expect(bundledContract).toContain('operationId: copyWorkspaceTeamToWorkspace')
-  })
-
   it('keeps project dashboard task summaries and task permission modules in the bundled contract', () => {
     const bundledContract = readFileSync(
       path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, watch } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
@@ -50,11 +50,7 @@ import {
 import { type MenuIconKey } from '@/navigation/menuRegistry'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
-import {
-  buildInheritedProjectAssignments,
-  buildProjectSetupPresetSeed,
-  type ProjectSetupPreset,
-} from '@/stores/project_setup'
+import { buildProjectSetupPresetSeed, type ProjectSetupPreset } from '@/stores/project_setup'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
@@ -85,7 +81,6 @@ const quickCreateForm = reactive({
   description: '',
   resourceDirectory: '',
   preset: 'general' as ProjectSetupPreset,
-  leaderAgentId: '',
 })
 const workspaceLabel = computed(() =>
   resolveWorkspaceLabel(
@@ -409,7 +404,6 @@ function resetQuickCreateForm() {
   quickCreateForm.description = ''
   quickCreateForm.resourceDirectory = ''
   quickCreateForm.preset = 'general'
-  quickCreateForm.leaderAgentId = quickCreateLeaderOptions.value[0]?.value ?? ''
 }
 
 const quickCreatePresetOptions = computed(() => ([
@@ -419,40 +413,9 @@ const quickCreatePresetOptions = computed(() => ([
   { value: 'advanced', label: String(t('projects.presets.options.advanced.label')) },
 ]))
 
-const quickCreateLeaderOptions = computed(() =>
-  agentStore.workspaceOwnedAgents
-    .filter(agent => agent.status === 'active')
-    .map(agent => ({
-      value: agent.id,
-      label: agent.name,
-    })),
-)
-
-watch(
-  () => workspaceStore.activeConnectionId,
-  async (connectionId) => {
-    if (!connectionId) {
-      return
-    }
-
-    await Promise.all([
-      catalogStore.ensureLoaded(connectionId),
-      agentStore.ensureLoaded(connectionId),
-      teamStore.ensureLoaded(connectionId),
-    ])
-  },
-  { immediate: true },
-)
-
 async function submitQuickCreateProject() {
   const workspaceId = currentWorkspaceId.value
-  if (
-    !workspaceId
-    || !quickCreateForm.name.trim()
-    || !quickCreateForm.resourceDirectory.trim()
-    || !quickCreateForm.leaderAgentId
-    || quickCreateSubmitting.value
-  ) {
+  if (!workspaceId || !quickCreateForm.name.trim() || !quickCreateForm.resourceDirectory.trim() || quickCreateSubmitting.value) {
     return
   }
 
@@ -479,18 +442,23 @@ async function submitQuickCreateProject() {
       name: quickCreateForm.name,
       description: quickCreateForm.description,
       resourceDirectory: quickCreateForm.resourceDirectory,
-      leaderAgentId: quickCreateForm.leaderAgentId || undefined,
-      assignments: buildInheritedProjectAssignments(presetSeed.assignments?.models),
+      assignments: presetSeed.assignments,
     })
     if (!created) {
       return
     }
 
-    await (
+    await Promise.all([
       presetSeed.modelSettings
         ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.modelSettings)
-        : Promise.resolve(null)
-    )
+        : Promise.resolve(null),
+      presetSeed.toolSettings
+        ? workspaceStore.saveProjectToolSettings(created.id, presetSeed.toolSettings)
+        : Promise.resolve(null),
+      presetSeed.agentSettings
+        ? workspaceStore.saveProjectAgentSettings(created.id, presetSeed.agentSettings)
+        : Promise.resolve(null),
+    ])
 
     quickCreateOpen.value = false
     resetQuickCreateForm()
@@ -638,26 +606,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
                 />
               </UiField>
 
-              <UiField
-                :label="t('projects.fields.leader')"
-                :hint="t('projects.fields.leaderHint')"
-              >
-                <UiSelect
-                  v-model="quickCreateForm.leaderAgentId"
-                  data-testid="sidebar-project-create-leader-select"
-                  :options="quickCreateLeaderOptions"
-                />
-              </UiField>
-
               <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-3 py-2 text-xs leading-5 text-text-secondary">
                 {{ t(`projects.presets.options.${quickCreateForm.preset}.description`) }}
-              </div>
-
-              <div
-                data-testid="sidebar-project-create-inheritance-hint"
-                class="rounded-[var(--radius-l)] border border-dashed border-border bg-surface px-3 py-2 text-xs leading-5 text-text-secondary"
-              >
-                {{ t('projects.inheritanceHint') }}
               </div>
 
               <ProjectResourceDirectoryField
@@ -687,7 +637,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               <UiButton
                 type="submit"
                 data-testid="sidebar-project-create-submit"
-                :disabled="quickCreateSubmitting || !quickCreateForm.name.trim() || !quickCreateForm.resourceDirectory.trim() || !quickCreateForm.leaderAgentId"
+                :disabled="quickCreateSubmitting || !quickCreateForm.name.trim() || !quickCreateForm.resourceDirectory.trim()"
               >
                 {{ t('projects.actions.create') }}
               </UiButton>

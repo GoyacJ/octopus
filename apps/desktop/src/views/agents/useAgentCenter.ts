@@ -152,24 +152,6 @@ export function useAgentCenter(scope: CenterScope) {
     Boolean(record.projectId) && record.projectId === projectId.value
   const isReadonlyProjectRecord = (record: AgentRecord | TeamRecord) =>
     isProjectScope.value && !isProjectOwnedRecord(record)
-  const resolveDialogContentReadonly = (record?: AgentRecord | TeamRecord) => {
-    if (!record) {
-      return false
-    }
-    if (isProjectScope.value) {
-      return !isProjectOwnedRecord(record)
-    }
-    return isBuiltinTemplateRecord(record)
-  }
-  const resolveDialogStatusReadonly = (record?: AgentRecord | TeamRecord) => {
-    if (!record) {
-      return false
-    }
-    if (isProjectScope.value) {
-      return !isProjectOwnedRecord(record)
-    }
-    return isBuiltinTemplateRecord(record)
-  }
   const isSelectableRecord = (record: AgentRecord | TeamRecord) =>
     isProjectScope.value || !isBuiltinTemplateRecord(record)
   const isExportableRecord = (record: AgentRecord | TeamRecord) =>
@@ -250,7 +232,7 @@ export function useAgentCenter(scope: CenterScope) {
       label: agent.name,
       keywords: [agent.personality, ...agent.tags],
       helper: agent.personality,
-      disabled: false,
+      disabled: isProjectScope.value ? !isProjectOwnedRecord(agent) : false,
     })),
   )
   const currentEditingAgentRecord = computed(() => currentAgents.value.find(agent => agent.id === editingAgentId.value))
@@ -269,6 +251,7 @@ export function useAgentCenter(scope: CenterScope) {
   })
   const leaderOptions = computed<SelectOption[]>(() =>
     currentAgents.value
+      .filter(agent => !isProjectScope.value || isProjectOwnedRecord(agent))
       .map(agent => ({
         value: canonicalAgentRef(agent.id),
         label: agent.name,
@@ -281,13 +264,13 @@ export function useAgentCenter(scope: CenterScope) {
   const teamDialogStatusReadonly = computed(() => editingTeamStatusReadonly.value)
   const canSaveAgentDialog = computed(() => !agentDialogStatusReadonly.value)
   const canSaveTeamDialog = computed(() => !teamDialogStatusReadonly.value)
-  const currentEditingAgentCopyLabel = computed(() => isProjectScope.value ? '复制为项目资产' : '复制到工作区')
-  const currentEditingTeamCopyLabel = computed(() => isProjectScope.value ? '复制为项目资产' : '复制到工作区')
+  const currentEditingAgentCopyLabel = computed(() => isProjectScope.value ? '复制到项目' : '复制到工作区')
+  const currentEditingTeamCopyLabel = computed(() => isProjectScope.value ? '复制到项目' : '复制到工作区')
   const canCopyCurrentEditingAgent = computed(() =>
-    Boolean(currentEditingAgentRecord.value && (isProjectScope.value ? projectId.value : true)),
+    Boolean(currentEditingAgentRecord.value && isBuiltinTemplateRecord(currentEditingAgentRecord.value)),
   )
   const canCopyCurrentEditingTeam = computed(() =>
-    Boolean(currentEditingTeamRecord.value && (isProjectScope.value ? projectId.value : true)),
+    Boolean(currentEditingTeamRecord.value && isBuiltinTemplateRecord(currentEditingTeamRecord.value)),
   )
   const tabValues: CenterTab[] = ['agent', 'team', 'builtin', 'skill', 'mcp']
   const tabs = computed(() => ([
@@ -578,8 +561,8 @@ export function useAgentCenter(scope: CenterScope) {
 
   function resetAgentForm(record?: AgentRecord) {
     editingAgentId.value = record?.id ?? null
-    editingAgentContentReadonly.value = resolveDialogContentReadonly(record)
-    editingAgentStatusReadonly.value = resolveDialogStatusReadonly(record)
+    editingAgentContentReadonly.value = Boolean(record)
+    editingAgentStatusReadonly.value = Boolean(record && isBuiltinTemplateRecord(record))
     agentForm.name = record?.name ?? ''
     agentForm.description = record?.description ?? ''
     agentForm.personality = record?.personality ?? ''
@@ -595,8 +578,8 @@ export function useAgentCenter(scope: CenterScope) {
 
   function resetTeamForm(record?: TeamRecord) {
     editingTeamId.value = record?.id ?? null
-    editingTeamContentReadonly.value = resolveDialogContentReadonly(record)
-    editingTeamStatusReadonly.value = resolveDialogStatusReadonly(record)
+    editingTeamContentReadonly.value = Boolean(record)
+    editingTeamStatusReadonly.value = Boolean(record && isBuiltinTemplateRecord(record))
     teamForm.name = record?.name ?? ''
     teamForm.description = record?.description ?? ''
     teamForm.personality = record?.personality ?? ''

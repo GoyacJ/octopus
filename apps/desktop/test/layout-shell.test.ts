@@ -916,18 +916,9 @@ describe('Workbench shell layout', () => {
     const nameInput = document.body.querySelector<HTMLInputElement>('[data-testid="sidebar-project-create-name-input"]')
     const descriptionInput = document.body.querySelector<HTMLTextAreaElement>('[data-testid="sidebar-project-create-description-input"]')
     const presetSelect = document.body.querySelector<HTMLSelectElement>('[data-testid="sidebar-project-create-preset-select"]')
-    const leaderSelect = document.body.querySelector<HTMLSelectElement>('[data-testid="sidebar-project-create-leader-select"]')
-    const inheritanceHint = document.body.querySelector<HTMLElement>('[data-testid="sidebar-project-create-inheritance-hint"]')
     expect(nameInput).not.toBeNull()
     expect(descriptionInput).not.toBeNull()
     expect(presetSelect).not.toBeNull()
-    expect(leaderSelect).not.toBeNull()
-    expect(inheritanceHint?.textContent).toContain('继承工作区')
-
-    const leaderOptionLabels = Array.from(leaderSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
-    expect(leaderOptionLabels).toContain('Architect Agent')
-    expect(leaderOptionLabels).toContain('Coder Agent')
-    expect(leaderOptionLabels).not.toContain('Finance Planner Template')
 
     presetSelect!.value = 'documentation'
     presetSelect!.dispatchEvent(new Event('change', { bubbles: true }))
@@ -935,8 +926,6 @@ describe('Workbench shell layout', () => {
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
     descriptionInput!.value = 'Launch checklist and delivery alignment.'
     descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    leaderSelect!.value = 'agent-coder'
-    leaderSelect!.dispatchEvent(new Event('change', { bubbles: true }))
     document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-resource-directory-pick"]')?.click()
     await waitFor(() =>
       document.body.querySelector<HTMLInputElement>('[data-testid="sidebar-project-create-resource-directory-path"]')?.value
@@ -959,12 +948,9 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-strategy-launch"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Strategy Launch')
-    const created = workspaceStore.projects.find(project => project.name === 'Strategy Launch')
-    expect(created?.leaderAgentId).toBe('agent-coder')
-    expect(created?.assignments?.models?.configuredModelIds).toHaveLength(1)
-    expect(created?.assignments?.tools?.excludedSourceKeys).toEqual([])
-    expect(created?.assignments?.agents?.excludedAgentIds).toEqual([])
-    expect(created?.assignments?.agents?.excludedTeamIds).toEqual([])
+    expect(
+      workspaceStore.projects.find(project => project.name === 'Strategy Launch')?.assignments?.models?.configuredModelIds,
+    ).toHaveLength(1)
 
     mounted.destroy()
   })

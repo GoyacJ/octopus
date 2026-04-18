@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import {
+  UiAccordion,
   UiBadge,
   UiButton,
   UiCheckbox,
@@ -16,7 +17,6 @@ import {
   UiPageShell,
   UiSelect,
   UiStatusCallout,
-  UiTabs,
 } from '@octopus/ui'
 
 import { createWorkspaceConsoleSurfaceTarget } from '@/i18n/navigation'
@@ -33,39 +33,17 @@ const {
   grantForm,
   runtimeForm,
   memberDraft,
-  leaderDraft,
-  grantToolTab,
-  runtimeToolTab,
-  grantActorTab,
-  runtimeActorTab,
-  grantToolSearch,
-  runtimeToolSearch,
-  grantActorSearch,
-  runtimeActorSearch,
   workspaceConfiguredModels,
   workspaceToolSections,
-  grantToolTabs,
   grantedConfiguredModels,
   grantedToolSections,
-  runtimeToolTabs,
-  workspaceLeaderOptions,
-  projectLeaderId,
-  projectLeaderName,
   actorCandidateAgents,
   actorCandidateTeams,
-  grantActorTabs,
   grantedAgents,
   grantedTeams,
-  runtimeActorTabs,
   projectOwnedAgents,
   projectOwnedTeams,
   workspaceUsers,
-  filteredGrantToolEntries,
-  filteredRuntimeToolEntries,
-  filteredGrantAgents,
-  filteredGrantTeams,
-  filteredRuntimeAgents,
-  filteredRuntimeTeams,
   toolPermissionOptions,
   grantSummary,
   runtimeSummary,
@@ -77,10 +55,17 @@ const {
   viewReady,
   statusLabel,
   badgeTone,
-  openOverviewDialog,
   openGrantModelsDialog,
   openGrantToolsDialog,
   openGrantActorsDialog,
+  selectAllGrantModels,
+  clearGrantModels,
+  selectAllGrantTools,
+  clearGrantTools,
+  selectAllGrantAgents,
+  clearGrantAgents,
+  selectAllGrantTeams,
+  clearGrantTeams,
   openRuntimeModelsDialog,
   openRuntimeToolsDialog,
   openRuntimeActorsDialog,
@@ -88,16 +73,6 @@ const {
   resolveRuntimeToolSelection,
   runtimeToolPermissionSummaryLabel,
   updateRuntimeToolPermission,
-  selectAllGrantToolsInActiveTab,
-  clearGrantToolsInActiveTab,
-  selectAllRuntimeToolsInActiveTab,
-  clearRuntimeToolsInActiveTab,
-  selectAllGrantActorsInActiveTab,
-  clearGrantActorsInActiveTab,
-  selectAllRuntimeActorsInActiveTab,
-  clearRuntimeActorsInActiveTab,
-  isProjectLeaderAgent,
-  saveOverview,
   saveGrantModels,
   saveGrantTools,
   saveGrantActors,
@@ -107,11 +82,38 @@ const {
   saveMembers,
 } = useProjectSettings()
 
+const grantToolsAccordion = ref<string[]>([])
+const runtimeToolsAccordion = ref<string[]>([])
+
 const projectManagementTarget = computed(() =>
   workspaceStore.currentWorkspaceId
     ? createWorkspaceConsoleSurfaceTarget('workspace-console-projects', workspaceStore.currentWorkspaceId)
     : null,
 )
+
+const grantToolAccordionItems = computed(() =>
+  workspaceToolSections.value.map(section => ({
+    value: section.kind,
+    title: `${t(`projectSettings.tools.groups.${section.kind}`)} · ${section.entries.length}`,
+  })),
+)
+
+const runtimeToolAccordionItems = computed(() =>
+  grantedToolSections.value.map(section => ({
+    value: section.kind,
+    title: `${t(`projectSettings.tools.groups.${section.kind}`)} · ${section.entries.length}`,
+  })),
+)
+
+const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left text-text-primary transition-colors hover:border-border-strong hover:bg-surface-muted'
+
+function entriesForGrantSection(kind: string) {
+  return workspaceToolSections.value.find(section => section.kind === kind)?.entries ?? []
+}
+
+function entriesForRuntimeSection(kind: string) {
+  return grantedToolSections.value.find(section => section.kind === kind)?.entries ?? []
+}
 </script>
 
 <template>
@@ -159,26 +161,11 @@ const projectManagementTarget = computed(() =>
               </div>
             </div>
 
-            <div class="mt-4 flex justify-end">
-              <UiButton
-                data-testid="project-settings-open-overview"
-                variant="ghost"
-                @click="openOverviewDialog"
-              >
-                {{ t('common.edit') }}
-              </UiButton>
-            </div>
-
             <div class="mt-4 grid gap-3 md:grid-cols-2">
               <UiInfoCard :label="t('projects.fields.name')" :title="project.name" />
               <UiInfoCard :label="t('projects.fields.resourceDirectory')" :title="project.resourceDirectory" />
               <UiInfoCard :label="t('projects.fields.description')" :title="project.description || t('common.na')" />
               <UiInfoCard :label="t('projectSettings.summary.status')" :title="statusLabel" />
-              <UiInfoCard
-                data-testid="project-settings-overview-leader-card"
-                :label="t('projects.fields.leader')"
-                :title="projectLeaderName"
-              />
             </div>
 
             <div class="mt-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary">
@@ -200,10 +187,10 @@ const projectManagementTarget = computed(() =>
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-models"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantModelsDialog"
               >
                 <div class="space-y-1">
@@ -217,12 +204,12 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.models }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-tools"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantToolsDialog"
               >
                 <div class="space-y-1">
@@ -236,12 +223,12 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.tools }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-actors"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantActorsDialog"
               >
                 <div class="space-y-1">
@@ -255,7 +242,7 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.actors }}
                 </div>
-              </button>
+              </UiButton>
             </div>
           </section>
 
@@ -273,10 +260,10 @@ const projectManagementTarget = computed(() =>
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-models"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeModelsDialog"
               >
                 <div class="space-y-1">
@@ -290,12 +277,12 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.models }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-tools"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeToolsDialog"
               >
                 <div class="space-y-1">
@@ -309,12 +296,12 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.tools }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-actors"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeActorsDialog"
               >
                 <div class="space-y-1">
@@ -328,7 +315,7 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.actors }}
                 </div>
-              </button>
+              </UiButton>
             </div>
           </section>
 
@@ -346,10 +333,10 @@ const projectManagementTarget = computed(() =>
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-members"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openMembersDialog"
               >
                 <div class="space-y-1">
@@ -363,7 +350,7 @@ const projectManagementTarget = computed(() =>
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ memberSummary }}
                 </div>
-              </button>
+              </UiButton>
 
               <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3">
                 <div class="flex items-start justify-between gap-4">
@@ -427,49 +414,6 @@ const projectManagementTarget = computed(() =>
       </div>
 
       <UiDialog
-        v-model:open="dialogOpen.overview"
-        :title="t('projectSettings.dialogs.overview.title')"
-        :description="t('projectSettings.dialogs.overview.description')"
-        content-test-id="project-settings-overview-dialog"
-      >
-        <div class="space-y-4">
-          <UiField :label="t('projects.fields.leader')">
-            <UiSelect
-              v-model="leaderDraft"
-              data-testid="project-settings-overview-leader-select"
-              :options="workspaceLeaderOptions"
-            />
-          </UiField>
-
-          <div
-            data-testid="project-settings-overview-leader-hint"
-            class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary"
-          >
-            {{ t('projectSettings.leader.hint') }}
-          </div>
-
-          <UiStatusCallout
-            v-if="dialogErrors.overview"
-            tone="error"
-            :description="dialogErrors.overview"
-          />
-        </div>
-
-        <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.overview = false">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton
-            data-testid="project-settings-overview-save-button"
-            :disabled="saving.overview"
-            @click="saveOverview"
-          >
-            {{ t('common.save') }}
-          </UiButton>
-        </template>
-      </UiDialog>
-
-      <UiDialog
         v-model:open="dialogOpen.grantModels"
         :title="t('projectSettings.dialogs.grantModels.title')"
         :description="t('projectSettings.dialogs.grantModels.description')"
@@ -481,6 +425,26 @@ const projectManagementTarget = computed(() =>
             :hint="t('projectSettings.dialogs.grantModels.hint')"
           >
             <div v-if="workspaceConfiguredModels.length" class="space-y-3">
+              <div class="flex items-center justify-end gap-2">
+                <UiButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="project-settings-grants-models-select-all"
+                  @click="selectAllGrantModels"
+                >
+                  {{ t('common.selectAll') }}
+                </UiButton>
+                <UiButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="project-settings-grants-models-clear-all"
+                  @click="clearGrantModels"
+                >
+                  {{ t('common.clearAll') }}
+                </UiButton>
+              </div>
               <label
                 v-for="modelOption in workspaceConfiguredModels"
                 :key="modelOption.value"
@@ -560,76 +524,57 @@ const projectManagementTarget = computed(() =>
             :description="t('projectSettings.tools.emptyDescription')"
           />
 
-          <div v-else class="space-y-4">
-            <UiTabs
-              v-model="grantToolTab"
-              :tabs="grantToolTabs"
-              variant="segmented"
-              data-testid="project-settings-grant-tools-tabs"
-            />
-
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <UiInput
-                v-model="grantToolSearch"
-                data-testid="project-settings-grant-tools-search-input"
-                :placeholder="t('projectSettings.dialogs.assetPicker.searchTools')"
-                class="lg:max-w-sm"
-              />
-
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs text-text-tertiary">
-                  {{ t('projectSettings.dialogs.assetPicker.results', { count: filteredGrantToolEntries.length }) }}
-                </span>
-                <UiButton
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-grant-tools-select-all-visible-button"
-                  @click="selectAllGrantToolsInActiveTab"
-                >
-                  {{ t('projectSettings.dialogs.assetPicker.selectVisible') }}
-                </UiButton>
-                <UiButton
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-grant-tools-clear-visible-button"
-                  @click="clearGrantToolsInActiveTab"
-                >
-                  {{ t('projectSettings.dialogs.assetPicker.clearVisible') }}
-                </UiButton>
-              </div>
-            </div>
-
-            <div v-if="filteredGrantToolEntries.length" class="space-y-3">
-              <label
-                v-for="entry in filteredGrantToolEntries"
-                :key="entry.sourceKey"
-                :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+          <div v-else class="space-y-3">
+            <div class="flex items-center justify-end gap-2">
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="project-settings-grants-tools-select-all"
+                @click="selectAllGrantTools"
               >
-                <div class="min-w-0 space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ entry.name }}
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ entry.description || entry.sourceKey }}
-                  </div>
-                </div>
-                <UiCheckbox
-                  v-model="grantForm.assignedToolSourceKeys"
-                  :value="entry.sourceKey"
-                  :aria-label="entry.name"
-                />
-              </label>
+                {{ t('common.selectAll') }}
+              </UiButton>
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="project-settings-grants-tools-clear-all"
+                @click="clearGrantTools"
+              >
+                {{ t('common.clearAll') }}
+              </UiButton>
             </div>
-            <UiEmptyState
-              v-else
-              :title="grantToolSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchTitle')
-                : t('projectSettings.dialogs.assetPicker.emptyTabTitle')"
-              :description="grantToolSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchDescription')
-                : t('projectSettings.dialogs.assetPicker.emptyTabDescription')"
-            />
+
+            <UiAccordion
+              v-model="grantToolsAccordion"
+              :items="grantToolAccordionItems"
+            >
+              <template #content="{ item }">
+                <div class="space-y-3">
+                  <label
+                    v-for="entry in entriesForGrantSection(item.value)"
+                    :key="entry.sourceKey"
+                    :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
+                    class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                  >
+                    <div class="min-w-0 space-y-1">
+                      <div class="text-sm font-semibold text-text-primary">
+                        {{ entry.name }}
+                      </div>
+                      <div class="text-xs text-text-secondary">
+                        {{ entry.description || entry.sourceKey }}
+                      </div>
+                    </div>
+                    <UiCheckbox
+                      v-model="grantForm.assignedToolSourceKeys"
+                      :value="entry.sourceKey"
+                      :aria-label="entry.name"
+                    />
+                  </label>
+                </div>
+              </template>
+            </UiAccordion>
           </div>
 
           <UiStatusCallout
@@ -660,105 +605,115 @@ const projectManagementTarget = computed(() =>
         content-test-id="project-settings-grants-actors-dialog"
       >
         <div class="space-y-4">
-          <UiTabs
-            v-model="grantActorTab"
-            :tabs="grantActorTabs"
-            variant="segmented"
-            data-testid="project-settings-grant-actors-tabs"
-          />
-
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <UiInput
-              v-model="grantActorSearch"
-              data-testid="project-settings-grant-actors-search-input"
-              :placeholder="t('projectSettings.dialogs.assetPicker.searchActors')"
-              class="lg:max-w-sm"
-            />
-
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-xs text-text-tertiary">
-                {{ t('projectSettings.dialogs.assetPicker.results', {
-                  count: grantActorTab === 'agents' ? filteredGrantAgents.length : filteredGrantTeams.length,
-                }) }}
-              </span>
-              <UiButton
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-grant-actors-select-all-visible-button"
-                @click="selectAllGrantActorsInActiveTab"
-              >
-                {{ t('projectSettings.dialogs.assetPicker.selectVisible') }}
-              </UiButton>
-              <UiButton
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-grant-actors-clear-visible-button"
-                @click="clearGrantActorsInActiveTab"
-              >
-                {{ t('projectSettings.dialogs.assetPicker.clearVisible') }}
-              </UiButton>
-            </div>
-          </div>
-
-          <UiField
-            :label="grantActorTab === 'agents' ? t('projectSettings.agents.agentsLabel') : t('projectSettings.agents.teamsLabel')"
-            :hint="grantActorTab === 'agents'
-              ? t('projectSettings.dialogs.grantActors.agentsHint')
-              : t('projectSettings.dialogs.grantActors.teamsHint')"
-          >
-            <div
-              v-if="grantActorTab === 'agents' ? filteredGrantAgents.length : filteredGrantTeams.length"
-              class="space-y-3"
+          <section class="space-y-3">
+            <UiField
+              :label="t('projectSettings.agents.agentsLabel')"
+              :hint="t('projectSettings.dialogs.grantActors.agentsHint')"
             >
-              <label
-                v-for="actor in grantActorTab === 'agents' ? filteredGrantAgents : filteredGrantTeams"
-                :key="actor.id"
-                :data-testid="grantActorTab === 'agents'
-                  ? `project-grant-agent-option-${actor.id}`
-                  : `project-grant-team-option-${actor.id}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <div class="text-sm font-semibold text-text-primary">
-                      {{ actor.name }}
-                    </div>
-                    <UiBadge
-                      v-if="grantActorTab === 'agents' && isProjectLeaderAgent(actor.id)"
-                      :data-testid="`project-grant-agent-leader-badge-${actor.id}`"
-                      :label="t('projects.fields.leader')"
-                      subtle
-                    />
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ actor.description || t('common.na') }}
-                  </div>
+              <div v-if="actorCandidateAgents.length" class="space-y-3">
+                <div class="flex items-center justify-end gap-2">
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-agents-select-all"
+                    @click="selectAllGrantAgents"
+                  >
+                    {{ t('common.selectAll') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-agents-clear-all"
+                    @click="clearGrantAgents"
+                  >
+                    {{ t('common.clearAll') }}
+                  </UiButton>
                 </div>
-                <UiCheckbox
-                  v-if="grantActorTab === 'agents'"
-                  v-model="grantForm.assignedAgentIds"
-                  :value="actor.id"
-                  :aria-label="actor.name"
-                  :disabled="isProjectLeaderAgent(actor.id)"
-                />
-                <UiCheckbox
-                  v-else
-                  v-model="grantForm.assignedTeamIds"
-                  :value="actor.id"
-                  :aria-label="actor.name"
-                />
-              </label>
-            </div>
-            <UiEmptyState
-              v-else
-              :title="grantActorSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchTitle')
-                : t('projectSettings.dialogs.assetPicker.emptyTabTitle')"
-              :description="grantActorSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchDescription')
-                : t('projectSettings.dialogs.assetPicker.emptyTabDescription')"
-            />
-          </UiField>
+                <label
+                  v-for="agent in actorCandidateAgents"
+                  :key="agent.id"
+                  :data-testid="`project-grant-agent-option-${agent.id}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
+                    <div class="text-sm font-semibold text-text-primary">
+                      {{ agent.name }}
+                    </div>
+                    <div class="text-xs text-text-secondary">
+                      {{ agent.description || t('common.na') }}
+                    </div>
+                  </div>
+                  <UiCheckbox
+                    v-model="grantForm.assignedAgentIds"
+                    :value="agent.id"
+                    :aria-label="agent.name"
+                  />
+                </label>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.agents.emptyTitle')"
+                :description="t('projectSettings.agents.emptyDescription')"
+              />
+            </UiField>
+          </section>
+
+          <section class="space-y-3">
+            <UiField
+              :label="t('projectSettings.agents.teamsLabel')"
+              :hint="t('projectSettings.dialogs.grantActors.teamsHint')"
+            >
+              <div v-if="actorCandidateTeams.length" class="space-y-3">
+                <div class="flex items-center justify-end gap-2">
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-teams-select-all"
+                    @click="selectAllGrantTeams"
+                  >
+                    {{ t('common.selectAll') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-teams-clear-all"
+                    @click="clearGrantTeams"
+                  >
+                    {{ t('common.clearAll') }}
+                  </UiButton>
+                </div>
+                <label
+                  v-for="team in actorCandidateTeams"
+                  :key="team.id"
+                  :data-testid="`project-grant-team-option-${team.id}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
+                    <div class="text-sm font-semibold text-text-primary">
+                      {{ team.name }}
+                    </div>
+                    <div class="text-xs text-text-secondary">
+                      {{ team.description || t('common.na') }}
+                    </div>
+                  </div>
+                  <UiCheckbox
+                    v-model="grantForm.assignedTeamIds"
+                    :value="team.id"
+                    :aria-label="team.name"
+                  />
+                </label>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.agents.emptyTitle')"
+                :description="t('projectSettings.agents.emptyDescription')"
+              />
+            </UiField>
+          </section>
 
           <UiStatusCallout
             v-if="dialogErrors.grantActors"
@@ -895,83 +850,42 @@ const projectManagementTarget = computed(() =>
             :description="t('projectSettings.tools.emptyDescription')"
           />
 
-          <div v-else class="space-y-4">
-            <UiTabs
-              v-model="runtimeToolTab"
-              :tabs="runtimeToolTabs"
-              variant="segmented"
-              data-testid="project-settings-runtime-tools-tabs"
-            />
-
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <UiInput
-                v-model="runtimeToolSearch"
-                data-testid="project-settings-runtime-tools-search-input"
-                :placeholder="t('projectSettings.dialogs.assetPicker.searchTools')"
-                class="lg:max-w-sm"
-              />
-
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs text-text-tertiary">
-                  {{ t('projectSettings.dialogs.assetPicker.results', { count: filteredRuntimeToolEntries.length }) }}
-                </span>
-                <UiButton
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-runtime-tools-select-all-visible-button"
-                  @click="selectAllRuntimeToolsInActiveTab"
+          <UiAccordion
+            v-else
+            v-model="runtimeToolsAccordion"
+            :items="runtimeToolAccordionItems"
+          >
+            <template #content="{ item }">
+              <div class="space-y-3">
+                <div
+                  v-for="entry in entriesForRuntimeSection(item.value)"
+                  :key="entry.sourceKey"
+                  class="space-y-2 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
                 >
-                  {{ t('projectSettings.dialogs.runtimeTools.inheritVisible') }}
-                </UiButton>
-                <UiButton
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-runtime-tools-clear-visible-button"
-                  @click="clearRuntimeToolsInActiveTab"
-                >
-                  {{ t('projectSettings.dialogs.runtimeTools.denyVisible') }}
-                </UiButton>
-              </div>
-            </div>
-
-            <div v-if="filteredRuntimeToolEntries.length" class="space-y-3">
-              <div
-                v-for="entry in filteredRuntimeToolEntries"
-                :key="entry.sourceKey"
-                class="space-y-2 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="flex items-start justify-between gap-4">
-                  <div class="min-w-0 space-y-1">
-                    <div class="text-sm font-semibold text-text-primary">
-                      {{ entry.name }}
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0 space-y-1">
+                      <div class="text-sm font-semibold text-text-primary">
+                        {{ entry.name }}
+                      </div>
+                      <div class="text-xs text-text-secondary">
+                        {{ entry.description || entry.sourceKey }}
+                      </div>
                     </div>
-                    <div class="text-xs text-text-secondary">
-                      {{ entry.description || entry.sourceKey }}
-                    </div>
+                    <UiBadge :label="t('projectSettings.labels.workspaceGrant')" subtle />
                   </div>
-                  <UiBadge :label="t('projectSettings.labels.workspaceGrant')" subtle />
-                </div>
 
-                <UiSelect
-                  :model-value="resolveRuntimeToolSelection(entry.sourceKey)"
-                  :options="toolPermissionOptions"
-                  @update:model-value="updateRuntimeToolPermission(entry.sourceKey, $event)"
-                />
-                <div class="text-xs text-text-tertiary">
-                  {{ runtimeToolPermissionSummaryLabel(entry) }}
+                  <UiSelect
+                    :model-value="resolveRuntimeToolSelection(entry.sourceKey)"
+                    :options="toolPermissionOptions"
+                    @update:model-value="updateRuntimeToolPermission(entry.sourceKey, $event)"
+                  />
+                  <div class="text-xs text-text-tertiary">
+                    {{ runtimeToolPermissionSummaryLabel(entry) }}
+                  </div>
                 </div>
               </div>
-            </div>
-            <UiEmptyState
-              v-else
-              :title="runtimeToolSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchTitle')
-                : t('projectSettings.dialogs.assetPicker.emptyTabTitle')"
-              :description="runtimeToolSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchDescription')
-                : t('projectSettings.dialogs.assetPicker.emptyTabDescription')"
-            />
-          </div>
+            </template>
+          </UiAccordion>
 
           <UiStatusCallout
             v-if="dialogErrors.runtimeTools"
@@ -1013,105 +927,75 @@ const projectManagementTarget = computed(() =>
             </div>
           </div>
 
-          <UiTabs
-            v-model="runtimeActorTab"
-            :tabs="runtimeActorTabs"
-            variant="segmented"
-            data-testid="project-settings-runtime-actors-tabs"
-          />
-
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <UiInput
-              v-model="runtimeActorSearch"
-              data-testid="project-settings-runtime-actors-search-input"
-              :placeholder="t('projectSettings.dialogs.assetPicker.searchActors')"
-              class="lg:max-w-sm"
-            />
-
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-xs text-text-tertiary">
-                {{ t('projectSettings.dialogs.assetPicker.results', {
-                  count: runtimeActorTab === 'agents' ? filteredRuntimeAgents.length : filteredRuntimeTeams.length,
-                }) }}
-              </span>
-              <UiButton
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-runtime-actors-select-all-visible-button"
-                @click="selectAllRuntimeActorsInActiveTab"
-              >
-                {{ t('projectSettings.dialogs.runtimeActors.enableVisible') }}
-              </UiButton>
-              <UiButton
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-runtime-actors-clear-visible-button"
-                @click="clearRuntimeActorsInActiveTab"
-              >
-                {{ t('projectSettings.dialogs.runtimeActors.disableVisible') }}
-              </UiButton>
-            </div>
-          </div>
-
-          <UiField
-            :label="runtimeActorTab === 'agents' ? t('projectSettings.agents.agentsLabel') : t('projectSettings.agents.teamsLabel')"
-            :hint="runtimeActorTab === 'agents'
-              ? t('projectSettings.dialogs.runtimeActors.agentsHint')
-              : t('projectSettings.dialogs.runtimeActors.teamsHint')"
-          >
-            <div
-              v-if="runtimeActorTab === 'agents' ? filteredRuntimeAgents.length : filteredRuntimeTeams.length"
-              class="space-y-3"
+          <section class="space-y-3">
+            <UiField
+              :label="t('projectSettings.agents.agentsLabel')"
+              :hint="t('projectSettings.dialogs.runtimeActors.agentsHint')"
             >
-              <label
-                v-for="actor in runtimeActorTab === 'agents' ? filteredRuntimeAgents : filteredRuntimeTeams"
-                :key="actor.id"
-                :data-testid="runtimeActorTab === 'agents'
-                  ? `project-runtime-agent-option-${actor.id}`
-                  : `project-runtime-team-option-${actor.id}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
+              <div v-if="grantedAgents.length" class="space-y-3">
+                <label
+                  v-for="agent in grantedAgents"
+                  :key="agent.id"
+                  :data-testid="`project-runtime-agent-option-${agent.id}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
                     <div class="text-sm font-semibold text-text-primary">
-                      {{ actor.name }}
+                      {{ agent.name }}
                     </div>
-                    <UiBadge
-                      v-if="runtimeActorTab === 'agents' && isProjectLeaderAgent(actor.id)"
-                      :data-testid="`project-runtime-agent-leader-badge-${actor.id}`"
-                      :label="t('projects.fields.leader')"
-                      subtle
-                    />
+                    <div class="text-xs text-text-secondary">
+                      {{ agent.description || t('common.na') }}
+                    </div>
                   </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ actor.description || t('common.na') }}
+                  <UiCheckbox
+                    v-model="runtimeForm.enabledAgentIds"
+                    :value="agent.id"
+                    :aria-label="agent.name"
+                  />
+                </label>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.agents.emptyTitle')"
+                :description="t('projectSettings.agents.emptyDescription')"
+              />
+            </UiField>
+          </section>
+
+          <section class="space-y-3">
+            <UiField
+              :label="t('projectSettings.agents.teamsLabel')"
+              :hint="t('projectSettings.dialogs.runtimeActors.teamsHint')"
+            >
+              <div v-if="grantedTeams.length" class="space-y-3">
+                <label
+                  v-for="team in grantedTeams"
+                  :key="team.id"
+                  :data-testid="`project-runtime-team-option-${team.id}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
+                    <div class="text-sm font-semibold text-text-primary">
+                      {{ team.name }}
+                    </div>
+                    <div class="text-xs text-text-secondary">
+                      {{ team.description || t('common.na') }}
+                    </div>
                   </div>
-                </div>
-                <UiCheckbox
-                  v-if="runtimeActorTab === 'agents'"
-                  v-model="runtimeForm.enabledAgentIds"
-                  :value="actor.id"
-                  :aria-label="actor.name"
-                  :disabled="isProjectLeaderAgent(actor.id)"
-                />
-                <UiCheckbox
-                  v-else
-                  v-model="runtimeForm.enabledTeamIds"
-                  :value="actor.id"
-                  :aria-label="actor.name"
-                />
-              </label>
-            </div>
-            <UiEmptyState
-              v-else
-              :title="runtimeActorSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchTitle')
-                : t('projectSettings.dialogs.assetPicker.emptyTabTitle')"
-              :description="runtimeActorSearch
-                ? t('projectSettings.dialogs.assetPicker.emptySearchDescription')
-                : t('projectSettings.dialogs.assetPicker.emptyTabDescription')"
-            />
-          </UiField>
+                  <UiCheckbox
+                    v-model="runtimeForm.enabledTeamIds"
+                    :value="team.id"
+                    :aria-label="team.name"
+                  />
+                </label>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.agents.emptyTitle')"
+                :description="t('projectSettings.agents.emptyDescription')"
+              />
+            </UiField>
+          </section>
 
           <UiStatusCallout
             v-if="dialogErrors.runtimeActors"

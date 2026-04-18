@@ -2079,10 +2079,6 @@ export function createWorkspaceClientFixture(
   ): ImportWorkspaceAgentBundlePreview => {
     const files = normalizeImportedDirectoryEntries(input.files)
     const projectScoped = Boolean(targetProjectId)
-    const agentCount = 1
-    const teamCount = 1
-    const skillCount = 1
-    const mcpCount = 1
     return {
       departments: ['Imported Bundle'],
       departmentCount: 1,
@@ -2096,10 +2092,6 @@ export function createWorkspaceClientFixture(
       failureCount: 0,
       uniqueSkillCount: 1,
       uniqueMcpCount: 1,
-      agentCount,
-      teamCount,
-      skillCount,
-      mcpCount,
       avatarCount: 2,
       filteredFileCount: files.length,
       agents: [
@@ -2165,152 +2157,41 @@ export function createWorkspaceClientFixture(
     }
   }
 
-  const uniqueIds = (values: string[]) => [...new Set(values.filter(Boolean))]
-
-  const resolveFixtureProjectAssignedActorIds = (projectId: string) => {
-    const project = findProjectRecord(projectId)
-    const agents = project.assignments?.agents as {
-      excludedAgentIds?: string[]
-      excludedTeamIds?: string[]
-      agentIds?: string[]
-      teamIds?: string[]
-    } | undefined
-    const workspaceAgentIds = uniqueIds(
-      workspaceState.agents
-        .filter(record => !record.projectId)
-        .map(record => record.id),
-    )
-    const workspaceTeamIds = uniqueIds(
-      workspaceState.teams
-        .filter(record => !record.projectId)
-        .map(record => record.id),
-    )
-
-    if (agents && ('excludedAgentIds' in agents || 'excludedTeamIds' in agents)) {
-      const excludedAgentIds = uniqueIds(agents.excludedAgentIds ?? [])
-      const excludedTeamIds = uniqueIds(agents.excludedTeamIds ?? [])
-      return {
-        agentIds: workspaceAgentIds.filter(agentId => !excludedAgentIds.includes(agentId)),
-        teamIds: workspaceTeamIds.filter(teamId => !excludedTeamIds.includes(teamId)),
-      }
-    }
-
-    if (agents && ('agentIds' in agents || 'teamIds' in agents)) {
-      const legacyAgentIds = uniqueIds(agents.agentIds ?? [])
-      const legacyTeamIds = uniqueIds(agents.teamIds ?? [])
-      return {
-        agentIds: workspaceAgentIds.filter(agentId => legacyAgentIds.includes(agentId)),
-        teamIds: workspaceTeamIds.filter(teamId => legacyTeamIds.includes(teamId)),
-      }
-    }
-
-    return {
-      agentIds: workspaceAgentIds,
-      teamIds: workspaceTeamIds,
-    }
-  }
-
   const buildAgentBundleExport = (
     input: ExportWorkspaceAgentBundleInput,
-    targetProjectId?: string,
   ): ExportWorkspaceAgentBundleResult => {
-    const exportableAgentIds = new Set<string>()
-    const exportableTeamIds = new Set<string>()
-
-    if (targetProjectId) {
-      const assignedActors = resolveFixtureProjectAssignedActorIds(targetProjectId)
-      for (const agentId of assignedActors.agentIds) {
-        exportableAgentIds.add(agentId)
-      }
-      for (const teamId of assignedActors.teamIds) {
-        exportableTeamIds.add(teamId)
-      }
-      for (const agent of workspaceState.agents.filter(record => record.projectId === targetProjectId)) {
-        exportableAgentIds.add(agent.id)
-      }
-      for (const team of workspaceState.teams.filter(record => record.projectId === targetProjectId)) {
-        exportableTeamIds.add(team.id)
-      }
-      for (const link of workspaceState.projectAgentLinks[targetProjectId] ?? []) {
-        exportableAgentIds.add(link.agentId)
-      }
-      for (const link of workspaceState.projectTeamLinks[targetProjectId] ?? []) {
-        exportableTeamIds.add(link.teamId)
-      }
-    } else {
-      for (const agent of workspaceState.agents.filter(record => !record.projectId)) {
-        exportableAgentIds.add(agent.id)
-      }
-      for (const team of workspaceState.teams.filter(record => !record.projectId)) {
-        exportableTeamIds.add(team.id)
-      }
-    }
-
-    const selectedTeams = uniqueIds(input.teamIds)
-      .filter(teamId => exportableTeamIds.has(teamId))
-      .map(teamId => workspaceState.teams.find(record => record.id === teamId))
-      .filter((team): team is WorkspaceFixtureState['teams'][number] => Boolean(team))
-    const teamMemberIds = new Set(selectedTeams.flatMap(team => team.memberAgentIds))
-    const selectedAgents = uniqueIds(input.agentIds)
-      .filter(agentId => exportableAgentIds.has(agentId))
-      .map(agentId => workspaceState.agents.find(record => record.id === agentId))
-      .filter((agent): agent is WorkspaceFixtureState['agents'][number] => Boolean(agent))
-    const bundledAgents = [
-      ...selectedAgents,
-      ...selectedTeams.flatMap(team =>
-        team.memberAgentIds
-          .map(agentId => workspaceState.agents.find(record => record.id === agentId))
-          .filter((agent): agent is WorkspaceFixtureState['agents'][number] => Boolean(agent)),
-      ),
-    ].filter((agent, index, records) => records.findIndex(record => record.id === agent.id) === index)
-
-    const primaryRootId = selectedAgents[0]?.id || selectedTeams[0]?.id || 'templates'
-    const rootDirName = input.mode === 'single' ? primaryRootId : 'templates'
+    const rootDirName = input.mode === 'single'
+      ? input.agentIds[0] || input.teamIds[0] || 'templates'
+      : 'templates'
     const files = [
-      ...selectedTeams.map((team) => ({
-        fileName: `${team.id}说明.md`,
+      ...input.agentIds.map((agentId) => ({
+        fileName: `${agentId}.md`,
         contentType: 'text/markdown',
         byteSize: 64,
-        dataBase64: btoa(`# ${team.id}\n`),
+        dataBase64: btoa(`# ${agentId}\n`),
         relativePath: input.mode === 'single'
-          ? `${rootDirName}/${team.id}说明.md`
-          : `templates/${team.id}/${team.id}说明.md`,
+          ? `${rootDirName}/${agentId}.md`
+          : `templates/${agentId}/${agentId}.md`,
       })),
-      ...bundledAgents
-        .filter(agent => !teamMemberIds.has(agent.id))
-        .map((agent) => ({
-          fileName: `${agent.id}.md`,
-          contentType: 'text/markdown',
-          byteSize: 64,
-          dataBase64: btoa(`# ${agent.id}\n`),
-          relativePath: input.mode === 'single'
-            ? `${rootDirName}/${agent.id}.md`
-            : `templates/${agent.id}/${agent.id}.md`,
-        })),
-      ...selectedTeams.flatMap((team) =>
-        uniqueIds(team.memberAgentIds)
-          .map((agentId) => workspaceState.agents.find(record => record.id === agentId))
-          .filter((agent): agent is WorkspaceFixtureState['agents'][number] => Boolean(agent))
-          .map((agent) => ({
-            fileName: `${agent.id}.md`,
-            contentType: 'text/markdown',
-            byteSize: 64,
-            dataBase64: btoa(`# ${agent.id}\n`),
-            relativePath: input.mode === 'single'
-              ? `${rootDirName}/${agent.id}/${agent.id}.md`
-              : `templates/${team.id}/${agent.id}/${agent.id}.md`,
-          })),
-      ),
+      ...input.teamIds.map((teamId) => ({
+        fileName: `${teamId}说明.md`,
+        contentType: 'text/markdown',
+        byteSize: 64,
+        dataBase64: btoa(`# ${teamId}\n`),
+        relativePath: input.mode === 'single'
+          ? `${rootDirName}/${teamId}说明.md`
+          : `templates/${teamId}/${teamId}说明.md`,
+      })),
     ]
 
     return {
       rootDirName,
       fileCount: files.length,
-      agentCount: bundledAgents.length,
-      teamCount: selectedTeams.length,
-      skillCount: Math.max(0, bundledAgents.length + selectedTeams.length),
-      mcpCount: bundledAgents.length ? 1 : 0,
-      avatarCount: bundledAgents.length + selectedTeams.length,
+      agentCount: input.agentIds.length,
+      teamCount: input.teamIds.length,
+      skillCount: Math.max(0, input.agentIds.length + input.teamIds.length),
+      mcpCount: input.agentIds.length ? 1 : 0,
+      avatarCount: input.agentIds.length + input.teamIds.length,
       files,
       issues: [],
     }
@@ -3267,8 +3148,8 @@ export function createWorkspaceClientFixture(
         workspaceState.teams = [...workspaceState.teams, importedTeam]
         return clone(preview) as ImportWorkspaceAgentBundleResult
       },
-      async exportBundle(input, projectId) {
-        return clone(buildAgentBundleExport(input, projectId))
+      async exportBundle(input) {
+        return clone(buildAgentBundleExport(input))
       },
       async create(input) {
         const id = `agent-${Date.now()}`

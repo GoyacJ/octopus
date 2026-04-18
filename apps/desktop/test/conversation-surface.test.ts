@@ -119,144 +119,6 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('seeds a new conversation session with the project leader by default when the leader is valid', async () => {
-    vi.restoreAllMocks()
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign project')
-        }
-
-        project.leaderAgentId = 'agent-coder'
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          agents: {
-            excludedAgentIds: [],
-            excludedTeamIds: [],
-          },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (!projectSource) {
-          throw new Error('Expected proj-redesign runtime project source')
-        }
-
-        ;(projectSource as any).document = {
-          ...((projectSource as any).document ?? {}),
-          projectSettings: {
-            ...((projectSource as any).document?.projectSettings ?? {}),
-            agents: {
-              disabledAgentIds: [],
-              disabledTeamIds: [],
-            },
-          },
-        }
-      },
-    })
-
-    let createdSessionActorRef = ''
-    configureWorkspaceClient(client => ({
-      ...client,
-      runtime: {
-        ...client.runtime,
-        async createSession(input, idempotencyKey) {
-          createdSessionActorRef = input.selectedActorRef
-          return await client.runtime.createSession(input, idempotencyKey)
-        },
-      },
-    }))
-
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-leader-default')
-    await router.isReady()
-
-    const mounted = mountApp()
-    const runtime = useRuntimeStore()
-
-    await waitFor(() => runtime.activeSessionId !== '')
-
-    expect(createdSessionActorRef).toBe('agent:agent-coder')
-    expect(
-      mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')?.value,
-    ).toBe('agent:agent-coder')
-
-    mounted.destroy()
-  })
-
-  it('falls back to the first available actor when the configured leader is invalid', async () => {
-    vi.restoreAllMocks()
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign project')
-        }
-
-        project.leaderAgentId = 'agent-missing'
-        project.assignments = {
-          ...(project.assignments ?? {}),
-          agents: {
-            excludedAgentIds: [],
-            excludedTeamIds: [],
-          },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (!projectSource) {
-          throw new Error('Expected proj-redesign runtime project source')
-        }
-
-        ;(projectSource as any).document = {
-          ...((projectSource as any).document ?? {}),
-          projectSettings: {
-            ...((projectSource as any).document?.projectSettings ?? {}),
-            agents: {
-              disabledAgentIds: [],
-              disabledTeamIds: [],
-            },
-          },
-        }
-      },
-    })
-
-    let createdSessionActorRef = ''
-    configureWorkspaceClient(client => ({
-      ...client,
-      runtime: {
-        ...client.runtime,
-        async createSession(input, idempotencyKey) {
-          createdSessionActorRef = input.selectedActorRef
-          return await client.runtime.createSession(input, idempotencyKey)
-        },
-      },
-    }))
-
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-invalid-leader')
-    await router.isReady()
-
-    const mounted = mountApp()
-    const runtime = useRuntimeStore()
-
-    await waitFor(() => runtime.activeSessionId !== '')
-
-    expect(createdSessionActorRef).toBe('agent:agent-architect')
-    expect(
-      mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')?.value,
-    ).toBe('agent:agent-architect')
-
-    mounted.destroy()
-  })
-
   it('renders active conversation controls as calm selected bands instead of raised chips', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
     await router.isReady()
@@ -1528,61 +1390,6 @@ describe('Conversation surfaces', () => {
   })
 
   it('keeps configured workspace agents and teams visible in the composer even without project link records', async () => {
-    installWorkspaceApiFixture({
-      preloadConversationMessages: true,
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project) {
-          throw new Error('Expected proj-redesign project')
-        }
-
-        project.assignments = {
-          ...project.assignments,
-          agents: {
-            excludedAgentIds: [],
-            excludedTeamIds: [],
-          },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (
-          projectSource
-          && projectSource.document
-          && typeof projectSource.document === 'object'
-          && !Array.isArray(projectSource.document)
-        ) {
-          ;(projectSource.document as Record<string, any>).projectSettings = {
-            ...((projectSource.document as Record<string, any>).projectSettings ?? {}),
-            agents: {
-              disabledAgentIds: [],
-              disabledTeamIds: [],
-            },
-          }
-        }
-        if (projectConfig) {
-          const effectiveConfig = projectConfig.effectiveConfig as Record<string, any>
-          state.runtimeProjectConfigs['proj-redesign'] = {
-            ...projectConfig,
-            effectiveConfig: {
-              ...effectiveConfig,
-              projectSettings: {
-                ...(effectiveConfig.projectSettings ?? {}),
-                agents: {
-                  disabledAgentIds: [],
-                  disabledTeamIds: [],
-                },
-              },
-            },
-          }
-        }
-      },
-    })
-
     configureWorkspaceClient((client) => ({
       ...client,
       agents: {
@@ -1614,10 +1421,7 @@ describe('Conversation surfaces', () => {
     expect(actorSelect).not.toBeNull()
     const actorOptionLabels = Array.from(actorSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
     expect(actorOptionLabels).toContain('Architect Agent')
-    expect(actorOptionLabels).toContain('Coder Agent')
-    expect(actorOptionLabels).toContain('Finance Planner Template')
     expect(actorOptionLabels).toContain('Studio Direction Team')
-    expect(actorOptionLabels).toContain('Finance Ops Template')
 
     mounted.destroy()
   })

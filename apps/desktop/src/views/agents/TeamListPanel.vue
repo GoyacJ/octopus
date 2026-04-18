@@ -86,9 +86,7 @@ function canRemoveTeam(team: TeamRecord) {
 }
 
 function openLabel(team: TeamRecord) {
-  return props.isProjectScope
-    ? (isProjectOwnedTeam(team) ? '编辑' : '查看')
-    : (isBuiltinTemplateTeam(team) ? '查看' : '编辑')
+  return '查看'
 }
 
 function resolveAgentName(actorRef?: string) {

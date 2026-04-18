@@ -1,5 +1,29 @@
 # AGENTS.md
 
+## AI Planning And Execution Protocol
+
+- Codex reads `AGENTS.md` from the repository root down to the current working directory. Keep repo-wide rules here and put narrower overrides in nested `AGENTS.md` files close to the affected subtree.
+- For any non-trivial implementation work, create or update a plan in `docs/plans/YYYY-MM-DD-<topic>.md` before editing code. "Non-trivial" includes multi-file work, cross-layer work, contract/schema changes, shared UI changes, runtime/persistence changes, and any task expected to take more than one short iteration.
+- If a relevant active plan already exists, extend that plan instead of creating a parallel plan that fragments execution state.
+- Plans are executable control documents, not loose notes. Each task must be atomic and include:
+  - exact files or directories to touch
+  - explicit preconditions or dependencies
+  - `Done when` acceptance criteria
+  - verification commands
+  - stop conditions that require human confirmation instead of guessing
+- Every execution task must carry a status marker: `pending`, `in_progress`, `blocked`, or `done`.
+- During execution, update the plan in place so the current task and current step are always visible without re-reading the full conversation.
+- Execute plans in small batches by default. Do not silently run the entire plan end to end without checkpoints when the work is multi-step or cross-cutting.
+- After each execution batch, report:
+  - current task and current step
+  - files changed
+  - verification results
+  - blockers or open decisions
+  - next step
+- Do not minimize implementation by shipping page-local, adapter-local, or test-only patches when the plan or architecture requires shared-layer changes. Follow the real ownership boundary even if it increases the diff.
+- Stop and ask instead of guessing when source of truth, contract ownership, acceptance criteria, or verification results are unclear.
+- Prefer `docs/plans/PLAN_TEMPLATE.md` when writing new plans and `docs/plans/EXECUTION_TEMPLATE.md` when resuming or reporting execution.
+
 ## Frontend Governance
 
 - This root file defines repo-wide defaults. If a more specific `AGENTS.md` exists deeper in the tree, the nearest file wins for that subtree.

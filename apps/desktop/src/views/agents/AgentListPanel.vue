@@ -94,9 +94,7 @@ function canRemoveAgent(agent: AgentRecord) {
 }
 
 function openLabel(agent: AgentRecord) {
-  return props.isProjectScope
-    ? (isProjectOwnedAgent(agent) ? '编辑' : '查看')
-    : (isBuiltinTemplateAgent(agent) ? '查看' : '编辑')
+  return '查看'
 }
 
 function originLabel(agent: AgentRecord) {

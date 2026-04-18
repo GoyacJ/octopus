@@ -113,8 +113,6 @@ describe('Workspace project management view', () => {
     expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-description-input"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-preset-select"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-leader-select"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-inheritance-hint"]')?.textContent).toContain('继承工作区')
     expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-tools"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).toBeNull()
@@ -184,18 +182,10 @@ describe('Workspace project management view', () => {
     await nextTick()
 
     const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
-    const leaderSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="projects-leader-select"]')
     expect(nameInput).not.toBeNull()
-    expect(leaderSelect).not.toBeNull()
-    const leaderOptionLabels = Array.from(leaderSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
-    expect(leaderOptionLabels).toContain('Architect Agent')
-    expect(leaderOptionLabels).toContain('Coder Agent')
-    expect(leaderOptionLabels).not.toContain('Finance Planner Template')
 
     nameInput!.value = 'Agent Studio'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    leaderSelect!.value = 'agent-coder'
-    leaderSelect!.dispatchEvent(new Event('change', { bubbles: true }))
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
     await waitFor(() =>
@@ -210,16 +200,7 @@ describe('Workspace project management view', () => {
     const created = workspaceStore.projects.find(project => project.name === 'Agent Studio')
     expect(created).toBeTruthy()
     expect(created?.description).toBe('')
-    expect(created?.leaderAgentId).toBe('agent-coder')
-    expect(created?.assignments).toEqual({
-      tools: {
-        excludedSourceKeys: [],
-      },
-      agents: {
-        excludedAgentIds: [],
-        excludedTeamIds: [],
-      },
-    })
+    expect(created?.assignments).toBeUndefined()
     expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
 
     mounted.destroy()
@@ -248,11 +229,8 @@ describe('Workspace project management view', () => {
     expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).toBeNull()
 
     const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
-    const leaderSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="projects-leader-select"]')
     nameInput!.value = 'Docs Workbench'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    leaderSelect!.value = 'agent-architect'
-    leaderSelect!.dispatchEvent(new Event('change', { bubbles: true }))
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
     await waitFor(() =>
@@ -265,18 +243,10 @@ describe('Workspace project management view', () => {
     await waitFor(() => workspaceStore.projects.some(project => project.name === 'Docs Workbench'))
 
     const created = workspaceStore.projects.find(project => project.name === 'Docs Workbench')
-    expect(created?.leaderAgentId).toBe('agent-architect')
     expect(created?.assignments?.models?.configuredModelIds).toHaveLength(1)
     expect(created?.assignments?.models?.defaultConfiguredModelId).toBe(
       created?.assignments?.models?.configuredModelIds[0],
     )
-    expect(created?.assignments?.tools).toEqual({
-      excludedSourceKeys: [],
-    })
-    expect(created?.assignments?.agents).toEqual({
-      excludedAgentIds: [],
-      excludedTeamIds: [],
-    })
 
     mounted.destroy()
   })

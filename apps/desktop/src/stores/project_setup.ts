@@ -12,10 +12,7 @@ import type {
 } from '@octopus/schema'
 
 import type { CatalogConfiguredModelOption } from './catalog'
-import {
-  resolveEnabledProjectAgentIds,
-  resolveProjectModelSettings,
-} from './project_settings'
+import { resolveProjectAgentSettings, resolveProjectModelSettings } from './project_settings'
 
 export type ToolPermissionSelection = 'inherit' | WorkspaceToolPermissionMode
 export type ProjectSetupPreset = 'general' | 'engineering' | 'documentation' | 'advanced'
@@ -66,31 +63,8 @@ export interface ProjectPresetContext {
   teams: TeamRecord[]
 }
 
-export interface PreferredProjectActorOption {
-  value: string
-  kind: 'agent' | 'team'
-}
-
-interface LegacyProjectToolAssignments {
-  excludedSourceKeys?: string[]
-  sourceKeys?: string[]
-}
-
-interface LegacyProjectAgentAssignments {
-  excludedAgentIds?: string[]
-  excludedTeamIds?: string[]
-  agentIds?: string[]
-  teamIds?: string[]
-}
-
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? unique(value.filter((item): item is string => typeof item === 'string'))
-    : []
 }
 
 export function inferWorkspaceToolPermission(
@@ -121,72 +95,14 @@ export function resolveProjectToolSettings(
   assignedToolEntries: CapabilityAssetManifest[],
 ) {
   const assignedSourceKeys = assignedToolEntries.map(entry => entry.sourceKey)
-  const saved = projectSettings.tools as (ProjectToolSettings & {
-    __hasDisabledSourceKeys?: boolean
-    __hasLegacyEnabledSourceKeys?: boolean
-    __legacyEnabledSourceKeys?: string[]
-    enabledSourceKeys?: string[]
-  }) | undefined
-  const hasDisabledSourceKeys = saved?.__hasDisabledSourceKeys ?? Array.isArray(saved?.disabledSourceKeys)
-  const hasLegacyEnabledSourceKeys = !hasDisabledSourceKeys
-    && (saved?.__hasLegacyEnabledSourceKeys ?? Array.isArray(saved?.enabledSourceKeys))
-  const legacyEnabledSourceKeys = saved?.__legacyEnabledSourceKeys ?? readStringArray(saved?.enabledSourceKeys)
-  const enabledSourceKeys = hasDisabledSourceKeys
-    ? assignedSourceKeys.filter(sourceKey => !(saved?.disabledSourceKeys ?? []).includes(sourceKey))
-    : hasLegacyEnabledSourceKeys
-      ? legacyEnabledSourceKeys.filter(sourceKey => assignedSourceKeys.includes(sourceKey))
-      : assignedSourceKeys
+  const saved = projectSettings.tools
+  const enabledSourceKeys = saved?.enabledSourceKeys?.length
+    ? saved.enabledSourceKeys.filter(sourceKey => assignedSourceKeys.includes(sourceKey))
+    : assignedSourceKeys
 
   return {
     enabledSourceKeys,
     overrides: saved?.overrides ?? {},
-  }
-}
-
-export function resolveProjectGrantedToolSourceKeys(
-  assignments: ProjectWorkspaceAssignments | undefined,
-  workspaceToolSourceKeys: string[],
-) {
-  const sourceKeys = unique(workspaceToolSourceKeys)
-  const tools = assignments?.tools as LegacyProjectToolAssignments | undefined
-  if (tools && Array.isArray(tools.excludedSourceKeys)) {
-    const excludedSourceKeys = readStringArray(tools.excludedSourceKeys)
-    return sourceKeys.filter(sourceKey => !excludedSourceKeys.includes(sourceKey))
-  }
-  if (tools && Array.isArray(tools.sourceKeys)) {
-    const legacySourceKeys = readStringArray(tools.sourceKeys)
-    return sourceKeys.filter(sourceKey => legacySourceKeys.includes(sourceKey))
-  }
-  return sourceKeys
-}
-
-export function resolveProjectGrantedActorIds(
-  assignments: ProjectWorkspaceAssignments | undefined,
-  workspaceAgentIds: string[],
-  workspaceTeamIds: string[],
-) {
-  const agentIds = unique(workspaceAgentIds)
-  const teamIds = unique(workspaceTeamIds)
-  const agents = assignments?.agents as LegacyProjectAgentAssignments | undefined
-  if (agents && (Array.isArray(agents.excludedAgentIds) || Array.isArray(agents.excludedTeamIds))) {
-    const excludedAgentIds = readStringArray(agents.excludedAgentIds)
-    const excludedTeamIds = readStringArray(agents.excludedTeamIds)
-    return {
-      assignedAgentIds: agentIds.filter(agentId => !excludedAgentIds.includes(agentId)),
-      assignedTeamIds: teamIds.filter(teamId => !excludedTeamIds.includes(teamId)),
-    }
-  }
-  if (agents && (Array.isArray(agents.agentIds) || Array.isArray(agents.teamIds))) {
-    const legacyAgentIds = readStringArray(agents.agentIds)
-    const legacyTeamIds = readStringArray(agents.teamIds)
-    return {
-      assignedAgentIds: agentIds.filter(agentId => legacyAgentIds.includes(agentId)),
-      assignedTeamIds: teamIds.filter(teamId => legacyTeamIds.includes(teamId)),
-    }
-  }
-  return {
-    assignedAgentIds: agentIds,
-    assignedTeamIds: teamIds,
   }
 }
 
@@ -211,32 +127,15 @@ export function buildToolPermissionDraft(
   ) as Record<string, ToolPermissionSelection>
 }
 
-export function buildProjectGrantState(
-  project: ProjectRecord | null,
-  input: {
-    workspaceToolSourceKeys?: string[]
-    workspaceAgentIds?: string[]
-    workspaceTeamIds?: string[]
-  } = {},
-): ProjectGrantState {
+export function buildProjectGrantState(project: ProjectRecord | null): ProjectGrantState {
   const assignments = project?.assignments
-  const resolvedActors = (
-    input.workspaceAgentIds || input.workspaceTeamIds
-  )
-    ? resolveProjectGrantedActorIds(assignments, input.workspaceAgentIds ?? [], input.workspaceTeamIds ?? [])
-    : {
-        assignedAgentIds: readStringArray((assignments?.agents as { agentIds?: string[] } | undefined)?.agentIds),
-        assignedTeamIds: readStringArray((assignments?.agents as { teamIds?: string[] } | undefined)?.teamIds),
-      }
 
   return {
     assignedConfiguredModelIds: unique(assignments?.models?.configuredModelIds ?? []),
     defaultConfiguredModelId: assignments?.models?.defaultConfiguredModelId ?? '',
-    assignedToolSourceKeys: input.workspaceToolSourceKeys
-      ? resolveProjectGrantedToolSourceKeys(assignments, input.workspaceToolSourceKeys)
-      : readStringArray((assignments?.tools as { sourceKeys?: string[] } | undefined)?.sourceKeys),
-    assignedAgentIds: resolvedActors.assignedAgentIds,
-    assignedTeamIds: resolvedActors.assignedTeamIds,
+    assignedToolSourceKeys: unique(assignments?.tools?.sourceKeys ?? []),
+    assignedAgentIds: unique(assignments?.agents?.agentIds ?? []),
+    assignedTeamIds: unique(assignments?.agents?.teamIds ?? []),
     memberUserIds: unique([...(project?.memberUserIds ?? []), project?.ownerUserId ?? '']),
   }
 }
@@ -255,7 +154,7 @@ export function buildProjectRuntimeRefinementState(input: {
     input.assignedConfiguredModels.map(item => item.value),
     input.assignmentDefaultConfiguredModelId,
   )
-  const resolvedActors = resolveEnabledProjectAgentIds(
+  const resolvedActors = resolveProjectAgentSettings(
     input.projectSettings,
     input.assignedAgentIds,
     input.assignedTeamIds,
@@ -279,13 +178,12 @@ export function buildProjectRuntimeRefinementState(input: {
 
 export function buildProjectCapabilitySummary(input: {
   project: ProjectRecord | null
-  grantState?: ProjectGrantState
   projectSettings: ProjectSettingsConfig
   assignedConfiguredModels: CatalogConfiguredModelOption[]
   assignedToolEntries: CapabilityAssetManifest[]
   workspaceTools: Array<{ kind: string, name: string, permissionMode: WorkspaceToolPermissionMode }>
 }): ProjectCapabilitySummary {
-  const grantState = input.grantState ?? buildProjectGrantState(input.project)
+  const grantState = buildProjectGrantState(input.project)
   const runtimeState = buildProjectRuntimeRefinementState({
     projectSettings: input.projectSettings,
     assignedConfiguredModels: input.assignedConfiguredModels,
@@ -321,21 +219,15 @@ function buildAssignmentsFromSeed(input: {
   configuredModelIds: string[]
   defaultConfiguredModelId: string
   toolSourceKeys: string[]
-  allToolSourceKeys: string[]
   agentIds: string[]
-  allAgentIds: string[]
   teamIds: string[]
-  allTeamIds: string[]
 }): ProjectWorkspaceAssignments | undefined {
   const configuredModelIds = unique(input.configuredModelIds)
   const toolSourceKeys = unique(input.toolSourceKeys)
   const agentIds = unique(input.agentIds)
   const teamIds = unique(input.teamIds)
-  const excludedSourceKeys = unique(input.allToolSourceKeys).filter(sourceKey => !toolSourceKeys.includes(sourceKey))
-  const excludedAgentIds = unique(input.allAgentIds).filter(agentId => !agentIds.includes(agentId))
-  const excludedTeamIds = unique(input.allTeamIds).filter(teamId => !teamIds.includes(teamId))
 
-  if (!configuredModelIds.length && !input.allToolSourceKeys.length && !input.allAgentIds.length && !input.allTeamIds.length) {
+  if (!configuredModelIds.length && !toolSourceKeys.length && !agentIds.length && !teamIds.length) {
     return undefined
   }
 
@@ -348,43 +240,9 @@ function buildAssignmentsFromSeed(input: {
             : configuredModelIds[0] ?? '',
         }
       : undefined,
-    tools: input.allToolSourceKeys.length ? { excludedSourceKeys } : undefined,
-    agents: input.allAgentIds.length || input.allTeamIds.length
-      ? { excludedAgentIds, excludedTeamIds }
-      : undefined,
+    tools: toolSourceKeys.length ? { sourceKeys: toolSourceKeys } : undefined,
+    agents: agentIds.length || teamIds.length ? { agentIds, teamIds } : undefined,
   }
-}
-
-export function buildInheritedProjectAssignments(
-  modelAssignments?: ProjectWorkspaceAssignments['models'],
-): ProjectWorkspaceAssignments {
-  return {
-    ...(modelAssignments ? { models: modelAssignments } : {}),
-    tools: {
-      excludedSourceKeys: [],
-    },
-    agents: {
-      excludedAgentIds: [],
-      excludedTeamIds: [],
-    },
-  }
-}
-
-export function resolvePreferredProjectActorRef(
-  options: PreferredProjectActorOption[],
-  leaderAgentId?: string | null,
-) {
-  const normalizedLeaderAgentId = typeof leaderAgentId === 'string' ? leaderAgentId.trim() : ''
-  if (normalizedLeaderAgentId) {
-    const leaderOption = options.find(option =>
-      option.kind === 'agent' && option.value === `agent:${normalizedLeaderAgentId}`,
-    )
-    if (leaderOption) {
-      return leaderOption.value
-    }
-  }
-
-  return options[0]?.value ?? ''
 }
 
 export function buildProjectSetupPresetSeed(
@@ -393,18 +251,18 @@ export function buildProjectSetupPresetSeed(
 ): ProjectSetupPresetSeed {
   const primaryModel = choosePrimaryModel(context.models)
   const engineeringModels = unique(context.models.map(model => model.value))
+  const engineeringTools = unique(context.tools.map(entry => entry.sourceKey))
+  const engineeringAgents = unique(context.agents.map(agent => agent.id))
+  const engineeringTeams = unique(context.teams.map(team => team.id))
 
   if (preset === 'engineering') {
     return {
       assignments: buildAssignmentsFromSeed({
         configuredModelIds: engineeringModels,
         defaultConfiguredModelId: primaryModel?.value ?? engineeringModels[0] ?? '',
-        toolSourceKeys: [],
-        allToolSourceKeys: [],
-        agentIds: [],
-        allAgentIds: [],
-        teamIds: [],
-        allTeamIds: [],
+        toolSourceKeys: engineeringTools,
+        agentIds: engineeringAgents,
+        teamIds: engineeringTeams,
       }),
       modelSettings: engineeringModels.length
         ? {
@@ -412,22 +270,36 @@ export function buildProjectSetupPresetSeed(
             defaultConfiguredModelId: primaryModel?.value ?? engineeringModels[0] ?? '',
           }
         : undefined,
+      toolSettings: engineeringTools.length
+        ? {
+            enabledSourceKeys: engineeringTools,
+            overrides: {},
+          }
+        : undefined,
+      agentSettings: engineeringAgents.length || engineeringTeams.length
+        ? {
+            enabledAgentIds: engineeringAgents,
+            enabledTeamIds: engineeringTeams,
+          }
+        : undefined,
     }
   }
 
   if (preset === 'documentation') {
     const documentationModels = unique(primaryModel ? [primaryModel.value] : [])
+    const documentationTools = unique(
+      context.tools
+        .filter(entry => entry.kind === 'skill' || entry.sourceKey.includes('help'))
+        .map(entry => entry.sourceKey),
+    )
 
     return {
       assignments: buildAssignmentsFromSeed({
         configuredModelIds: documentationModels,
         defaultConfiguredModelId: documentationModels[0] ?? '',
-        toolSourceKeys: [],
-        allToolSourceKeys: [],
+        toolSourceKeys: documentationTools,
         agentIds: [],
-        allAgentIds: [],
         teamIds: [],
-        allTeamIds: [],
       }),
       modelSettings: documentationModels.length
         ? {
@@ -435,6 +307,13 @@ export function buildProjectSetupPresetSeed(
             defaultConfiguredModelId: documentationModels[0] ?? '',
           }
         : undefined,
+      toolSettings: documentationTools.length
+        ? {
+            enabledSourceKeys: documentationTools,
+            overrides: {},
+          }
+        : undefined,
+      agentSettings: undefined,
     }
   }
 

@@ -250,7 +250,6 @@ export function createWorkspaceFixtureState(
           status: 'active',
           description: 'Real workspace API migration for the desktop surface.',
           resourceDirectory: 'data/projects/proj-redesign/resources',
-          leaderAgentId: 'agent-architect',
           ownerUserId: 'user-owner',
           memberUserIds: ['user-owner', 'user-operator'],
           permissionOverrides: {
@@ -287,7 +286,6 @@ export function createWorkspaceFixtureState(
           status: 'active',
           description: 'RBAC, menu policies, and audit automation.',
           resourceDirectory: 'data/projects/proj-governance/resources',
-          leaderAgentId: 'agent-coder',
           ownerUserId: 'user-owner',
           memberUserIds: ['user-owner'],
           permissionOverrides: {
