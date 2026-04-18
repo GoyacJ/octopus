@@ -1047,6 +1047,21 @@ pub struct CapabilityDescriptor {
     pub label: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeExecutionSupport {
+    pub prompt: bool,
+    pub conversation: bool,
+    pub tool_loop: bool,
+    pub streaming: bool,
+}
+
+impl RuntimeExecutionSupport {
+    pub fn executable(self) -> bool {
+        self.prompt || self.conversation || self.tool_loop || self.streaming
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceDescriptor {
@@ -1058,6 +1073,8 @@ pub struct SurfaceDescriptor {
     pub base_url_policy: String,
     pub enabled: bool,
     pub capabilities: Vec<CapabilityDescriptor>,
+    #[serde(default)]
+    pub runtime_support: RuntimeExecutionSupport,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1076,6 +1093,8 @@ pub struct ModelSurfaceBinding {
     pub surface: String,
     pub protocol_family: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub runtime_support: RuntimeExecutionSupport,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2071,19 +2090,9 @@ pub struct RuntimeConfiguredModelProbeInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeConfiguredModelCredentialUpsertInput {
+pub struct RuntimeConfiguredModelCredentialInput {
     pub configured_model_id: String,
-    pub provider_id: String,
     pub api_key: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeConfiguredModelCredentialRecord {
-    pub configured_model_id: String,
-    pub credential_ref: String,
-    pub storage_kind: String,
-    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2114,6 +2123,8 @@ pub struct RuntimeEffectiveConfig {
 pub struct RuntimeConfigPatch {
     pub scope: String,
     pub patch: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub configured_model_credentials: Vec<RuntimeConfiguredModelCredentialInput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3105,6 +3116,47 @@ pub struct ProviderConfig {
     pub protocol_family: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedRequestPolicyInput {
+    pub auth_strategy: String,
+    pub base_url_policy: String,
+    pub default_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured_base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ResolvedRequestAuthMode {
+    None,
+    BearerToken,
+    Header,
+    QueryParam,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedRequestAuth {
+    pub mode: ResolvedRequestAuthMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedRequestPolicy {
+    pub base_url: String,
+    pub headers: BTreeMap<String, String>,
+    pub auth: ResolvedRequestAuth,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedExecutionTarget {
@@ -3116,6 +3168,9 @@ pub struct ResolvedExecutionTarget {
     pub surface: String,
     pub protocol_family: String,
     pub credential_ref: Option<String>,
+    pub credential_source: String,
+    #[serde(default)]
+    pub request_policy: ResolvedRequestPolicyInput,
     pub base_url: Option<String>,
     pub max_output_tokens: Option<u32>,
     pub capabilities: Vec<CapabilityDescriptor>,

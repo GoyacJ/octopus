@@ -144,6 +144,13 @@ export interface CapabilityDescriptor {
   label: string
 }
 
+export interface RuntimeExecutionSupport {
+  prompt: boolean
+  conversation: boolean
+  toolLoop: boolean
+  streaming: boolean
+}
+
 export interface SurfaceDescriptor {
   surface: ModelSurfaceId | string
   protocolFamily: ProtocolFamily | string
@@ -153,6 +160,7 @@ export interface SurfaceDescriptor {
   baseUrlPolicy: BaseUrlPolicy | string
   enabled: boolean
   capabilities: CapabilityDescriptor[]
+  runtimeSupport: RuntimeExecutionSupport
 }
 
 export interface ProviderRegistryRecord {
@@ -167,6 +175,7 @@ export interface ModelSurfaceBinding {
   surface: ModelSurfaceId | string
   protocolFamily: ProtocolFamily | string
   enabled: boolean
+  runtimeSupport: RuntimeExecutionSupport
 }
 
 export interface ModelRegistryRecord {

@@ -53,7 +53,6 @@ use octopus_core::{
     RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput, ResourceActionGrant,
     ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord, RoleBindingUpsertRequest,
     RoleUpsertRequest, RuntimeConfigPatch, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelCredentialRecord, RuntimeConfiguredModelCredentialUpsertInput,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
     SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,

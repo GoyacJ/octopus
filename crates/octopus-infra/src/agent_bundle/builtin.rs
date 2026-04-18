@@ -368,20 +368,20 @@ fn build_builtin_team_record(
         .collect::<Vec<_>>();
     let task_domains = normalize_task_domains(source.tags.clone());
     let delegation_policy = default_team_delegation_policy();
-    let leader_agent_id = source
+    let leader_agent_record_id = source
         .leader_agent_source_id
         .as_ref()
         .map(|source_id| catalog_hash_id("builtin-agent", source_id));
-    let member_agent_ids = source
+    let member_agent_record_ids = source
         .member_agent_source_ids
         .iter()
         .map(|source_id| catalog_hash_id("builtin-agent", source_id))
         .collect::<Vec<_>>();
-    let leader_ref = leader_agent_id
+    let leader_ref = leader_agent_record_id
         .as_deref()
         .map(crate::canonical_agent_ref)
         .unwrap_or_default();
-    let member_refs = crate::canonical_agent_refs(&member_agent_ids);
+    let member_refs = crate::canonical_agent_refs(&member_agent_record_ids);
 
     TeamRecord {
         id: catalog_hash_id("builtin-team", &source.source_id),
@@ -413,8 +413,6 @@ fn build_builtin_team_record(
         approval_preference: default_approval_preference(),
         output_contract: default_output_contract(),
         shared_capability_policy: default_team_shared_capability_policy(),
-        leader_agent_id,
-        member_agent_ids: member_agent_ids.clone(),
         leader_ref: leader_ref.clone(),
         member_refs: member_refs.clone(),
         team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),
@@ -597,44 +595,38 @@ mod tests {
 
         assert!(!builtin_teams.is_empty());
 
-        let builtin_agent_ids = builtin_agents
+        let builtin_agent_refs = builtin_agents
             .iter()
-            .map(|agent| agent.id.clone())
+            .map(|agent| crate::canonical_agent_ref(&agent.id))
             .collect::<std::collections::BTreeSet<_>>();
 
         let team_with_members = builtin_teams
             .iter()
-            .find(|team| !team.member_agent_ids.is_empty())
+            .find(|team| !team.member_refs.is_empty())
             .expect("expected at least one builtin team with members");
 
         assert!(
             team_with_members
-                .member_agent_ids
+                .member_refs
                 .iter()
-                .all(|agent_id| builtin_agent_ids.contains(agent_id)),
-            "builtin team members should resolve to builtin agent ids",
+                .all(|agent_ref| builtin_agent_refs.contains(agent_ref)),
+            "builtin team members should resolve to builtin agent refs",
         );
 
-        if let Some(leader_agent_id) = team_with_members.leader_agent_id.as_ref() {
-            assert!(
-                builtin_agent_ids.contains(leader_agent_id),
-                "builtin team leader should resolve to a builtin agent id",
-            );
-            assert_eq!(
-                team_with_members.leader_ref,
-                format!("agent:{leader_agent_id}"),
-                "builtin team leader ref should be a canonical actor ref",
-            );
-        }
+        assert!(
+            builtin_agent_refs.contains(&team_with_members.leader_ref),
+            "builtin team leader should resolve to a builtin agent ref",
+        );
 
         assert_eq!(
             team_with_members.member_refs,
             team_with_members
-                .member_agent_ids
+                .member_refs
                 .iter()
-                .map(|agent_id| format!("agent:{agent_id}"))
+                .filter(|agent_ref| builtin_agent_refs.contains(*agent_ref))
+                .cloned()
                 .collect::<Vec<_>>(),
-            "builtin team member refs should be canonical actor refs",
+            "builtin team member refs should remain canonical actor refs",
         );
     }
 }

@@ -212,13 +212,19 @@ describe('Models view', () => {
                     protocolFamily: 'openai_chat',
                     transport: ['request_response', 'sse'],
                     authStrategy: 'bearer',
-                    baseUrl: 'http://127.0.0.1:11434/v1',
-                    baseUrlPolicy: 'allow_override',
-                    enabled: true,
-                    capabilities: [],
+                  baseUrl: 'http://127.0.0.1:11434/v1',
+                  baseUrlPolicy: 'allow_override',
+                  enabled: true,
+                  capabilities: [],
+                  runtimeSupport: {
+                    prompt: false,
+                    conversation: false,
+                    toolLoop: false,
+                    streaming: false,
                   },
-                ],
-                metadata: {},
+                },
+              ],
+              metadata: {},
               },
             ],
           } satisfies ModelCatalogSnapshot
@@ -497,7 +503,7 @@ describe('Models view', () => {
     mounted.destroy()
   })
 
-  it('stores a replacement ApiKey through managed secret upsert before saving and emits a save notification', async () => {
+  it('submits a replacement ApiKey with the workspace save patch and emits a save notification', async () => {
     overrideWorkspaceRuntimeConfig({
       configuredModels: {
         'anthropic-primary': {
@@ -512,21 +518,12 @@ describe('Models view', () => {
       },
     })
 
-    const upsertSpy = vi.fn(async () => ({
-      configuredModelId: 'anthropic-primary',
-      credentialRef: 'secret-ref:fixture:anthropic-primary',
-      storageKind: 'os-keyring',
-      status: 'configured',
-    }))
     const saveSpy = vi.fn()
 
     configureWorkspaceClient((client) => ({
       ...client,
       runtime: {
         ...client.runtime,
-        async upsertConfiguredModelCredential(configuredModelId, input) {
-          return await upsertSpy(configuredModelId, input)
-        },
         async saveConfig(patch) {
           saveSpy(patch)
           return await client.runtime.saveConfig(patch)
@@ -545,25 +542,16 @@ describe('Models view', () => {
     expect(saveButton).not.toBeNull()
     saveButton?.click()
 
-    await waitFor(() => upsertSpy.mock.calls.length === 1, 2000, 'credential upsert call')
-    expect(upsertSpy.mock.calls[0]?.[0]).toBe('anthropic-primary')
-    expect(upsertSpy.mock.calls[0]?.[1]).toMatchObject({
-      configuredModelId: 'anthropic-primary',
-      providerId: 'anthropic',
-      apiKey: 'sk-ant-replacement-secret',
-    })
-
     await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'save config call')
     expect(saveSpy.mock.calls[0]?.[0]).toMatchObject({
       scope: 'workspace',
-      patch: {
-        configuredModels: {
-          'anthropic-primary': {
-            credentialRef: 'secret-ref:fixture:anthropic-primary',
-          },
-        },
-      },
+      configuredModelCredentials: [{
+        configuredModelId: 'anthropic-primary',
+        apiKey: 'sk-ant-replacement-secret',
+      }],
+      patch: {},
     })
+    expect(JSON.stringify(saveSpy.mock.calls[0]?.[0])).not.toContain('credentialRef')
 
     const notificationStore = useNotificationStore()
     await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'save toast')
@@ -575,22 +563,13 @@ describe('Models view', () => {
     mounted.destroy()
   })
 
-  it('stores ApiKey through managed secret upsert before creating a model and emits a create notification', async () => {
-    const upsertSpy = vi.fn(async (configuredModelId: string) => ({
-      configuredModelId,
-      credentialRef: `secret-ref:fixture:${configuredModelId}`,
-      storageKind: 'os-keyring',
-      status: 'configured',
-    }))
+  it('submits ApiKey with the create save patch and emits a create notification', async () => {
     const saveSpy = vi.fn()
 
     configureWorkspaceClient((client) => ({
       ...client,
       runtime: {
         ...client.runtime,
-        async upsertConfiguredModelCredential(configuredModelId, input) {
-          return await upsertSpy(configuredModelId, input)
-        },
         async saveConfig(patch) {
           saveSpy(patch)
           return await client.runtime.saveConfig(patch)
@@ -617,16 +596,14 @@ describe('Models view', () => {
     expect(confirmButton).not.toBeUndefined()
     confirmButton?.click()
 
-    await waitFor(() => upsertSpy.mock.calls.length === 1, 2000, 'create credential upsert')
-    expect(upsertSpy.mock.calls[0]?.[1]).toMatchObject({
-      providerId: 'openai',
-      apiKey: 'sk-openai-managed-secret',
-    })
-
     await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'create save config call')
+    expect(saveSpy.mock.calls[0]?.[0]?.configuredModelCredentials).toMatchObject([{
+      configuredModelId: expect.any(String),
+      apiKey: 'sk-openai-managed-secret',
+    }])
     const configuredModelsPatch = saveSpy.mock.calls[0]?.[0]?.patch?.configuredModels as Record<string, Record<string, unknown>>
     const createdEntry = Object.values(configuredModelsPatch ?? {})[0]
-    expect(createdEntry?.credentialRef).toMatch(/^secret-ref:fixture:/)
+    expect(createdEntry?.credentialRef).toBeUndefined()
     expect(JSON.stringify(createdEntry)).not.toContain('sk-openai-managed-secret')
 
     const notificationStore = useNotificationStore()
@@ -639,7 +616,7 @@ describe('Models view', () => {
     mounted.destroy()
   })
 
-  it('deletes the configured model and best-effort managed secret through a workspace notification workflow', async () => {
+  it('deletes the configured model through the workspace save boundary and emits a delete notification', async () => {
     overrideWorkspaceRuntimeConfig({
       configuredModels: {
         'anthropic-primary': {
@@ -654,15 +631,15 @@ describe('Models view', () => {
       },
     })
 
-    const deleteCredentialSpy = vi.fn(async () => {})
+    const saveSpy = vi.fn()
 
     configureWorkspaceClient((client) => ({
       ...client,
       runtime: {
         ...client.runtime,
-        async deleteConfiguredModelCredential(configuredModelId) {
-          deleteCredentialSpy(configuredModelId)
-          await client.runtime.deleteConfiguredModelCredential(configuredModelId)
+        async saveConfig(patch) {
+          saveSpy(patch)
+          return await client.runtime.saveConfig(patch)
         },
       },
     }))
@@ -677,8 +654,15 @@ describe('Models view', () => {
     expect(deleteButton).not.toBeNull()
     deleteButton?.click()
 
-    await waitFor(() => deleteCredentialSpy.mock.calls.length === 1, 2000, 'delete credential cleanup call')
-    expect(deleteCredentialSpy).toHaveBeenCalledWith('anthropic-primary')
+    await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'delete save config call')
+    expect(saveSpy.mock.calls[0]?.[0]).toMatchObject({
+      scope: 'workspace',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': null,
+        },
+      },
+    })
 
     const notificationStore = useNotificationStore()
     await waitFor(() => notificationStore.notificationsState.length > 0, 2000, 'delete toast')

@@ -3,6 +3,7 @@ import type {
   JsonValue,
   ModelRegistryRecord,
   ProviderRegistryRecord,
+  RuntimeExecutionSupport,
   SurfaceDescriptor,
 } from '@octopus/schema'
 
@@ -30,6 +31,23 @@ export function toRecord(value: unknown): Record<string, JsonValue> {
 
 export function toMetadata(value: unknown): Record<string, unknown> {
   return isObjectRecord(value) ? cloneJson(value) as Record<string, unknown> : {}
+}
+
+function toRuntimeExecutionSupport(value: unknown): RuntimeExecutionSupport {
+  if (!isObjectRecord(value)) {
+    return {
+      prompt: false,
+      conversation: false,
+      toolLoop: false,
+      streaming: false,
+    }
+  }
+  return {
+    prompt: Boolean(value.prompt),
+    conversation: Boolean(value.conversation),
+    toolLoop: Boolean(value.toolLoop),
+    streaming: Boolean(value.streaming),
+  }
 }
 
 export function toConfiguredModelMap(value: unknown): Record<string, ConfiguredModelRecord> {
@@ -95,6 +113,7 @@ export function toSurfaceDescriptors(value: unknown): SurfaceDescriptor[] {
             }))
             .filter(capability => capability.capabilityId)
         : [],
+      runtimeSupport: toRuntimeExecutionSupport(entry.runtimeSupport),
     }))
 }
 
@@ -148,6 +167,7 @@ export function toModelRegistryMap(value: unknown): Record<string, ModelRegistry
                 surface: typeof binding.surface === 'string' ? binding.surface : 'conversation',
                 protocolFamily: typeof binding.protocolFamily === 'string' ? binding.protocolFamily : 'openai_chat',
                 enabled: typeof binding.enabled === 'boolean' ? binding.enabled : true,
+                runtimeSupport: toRuntimeExecutionSupport(binding.runtimeSupport),
               }]
             })
         : [],
@@ -315,6 +335,12 @@ export function buildManagedProviderOverride(
         baseUrlPolicy: 'allow_override',
         enabled: true,
         capabilities: [],
+        runtimeSupport: {
+          prompt: false,
+          conversation: false,
+          toolLoop: false,
+          streaming: false,
+        },
       },
     ],
     metadata: createManagedMetadata(providerType),
@@ -344,6 +370,12 @@ export function buildManagedModelOverride(
         surface: 'conversation',
         protocolFamily: 'openai_chat',
         enabled: true,
+        runtimeSupport: {
+          prompt: false,
+          conversation: false,
+          toolLoop: false,
+          streaming: false,
+        },
       },
     ],
     capabilities: [],
@@ -363,6 +395,12 @@ export function updateProviderBaseUrl(provider: ProviderRegistryRecord, baseUrl:
         baseUrlPolicy: 'allow_override',
         enabled: true,
         capabilities: [],
+        runtimeSupport: {
+          prompt: false,
+          conversation: false,
+          toolLoop: false,
+          streaming: false,
+        },
       }]
   return {
     ...provider,

@@ -28,6 +28,7 @@ import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-contro
 import { useWorkspaceStore } from '@/stores/workspace'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
+export type { ToolPermissionSelection } from '@/stores/project_setup'
 
 export interface ToolSection {
   kind: WorkspaceToolKind

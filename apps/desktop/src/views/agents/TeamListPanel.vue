@@ -7,6 +7,7 @@ import type { AgentRecord, TeamRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
 
 import type { AgentBundleTransferFormat, ViewMode } from './useAgentCenter'
+import { agentIdFromRef, matchesAgentRef } from './agent-refs'
 import TeamUnitCard from './TeamUnitCard.vue'
 
 const props = defineProps<{
@@ -88,11 +89,11 @@ function openLabel(team: TeamRecord) {
   return '查看'
 }
 
-function resolveAgentName(agentId?: string) {
-  if (!agentId) {
-    return '未设置负责人'
+function resolveAgentName(actorRef?: string) {
+  if (!actorRef) {
+    return ''
   }
-  return props.resolvedAgents.find(agent => agent.id === agentId)?.name ?? agentId
+  return props.resolvedAgents.find(agent => matchesAgentRef(agent.id, actorRef))?.name ?? agentIdFromRef(actorRef)
 }
 
 function initials(name: string) {
@@ -240,8 +241,8 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
           :avatar="team.avatar"
           :title="team.personality || 'Digital Team'"
           :description="team.description"
-          :lead-label="resolveAgentName(team.leaderAgentId)"
-          :members="team.memberAgentIds.map(resolveAgentName)"
+          :lead-label="resolveAgentName(team.leaderRef) || '未设置负责人'"
+          :members="team.memberRefs.map(resolveAgentName)"
           :workflow="team.tags.slice(0, 3)"
           :recent-outcome="team.prompt || team.description"
           :origin-label="teamOriginLabel(team)"
@@ -305,12 +306,12 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
               <div class="flex flex-col items-end">
                 <span class="text-[9px] font-bold uppercase tracking-tighter text-text-tertiary/40">负责人</span>
                 <span class="max-w-[80px] truncate text-xs font-bold text-text-primary/70">
-                  {{ resolveAgentName(team.leaderAgentId) || '未设置' }}
+                  {{ resolveAgentName(team.leaderRef) || '未设置' }}
                 </span>
               </div>
               <div class="flex flex-col items-end">
                 <span class="text-[9px] font-bold uppercase tracking-tighter text-text-tertiary/40">成员</span>
-                <span class="text-xs font-bold tabular-nums text-text-primary/70">{{ team.memberAgentIds.length }}</span>
+                <span class="text-xs font-bold tabular-nums text-text-primary/70">{{ team.memberRefs.length }}</span>
               </div>
             </div>
           </div>

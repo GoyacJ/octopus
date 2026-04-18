@@ -71,3 +71,17 @@ pub(super) async fn resolve_memory_proposal(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::approval_decision_status;
+
+    #[test]
+    fn normalizes_approval_resolution_status() {
+        assert_eq!(
+            approval_decision_status("reject").expect("reject"),
+            "rejected"
+        );
+        assert!(approval_decision_status("later").is_err());
+    }
+}

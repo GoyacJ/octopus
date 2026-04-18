@@ -1041,6 +1041,26 @@ pub(super) async fn emit_submit_turn_events(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::usage_cost_shape;
+
+    #[test]
+    fn derives_usage_cost_shape() {
+        assert_eq!(usage_cost_shape(Some(42)), ("tokens", 42_i64, "tokens"));
+        assert_eq!(usage_cost_shape(None), ("turns", 1_i64, "count"));
+    }
+
+    #[test]
+    fn uses_run_trace_event_taxonomy() {
+        let source = include_str!("execution_events.rs");
+        let legacy_submitted = ["turn", "submitted"].join("_");
+        let legacy_executed = ["turn", "executed"].join("_");
+        assert!(!source.contains(&legacy_submitted));
+        assert!(!source.contains(&legacy_executed));
+    }
+}
+
 pub(super) async fn record_subrun_cancellation_activity(
     adapter: &RuntimeAdapter,
     session_id: &str,

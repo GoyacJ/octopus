@@ -136,6 +136,24 @@ CancelRuntimeSubrunInput:
     note:
       type: string
   type: object
+ResolvedRequestPolicyInput:
+  additionalProperties: false
+  properties:
+    authStrategy:
+      type: string
+    baseUrlPolicy:
+      type: string
+    configuredBaseUrl:
+      type: string
+    defaultBaseUrl:
+      type: string
+    providerBaseUrl:
+      type: string
+  required:
+    - authStrategy
+    - baseUrlPolicy
+    - defaultBaseUrl
+  type: object
 ResolvedExecutionTarget:
   additionalProperties: false
   properties:
@@ -151,12 +169,16 @@ ResolvedExecutionTarget:
       type: string
     credentialRef:
       type: string
+    credentialSource:
+      type: string
     modelId:
       type: string
     protocolFamily:
       type: string
     providerId:
       type: string
+    requestPolicy:
+      $ref: "#/components/schemas/ResolvedRequestPolicyInput"
     registryModelId:
       type: string
     surface:
@@ -169,6 +191,8 @@ ResolvedExecutionTarget:
     - modelId
     - surface
     - protocolFamily
+    - credentialSource
+    - requestPolicy
     - capabilities
   type: object
 RuntimeActorType:
@@ -1242,6 +1266,10 @@ RuntimeBootstrap:
 RuntimeConfigPatch:
   additionalProperties: false
   properties:
+    configuredModelCredentials:
+      items:
+        $ref: "#/components/schemas/RuntimeConfiguredModelCredentialInput"
+      type: array
     patch:
       additionalProperties: true
       type: object
@@ -1319,36 +1347,16 @@ RuntimeConfiguredModelProbeInput:
     - configuredModelId
     - patch
   type: object
-RuntimeConfiguredModelCredentialUpsertInput:
+RuntimeConfiguredModelCredentialInput:
   additionalProperties: false
   properties:
     apiKey:
       type: string
     configuredModelId:
       type: string
-    providerId:
-      type: string
   required:
     - configuredModelId
-    - providerId
     - apiKey
-  type: object
-RuntimeConfiguredModelCredentialRecord:
-  additionalProperties: false
-  properties:
-    configuredModelId:
-      type: string
-    credentialRef:
-      type: string
-    status:
-      type: string
-    storageKind:
-      type: string
-  required:
-    - configuredModelId
-    - credentialRef
-    - storageKind
-    - status
   type: object
 RuntimeConfiguredModelProbeResult:
   additionalProperties: false

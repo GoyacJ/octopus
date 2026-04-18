@@ -1899,49 +1899,49 @@ pub(crate) async fn create_project_task_intervention(
                         };
                     if let Some(runtime_session) = runtime_session {
                         if let Some(approval_id) = explicit_approval_id.clone().or_else(|| {
-                                runtime_session
-                                    .pending_approval
-                                    .as_ref()
-                                    .map(|approval| approval.id.clone())
-                            }) {
-                                let previous_run = target_run.clone();
-                                let runtime_run = state
-                                    .services
-                                    .runtime_execution
-                                    .resolve_approval(
-                                        session_id,
-                                        &approval_id,
-                                        octopus_core::ResolveRuntimeApprovalInput {
-                                            decision: if intervention_type == "approve" {
-                                                "approve".into()
-                                            } else {
-                                                "reject".into()
-                                            },
+                            runtime_session
+                                .pending_approval
+                                .as_ref()
+                                .map(|approval| approval.id.clone())
+                        }) {
+                            let previous_run = target_run.clone();
+                            let runtime_run = state
+                                .services
+                                .runtime_execution
+                                .resolve_approval(
+                                    session_id,
+                                    &approval_id,
+                                    octopus_core::ResolveRuntimeApprovalInput {
+                                        decision: if intervention_type == "approve" {
+                                            "approve".into()
+                                        } else {
+                                            "reject".into()
                                         },
-                                    )
-                                    .await?;
-                                let refreshed_session = state
-                                    .services
-                                    .runtime_session
-                                    .get_session(session_id)
-                                    .await?;
-                                runtime_synced_run = Some((
-                                    previous_run.clone(),
-                                    if intervention_type == "approve" {
-                                        sync_task_run_record_from_runtime(
-                                            &previous_run,
-                                            &refreshed_session,
-                                            &runtime_run,
-                                        )
-                                    } else {
-                                        sync_rejected_task_run_record_from_runtime(
-                                            &previous_run,
-                                            &refreshed_session,
-                                            &runtime_run,
-                                        )
                                     },
-                                ));
-                            }
+                                )
+                                .await?;
+                            let refreshed_session = state
+                                .services
+                                .runtime_session
+                                .get_session(session_id)
+                                .await?;
+                            runtime_synced_run = Some((
+                                previous_run.clone(),
+                                if intervention_type == "approve" {
+                                    sync_task_run_record_from_runtime(
+                                        &previous_run,
+                                        &refreshed_session,
+                                        &runtime_run,
+                                    )
+                                } else {
+                                    sync_rejected_task_run_record_from_runtime(
+                                        &previous_run,
+                                        &refreshed_session,
+                                        &runtime_run,
+                                    )
+                                },
+                            ));
+                        }
                     }
                 }
             }
@@ -4361,57 +4361,6 @@ pub(crate) async fn probe_runtime_configured_model_route(
     ))
 }
 
-pub(crate) async fn upsert_runtime_configured_model_credential_route(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(configured_model_id): Path<String>,
-    Json(input): Json<RuntimeConfiguredModelCredentialUpsertInput>,
-) -> Result<Json<RuntimeConfiguredModelCredentialRecord>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "runtime.config.workspace.manage",
-        None,
-        Some("runtime.config"),
-        Some("workspace"),
-    )
-    .await?;
-    if input.configured_model_id != configured_model_id {
-        return Err(ApiError::from(AppError::invalid_input(
-            "configured model id must match the route path",
-        )));
-    }
-    Ok(Json(
-        state
-            .services
-            .runtime_config
-            .upsert_configured_model_credential(input)
-            .await?,
-    ))
-}
-
-pub(crate) async fn delete_runtime_configured_model_credential_route(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(configured_model_id): Path<String>,
-) -> Result<StatusCode, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "runtime.config.workspace.manage",
-        None,
-        Some("runtime.config"),
-        Some("workspace"),
-    )
-    .await?;
-    state
-        .services
-        .runtime_config
-        .delete_configured_model_credential(&configured_model_id)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
 pub(crate) async fn save_runtime_config_route(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -5904,7 +5853,7 @@ mod tests {
         connection
             .execute(
                 "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?21)",
                 params![
                     APPROVAL_AGENT_ID,
                     DEFAULT_WORKSPACE_ID,
@@ -5989,7 +5938,7 @@ mod tests {
             .expect("upsert chained worker");
         connection
             .execute(
-                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_ref, member_refs, description, status, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     "team-spawn-workflow-approval",
@@ -6012,12 +5961,12 @@ mod tests {
                         "workflowEscalation": "require-approval"
                     }))
                     .expect("approval preference"),
-                    "agent-team-spawn-workflow-leader",
+                    "agent:agent-team-spawn-workflow-leader",
                     serde_json::to_string(&vec![
-                        "agent-team-spawn-workflow-leader",
-                        "agent-team-spawn-workflow-worker"
+                        "agent:agent-team-spawn-workflow-leader",
+                        "agent:agent-team-spawn-workflow-worker"
                     ])
-                    .expect("member ids"),
+                    .expect("member refs"),
                     "Team for chained workflow approval tests.",
                     "active",
                     timestamp_now() as i64,

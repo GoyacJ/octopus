@@ -26,13 +26,15 @@ pub(crate) fn export_assets(
         )?);
     }
 
-    let team_member_ids = context
+    let team_member_refs = context
         .teams
         .iter()
-        .flat_map(|team| team.member_agent_ids.iter().cloned())
+        .flat_map(|team| team.member_refs.iter().cloned())
         .collect::<BTreeSet<_>>();
     for agent in &context.agents {
-        if team_member_ids.contains(&agent.id) {
+        if team_member_refs.contains(&agent.id)
+            || team_member_refs.contains(&crate::canonical_agent_ref(&agent.id))
+        {
             continue;
         }
         files.extend(agent_assets::export_agent_files(

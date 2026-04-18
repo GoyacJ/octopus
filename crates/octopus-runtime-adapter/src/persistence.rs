@@ -343,36 +343,6 @@ fn approval_lineage_json(
 }
 
 impl RuntimeAdapter {
-    fn purge_legacy_runtime_session_projection(
-        &self,
-        connection: &Connection,
-        session_id: &str,
-        error: &serde_json::Error,
-    ) -> Result<(), AppError> {
-        eprintln!("dropping legacy runtime projection {session_id}: {error}");
-
-        for statement in [
-            "DELETE FROM runtime_session_projections WHERE id = ?1",
-            "DELETE FROM runtime_run_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_subrun_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_artifact_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_mailbox_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_handoff_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_workflow_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_background_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_approval_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_auth_challenge_projections WHERE session_id = ?1",
-            "DELETE FROM runtime_memory_proposals WHERE session_id = ?1",
-        ] {
-            connection
-                .execute(statement, [session_id])
-                .map_err(|db_error| AppError::database(db_error.to_string()))?;
-        }
-
-        let _ = fs::remove_file(self.runtime_events_path(session_id));
-        Ok(())
-    }
-
     pub(super) fn runtime_events_path(&self, session_id: &str) -> PathBuf {
         self.state
             .paths
@@ -1508,22 +1478,6 @@ impl RuntimeAdapter {
 
     pub(super) fn load_persisted_sessions(&self) -> Result<(), AppError> {
         let connection = self.open_db()?;
-        connection
-            .execute(
-                "UPDATE runtime_session_projections
-                 SET manifest_snapshot_ref = id || '-manifest'
-                 WHERE manifest_snapshot_ref IS NULL OR TRIM(manifest_snapshot_ref) = ''",
-                [],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-        connection
-            .execute(
-                "UPDATE runtime_session_projections
-                 SET session_policy_snapshot_ref = id || '-policy'
-                 WHERE session_policy_snapshot_ref IS NULL OR TRIM(session_policy_snapshot_ref) = ''",
-                [],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
         let rows = {
             let mut statement = connection
                 .prepare(
@@ -1547,28 +1501,18 @@ impl RuntimeAdapter {
             rows
         };
 
-        let mut sessions = self
-            .state
-            .sessions
-            .lock()
-            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
-        let mut order = self
-            .state
-            .order
-            .lock()
-            .map_err(|_| AppError::runtime("runtime order mutex poisoned"))?;
-        sessions.clear();
-        order.clear();
+        let mut next_sessions = HashMap::new();
+        let mut next_order = Vec::new();
 
         for row in rows {
             let (session_id, detail_json, manifest_snapshot_ref, session_policy_snapshot_ref) = row;
-            let mut detail = match serde_json::from_str::<RuntimeSessionDetail>(&detail_json) {
-                Ok(detail) => detail,
-                Err(error) => {
-                    self.purge_legacy_runtime_session_projection(&connection, &session_id, &error)?;
-                    continue;
-                }
-            };
+            let mut detail = serde_json::from_str::<RuntimeSessionDetail>(&detail_json).map_err(
+                |error| {
+                    AppError::runtime(format!(
+                        "runtime session `{session_id}` uses an unsupported persisted projection shape: {error}"
+                    ))
+                },
+            )?;
             sync_runtime_session_detail(&mut detail);
             self.hydrate_phase_four_runtime_projection(&connection, &mut detail)?;
             let subrun_states = self.load_subrun_state_artifacts(
@@ -1597,8 +1541,8 @@ impl RuntimeAdapter {
                         detail.summary.id
                     ))
                 })?;
-            order.push(detail.summary.id.clone());
-            sessions.insert(
+            next_order.push(detail.summary.id.clone());
+            next_sessions.insert(
                 detail.summary.id.clone(),
                 RuntimeAggregate {
                     detail,
@@ -1613,6 +1557,19 @@ impl RuntimeAdapter {
                 },
             );
         }
+
+        let mut sessions = self
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let mut order = self
+            .state
+            .order
+            .lock()
+            .map_err(|_| AppError::runtime("runtime order mutex poisoned"))?;
+        *sessions = next_sessions;
+        *order = next_order;
 
         Ok(())
     }
@@ -2589,5 +2546,27 @@ impl RuntimeAdapter {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::append_json_line;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn appends_jsonl_into_runtime_path() {
+        let temp = std::env::temp_dir().join(format!(
+            "octopus-runtime-adapter-persistence-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp).expect("tempdir");
+
+        let append_target = temp.join("runtime/events/append-test.jsonl");
+        append_json_line(&append_target, &json!({ "ok": true })).expect("append json line");
+        assert!(append_target.exists());
+
+        std::fs::remove_dir_all(temp).expect("cleanup");
     }
 }

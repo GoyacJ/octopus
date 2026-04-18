@@ -486,8 +486,6 @@ mod tests {
                 approval_preference: octopus_core::default_approval_preference(),
                 output_contract: octopus_core::default_output_contract(),
                 shared_capability_policy: octopus_core::default_team_shared_capability_policy(),
-                leader_agent_id: None,
-                member_agent_ids: Vec::new(),
                 leader_ref: "agent:leader".into(),
                 member_refs: Vec::new(),
                 team_topology: octopus_core::team_topology_from_refs(

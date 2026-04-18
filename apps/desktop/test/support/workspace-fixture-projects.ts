@@ -9,6 +9,8 @@ import type {
   WorkspaceOverviewSnapshot,
 } from '@octopus/schema'
 
+import { canonicalAgentRef } from '@/views/agents/agent-refs'
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -90,8 +92,8 @@ export function normalizeTeamRecord(
     builtinToolKeys: [...input.builtinToolKeys],
     skillIds: [...input.skillIds],
     mcpServerNames: [...input.mcpServerNames],
-    leaderAgentId: input.leaderAgentId,
-    memberAgentIds: [...input.memberAgentIds],
+    leaderRef: canonicalAgentRef(input.leaderRef),
+    memberRefs: [...new Set((input.memberRefs ?? []).map(canonicalAgentRef).filter(Boolean))],
     description: input.description || summarizePrompt(input.prompt, input.personality || input.name),
     status: input.status,
     updatedAt: Date.now(),

@@ -6,6 +6,7 @@ import type { AgentRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiCombobox, UiDialog, UiField, UiInput, UiSearchableMultiSelect, UiSelect, UiSurface, UiTextarea } from '@octopus/ui'
 
 import type { SelectOption, TeamFormState } from './useAgentCenter'
+import { agentIdFromRef } from './agent-refs'
 
 const props = defineProps<{
   open: boolean
@@ -53,11 +54,13 @@ function initials(name: string) {
 }
 
 const readonlyLeaderLabel = computed(() =>
-  props.dialogTeamLeader?.name || props.form.leaderAgentId || '未设置负责人',
+  props.dialogTeamLeader?.name || agentIdFromRef(props.form.leaderRef) || '未设置负责人',
 )
 
 const readonlyMemberLabel = computed(() =>
-  props.dialogTeamMembers.map(member => member.name).join('、') || '暂无成员',
+  props.dialogTeamMembers.map(member => member.name).join('、')
+    || props.form.memberRefs.map(agentIdFromRef).filter(Boolean).join('、')
+    || '暂无成员',
 )
 </script>
 
@@ -111,7 +114,7 @@ const readonlyMemberLabel = computed(() =>
             />
             <UiCombobox
               v-else
-              v-model="form.leaderAgentId"
+              v-model="form.leaderRef"
               :options="leaderOptions"
               placeholder="选择负责人"
             />
@@ -124,7 +127,7 @@ const readonlyMemberLabel = computed(() =>
             />
             <UiSearchableMultiSelect
               v-else
-              v-model="form.memberAgentIds"
+              v-model="form.memberRefs"
               :options="teamAgentOptions"
               placeholder="搜索并添加数字员工成员"
             />

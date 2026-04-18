@@ -77,8 +77,6 @@ pub struct TeamRecord {
     pub approval_preference: ApprovalPreference,
     pub output_contract: OutputContract,
     pub shared_capability_policy: SharedCapabilityPolicy,
-    pub leader_agent_id: Option<String>,
-    pub member_agent_ids: Vec<String>,
     pub leader_ref: String,
     pub member_refs: Vec<String>,
     pub team_topology: TeamTopology,
@@ -195,10 +193,7 @@ pub struct UpsertTeamInput {
     pub output_contract: Option<OutputContract>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared_capability_policy: Option<SharedCapabilityPolicy>,
-    pub leader_agent_id: Option<String>,
-    pub member_agent_ids: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub leader_ref: Option<String>,
+    pub leader_ref: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub member_refs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

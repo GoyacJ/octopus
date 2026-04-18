@@ -97,6 +97,8 @@ const runtimeToolAccordionItems = computed(() =>
   })),
 )
 
+const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left text-text-primary transition-colors hover:border-border-strong hover:bg-surface-muted'
+
 function entriesForGrantSection(kind: string) {
   return workspaceToolSections.value.find(section => section.kind === kind)?.entries ?? []
 }
@@ -177,10 +179,10 @@ function entriesForRuntimeSection(kind: string) {
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-models"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantModelsDialog"
               >
                 <div class="space-y-1">
@@ -194,12 +196,12 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.models }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-tools"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantToolsDialog"
               >
                 <div class="space-y-1">
@@ -213,12 +215,12 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.tools }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-grants-actors"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openGrantActorsDialog"
               >
                 <div class="space-y-1">
@@ -232,7 +234,7 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ grantSummary.actors }}
                 </div>
-              </button>
+              </UiButton>
             </div>
           </section>
 
@@ -250,10 +252,10 @@ function entriesForRuntimeSection(kind: string) {
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-models"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeModelsDialog"
               >
                 <div class="space-y-1">
@@ -267,12 +269,12 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.models }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-tools"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeToolsDialog"
               >
                 <div class="space-y-1">
@@ -286,12 +288,12 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.tools }}
                 </div>
-              </button>
+              </UiButton>
 
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-runtime-actors"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openRuntimeActorsDialog"
               >
                 <div class="space-y-1">
@@ -305,7 +307,7 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ runtimeSummary.actors }}
                 </div>
-              </button>
+              </UiButton>
             </div>
           </section>
 
@@ -323,10 +325,10 @@ function entriesForRuntimeSection(kind: string) {
             </div>
 
             <div class="mt-4 space-y-3">
-              <button
-                type="button"
+              <UiButton
+                variant="outline"
                 data-testid="project-settings-open-members"
-                class="ui-focus-ring flex w-full items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:border-border-strong"
+                :class="summaryRowButtonClass"
                 @click="openMembersDialog"
               >
                 <div class="space-y-1">
@@ -340,7 +342,7 @@ function entriesForRuntimeSection(kind: string) {
                 <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
                   {{ memberSummary }}
                 </div>
-              </button>
+              </UiButton>
 
               <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3">
                 <div class="flex items-start justify-between gap-4">
