@@ -23,6 +23,8 @@
     "confirm": "确定",
     "confirmDelete": "确认删除当前项？",
     "save": "保存",
+    "selectAll": "全选",
+    "clearAll": "取消全选",
     "done": "已完成",
     "pending": "待处理",
     "reset": "重置",

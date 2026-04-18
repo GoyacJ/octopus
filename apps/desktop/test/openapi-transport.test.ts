@@ -820,17 +820,15 @@ describe('OpenAPI transport helpers', () => {
     expect(secondHeaders.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
-  it('keeps managed configured-model credential paths and probe apiKey override in the generated transport contract', () => {
+  it('keeps managed configured-model save payloads and probe apiKey override in the generated transport contract', () => {
     const generated = readFileSync(
       resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
       'utf8',
     )
 
-    expect(generated).toContain('"/api/v1/runtime/config/configured-models/{configuredModelId}/credential"')
-    expect(generated).toContain('operationId: "upsertRuntimeConfiguredModelCredential"')
-    expect(generated).toContain('operationId: "deleteRuntimeConfiguredModelCredential"')
-    expect(generated).toContain('export interface RuntimeConfiguredModelCredentialUpsertInput')
-    expect(generated).toContain('export interface RuntimeConfiguredModelCredentialRecord')
+    expect(generated).not.toContain('"/api/v1/runtime/config/configured-models/{configuredModelId}/credential"')
+    expect(generated).toContain('export interface RuntimeConfiguredModelCredentialInput')
+    expect(generated).toContain('configuredModelCredentials?: RuntimeConfiguredModelCredentialInput[]')
     expect(generated).toContain('apiKey?: string')
   })
 

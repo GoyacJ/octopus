@@ -420,3 +420,17 @@ impl RuntimeSessionService for RuntimeAdapter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::default_session_kind;
+
+    #[test]
+    fn defaults_session_kind_to_project() {
+        assert_eq!(default_session_kind(None), "project".to_string());
+        assert_eq!(
+            default_session_kind(Some("review".into())),
+            "review".to_string()
+        );
+    }
+}

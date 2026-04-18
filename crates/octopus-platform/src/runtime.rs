@@ -4,8 +4,7 @@ use octopus_core::{
     DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
     PromoteDeliverableInput, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
-    RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialRecord,
-    RuntimeConfiguredModelCredentialUpsertInput, RuntimeConfiguredModelProbeInput,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
     RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, SubmitRuntimeTurnInput,
 };
@@ -125,14 +124,6 @@ pub trait RuntimeConfigService: Send + Sync {
         &self,
         input: RuntimeConfiguredModelProbeInput,
     ) -> Result<RuntimeConfiguredModelProbeResult, AppError>;
-    async fn upsert_configured_model_credential(
-        &self,
-        input: RuntimeConfiguredModelCredentialUpsertInput,
-    ) -> Result<RuntimeConfiguredModelCredentialRecord, AppError>;
-    async fn delete_configured_model_credential(
-        &self,
-        configured_model_id: &str,
-    ) -> Result<(), AppError>;
     async fn save_config(
         &self,
         scope: &str,

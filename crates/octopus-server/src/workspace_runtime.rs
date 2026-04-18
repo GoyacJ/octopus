@@ -4420,57 +4420,6 @@ pub(crate) async fn probe_runtime_configured_model_route(
     ))
 }
 
-pub(crate) async fn upsert_runtime_configured_model_credential_route(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(configured_model_id): Path<String>,
-    Json(input): Json<RuntimeConfiguredModelCredentialUpsertInput>,
-) -> Result<Json<RuntimeConfiguredModelCredentialRecord>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "runtime.config.workspace.manage",
-        None,
-        Some("runtime.config"),
-        Some("workspace"),
-    )
-    .await?;
-    if input.configured_model_id != configured_model_id {
-        return Err(ApiError::from(AppError::invalid_input(
-            "configured model id must match the route path",
-        )));
-    }
-    Ok(Json(
-        state
-            .services
-            .runtime_config
-            .upsert_configured_model_credential(input)
-            .await?,
-    ))
-}
-
-pub(crate) async fn delete_runtime_configured_model_credential_route(
-    State(state): State<ServerState>,
-    headers: HeaderMap,
-    Path(configured_model_id): Path<String>,
-) -> Result<StatusCode, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "runtime.config.workspace.manage",
-        None,
-        Some("runtime.config"),
-        Some("workspace"),
-    )
-    .await?;
-    state
-        .services
-        .runtime_config
-        .delete_configured_model_credential(&configured_model_id)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
 pub(crate) async fn save_runtime_config_route(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -6201,7 +6150,7 @@ mod tests {
             .expect("upsert workspace core member");
         connection
             .execute(
-                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_ref, member_refs, description, status, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     "team-workspace-core",
@@ -6224,9 +6173,12 @@ mod tests {
                         "workflowEscalation": "auto"
                     }))
                     .expect("approval preference"),
-                    "agent-orchestrator",
-                    serde_json::to_string(&vec!["agent-orchestrator", "agent-project-delivery"])
-                        .expect("member ids"),
+                    "agent:agent-orchestrator",
+                    serde_json::to_string(&vec![
+                        "agent:agent-orchestrator",
+                        "agent:agent-project-delivery",
+                    ])
+                    .expect("member refs"),
                     "Core workspace decision board.",
                     "active",
                     timestamp_now() as i64,
@@ -6325,7 +6277,7 @@ mod tests {
             .expect("upsert chained worker");
         connection
             .execute(
-                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_ref, member_refs, description, status, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     "team-spawn-workflow-approval",
@@ -6348,12 +6300,12 @@ mod tests {
                         "workflowEscalation": "require-approval"
                     }))
                     .expect("approval preference"),
-                    "agent-team-spawn-workflow-leader",
+                    "agent:agent-team-spawn-workflow-leader",
                     serde_json::to_string(&vec![
-                        "agent-team-spawn-workflow-leader",
-                        "agent-team-spawn-workflow-worker"
+                        "agent:agent-team-spawn-workflow-leader",
+                        "agent:agent-team-spawn-workflow-worker"
                     ])
-                    .expect("member ids"),
+                    .expect("member refs"),
                     "Team for chained workflow approval tests.",
                     "active",
                     timestamp_now() as i64,
@@ -6367,6 +6319,7 @@ mod tests {
         task: &ProjectTaskRecord,
         user_id: &str,
     ) -> ProjectTaskRunRecord {
+        std::env::set_var("ANTHROPIC_API_KEY", "test-anthropic-key");
         let runtime_session = state
             .services
             .runtime_session
@@ -7113,6 +7066,7 @@ mod tests {
                     }
                 }
             }),
+            configured_model_credentials: Vec::new(),
         };
 
         let Json(validation) = validate_project_runtime_config_route(
@@ -7245,10 +7199,8 @@ mod tests {
                 approval_preference: None,
                 output_contract: None,
                 shared_capability_policy: None,
-                leader_agent_id: Some(included_agent.id.clone()),
-                member_agent_ids: vec![included_agent.id.clone()],
-                leader_ref: None,
-                member_refs: Vec::new(),
+                leader_ref: format!("agent:{}", included_agent.id.clone()),
+                member_refs: vec![format!("agent:{}", included_agent.id.clone())],
                 team_topology: None,
                 shared_memory_policy: None,
                 mailbox_policy: None,
@@ -7285,10 +7237,8 @@ mod tests {
                 approval_preference: None,
                 output_contract: None,
                 shared_capability_policy: None,
-                leader_agent_id: Some(excluded_agent.id.clone()),
-                member_agent_ids: vec![excluded_agent.id.clone()],
-                leader_ref: None,
-                member_refs: Vec::new(),
+                leader_ref: format!("agent:{}", excluded_agent.id.clone()),
+                member_refs: vec![format!("agent:{}", excluded_agent.id.clone())],
                 team_topology: None,
                 shared_memory_policy: None,
                 mailbox_policy: None,
@@ -7448,10 +7398,8 @@ mod tests {
                 approval_preference: None,
                 output_contract: None,
                 shared_capability_policy: None,
-                leader_agent_id: Some(workspace_agent.id.clone()),
-                member_agent_ids: vec![workspace_agent.id.clone()],
-                leader_ref: None,
-                member_refs: Vec::new(),
+                leader_ref: format!("agent:{}", workspace_agent.id.clone()),
+                member_refs: vec![format!("agent:{}", workspace_agent.id.clone())],
                 team_topology: None,
                 shared_memory_policy: None,
                 mailbox_policy: None,
@@ -7519,12 +7467,12 @@ mod tests {
             .expect("imported project team");
         assert_eq!(imported_team.scope, "project");
         assert_eq!(
-            imported_team.leader_agent_id.as_deref(),
-            Some(imported_agent.id.as_str())
+            imported_team.leader_ref,
+            format!("agent:{}", imported_agent.id.clone())
         );
         assert_eq!(
-            imported_team.member_agent_ids,
-            vec![imported_agent.id.clone()]
+            imported_team.member_refs,
+            vec![format!("agent:{}", imported_agent.id.clone())]
         );
 
         let Json(project_exported) = export_project_agent_bundle_route(
@@ -7626,10 +7574,8 @@ mod tests {
                 approval_preference: None,
                 output_contract: None,
                 shared_capability_policy: None,
-                leader_agent_id: Some(project_agent.id.clone()),
-                member_agent_ids: vec![project_agent.id.clone()],
-                leader_ref: None,
-                member_refs: Vec::new(),
+                leader_ref: format!("agent:{}", project_agent.id.clone()),
+                member_refs: vec![format!("agent:{}", project_agent.id.clone())],
                 team_topology: None,
                 shared_memory_policy: None,
                 mailbox_policy: None,
@@ -7706,12 +7652,12 @@ mod tests {
         );
         assert_eq!(original_project_team.scope, "project");
         assert_eq!(
-            original_project_team.leader_agent_id.as_deref(),
-            Some(project_agent.id.as_str())
+            original_project_team.leader_ref,
+            format!("agent:{}", project_agent.id.clone())
         );
         assert_eq!(
-            original_project_team.member_agent_ids,
-            vec![project_agent.id.clone()]
+            original_project_team.member_refs,
+            vec![format!("agent:{}", project_agent.id.clone())]
         );
 
         let workspace_team = teams
@@ -7720,14 +7666,12 @@ mod tests {
             .expect("promoted workspace team");
         assert_eq!(workspace_team.scope, "workspace");
 
-        let workspace_team_leader_id = workspace_team
-            .leader_agent_id
-            .as_deref()
-            .expect("workspace team leader");
-        assert_ne!(workspace_team_leader_id, project_agent.id.as_str());
+        let workspace_team_leader_ref = workspace_team.leader_ref.as_str();
+        let project_agent_ref = format!("agent:{}", project_agent.id.clone());
+        assert_ne!(workspace_team_leader_ref, project_agent_ref);
         assert!(
             agents.iter().any(|agent| {
-                agent.id == workspace_team_leader_id
+                format!("agent:{}", agent.id.clone()) == workspace_team_leader_ref
                     && agent.project_id.is_none()
                     && agent.scope == "workspace"
             }),
@@ -7735,15 +7679,15 @@ mod tests {
         );
         assert!(
             workspace_team
-                .member_agent_ids
+                .member_refs
                 .iter()
-                .all(|agent_id| agent_id != &project_agent.id),
+                .all(|agent_ref| agent_ref != &project_agent_ref),
             "workspace team should not keep project agent ids as members"
         );
         assert!(
-            workspace_team.member_agent_ids.iter().all(|agent_id| {
+            workspace_team.member_refs.iter().all(|agent_ref| {
                 agents.iter().any(|agent| {
-                    agent.id == *agent_id
+                    format!("agent:{}", agent.id.clone()) == *agent_ref
                         && agent.project_id.is_none()
                         && agent.scope == "workspace"
                 })

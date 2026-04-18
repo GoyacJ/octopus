@@ -66,3 +66,19 @@ impl RuntimeExecutionService for RuntimeAdapter {
         Ok(self.session_sender(session_id)?.subscribe())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{approval_decision_status, requires_approval};
+
+    #[test]
+    fn normalizes_approval_decisions_and_permission_helpers() {
+        assert_eq!(
+            approval_decision_status("approve").expect("approve"),
+            "approved"
+        );
+        assert!(!requires_approval("workspace-write").expect("workspace-write"));
+        assert!(!requires_approval("danger-full-access").expect("danger-full-access"));
+        assert!(approval_decision_status("nope").is_err());
+    }
+}

@@ -102,6 +102,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 name = "api"
 version = "0.2.5"
 dependencies = [
+ "octopus-model-policy",
  "reqwest 0.12.28",
  "runtime",
  "serde",
@@ -3148,6 +3149,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-model-policy"
+version = "0.2.5"
+
+[[package]]
 name = "octopus-platform"
 version = "0.2.5"
 dependencies = [
@@ -3166,6 +3171,7 @@ dependencies = [
  "keyring",
  "octopus-core",
  "octopus-infra",
+ "octopus-model-policy",
  "octopus-platform",
  "plugins",
  "reqwest 0.12.28",
@@ -4415,6 +4421,7 @@ dependencies = [
  "compat-harness",
  "crossterm",
  "mock-anthropic-service",
+ "octopus-model-policy",
  "plugins",
  "pulldown-cmark",
  "runtime",

@@ -679,13 +679,8 @@ fn provider_auth_target_ref(provider_key: &str) -> String {
     provider_key.to_string()
 }
 
-fn legacy_runtime_turn_target(target_kind: Option<&str>) -> bool {
-    matches!(target_kind, Some("runtime-execution" | "runtime-turn"))
-}
-
 fn approval_replays_runtime_loop(target_kind: Option<&str>) -> bool {
-    legacy_runtime_turn_target(target_kind)
-        || matches!(target_kind, Some("model-execution" | "capability-call"))
+    matches!(target_kind, Some("model-execution" | "capability-call"))
 }
 
 fn resumable_approval_target(target_kind: Option<&str>) -> bool {

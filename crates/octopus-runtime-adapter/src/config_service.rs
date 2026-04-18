@@ -1,4 +1,14 @@
 use super::*;
+use crate::model_runtime::{
+    parse_model_credential_reference, CredentialReference, CREDENTIAL_SOURCE_PROBE_OVERRIDE,
+};
+
+#[derive(Debug, Clone)]
+struct ManagedConfiguredModelCredentialWrite {
+    credential_ref: String,
+    api_key: String,
+    previous_value: Option<String>,
+}
 
 pub(crate) fn apply_validation(
     mut effective: RuntimeEffectiveConfig,
@@ -9,6 +19,211 @@ pub(crate) fn apply_validation(
 }
 
 impl RuntimeAdapter {
+    fn ensure_workspace_managed_credentials_supported(
+        target_scope: RuntimeConfigScopeKind,
+        configured_model_credentials: &[RuntimeConfiguredModelCredentialInput],
+    ) -> Result<(), AppError> {
+        if target_scope == RuntimeConfigScopeKind::Workspace
+            || configured_model_credentials.is_empty()
+        {
+            return Ok(());
+        }
+
+        Err(AppError::invalid_input(
+            "configured model credentials are only supported for workspace runtime config",
+        ))
+    }
+
+    fn workspace_target_document_mut<'a>(
+        documents: &'a mut [RuntimeConfigDocumentRecord],
+    ) -> Result<&'a mut RuntimeConfigDocumentRecord, AppError> {
+        documents
+            .iter_mut()
+            .find(|document| document.scope == RuntimeConfigScopeKind::Workspace)
+            .ok_or_else(|| AppError::not_found("workspace runtime config document"))
+    }
+
+    fn workspace_target_document<'a>(
+        documents: &'a [RuntimeConfigDocumentRecord],
+    ) -> Result<&'a RuntimeConfigDocumentRecord, AppError> {
+        documents
+            .iter()
+            .find(|document| document.scope == RuntimeConfigScopeKind::Workspace)
+            .ok_or_else(|| AppError::not_found("workspace runtime config document"))
+    }
+
+    fn apply_workspace_managed_credentials(
+        &self,
+        documents: &mut [RuntimeConfigDocumentRecord],
+        configured_model_credentials: &[RuntimeConfiguredModelCredentialInput],
+    ) -> Result<Vec<ManagedConfiguredModelCredentialWrite>, AppError> {
+        if configured_model_credentials.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let target = Self::workspace_target_document_mut(documents)?;
+        let document = target.document.get_or_insert_with(BTreeMap::new);
+        let Some(JsonValue::Object(configured_models)) = document.get_mut("configuredModels")
+        else {
+            return Err(AppError::invalid_input(
+                "configured model credentials require configuredModels entries in the workspace patch",
+            ));
+        };
+
+        let mut seen = HashSet::new();
+        let mut writes = Vec::with_capacity(configured_model_credentials.len());
+
+        for input in configured_model_credentials {
+            let configured_model_id = input.configured_model_id.trim();
+            if configured_model_id.is_empty() {
+                return Err(AppError::invalid_input(
+                    "configured model credential input requires configuredModelId",
+                ));
+            }
+            if !seen.insert(configured_model_id.to_string()) {
+                return Err(AppError::invalid_input(format!(
+                    "duplicate configured model credential input `{configured_model_id}`"
+                )));
+            }
+
+            let api_key = input.api_key.trim();
+            if api_key.is_empty() {
+                return Err(AppError::invalid_input(
+                    "configured model credential input requires apiKey",
+                ));
+            }
+
+            let Some(JsonValue::Object(configured_model)) =
+                configured_models.get_mut(configured_model_id)
+            else {
+                return Err(AppError::invalid_input(format!(
+                    "configured model credential target `{configured_model_id}` is missing from the workspace patch"
+                )));
+            };
+
+            let credential_ref = self.configured_model_secret_reference(configured_model_id);
+            configured_model.insert(
+                "credentialRef".to_string(),
+                JsonValue::String(credential_ref.clone()),
+            );
+
+            writes.push(ManagedConfiguredModelCredentialWrite {
+                previous_value: self.state.secret_store.get_secret(&credential_ref)?,
+                credential_ref,
+                api_key: api_key.to_string(),
+            });
+        }
+
+        Ok(writes)
+    }
+
+    fn rollback_managed_credential_writes(
+        &self,
+        writes: &[ManagedConfiguredModelCredentialWrite],
+    ) -> Result<(), AppError> {
+        for write in writes.iter().rev() {
+            if let Some(previous_value) = write.previous_value.as_deref() {
+                self.state
+                    .secret_store
+                    .put_secret(&write.credential_ref, previous_value)?;
+            } else {
+                self.state
+                    .secret_store
+                    .delete_secret(&write.credential_ref)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn persist_managed_credential_writes(
+        &self,
+        writes: &[ManagedConfiguredModelCredentialWrite],
+    ) -> Result<(), AppError> {
+        for write in writes {
+            self.state
+                .secret_store
+                .put_secret(&write.credential_ref, &write.api_key)?;
+        }
+        Ok(())
+    }
+
+    fn workspace_owned_managed_credential_refs(
+        &self,
+        documents: &[RuntimeConfigDocumentRecord],
+    ) -> Result<HashSet<String>, AppError> {
+        let mut refs = HashSet::new();
+        let target = match Self::workspace_target_document(documents) {
+            Ok(target) => target,
+            Err(_) => return Ok(refs),
+        };
+        let Some(document) = target.document.as_ref() else {
+            return Ok(refs);
+        };
+        let Some(configured_models) = document
+            .get("configuredModels")
+            .and_then(JsonValue::as_object)
+        else {
+            return Ok(refs);
+        };
+
+        for (entry_key, entry) in configured_models {
+            let Some(entry_object) = entry.as_object() else {
+                continue;
+            };
+            let configured_model_id = entry_object
+                .get("configuredModelId")
+                .and_then(JsonValue::as_str)
+                .unwrap_or(entry_key);
+            let Some(reference) = entry_object
+                .get("credentialRef")
+                .and_then(JsonValue::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+
+            let Ok(Some(CredentialReference::ManagedSecret(reference))) =
+                parse_model_credential_reference(Some(reference))
+            else {
+                continue;
+            };
+
+            if reference == self.configured_model_secret_reference(configured_model_id) {
+                refs.insert(reference.to_string());
+            }
+        }
+
+        Ok(refs)
+    }
+
+    fn cleanup_orphaned_workspace_managed_credentials(
+        &self,
+        previous_refs: &HashSet<String>,
+        documents: &[RuntimeConfigDocumentRecord],
+    ) -> Result<(), AppError> {
+        let retained_refs = self.workspace_owned_managed_credential_refs(documents)?;
+        for orphaned_ref in previous_refs.difference(&retained_refs) {
+            self.state.secret_store.delete_secret(orphaned_ref)?;
+        }
+        Ok(())
+    }
+
+    fn restore_document_state(
+        &self,
+        previous: &RuntimeConfigDocumentRecord,
+    ) -> Result<(), AppError> {
+        if let Some(document) = previous.document.as_ref() {
+            return self.write_runtime_document(&previous.storage_path, document);
+        }
+
+        match fs::remove_file(&previous.storage_path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     pub(super) async fn probe_configured_model_documents(
         &self,
         documents: &[RuntimeConfigDocumentRecord],
@@ -80,6 +295,7 @@ impl RuntimeAdapter {
         let mut probe_target = resolved_target.clone();
         if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
             probe_target.credential_ref = Some(api_key.to_string());
+            probe_target.credential_source = CREDENTIAL_SOURCE_PROBE_OVERRIDE.to_string();
         }
 
         let response = match self
@@ -208,8 +424,18 @@ impl RuntimeConfigService for RuntimeAdapter {
         &self,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError> {
-        let documents =
-            self.patched_documents(Self::parse_scope(&patch.scope)?, None, None, &patch.patch)?;
+        let target_scope = Self::parse_scope(&patch.scope)?;
+        Self::ensure_workspace_managed_credentials_supported(
+            target_scope,
+            &patch.configured_model_credentials,
+        )?;
+        let mut documents = self.patched_documents(target_scope, None, None, &patch.patch)?;
+        if target_scope == RuntimeConfigScopeKind::Workspace {
+            self.apply_workspace_managed_credentials(
+                &mut documents,
+                &patch.configured_model_credentials,
+            )?;
+        }
         self.validate_registry_documents(&documents)
     }
 
@@ -219,6 +445,10 @@ impl RuntimeConfigService for RuntimeAdapter {
         user_id: &str,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError> {
+        Self::ensure_workspace_managed_credentials_supported(
+            Self::parse_scope(&patch.scope)?,
+            &patch.configured_model_credentials,
+        )?;
         let documents = self.patched_documents(
             Self::parse_scope(&patch.scope)?,
             Some(project_id),
@@ -233,6 +463,10 @@ impl RuntimeConfigService for RuntimeAdapter {
         user_id: &str,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError> {
+        Self::ensure_workspace_managed_credentials_supported(
+            Self::parse_scope(&patch.scope)?,
+            &patch.configured_model_credentials,
+        )?;
         let documents = self.patched_documents(
             Self::parse_scope(&patch.scope)?,
             None,
@@ -269,45 +503,6 @@ impl RuntimeConfigService for RuntimeAdapter {
         .await
     }
 
-    async fn upsert_configured_model_credential(
-        &self,
-        input: RuntimeConfiguredModelCredentialUpsertInput,
-    ) -> Result<RuntimeConfiguredModelCredentialRecord, AppError> {
-        let configured_model_id = input.configured_model_id.trim();
-        if configured_model_id.is_empty() {
-            return Err(AppError::invalid_input(
-                "configured model id is required for runtime credential storage",
-            ));
-        }
-        if input.api_key.trim().is_empty() {
-            return Err(AppError::invalid_input("apiKey is required"));
-        }
-
-        let credential_ref = self.configured_model_secret_reference(configured_model_id);
-        self.state
-            .secret_store
-            .put_secret(&credential_ref, input.api_key.trim())?;
-
-        Ok(RuntimeConfiguredModelCredentialRecord {
-            configured_model_id: configured_model_id.to_string(),
-            credential_ref,
-            storage_kind: "os-keyring".to_string(),
-            status: "configured".to_string(),
-        })
-    }
-
-    async fn delete_configured_model_credential(
-        &self,
-        configured_model_id: &str,
-    ) -> Result<(), AppError> {
-        let configured_model_id = configured_model_id.trim();
-        if configured_model_id.is_empty() {
-            return Ok(());
-        }
-        let credential_ref = self.configured_model_secret_reference(configured_model_id);
-        self.state.secret_store.delete_secret(&credential_ref)
-    }
-
     async fn save_config(
         &self,
         scope: &str,
@@ -320,7 +515,28 @@ impl RuntimeConfigService for RuntimeAdapter {
         }
 
         let target_scope = Self::parse_scope(scope)?;
-        let documents = self.patched_documents(target_scope, None, None, &patch.patch)?;
+        Self::ensure_workspace_managed_credentials_supported(
+            target_scope,
+            &patch.configured_model_credentials,
+        )?;
+        let existing_documents = self.resolve_documents(None, None)?;
+        let previous_target = existing_documents
+            .iter()
+            .find(|document| document.scope == target_scope)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("runtime config document"))?;
+        let previous_managed_refs =
+            self.workspace_owned_managed_credential_refs(&existing_documents)?;
+
+        let mut documents = self.patched_documents(target_scope, None, None, &patch.patch)?;
+        let writes = if target_scope == RuntimeConfigScopeKind::Workspace {
+            self.apply_workspace_managed_credentials(
+                &mut documents,
+                &patch.configured_model_credentials,
+            )?
+        } else {
+            Vec::new()
+        };
         let validation = self.validate_registry_documents(&documents)?;
         if !validation.valid {
             return Err(AppError::invalid_input(validation.errors.join("; ")));
@@ -330,9 +546,23 @@ impl RuntimeConfigService for RuntimeAdapter {
             .iter()
             .find(|document| document.scope == target_scope)
             .ok_or_else(|| AppError::not_found("runtime config document"))?;
-        self.write_document(target)?;
+        if let Err(error) = self.persist_managed_credential_writes(&writes) {
+            self.rollback_managed_credential_writes(&writes)?;
+            return Err(error);
+        }
+        if let Err(error) = self.write_document(target) {
+            self.rollback_managed_credential_writes(&writes)?;
+            return Err(error);
+        }
 
         let reloaded = self.resolve_documents(None, None)?;
+        if let Err(error) =
+            self.cleanup_orphaned_workspace_managed_credentials(&previous_managed_refs, &reloaded)
+        {
+            self.restore_document_state(&previous_target)?;
+            self.rollback_managed_credential_writes(&writes)?;
+            return Err(error);
+        }
         let effective = self.build_effective_config(&reloaded)?;
         Ok(apply_validation(effective, validation))
     }
@@ -402,5 +632,284 @@ impl RuntimeConfigService for RuntimeAdapter {
         let reloaded = self.resolve_documents(None, Some(user_id))?;
         let effective = self.build_effective_config(&reloaded)?;
         Ok(apply_validation(effective, validation))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::Arc,
+    };
+
+    use octopus_infra::build_infra_bundle;
+    use runtime::JsonValue;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::*;
+
+    fn test_root() -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("octopus-runtime-config-service-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test root");
+        root
+    }
+
+    fn write_json(path: &Path, value: serde_json::Value) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("config dir");
+        }
+        fs::write(path, serde_json::to_vec_pretty(&value).expect("json")).expect("write config");
+    }
+
+    #[test]
+    fn applies_validation_to_effective_config() {
+        let effective = RuntimeEffectiveConfig {
+            effective_config: json!({}),
+            effective_config_hash: "hash".into(),
+            sources: Vec::new(),
+            validation: RuntimeConfigValidationResult {
+                valid: true,
+                errors: Vec::new(),
+                warnings: Vec::new(),
+            },
+            secret_references: Vec::new(),
+        };
+        let validation = RuntimeConfigValidationResult {
+            valid: false,
+            errors: vec!["boom".into()],
+            warnings: vec!["warn".into()],
+        };
+
+        let updated = apply_validation(effective, validation.clone());
+        assert_eq!(updated.validation, validation);
+    }
+
+    #[tokio::test]
+    async fn save_config_persists_workspace_managed_model_credentials_in_one_boundary() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+            Arc::new(MockRuntimeModelDriver),
+        );
+        let configured_model_id = "anthropic-inline";
+        let managed_reference = adapter.configured_model_secret_reference(configured_model_id);
+
+        let saved = adapter
+            .save_config(
+                "workspace",
+                RuntimeConfigPatch {
+                    scope: "workspace".into(),
+                    patch: json!({
+                        "configuredModels": {
+                            configured_model_id: {
+                                "configuredModelId": configured_model_id,
+                                "name": "Claude Inline",
+                                "providerId": "anthropic",
+                                "modelId": "claude-sonnet-4-5",
+                                "enabled": true,
+                                "source": "workspace"
+                            }
+                        }
+                    }),
+                    configured_model_credentials: vec![RuntimeConfiguredModelCredentialInput {
+                        configured_model_id: configured_model_id.into(),
+                        api_key: "sk-ant-saved-secret".into(),
+                    }],
+                },
+            )
+            .await
+            .expect("save runtime config with managed credential");
+
+        let workspace_source = saved
+            .sources
+            .iter()
+            .find(|source| source.scope == "workspace")
+            .expect("workspace source");
+        let workspace_document = workspace_source
+            .document
+            .as_ref()
+            .expect("workspace document");
+        assert_eq!(
+            workspace_document
+                .pointer("/configuredModels/anthropic-inline/credentialRef")
+                .and_then(serde_json::Value::as_str),
+            Some(managed_reference.as_str())
+        );
+        assert_eq!(
+            adapter
+                .resolve_secret_reference(&managed_reference)
+                .expect("resolve stored secret"),
+            Some("sk-ant-saved-secret".into())
+        );
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn save_config_restores_managed_model_credentials_when_workspace_write_fails() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+        let configured_model_id = "anthropic-inline";
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+            Arc::new(MockRuntimeModelDriver),
+        );
+        let managed_reference = adapter.configured_model_secret_reference(configured_model_id);
+        write_json(
+            &workspace_config_path,
+            json!({
+                "configuredModels": {
+                    configured_model_id: {
+                        "configuredModelId": configured_model_id,
+                        "name": "Claude Inline",
+                        "providerId": "anthropic",
+                        "modelId": "claude-sonnet-4-5",
+                        "credentialRef": managed_reference.clone(),
+                        "enabled": true,
+                        "source": "workspace"
+                    }
+                }
+            }),
+        );
+
+        adapter
+            .state
+            .secret_store
+            .put_secret(&managed_reference, "sk-ant-original-secret")
+            .expect("seed managed secret");
+
+        let mut permissions = fs::metadata(&workspace_config_path)
+            .expect("workspace config metadata")
+            .permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&workspace_config_path, permissions)
+            .expect("set workspace config readonly");
+
+        let save_result = adapter
+            .save_config(
+                "workspace",
+                RuntimeConfigPatch {
+                    scope: "workspace".into(),
+                    patch: json!({
+                        "configuredModels": {
+                            configured_model_id: {
+                                "name": "Claude Updated"
+                            }
+                        }
+                    }),
+                    configured_model_credentials: vec![RuntimeConfiguredModelCredentialInput {
+                        configured_model_id: configured_model_id.into(),
+                        api_key: "sk-ant-updated-secret".into(),
+                    }],
+                },
+            )
+            .await;
+
+        let mut reset_permissions = fs::metadata(&workspace_config_path)
+            .expect("workspace config metadata after save")
+            .permissions();
+        reset_permissions.set_readonly(false);
+        fs::set_permissions(&workspace_config_path, reset_permissions)
+            .expect("reset workspace config permissions");
+
+        assert!(
+            save_result.is_err(),
+            "workspace save should fail when file is readonly"
+        );
+        assert_eq!(
+            adapter
+                .resolve_secret_reference(&managed_reference)
+                .expect("resolve compensated secret"),
+            Some("sk-ant-original-secret".into())
+        );
+
+        let stored_document =
+            RuntimeAdapter::read_optional_runtime_document(&workspace_config_path)
+                .expect("read stored workspace document")
+                .expect("stored workspace document");
+        let stored_value =
+            RuntimeAdapter::runtime_json_to_serde(&JsonValue::Object(stored_document));
+        assert_eq!(
+            stored_value
+                .pointer("/configuredModels/anthropic-inline/name")
+                .and_then(serde_json::Value::as_str),
+            Some("Claude Inline")
+        );
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn save_config_deletes_orphaned_managed_model_credentials_after_model_removal() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let workspace_config_path = infra.paths.runtime_config_dir.join("workspace.json");
+        let configured_model_id = "anthropic-inline";
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            infra.authorization.clone(),
+            Arc::new(MockRuntimeModelDriver),
+        );
+        let managed_reference = adapter.configured_model_secret_reference(configured_model_id);
+        write_json(
+            &workspace_config_path,
+            json!({
+                "configuredModels": {
+                    configured_model_id: {
+                        "configuredModelId": configured_model_id,
+                        "name": "Claude Inline",
+                        "providerId": "anthropic",
+                        "modelId": "claude-sonnet-4-5",
+                        "credentialRef": managed_reference.clone(),
+                        "enabled": true,
+                        "source": "workspace"
+                    }
+                }
+            }),
+        );
+
+        adapter
+            .state
+            .secret_store
+            .put_secret(&managed_reference, "sk-ant-delete-me")
+            .expect("seed managed secret");
+
+        adapter
+            .save_config(
+                "workspace",
+                RuntimeConfigPatch {
+                    scope: "workspace".into(),
+                    patch: json!({
+                        "configuredModels": {
+                            configured_model_id: serde_json::Value::Null
+                        }
+                    }),
+                    configured_model_credentials: Vec::new(),
+                },
+            )
+            .await
+            .expect("save runtime config after model removal");
+
+        assert_eq!(
+            adapter
+                .resolve_secret_reference(&managed_reference)
+                .expect("resolve deleted secret"),
+            None
+        );
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 }

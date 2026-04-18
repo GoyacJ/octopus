@@ -364,3 +364,105 @@ pub(crate) fn mediate(request: &MediationRequest) -> BrokerDecision {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{mediate, MediationRequest};
+
+    #[test]
+    fn routes_all_mediation_through_one_entrypoint() {
+        let base_request = MediationRequest {
+            session_id: "rt-1".into(),
+            conversation_id: "conv-1".into(),
+            run_id: "run-1".into(),
+            tool_name: "workspace-api".into(),
+            summary: "Workspace API call requires mediation".into(),
+            detail: "Review before the tool call can continue.".into(),
+            mediation_kind: "approval".into(),
+            approval_layer: "capability-call".into(),
+            target_kind: "capability-call".into(),
+            target_ref: "capability-call:run-1:tool-use-1".into(),
+            capability_id: Some("cap-1".into()),
+            dispatch_kind: "runtime_capability".into(),
+            provider_key: None,
+            concurrency_policy: "serialized".into(),
+            input: serde_json::json!({ "path": "." }),
+            required_permission: Some("workspace-write".into()),
+            escalation_reason: Some("approval required".into()),
+            requires_approval: true,
+            requires_auth: false,
+            created_at: 1,
+            risk_level: "high".into(),
+            checkpoint_ref: None,
+            policy_action: None,
+            pending_state: None,
+        };
+
+        let approval = mediate(&base_request);
+        assert_eq!(approval.state, "requireApproval");
+        assert!(approval.pending_mediation.is_some());
+        assert!(approval.approval.is_some());
+
+        let auth = mediate(&MediationRequest {
+            mediation_kind: "auth".into(),
+            approval_layer: "provider-auth".into(),
+            target_kind: "provider-auth".into(),
+            target_ref: "mcp-server".into(),
+            provider_key: Some("mcp-server".into()),
+            escalation_reason: Some("auth required".into()),
+            requires_approval: false,
+            requires_auth: true,
+            policy_action: None,
+            ..base_request.clone()
+        });
+        assert_eq!(auth.state, "requireAuth");
+        assert!(auth.pending_mediation.is_some());
+        assert!(auth.auth_challenge.is_some());
+
+        let allowed = mediate(&MediationRequest {
+            requires_approval: false,
+            requires_auth: false,
+            escalation_reason: None,
+            policy_action: Some("allow".into()),
+            ..base_request.clone()
+        });
+        assert_eq!(allowed.state, "allow");
+        assert!(allowed.pending_mediation.is_none());
+
+        let denied = mediate(&MediationRequest {
+            requires_approval: false,
+            requires_auth: false,
+            policy_action: Some("deny".into()),
+            escalation_reason: Some("policy denied".into()),
+            ..base_request.clone()
+        });
+        assert_eq!(denied.state, "deny");
+        assert!(denied.pending_mediation.is_none());
+        assert_eq!(denied.execution_outcome.outcome, "deny");
+
+        let deferred = mediate(&MediationRequest {
+            mediation_kind: "memory".into(),
+            approval_layer: "memory-review".into(),
+            target_kind: "memory-write".into(),
+            target_ref: "proposal-1".into(),
+            tool_name: "Agent".into(),
+            summary: "Memory proposal pending review".into(),
+            detail: "Durable memory stays proposal-only until review.".into(),
+            requires_approval: false,
+            requires_auth: false,
+            policy_action: Some("defer".into()),
+            pending_state: Some("pending_review".into()),
+            ..base_request
+        });
+        assert_eq!(deferred.state, "defer");
+        assert_eq!(
+            deferred
+                .pending_mediation
+                .as_ref()
+                .map(|mediation| mediation.state.as_str()),
+            Some("pending_review")
+        );
+        assert!(deferred.approval.is_none());
+        assert!(deferred.auth_challenge.is_none());
+    }
+}

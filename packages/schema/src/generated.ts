@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: c8d74a6d74ff2a15613174b3f5faa6391995abf1146110e7629bb5494e3e0e7f
+// Source hash: cfbfdb4f4eb77bd3dc0d0f4161d239581fb9efafdde7e5a431ea1f9bf178f2a0
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "c8d74a6d74ff2a15613174b3f5faa6391995abf1146110e7629bb5494e3e0e7f"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "cfbfdb4f4eb77bd3dc0d0f4161d239581fb9efafdde7e5a431ea1f9bf178f2a0"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -486,6 +486,31 @@ export interface ClientAppRecord {
   status: string
 }
 
+export interface ConfiguredModelRecord {
+  baseUrl?: string
+  configured: boolean
+  configuredModelId: string
+  credentialRef?: string
+  enabled: boolean
+  modelId: string
+  name: string
+  providerId: string
+  source: string
+  status: string
+  tokenQuota?: ConfiguredModelTokenQuota
+  tokenUsage: ConfiguredModelTokenUsage
+}
+
+export interface ConfiguredModelTokenQuota {
+  totalTokens?: number
+}
+
+export interface ConfiguredModelTokenUsage {
+  exhausted: boolean
+  remainingTokens?: number
+  usedTokens: number
+}
+
 export type ConnectionMode = "local" | "shared" | "remote"
 
 export interface ConnectionProfile {
@@ -657,6 +682,13 @@ export interface DefaultModelStrategy {
   fallbackModelRefs: string[]
   preferredModelRef?: string
   selectionMode: "session-selected" | "actor-default" | "provider-pinned"
+}
+
+export interface DefaultSelection {
+  configuredModelId?: string
+  modelId: string
+  providerId: string
+  surface: string
 }
 
 export interface DelegationPolicy {
@@ -1148,12 +1180,42 @@ export interface MessageUsage {
 }
 
 export interface ModelCatalogSnapshot {
-  configuredModels?: Record<string, unknown>[]
-  credentialBindings?: Record<string, unknown>[]
-  defaultSelections?: Record<string, Record<string, unknown>>
-  diagnostics?: Record<string, unknown>
-  models?: Record<string, unknown>[]
-  providers?: Record<string, unknown>[]
+  configuredModels: ConfiguredModelRecord[]
+  credentialBindings: CredentialBinding[]
+  defaultSelections: Record<string, DefaultSelection>
+  diagnostics: ModelRegistryDiagnostics
+  models: ModelRegistryRecord[]
+  providers: ProviderRegistryRecord[]
+}
+
+export interface ModelRegistryDiagnostics {
+  errors: string[]
+  warnings: string[]
+}
+
+export interface ModelRegistryRecord {
+  availability: string
+  capabilities: CapabilityDescriptor[]
+  contextWindow?: number
+  defaultPermission: string
+  description: string
+  enabled: boolean
+  family: string
+  label: string
+  maxOutputTokens?: number
+  metadata: Record<string, unknown>
+  modelId: string
+  providerId: string
+  recommendedFor: string
+  surfaceBindings: ModelSurfaceBinding[]
+  track: string
+}
+
+export interface ModelSurfaceBinding {
+  enabled: boolean
+  protocolFamily: string
+  runtimeSupport: RuntimeExecutionSupport
+  surface: string
 }
 
 export interface NotificationFilter {
@@ -1582,6 +1644,14 @@ export interface ProviderConfig {
   providerId: string
 }
 
+export interface ProviderRegistryRecord {
+  enabled: boolean
+  label: string
+  metadata: Record<string, unknown>
+  providerId: string
+  surfaces: SurfaceDescriptor[]
+}
+
 export interface RegisterBootstrapAdminRequest {
   avatar: AvatarUploadPayload
   clientAppId: string
@@ -1603,11 +1673,21 @@ export interface ResolvedExecutionTarget {
   configuredModelId: string
   configuredModelName: string
   credentialRef?: string
+  credentialSource: string
   modelId: string
   protocolFamily: string
   providerId: string
   registryModelId: string
+  requestPolicy: ResolvedRequestPolicyInput
   surface: string
+}
+
+export interface ResolvedRequestPolicyInput {
+  authStrategy: string
+  baseUrlPolicy: string
+  configuredBaseUrl?: string
+  defaultBaseUrl: string
+  providerBaseUrl?: string
 }
 
 export interface ResolveRuntimeApprovalInput {
@@ -1822,6 +1902,7 @@ export interface RuntimeCapabilitySurface {
 }
 
 export interface RuntimeConfigPatch {
+  configuredModelCredentials?: RuntimeConfiguredModelCredentialInput[]
   patch: Record<string, unknown>
   scope: RuntimeConfigScope
 }
@@ -1839,17 +1920,9 @@ export interface RuntimeConfigSource {
   sourceKey: string
 }
 
-export interface RuntimeConfiguredModelCredentialRecord {
-  configuredModelId: string
-  credentialRef: string
-  status: string
-  storageKind: string
-}
-
-export interface RuntimeConfiguredModelCredentialUpsertInput {
+export interface RuntimeConfiguredModelCredentialInput {
   apiKey: string
   configuredModelId: string
-  providerId: string
 }
 
 export interface RuntimeConfiguredModelProbeInput {
@@ -1926,6 +1999,13 @@ export interface RuntimeEventEnvelope {
 }
 
 export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
+
+export interface RuntimeExecutionSupport {
+  conversation: boolean
+  prompt: boolean
+  streaming: boolean
+  toolLoop: boolean
+}
 
 export interface RuntimeHandoffSummary {
   artifactRefs: ArtifactVersionReference[]
@@ -2423,6 +2503,18 @@ export interface SubmitRuntimeTurnInput {
   recallMode?: RuntimeMemoryRecallMode
 }
 
+export interface SurfaceDescriptor {
+  authStrategy: string
+  baseUrl: string
+  baseUrlPolicy: string
+  capabilities: CapabilityDescriptor[]
+  enabled: boolean
+  protocolFamily: string
+  runtimeSupport: RuntimeExecutionSupport
+  surface: string
+  transport: string[]
+}
+
 export interface SystemAuthStatus {
   bootstrapAdminRequired: boolean
   ownerReady: boolean
@@ -2603,12 +2695,10 @@ export interface TeamRecord {
   kind: "workspace-link" | "builtin-template"
   sourceId: string
 }
-  leaderAgentId?: string
   leaderRef: string
   mailboxPolicy: MailboxPolicy
   manifestRevision: string
   mcpServerNames: string[]
-  memberAgentIds: string[]
   memberRefs: string[]
   memoryPolicy: MemoryPolicy
   name: string
@@ -2743,11 +2833,9 @@ export interface UpsertTeamInput {
   defaultModelStrategy?: DefaultModelStrategy
   delegationPolicy?: DelegationPolicy
   description: string
-  leaderAgentId?: string
-  leaderRef?: string
+  leaderRef: string
   mailboxPolicy?: MailboxPolicy
   mcpServerNames: string[]
-  memberAgentIds: string[]
   memberRefs?: string[]
   memoryPolicy?: MemoryPolicy
   name: string
@@ -3434,10 +3522,6 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/config": {
     get: { operationId: "getRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
-  }
-  "/api/v1/runtime/config/configured-models/{configuredModelId}/credential": {
-    put: { operationId: "upsertRuntimeConfiguredModelCredential"; response: RuntimeConfiguredModelCredentialRecord; error: ApiErrorEnvelope }
-    delete: { operationId: "deleteRuntimeConfiguredModelCredential"; response: void; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/config/configured-models/probe": {
     post: { operationId: "probeRuntimeConfiguredModel"; response: RuntimeConfiguredModelProbeResult; error: ApiErrorEnvelope }

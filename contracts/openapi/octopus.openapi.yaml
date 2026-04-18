@@ -2853,51 +2853,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
-  /api/v1/runtime/config/configured-models/{configuredModelId}/credential:
-    put:
-      operationId: upsertRuntimeConfiguredModelCredential
-      parameters:
-        - in: path
-          name: configuredModelId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RuntimeConfiguredModelCredentialUpsertInput"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimeConfiguredModelCredentialRecord"
-          description: Stored runtime configured model credential payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    delete:
-      operationId: deleteRuntimeConfiguredModelCredential
-      parameters:
-        - in: path
-          name: configuredModelId
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Runtime configured model credential deleted.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
   /api/v1/runtime/config/configured-models/probe:
     post:
       operationId: probeRuntimeConfiguredModel
@@ -5969,6 +5924,63 @@ components:
         - sessionPolicy
         - defaultScopes
       type: object
+    ConfiguredModelRecord:
+      additionalProperties: false
+      properties:
+        baseUrl:
+          type: string
+        configured:
+          type: boolean
+        configuredModelId:
+          type: string
+        credentialRef:
+          type: string
+        enabled:
+          type: boolean
+        modelId:
+          type: string
+        name:
+          type: string
+        providerId:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        tokenQuota:
+          $ref: "#/components/schemas/ConfiguredModelTokenQuota"
+        tokenUsage:
+          $ref: "#/components/schemas/ConfiguredModelTokenUsage"
+      required:
+        - configuredModelId
+        - name
+        - providerId
+        - modelId
+        - tokenUsage
+        - enabled
+        - source
+        - status
+        - configured
+      type: object
+    ConfiguredModelTokenQuota:
+      additionalProperties: false
+      properties:
+        totalTokens:
+          type: integer
+      type: object
+    ConfiguredModelTokenUsage:
+      additionalProperties: false
+      properties:
+        exhausted:
+          type: boolean
+        remainingTokens:
+          type: integer
+        usedTokens:
+          type: integer
+      required:
+        - usedTokens
+        - exhausted
+      type: object
     ConnectionMode:
       enum:
         - local
@@ -6406,6 +6418,22 @@ components:
         - selectionMode
         - allowTurnOverride
         - fallbackModelRefs
+      type: object
+    DefaultSelection:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        modelId:
+          type: string
+        providerId:
+          type: string
+        surface:
+          type: string
+      required:
+        - providerId
+        - modelId
+        - surface
       type: object
     DelegationPolicy:
       additionalProperties: false
@@ -7800,32 +7828,118 @@ components:
       properties:
         configuredModels:
           items:
-            additionalProperties: true
-            type: object
+            $ref: "#/components/schemas/ConfiguredModelRecord"
           type: array
         credentialBindings:
           items:
-            additionalProperties: true
-            type: object
+            $ref: "#/components/schemas/CredentialBinding"
           type: array
         defaultSelections:
           additionalProperties:
-            additionalProperties: true
-            type: object
+            $ref: "#/components/schemas/DefaultSelection"
           type: object
         diagnostics:
-          additionalProperties: true
-          type: object
+          $ref: "#/components/schemas/ModelRegistryDiagnostics"
         models:
           items:
-            additionalProperties: true
-            type: object
+            $ref: "#/components/schemas/ModelRegistryRecord"
           type: array
         providers:
           items:
-            additionalProperties: true
-            type: object
+            $ref: "#/components/schemas/ProviderRegistryRecord"
           type: array
+      required:
+        - providers
+        - models
+        - configuredModels
+        - credentialBindings
+        - defaultSelections
+        - diagnostics
+      type: object
+    ModelRegistryDiagnostics:
+      additionalProperties: false
+      properties:
+        errors:
+          items:
+            type: string
+          type: array
+        warnings:
+          items:
+            type: string
+          type: array
+      required:
+        - warnings
+        - errors
+      type: object
+    ModelRegistryRecord:
+      additionalProperties: false
+      properties:
+        availability:
+          type: string
+        capabilities:
+          items:
+            $ref: "#/components/schemas/CapabilityDescriptor"
+          type: array
+        contextWindow:
+          type: integer
+        defaultPermission:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        family:
+          type: string
+        label:
+          type: string
+        maxOutputTokens:
+          type: integer
+        metadata:
+          additionalProperties: true
+          type: object
+        modelId:
+          type: string
+        providerId:
+          type: string
+        recommendedFor:
+          type: string
+        surfaceBindings:
+          items:
+            $ref: "#/components/schemas/ModelSurfaceBinding"
+          type: array
+        track:
+          type: string
+      required:
+        - modelId
+        - providerId
+        - label
+        - description
+        - family
+        - track
+        - enabled
+        - recommendedFor
+        - availability
+        - defaultPermission
+        - surfaceBindings
+        - capabilities
+        - metadata
+      type: object
+    ModelSurfaceBinding:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        protocolFamily:
+          type: string
+        runtimeSupport:
+          $ref: "#/components/schemas/RuntimeExecutionSupport"
+        surface:
+          type: string
+      required:
+        - surface
+        - protocolFamily
+        - enabled
+        - runtimeSupport
       type: object
     NotificationFilter:
       additionalProperties: false
@@ -9015,6 +9129,29 @@ components:
       required:
         - providerId
       type: object
+    ProviderRegistryRecord:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        label:
+          type: string
+        metadata:
+          additionalProperties: true
+          type: object
+        providerId:
+          type: string
+        surfaces:
+          items:
+            $ref: "#/components/schemas/SurfaceDescriptor"
+          type: array
+      required:
+        - providerId
+        - label
+        - enabled
+        - surfaces
+        - metadata
+      type: object
     RegisterBootstrapAdminRequest:
       additionalProperties: false
       properties:
@@ -9064,6 +9201,8 @@ components:
           type: string
         credentialRef:
           type: string
+        credentialSource:
+          type: string
         modelId:
           type: string
         protocolFamily:
@@ -9072,6 +9211,8 @@ components:
           type: string
         registryModelId:
           type: string
+        requestPolicy:
+          $ref: "#/components/schemas/ResolvedRequestPolicyInput"
         surface:
           type: string
       required:
@@ -9082,7 +9223,27 @@ components:
         - modelId
         - surface
         - protocolFamily
+        - credentialSource
+        - requestPolicy
         - capabilities
+      type: object
+    ResolvedRequestPolicyInput:
+      additionalProperties: false
+      properties:
+        authStrategy:
+          type: string
+        baseUrlPolicy:
+          type: string
+        configuredBaseUrl:
+          type: string
+        defaultBaseUrl:
+          type: string
+        providerBaseUrl:
+          type: string
+      required:
+        - authStrategy
+        - baseUrlPolicy
+        - defaultBaseUrl
       type: object
     ResolveRuntimeApprovalInput:
       additionalProperties: false
@@ -9717,6 +9878,10 @@ components:
     RuntimeConfigPatch:
       additionalProperties: false
       properties:
+        configuredModelCredentials:
+          items:
+            $ref: "#/components/schemas/RuntimeConfiguredModelCredentialInput"
+          type: array
         patch:
           additionalProperties: true
           type: object
@@ -9759,35 +9924,15 @@ components:
         - exists
         - loaded
       type: object
-    RuntimeConfiguredModelCredentialRecord:
-      additionalProperties: false
-      properties:
-        configuredModelId:
-          type: string
-        credentialRef:
-          type: string
-        status:
-          type: string
-        storageKind:
-          type: string
-      required:
-        - configuredModelId
-        - credentialRef
-        - storageKind
-        - status
-      type: object
-    RuntimeConfiguredModelCredentialUpsertInput:
+    RuntimeConfiguredModelCredentialInput:
       additionalProperties: false
       properties:
         apiKey:
           type: string
         configuredModelId:
           type: string
-        providerId:
-          type: string
       required:
         - configuredModelId
-        - providerId
         - apiKey
       type: object
     RuntimeConfiguredModelProbeInput:
@@ -10028,6 +10173,23 @@ components:
         - runtime.session.updated
         - runtime.error
       type: string
+    RuntimeExecutionSupport:
+      additionalProperties: false
+      properties:
+        conversation:
+          type: boolean
+        prompt:
+          type: boolean
+        streaming:
+          type: boolean
+        toolLoop:
+          type: boolean
+      required:
+        - prompt
+        - conversation
+        - toolLoop
+        - streaming
+      type: object
     RuntimeHandoffSummary:
       additionalProperties: false
       properties:
@@ -11329,6 +11491,42 @@ components:
       required:
         - content
       type: object
+    SurfaceDescriptor:
+      additionalProperties: false
+      properties:
+        authStrategy:
+          type: string
+        baseUrl:
+          type: string
+        baseUrlPolicy:
+          type: string
+        capabilities:
+          items:
+            $ref: "#/components/schemas/CapabilityDescriptor"
+          type: array
+        enabled:
+          type: boolean
+        protocolFamily:
+          type: string
+        runtimeSupport:
+          $ref: "#/components/schemas/RuntimeExecutionSupport"
+        surface:
+          type: string
+        transport:
+          items:
+            type: string
+          type: array
+      required:
+        - surface
+        - protocolFamily
+        - transport
+        - authStrategy
+        - baseUrl
+        - baseUrlPolicy
+        - enabled
+        - capabilities
+        - runtimeSupport
+      type: object
     SystemAuthStatus:
       additionalProperties: false
       properties:
@@ -11873,8 +12071,6 @@ components:
             - kind
             - sourceId
           type: object
-        leaderAgentId:
-          type: string
         leaderRef:
           type: string
         mailboxPolicy:
@@ -11882,10 +12078,6 @@ components:
         manifestRevision:
           type: string
         mcpServerNames:
-          items:
-            type: string
-          type: array
-        memberAgentIds:
           items:
             type: string
           type: array
@@ -11950,7 +12142,6 @@ components:
         - builtinToolKeys
         - skillIds
         - mcpServerNames
-        - memberAgentIds
         - description
         - status
         - taskDomains
@@ -12260,17 +12451,11 @@ components:
           $ref: "#/components/schemas/DelegationPolicy"
         description:
           type: string
-        leaderAgentId:
-          type: string
         leaderRef:
           type: string
         mailboxPolicy:
           $ref: "#/components/schemas/MailboxPolicy"
         mcpServerNames:
-          items:
-            type: string
-          type: array
-        memberAgentIds:
           items:
             type: string
           type: array
@@ -12332,7 +12517,7 @@ components:
         - builtinToolKeys
         - skillIds
         - mcpServerNames
-        - memberAgentIds
+        - leaderRef
         - description
         - status
       type: object

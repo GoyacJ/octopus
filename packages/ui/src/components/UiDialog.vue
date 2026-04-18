@@ -51,7 +51,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
         :data-testid="props.contentTestId"
         data-ui-dialog-content="true"
         :class="cn(
-          'fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-[var(--radius-xl)] border border-border bg-popover p-5 shadow-lg md:w-full md:p-6',
+          'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-[var(--radius-xl)] border border-border bg-popover p-5 shadow-lg md:w-full md:p-6',
           props.contentClass,
         )"
       >
@@ -64,7 +64,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
 
         <header
           v-if="$slots.header || props.title || props.description"
-          class="flex items-start justify-between gap-3 border-b border-border pb-2"
+          class="shrink-0 flex items-start justify-between gap-3 border-b border-border pb-2"
         >
           <div class="min-w-0 flex-1">
             <slot name="header">
@@ -94,21 +94,21 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
         <div
           :data-testid="props.bodyTestId"
           data-ui-dialog-body="true"
-          :class="cn('min-w-0 text-text-primary', props.bodyClass)"
+          :class="cn('min-h-0 min-w-0 flex-1 overflow-y-auto text-text-primary', props.bodyClass)"
         >
           <slot />
         </div>
 
         <footer
           v-if="$slots.footer"
-          :class="cn('flex justify-end gap-2 pt-2', props.footerClass)"
+          :class="cn('shrink-0 flex justify-end gap-2 pt-2', props.footerClass)"
         >
           <slot name="footer" />
         </footer>
 
         <section
           v-if="$slots.danger"
-          class="mt-2 flex flex-col gap-3 rounded-[var(--radius-l)] border border-transparent bg-[var(--color-status-error-soft)] p-4"
+          class="mt-2 shrink-0 flex flex-col gap-3 rounded-[var(--radius-l)] border border-transparent bg-[var(--color-status-error-soft)] p-4"
           data-testid="ui-dialog-danger"
         >
           <slot name="danger" />

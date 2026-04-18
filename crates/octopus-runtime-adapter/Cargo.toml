@@ -15,6 +15,7 @@ base64 = "0.22"
 keyring = "3"
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
+octopus-model-policy = { path = "../octopus-model-policy" }
 octopus-platform = { path = "../octopus-platform" }
 plugins = { path = "../plugins" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

@@ -292,6 +292,39 @@ describe('Shared UI primitives', () => {
     warnSpy.mockRestore()
   })
 
+  it('constrains tall UiDialog content to the viewport and scrolls inside the body region', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const wrapper = mount(UiDialog, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        title: 'Grant models',
+      },
+      slots: {
+        default: '<div data-testid="dialog-scroll-content">Long dialog content</div>',
+        footer: '<button data-testid="dialog-footer-scroll" type="button">Save</button>',
+      },
+    })
+
+    await wrapper.vm.$nextTick()
+
+    const content = document.body.querySelector<HTMLElement>('[data-testid="ui-dialog-content"]')
+    const body = document.body.querySelector<HTMLElement>('[data-testid="ui-dialog-body"]')
+
+    expect(content).not.toBeNull()
+    expect(content?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(content?.className).toContain('overflow-hidden')
+
+    expect(body).not.toBeNull()
+    expect(body?.className).toContain('flex-1')
+    expect(body?.className).toContain('min-h-0')
+    expect(body?.className).toContain('overflow-y-auto')
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+    warnSpy.mockRestore()
+  })
+
   it('keeps the UiDialog close control on the neutral hover grammar', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const wrapper = mount(UiDialog, {

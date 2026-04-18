@@ -30,6 +30,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
 export type ProjectSettingsActorTab = 'agents' | 'teams'
+export type { ToolPermissionSelection } from '@/stores/project_setup'
 
 export interface ToolSection {
   kind: WorkspaceToolKind

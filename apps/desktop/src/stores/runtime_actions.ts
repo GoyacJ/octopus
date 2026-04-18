@@ -3,10 +3,9 @@ import {
   type ResolveRuntimeApprovalInput,
   type ResolveRuntimeAuthChallengeInput,
   type ResolveRuntimeMemoryProposalInput,
+  type RuntimeConfiguredModelCredentialInput,
   type RuntimeConfigScope,
   type RuntimeConfigValidationResult,
-  type RuntimeConfiguredModelCredentialRecord,
-  type RuntimeConfiguredModelCredentialUpsertInput,
   type RuntimeConfiguredModelProbeResult,
   type RuntimeDecisionAction,
   type RuntimeEffectiveConfig,
@@ -96,7 +95,11 @@ export const runtimeStoreActions = {
       }
     }
   },
-  async validateConfig(this: any, scope: RuntimeConfigScope): Promise<RuntimeConfigValidationResult> {
+  async validateConfig(
+    this: any,
+    scope: RuntimeConfigScope,
+    options?: { configuredModelCredentials?: RuntimeConfiguredModelCredentialInput[] },
+  ): Promise<RuntimeConfigValidationResult> {
     if (scope !== 'workspace') {
       return {
         valid: false,
@@ -121,6 +124,12 @@ export const runtimeStoreActions = {
     let patch
     try {
       patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+      if (options?.configuredModelCredentials?.length) {
+        patch = {
+          ...patch,
+          configuredModelCredentials: options.configuredModelCredentials,
+        }
+      }
     } catch (error) {
       const result = {
         valid: false,
@@ -278,33 +287,17 @@ export const runtimeStoreActions = {
       }
     }
   },
-  async upsertConfiguredModelCredential(
+  async saveConfig(
     this: any,
-    configuredModelId: string,
-    input: RuntimeConfiguredModelCredentialUpsertInput,
-  ): Promise<RuntimeConfiguredModelCredentialRecord> {
-    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
-    if (!resolvedClient) {
-      throw new Error('No active workspace connection selected')
-    }
-    const { client } = resolvedClient
-    return await client.runtime.upsertConfiguredModelCredential(configuredModelId, input)
-  },
-  async deleteConfiguredModelCredential(this: any, configuredModelId: string): Promise<void> {
-    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
-    if (!resolvedClient) {
-      throw new Error('No active workspace connection selected')
-    }
-    const { client } = resolvedClient
-    await client.runtime.deleteConfiguredModelCredential(configuredModelId)
-  },
-  async saveConfig(this: any, scope: RuntimeConfigScope): Promise<RuntimeEffectiveConfig | null> {
+    scope: RuntimeConfigScope,
+    options?: { configuredModelCredentials?: RuntimeConfiguredModelCredentialInput[] },
+  ): Promise<RuntimeEffectiveConfig | null> {
     if (scope !== 'workspace') {
       this.configError = 'Settings only supports workspace runtime configuration'
       return null
     }
 
-    const validation = await this.validateConfig(scope)
+    const validation = await this.validateConfig(scope, options)
     if (!validation.valid) {
       return null
     }
@@ -320,7 +313,13 @@ export const runtimeStoreActions = {
     this.configError = ''
 
     try {
-      const patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+      let patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+      if (options?.configuredModelCredentials?.length) {
+        patch = {
+          ...patch,
+          configuredModelCredentials: options.configuredModelCredentials,
+        }
+      }
       const config = await client.runtime.saveConfig(patch)
       if (this.activeWorkspaceConnectionId !== connectionId) {
         return null

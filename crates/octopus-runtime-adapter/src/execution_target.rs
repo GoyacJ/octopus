@@ -83,23 +83,12 @@ impl RuntimeAdapter {
         Ok((resolved_target, configured_model))
     }
 
-    fn hydrate_execution_target_credentials(
+    fn resolve_execution_request_policy(
         &self,
         target: &ResolvedExecutionTarget,
-    ) -> Result<ResolvedExecutionTarget, AppError> {
-        let mut hydrated = target.clone();
-        if let Some(reference) = target.credential_ref.as_deref() {
-            if reference.starts_with("secret-ref:") {
-                hydrated.credential_ref =
-                    Some(self.resolve_secret_reference(reference)?.ok_or_else(|| {
-                        AppError::invalid_input(format!(
-                            "missing managed credential `{reference}` for provider `{}`",
-                            target.provider_id
-                        ))
-                    })?);
-            }
-        }
-        Ok(hydrated)
+    ) -> Result<octopus_core::ResolvedRequestPolicy, AppError> {
+        let auth = self.resolve_model_auth(target)?;
+        resolve_request_policy(target, &auth)
     }
 
     pub(super) async fn execute_resolved_prompt(
@@ -108,10 +97,10 @@ impl RuntimeAdapter {
         content: &str,
         system_prompt: Option<&str>,
     ) -> Result<ModelExecutionResult, AppError> {
-        let hydrated_target = self.hydrate_execution_target_credentials(target)?;
+        let request_policy = self.resolve_execution_request_policy(target)?;
         self.state
             .executor
-            .execute_prompt(&hydrated_target, content, system_prompt)
+            .execute_prompt(target, &request_policy, content, system_prompt)
             .await
     }
 
@@ -120,10 +109,22 @@ impl RuntimeAdapter {
         target: &ResolvedExecutionTarget,
         request: &RuntimeConversationRequest,
     ) -> Result<RuntimeConversationExecution, AppError> {
-        let hydrated_target = self.hydrate_execution_target_credentials(target)?;
+        let request_policy = self.resolve_execution_request_policy(target)?;
         self.state
             .executor
-            .execute_conversation_execution(&hydrated_target, request)
+            .execute_conversation_execution(target, &request_policy, request)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requires_approval;
+
+    #[test]
+    fn permission_helpers_accept_runtime_modes() {
+        assert!(!requires_approval("workspace-write").expect("workspace-write"));
+        assert!(!requires_approval("danger-full-access").expect("danger-full-access"));
+        assert!(!requires_approval("read-only").expect("read-only"));
     }
 }

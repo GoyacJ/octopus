@@ -34,6 +34,7 @@ pub(super) fn binding(surface: &str, protocol_family: &str) -> ModelSurfaceBindi
         surface: surface.into(),
         protocol_family: protocol_family.into(),
         enabled: true,
+        runtime_support: RuntimeExecutionSupport::default(),
     }
 }
 
@@ -55,6 +56,7 @@ pub(super) fn surface(
         base_url_policy: base_url_policy.into(),
         enabled: true,
         capabilities: capabilities.iter().map(|value| capability(value)).collect(),
+        runtime_support: RuntimeExecutionSupport::default(),
     }
 }
 
@@ -115,7 +117,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                     "conversation",
                     "anthropic_messages",
                     &["request_response", "sse"],
-                    "bearer",
+                    "x_api_key",
                     "https://api.anthropic.com",
                     "allow_override",
                     &[
@@ -207,7 +209,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "conversation",
                         "anthropic_messages",
                         &["request_response", "sse"],
-                        "bearer",
+                        "x_api_key",
                         "https://api.deepseek.com/anthropic",
                         "allow_override",
                         &[
@@ -230,7 +232,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "conversation",
                         "anthropic_messages",
                         &["request_response", "sse"],
-                        "bearer",
+                        "x_api_key",
                         "https://api.minimaxi.com/anthropic",
                         "allow_override",
                         &["streaming", "tool_calling", "structured_output"],
@@ -320,7 +322,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "conversation",
                         "anthropic_messages",
                         &["request_response", "sse"],
-                        "bearer",
+                        "x_api_key",
                         "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
                         "allow_override",
                         &["streaming", "tool_calling", "structured_output"],
@@ -369,7 +371,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "conversation",
                         "gemini_native",
                         &["request_response", "sse"],
-                        "x_api_key",
+                        "api_key",
                         "https://generativelanguage.googleapis.com",
                         "allow_override",
                         &[
@@ -384,7 +386,7 @@ pub(crate) fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "realtime",
                         "gemini_native",
                         &["websocket"],
-                        "x_api_key",
+                        "api_key",
                         "https://generativelanguage.googleapis.com",
                         "allow_override",
                         &["audio_io", "realtime"],
@@ -905,33 +907,30 @@ pub(super) fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
 }
 
 pub(super) fn baseline_default_selections() -> BTreeMap<String, DefaultSelection> {
-    BTreeMap::from([
-        (
-            "conversation".into(),
-            DefaultSelection {
-                configured_model_id: Some("claude-sonnet-4-5".into()),
-                provider_id: "anthropic".into(),
-                model_id: "claude-sonnet-4-5".into(),
-                surface: "conversation".into(),
-            },
-        ),
-        (
-            "responses".into(),
-            DefaultSelection {
-                configured_model_id: Some("gpt-5.4".into()),
-                provider_id: "openai".into(),
-                model_id: "gpt-5.4".into(),
-                surface: "responses".into(),
-            },
-        ),
-        (
-            "fast".into(),
-            DefaultSelection {
-                configured_model_id: Some("gpt-5.4-mini".into()),
-                provider_id: "openai".into(),
-                model_id: "gpt-5.4-mini".into(),
-                surface: "responses".into(),
-            },
-        ),
-    ])
+    crate::model_runtime::CanonicalModelPolicy::default()
+        .default_selections()
+        .iter()
+        .map(|selection| {
+            (
+                selection.purpose.to_string(),
+                DefaultSelection {
+                    configured_model_id: Some(selection.model_id.to_string()),
+                    provider_id: selection.provider_id.to_string(),
+                    model_id: selection.model_id.to_string(),
+                    surface: selection.surface.to_string(),
+                },
+            )
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::baseline_providers;
+
+    #[test]
+    fn baseline_registry_contains_openai_provider() {
+        let providers = baseline_providers();
+        assert!(providers.contains_key("openai"));
+    }
 }

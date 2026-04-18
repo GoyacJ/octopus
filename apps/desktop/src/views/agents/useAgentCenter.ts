@@ -25,6 +25,8 @@ import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 
+import { agentIdFromRef, canonicalAgentRef, matchesAgentRef } from './agent-refs'
+
 export type CenterScope = 'workspace' | 'project'
 export type CenterTab = 'agent' | 'team' | 'builtin' | 'skill' | 'mcp'
 export type ViewMode = 'list' | 'card'
@@ -59,8 +61,8 @@ export interface TeamFormState {
   builtinToolKeys: string[]
   skillIds: string[]
   mcpServerNames: string[]
-  leaderAgentId: string
-  memberAgentIds: string[]
+  leaderRef: string
+  memberRefs: string[]
   status: string
 }
 
@@ -135,8 +137,8 @@ export function useAgentCenter(scope: CenterScope) {
     builtinToolKeys: [],
     skillIds: [],
     mcpServerNames: [],
-    leaderAgentId: '',
-    memberAgentIds: [],
+    leaderRef: '',
+    memberRefs: [],
     status: 'active',
   })
 
@@ -244,7 +246,7 @@ export function useAgentCenter(scope: CenterScope) {
   ])
   const teamAgentOptions = computed<SelectOption[]>(() =>
     currentAgents.value.map(agent => ({
-      value: agent.id,
+      value: canonicalAgentRef(agent.id),
       label: agent.name,
       keywords: [agent.personality, ...agent.tags],
       helper: agent.personality,
@@ -254,18 +256,21 @@ export function useAgentCenter(scope: CenterScope) {
   const currentEditingAgentRecord = computed(() => currentAgents.value.find(agent => agent.id === editingAgentId.value))
   const currentEditingTeamRecord = computed(() => currentTeams.value.find(team => team.id === editingTeamId.value))
   const dialogTeamLeader = computed(() =>
-    resolvedAgents.value.find(agent => agent.id === (teamForm.leaderAgentId || currentEditingTeamRecord.value?.leaderAgentId)),
+    resolvedAgents.value.find(agent =>
+      matchesAgentRef(agent.id, teamForm.leaderRef || currentEditingTeamRecord.value?.leaderRef),
+    ),
   )
   const dialogTeamMembers = computed(() => {
-    const selectedIds = teamForm.memberAgentIds.length
-      ? teamForm.memberAgentIds
-      : (currentEditingTeamRecord.value?.memberAgentIds ?? [])
-    return resolvedAgents.value.filter(agent => selectedIds.includes(agent.id))
+    const selectedRefs = teamForm.memberRefs.length
+      ? teamForm.memberRefs
+      : (currentEditingTeamRecord.value?.memberRefs ?? [])
+    const selectedSet = new Set(selectedRefs.map(canonicalAgentRef))
+    return resolvedAgents.value.filter(agent => selectedSet.has(canonicalAgentRef(agent.id)))
   })
   const leaderOptions = computed<SelectOption[]>(() =>
     currentAgents.value
       .map(agent => ({
-        value: agent.id,
+        value: canonicalAgentRef(agent.id),
         label: agent.name,
         keywords: [agent.personality, ...agent.tags],
       })),
@@ -340,6 +345,10 @@ export function useAgentCenter(scope: CenterScope) {
     return values.map(value => labelMap.get(value) ?? value)
   }
 
+  function isTeamRecord(record: AgentRecord | TeamRecord): record is TeamRecord {
+    return 'leaderRef' in record && 'memberRefs' in record
+  }
+
   function matchesQuery(record: AgentRecord | TeamRecord, query: string) {
     if (!query.trim()) {
       return true
@@ -355,9 +364,9 @@ export function useAgentCenter(scope: CenterScope) {
       ...catalogLabels(record.skillIds, skillOptions.value),
       ...catalogLabels(record.mcpServerNames, mcpOptions.value),
     ]
-    if ('leaderAgentId' in record) {
-      parts.push(record.leaderAgentId ?? '')
-      parts.push(...record.memberAgentIds)
+    if (isTeamRecord(record)) {
+      parts.push(agentIdFromRef(record.leaderRef))
+      parts.push(...record.memberRefs.map(agentIdFromRef))
     }
     return parts.join(' ').toLowerCase().includes(keyword)
   }
@@ -596,8 +605,8 @@ export function useAgentCenter(scope: CenterScope) {
     teamForm.builtinToolKeys = [...(record?.builtinToolKeys ?? [])]
     teamForm.skillIds = [...(record?.skillIds ?? [])]
     teamForm.mcpServerNames = [...(record?.mcpServerNames ?? [])]
-    teamForm.leaderAgentId = record?.leaderAgentId ?? ''
-    teamForm.memberAgentIds = [...(record?.memberAgentIds ?? [])]
+    teamForm.leaderRef = record?.leaderRef ?? ''
+    teamForm.memberRefs = [...(record?.memberRefs ?? [])]
     teamForm.status = record?.status ?? 'active'
     teamPendingAvatar.value = null
     removeTeamAvatar.value = false
@@ -1018,6 +1027,10 @@ export function useAgentCenter(scope: CenterScope) {
     if (!workspaceStore.currentWorkspaceId || !teamForm.name.trim()) {
       return
     }
+    if (!teamForm.leaderRef.trim()) {
+      await notifyTransfer('error', '保存失败', '请选择数字团队负责人。')
+      return
+    }
     const currentRecord = currentEditingTeam()
     const input: UpsertTeamInput = {
       workspaceId: currentRecord?.workspaceId ?? workspaceStore.currentWorkspaceId,
@@ -1032,8 +1045,8 @@ export function useAgentCenter(scope: CenterScope) {
       builtinToolKeys: [...teamForm.builtinToolKeys],
       skillIds: [...teamForm.skillIds],
       mcpServerNames: [...teamForm.mcpServerNames],
-      leaderAgentId: teamForm.leaderAgentId || undefined,
-      memberAgentIds: [...teamForm.memberAgentIds],
+      leaderRef: teamForm.leaderRef.trim(),
+      memberRefs: [...teamForm.memberRefs],
       description: teamForm.description.trim(),
       status: teamForm.status as TeamRecord['status'],
     }

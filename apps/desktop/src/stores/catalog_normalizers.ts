@@ -5,6 +5,7 @@ import type {
   DefaultSelection,
   ModelCatalogSnapshot,
   ModelRegistryRecord,
+  RuntimeExecutionSupport,
 } from '@octopus/schema'
 
 export interface CatalogFilterOption {
@@ -126,6 +127,24 @@ export const EMPTY_SNAPSHOT: ModelCatalogSnapshot = {
   },
 }
 
+function normalizeRuntimeExecutionSupport(
+  runtimeSupport?: Partial<RuntimeExecutionSupport> | null,
+): RuntimeExecutionSupport {
+  return {
+    prompt: Boolean(runtimeSupport?.prompt),
+    conversation: Boolean(runtimeSupport?.conversation),
+    toolLoop: Boolean(runtimeSupport?.toolLoop),
+    streaming: Boolean(runtimeSupport?.streaming),
+  }
+}
+
+function isRuntimeExecutable(runtimeSupport: RuntimeExecutionSupport): boolean {
+  return runtimeSupport.prompt
+    || runtimeSupport.conversation
+    || runtimeSupport.toolLoop
+    || runtimeSupport.streaming
+}
+
 function normalizeConfiguredModel(record: ConfiguredModelRecord): ConfiguredModelRecord {
   const totalTokens = record.tokenQuota?.totalTokens
   const usedTokens = Number.isFinite(record.tokenUsage?.usedTokens)
@@ -148,8 +167,20 @@ function normalizeConfiguredModel(record: ConfiguredModelRecord): ConfiguredMode
 
 export function normalizeSnapshot(snapshot?: Partial<ModelCatalogSnapshot> | null): ModelCatalogSnapshot {
   return {
-    providers: snapshot?.providers ?? [],
-    models: snapshot?.models ?? [],
+    providers: (snapshot?.providers ?? []).map(provider => ({
+      ...provider,
+      surfaces: provider.surfaces.map(surface => ({
+        ...surface,
+        runtimeSupport: normalizeRuntimeExecutionSupport(surface.runtimeSupport),
+      })),
+    })),
+    models: (snapshot?.models ?? []).map(model => ({
+      ...model,
+      surfaceBindings: model.surfaceBindings.map(binding => ({
+        ...binding,
+        runtimeSupport: normalizeRuntimeExecutionSupport(binding.runtimeSupport),
+      })),
+    })),
     configuredModels: (snapshot?.configuredModels ?? []).map(normalizeConfiguredModel),
     credentialBindings: snapshot?.credentialBindings ?? [],
     defaultSelections: snapshot?.defaultSelections ?? {},
@@ -194,7 +225,7 @@ export function toModelRow(
     defaultPermission: model.defaultPermission,
     recommendedFor: model.recommendedFor,
     surfaces: model.surfaceBindings
-      .filter(binding => binding.enabled)
+      .filter(binding => binding.enabled && isRuntimeExecutable(binding.runtimeSupport))
       .map(binding => binding.surface),
     capabilities: model.capabilities.map(capability => capability.capabilityId),
     defaultSurfaces,
@@ -231,7 +262,9 @@ export function toConfiguredModelRow(
     track: model?.track ?? '',
     enabled: configuredModel.enabled && (model?.enabled ?? true),
     source: configuredModel.source,
-    surfaces: model?.surfaceBindings.filter(binding => binding.enabled).map(binding => binding.surface) ?? [],
+    surfaces: model?.surfaceBindings
+      .filter(binding => binding.enabled && isRuntimeExecutable(binding.runtimeSupport))
+      .map(binding => binding.surface) ?? [],
     capabilities: model?.capabilities.map(capability => capability.capabilityId) ?? [],
     defaultSurfaces,
     contextWindow: model?.contextWindow,

@@ -302,13 +302,13 @@ pub(crate) fn execute_import(
             .filter(|slug| !failed_skill_slugs.contains(*slug))
             .map(|slug| crate::agent_bundle::shared::managed_skill_id(slug))
             .collect::<Vec<_>>();
-        let member_agent_ids = team
+        let member_agent_record_ids = team
             .agent_source_ids
             .iter()
             .filter_map(|source_id| agent_id_by_source.get(source_id))
             .cloned()
             .collect::<Vec<_>>();
-        let leader_agent_id = team.leader_name.as_ref().and_then(|leader_name| {
+        let leader_agent_record_id = team.leader_name.as_ref().and_then(|leader_name| {
             team.agent_source_ids.iter().find_map(|source_id| {
                 let agent = plan
                     .agents
@@ -321,14 +321,19 @@ pub(crate) fn execute_import(
                 }
             })
         });
+        let leader_ref = leader_agent_record_id
+            .as_deref()
+            .map(crate::canonical_agent_ref)
+            .unwrap_or_default();
+        let member_refs = crate::canonical_agent_refs(&member_agent_record_ids);
         let actual_action = agent_assets::resolve_team_action(
             workspace_id,
             &target,
             &existing_teams,
             team,
             &skill_ids,
-            leader_agent_id.as_deref(),
-            &member_agent_ids,
+            &leader_ref,
+            &member_refs,
         )?;
         let mut result_action = actual_action;
         let team_id = team.team_id.clone().unwrap_or_else(|| {
@@ -368,8 +373,8 @@ pub(crate) fn execute_import(
                 &team.builtin_tool_keys,
                 &skill_ids,
                 &team.mcp_server_names,
-                leader_agent_id.clone(),
-                member_agent_ids.clone(),
+                leader_ref.clone(),
+                member_refs.clone(),
             );
             record.default_model_strategy =
                 agent_assets::model_strategy_from_template(team.model.as_deref());
@@ -792,13 +797,13 @@ pub(crate) fn build_bundle_plan(
         } else {
             parsed_team.member_names.clone()
         };
-        let member_agent_ids = parsed_team
+        let member_agent_record_ids = parsed_team
             .agent_source_ids
             .iter()
             .filter_map(|source_id| agent_id_by_source.get(source_id))
             .cloned()
             .collect::<Vec<_>>();
-        let leader_agent_id = parsed_team.leader_name.as_ref().and_then(|leader_name| {
+        let leader_agent_record_id = parsed_team.leader_name.as_ref().and_then(|leader_name| {
             parsed_team.agent_source_ids.iter().find_map(|source_id| {
                 if agent_name_by_source.get(source_id) == Some(leader_name) {
                     agent_id_by_source.get(source_id).cloned()
@@ -807,6 +812,11 @@ pub(crate) fn build_bundle_plan(
                 }
             })
         });
+        let leader_ref = leader_agent_record_id
+            .as_deref()
+            .map(crate::canonical_agent_ref)
+            .unwrap_or_default();
+        let member_refs = crate::canonical_agent_refs(&member_agent_record_ids);
         let team_id = existing_team_sources
             .get(&parsed_team.source_id)
             .map(|mapping| mapping.team_id.clone())
@@ -843,8 +853,8 @@ pub(crate) fn build_bundle_plan(
                 .iter()
                 .map(|slug| crate::agent_bundle::shared::managed_skill_id(slug))
                 .collect::<Vec<_>>(),
-            leader_agent_id.as_deref(),
-            &member_agent_ids,
+            &leader_ref,
+            &member_refs,
         )?;
         planned_teams.push(agent_assets::PlannedTeam {
             source_id: parsed_team.source_id.clone(),
