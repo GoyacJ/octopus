@@ -7,6 +7,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { useAgentStore } from '@/stores/agent'
+import { useCatalogStore } from '@/stores/catalog'
+import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -100,6 +103,137 @@ describe('Project settings view', () => {
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-models-dialog"]') !== null)
 
     expect(document.body.querySelector('[data-testid="project-runtime-total-tokens-input"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('keeps grant dialogs inside the shared scrollable dialog shell', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+
+    const dialogContent = document.body.querySelector<HTMLElement>('[data-testid="project-settings-grants-models-dialog"]')
+    const dialogBody = document.body.querySelector<HTMLElement>('[data-testid="ui-dialog-body"]')
+
+    expect(dialogContent).not.toBeNull()
+    expect(dialogContent?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(dialogBody).not.toBeNull()
+    expect(dialogBody?.className).toContain('overflow-y-auto')
+
+    mounted.destroy()
+  })
+
+  it('supports select all and clear all actions across grant dialogs', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+    const catalogStore = useCatalogStore()
+    const agentStore = useAgentStore()
+    const teamStore = useTeamStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    const workspaceModelCount = catalogStore.configuredModelOptions.length
+    const workspaceToolCount = catalogStore.managementProjection.assets.filter(entry => entry.enabled).length
+    const workspaceAgentCount = agentStore.workspaceOwnedAgents.length + agentStore.builtinTemplateAgents.length
+    const workspaceTeamCount = teamStore.workspaceOwnedTeams.length + teamStore.builtinTemplateTeams.length
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+
+    const selectAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-select-all"]')
+    const clearAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-clear-all"]')
+
+    expect(selectAllModelsButton).not.toBeNull()
+    expect(clearAllModelsButton).not.toBeNull()
+
+    selectAllModelsButton?.click()
+    await nextTick()
+
+    const modelCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-model-option-"] input[type="checkbox"]'),
+    )
+
+    expect(modelCheckboxes).toHaveLength(workspaceModelCount)
+    expect(modelCheckboxes.every(input => input.checked)).toBe(true)
+
+    clearAllModelsButton?.click()
+    await nextTick()
+
+    expect(modelCheckboxes.every(input => !input.checked)).toBe(true)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-dialog-close"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') === null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+
+    const selectAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-select-all"]')
+    const clearAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')
+    const saveGrantToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')
+
+    expect(selectAllToolsButton).not.toBeNull()
+    expect(clearAllToolsButton).not.toBeNull()
+    expect(saveGrantToolsButton).not.toBeNull()
+
+    selectAllToolsButton?.click()
+    await nextTick()
+    saveGrantToolsButton?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      return project?.assignments?.tools?.sourceKeys.length === workspaceToolCount
+    })
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')?.click()
+    await nextTick()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      return project?.assignments?.tools == null
+    })
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
+
+    const selectAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-select-all"]')
+    const clearAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-clear-all"]')
+    const selectAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-select-all"]')
+    const clearAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-clear-all"]')
+
+    expect(selectAllAgentsButton).not.toBeNull()
+    expect(clearAllAgentsButton).not.toBeNull()
+    expect(selectAllTeamsButton).not.toBeNull()
+    expect(clearAllTeamsButton).not.toBeNull()
+
+    selectAllAgentsButton?.click()
+    selectAllTeamsButton?.click()
+    await nextTick()
+
+    const agentCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-agent-option-"] input[type="checkbox"]'),
+    )
+    const teamCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-team-option-"] input[type="checkbox"]'),
+    )
+
+    expect(agentCheckboxes).toHaveLength(workspaceAgentCount)
+    expect(teamCheckboxes).toHaveLength(workspaceTeamCount)
+    expect(agentCheckboxes.every(input => input.checked)).toBe(true)
+    expect(teamCheckboxes.every(input => input.checked)).toBe(true)
+
+    clearAllAgentsButton?.click()
+    clearAllTeamsButton?.click()
+    await nextTick()
+
+    expect(agentCheckboxes.every(input => !input.checked)).toBe(true)
+    expect(teamCheckboxes.every(input => !input.checked)).toBe(true)
 
     mounted.destroy()
   })

@@ -23,6 +23,8 @@
     "confirm": "Confirm",
     "confirmDelete": "Delete this item?",
     "save": "Save",
+    "selectAll": "Select all",
+    "clearAll": "Clear all",
     "done": "Done",
     "pending": "Pending",
     "reset": "Reset",

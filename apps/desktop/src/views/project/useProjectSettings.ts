@@ -472,6 +472,38 @@ export function useProjectSettings() {
     dialogOpen.members = true
   }
 
+  function selectAllGrantModels() {
+    grantForm.assignedConfiguredModelIds = unique(workspaceConfiguredModels.value.map(item => item.value))
+  }
+
+  function clearGrantModels() {
+    grantForm.assignedConfiguredModelIds = []
+  }
+
+  function selectAllGrantTools() {
+    grantForm.assignedToolSourceKeys = unique(workspaceToolEntries.value.map(entry => entry.sourceKey))
+  }
+
+  function clearGrantTools() {
+    grantForm.assignedToolSourceKeys = []
+  }
+
+  function selectAllGrantAgents() {
+    grantForm.assignedAgentIds = unique(actorCandidateAgents.value.map(agent => agent.id))
+  }
+
+  function clearGrantAgents() {
+    grantForm.assignedAgentIds = []
+  }
+
+  function selectAllGrantTeams() {
+    grantForm.assignedTeamIds = unique(actorCandidateTeams.value.map(team => team.id))
+  }
+
+  function clearGrantTeams() {
+    grantForm.assignedTeamIds = []
+  }
+
   function resolveRuntimeToolSelection(sourceKey: string) {
     return runtimeForm.toolPermissionDraft[sourceKey] ?? 'inherit'
   }
@@ -758,6 +790,14 @@ export function useProjectSettings() {
     openGrantModelsDialog,
     openGrantToolsDialog,
     openGrantActorsDialog,
+    selectAllGrantModels,
+    clearGrantModels,
+    selectAllGrantTools,
+    clearGrantTools,
+    selectAllGrantAgents,
+    clearGrantAgents,
+    selectAllGrantTeams,
+    clearGrantTeams,
     openRuntimeModelsDialog,
     openRuntimeToolsDialog,
     openRuntimeActorsDialog,

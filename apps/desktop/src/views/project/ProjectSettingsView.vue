@@ -58,6 +58,14 @@ const {
   openGrantModelsDialog,
   openGrantToolsDialog,
   openGrantActorsDialog,
+  selectAllGrantModels,
+  clearGrantModels,
+  selectAllGrantTools,
+  clearGrantTools,
+  selectAllGrantAgents,
+  clearGrantAgents,
+  selectAllGrantTeams,
+  clearGrantTeams,
   openRuntimeModelsDialog,
   openRuntimeToolsDialog,
   openRuntimeActorsDialog,
@@ -415,6 +423,26 @@ function entriesForRuntimeSection(kind: string) {
             :hint="t('projectSettings.dialogs.grantModels.hint')"
           >
             <div v-if="workspaceConfiguredModels.length" class="space-y-3">
+              <div class="flex items-center justify-end gap-2">
+                <UiButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="project-settings-grants-models-select-all"
+                  @click="selectAllGrantModels"
+                >
+                  {{ t('common.selectAll') }}
+                </UiButton>
+                <UiButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="project-settings-grants-models-clear-all"
+                  @click="clearGrantModels"
+                >
+                  {{ t('common.clearAll') }}
+                </UiButton>
+              </div>
               <label
                 v-for="modelOption in workspaceConfiguredModels"
                 :key="modelOption.value"
@@ -494,36 +522,58 @@ function entriesForRuntimeSection(kind: string) {
             :description="t('projectSettings.tools.emptyDescription')"
           />
 
-          <UiAccordion
-            v-else
-            v-model="grantToolsAccordion"
-            :items="grantToolAccordionItems"
-          >
-            <template #content="{ item }">
-              <div class="space-y-3">
-                <label
-                  v-for="entry in entriesForGrantSection(item.value)"
-                  :key="entry.sourceKey"
-                  :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
-                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-                >
-                  <div class="min-w-0 space-y-1">
-                    <div class="text-sm font-semibold text-text-primary">
-                      {{ entry.name }}
+          <div v-else class="space-y-3">
+            <div class="flex items-center justify-end gap-2">
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="project-settings-grants-tools-select-all"
+                @click="selectAllGrantTools"
+              >
+                {{ t('common.selectAll') }}
+              </UiButton>
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="project-settings-grants-tools-clear-all"
+                @click="clearGrantTools"
+              >
+                {{ t('common.clearAll') }}
+              </UiButton>
+            </div>
+
+            <UiAccordion
+              v-model="grantToolsAccordion"
+              :items="grantToolAccordionItems"
+            >
+              <template #content="{ item }">
+                <div class="space-y-3">
+                  <label
+                    v-for="entry in entriesForGrantSection(item.value)"
+                    :key="entry.sourceKey"
+                    :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
+                    class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                  >
+                    <div class="min-w-0 space-y-1">
+                      <div class="text-sm font-semibold text-text-primary">
+                        {{ entry.name }}
+                      </div>
+                      <div class="text-xs text-text-secondary">
+                        {{ entry.description || entry.sourceKey }}
+                      </div>
                     </div>
-                    <div class="text-xs text-text-secondary">
-                      {{ entry.description || entry.sourceKey }}
-                    </div>
-                  </div>
-                  <UiCheckbox
-                    v-model="grantForm.assignedToolSourceKeys"
-                    :value="entry.sourceKey"
-                    :aria-label="entry.name"
-                  />
-                </label>
-              </div>
-            </template>
-          </UiAccordion>
+                    <UiCheckbox
+                      v-model="grantForm.assignedToolSourceKeys"
+                      :value="entry.sourceKey"
+                      :aria-label="entry.name"
+                    />
+                  </label>
+                </div>
+              </template>
+            </UiAccordion>
+          </div>
 
           <UiStatusCallout
             v-if="dialogErrors.grantTools"
@@ -559,6 +609,26 @@ function entriesForRuntimeSection(kind: string) {
               :hint="t('projectSettings.dialogs.grantActors.agentsHint')"
             >
               <div v-if="actorCandidateAgents.length" class="space-y-3">
+                <div class="flex items-center justify-end gap-2">
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-agents-select-all"
+                    @click="selectAllGrantAgents"
+                  >
+                    {{ t('common.selectAll') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-agents-clear-all"
+                    @click="clearGrantAgents"
+                  >
+                    {{ t('common.clearAll') }}
+                  </UiButton>
+                </div>
                 <label
                   v-for="agent in actorCandidateAgents"
                   :key="agent.id"
@@ -594,6 +664,26 @@ function entriesForRuntimeSection(kind: string) {
               :hint="t('projectSettings.dialogs.grantActors.teamsHint')"
             >
               <div v-if="actorCandidateTeams.length" class="space-y-3">
+                <div class="flex items-center justify-end gap-2">
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-teams-select-all"
+                    @click="selectAllGrantTeams"
+                  >
+                    {{ t('common.selectAll') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-teams-clear-all"
+                    @click="clearGrantTeams"
+                  >
+                    {{ t('common.clearAll') }}
+                  </UiButton>
+                </div>
                 <label
                   v-for="team in actorCandidateTeams"
                   :key="team.id"
