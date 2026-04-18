@@ -7,6 +7,25 @@ import type {
 } from '@octopus/schema'
 import type { WorkspaceToolPermissionMode } from '@octopus/schema'
 
+type ProjectToolSettingsCompat = ProjectToolSettings & {
+  __legacyEnabledSourceKeys?: string[]
+}
+
+type ProjectAgentSettingsCompat = ProjectAgentSettings & {
+  __legacyEnabledAgentIds?: string[]
+  __legacyEnabledTeamIds?: string[]
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function parseStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? uniqueStrings(value.filter((item): item is string => typeof item === 'string'))
+    : []
+}
+
 export function isObjectRecord(value: unknown): value is Record<string, JsonValue> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -53,9 +72,8 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
     return undefined
   }
 
-  const enabledSourceKeys = Array.isArray(value.enabledSourceKeys)
-    ? value.enabledSourceKeys.filter((item): item is string => typeof item === 'string')
-    : []
+  const disabledSourceKeys = parseStringArray(value.disabledSourceKeys)
+  const legacyEnabledSourceKeys = parseStringArray(value.enabledSourceKeys)
   const overrides = isObjectRecord(value.overrides)
     ? Object.fromEntries(
         Object.entries(value.overrides)
@@ -68,11 +86,18 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
       )
     : {}
 
-  if (!enabledSourceKeys.length && !Object.keys(overrides).length) {
+  if (!disabledSourceKeys.length && !legacyEnabledSourceKeys.length && !Object.keys(overrides).length) {
     return undefined
   }
 
-  return { enabledSourceKeys, overrides }
+  const settings: ProjectToolSettingsCompat = {
+    disabledSourceKeys,
+    overrides,
+  }
+  if (!disabledSourceKeys.length && legacyEnabledSourceKeys.length) {
+    settings.__legacyEnabledSourceKeys = legacyEnabledSourceKeys
+  }
+  return settings
 }
 
 export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings | undefined {
@@ -80,21 +105,31 @@ export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings 
     return undefined
   }
 
-  const enabledAgentIds = Array.isArray(value.enabledAgentIds)
-    ? value.enabledAgentIds.filter((item): item is string => typeof item === 'string')
-    : []
-  const enabledTeamIds = Array.isArray(value.enabledTeamIds)
-    ? value.enabledTeamIds.filter((item): item is string => typeof item === 'string')
-    : []
+  const disabledAgentIds = parseStringArray(value.disabledAgentIds)
+  const disabledTeamIds = parseStringArray(value.disabledTeamIds)
+  const legacyEnabledAgentIds = parseStringArray(value.enabledAgentIds)
+  const legacyEnabledTeamIds = parseStringArray(value.enabledTeamIds)
 
-  if (!enabledAgentIds.length && !enabledTeamIds.length) {
+  if (
+    !disabledAgentIds.length
+    && !disabledTeamIds.length
+    && !legacyEnabledAgentIds.length
+    && !legacyEnabledTeamIds.length
+  ) {
     return undefined
   }
 
-  return {
-    enabledAgentIds,
-    enabledTeamIds,
+  const settings: ProjectAgentSettingsCompat = {
+    disabledAgentIds,
+    disabledTeamIds,
   }
+  if (!disabledAgentIds.length && legacyEnabledAgentIds.length) {
+    settings.__legacyEnabledAgentIds = legacyEnabledAgentIds
+  }
+  if (!disabledTeamIds.length && legacyEnabledTeamIds.length) {
+    settings.__legacyEnabledTeamIds = legacyEnabledTeamIds
+  }
+  return settings
 }
 
 export function parseProjectSettingsDocument(document: Record<string, JsonValue>): ProjectSettingsConfig {
@@ -134,19 +169,40 @@ export function resolveProjectModelSettings(
 
 export function resolveProjectAgentSettings(
   projectSettings: ProjectSettingsConfig,
-  assignedAgentIds: string[],
-  assignedTeamIds: string[],
+  grantedAgentIds: string[],
+  grantedTeamIds: string[],
 ): ProjectAgentSettings {
-  const normalizedAssignedAgentIds = [...new Set(assignedAgentIds.filter(Boolean))]
-  const normalizedAssignedTeamIds = [...new Set(assignedTeamIds.filter(Boolean))]
-  const saved = projectSettings.agents
+  const normalizedGrantedAgentIds = uniqueStrings(grantedAgentIds)
+  const normalizedGrantedTeamIds = uniqueStrings(grantedTeamIds)
+  const saved = projectSettings.agents as ProjectAgentSettingsCompat | undefined
+
+  const disabledAgentIds = saved?.__legacyEnabledAgentIds?.length
+    ? normalizedGrantedAgentIds.filter(agentId => !saved.__legacyEnabledAgentIds?.includes(agentId))
+    : (saved?.disabledAgentIds ?? []).filter(agentId => normalizedGrantedAgentIds.includes(agentId))
+  const disabledTeamIds = saved?.__legacyEnabledTeamIds?.length
+    ? normalizedGrantedTeamIds.filter(teamId => !saved.__legacyEnabledTeamIds?.includes(teamId))
+    : (saved?.disabledTeamIds ?? []).filter(teamId => normalizedGrantedTeamIds.includes(teamId))
 
   return {
-    enabledAgentIds: saved?.enabledAgentIds?.length
-      ? saved.enabledAgentIds.filter(agentId => normalizedAssignedAgentIds.includes(agentId))
-      : normalizedAssignedAgentIds,
-    enabledTeamIds: saved?.enabledTeamIds?.length
-      ? saved.enabledTeamIds.filter(teamId => normalizedAssignedTeamIds.includes(teamId))
-      : normalizedAssignedTeamIds,
+    disabledAgentIds,
+    disabledTeamIds,
+  }
+}
+
+export function resolveProjectToolSettings(
+  projectSettings: ProjectSettingsConfig,
+  grantedSourceKeys: string[],
+): ProjectToolSettings {
+  const normalizedGrantedSourceKeys = uniqueStrings(grantedSourceKeys)
+  const saved = projectSettings.tools as ProjectToolSettingsCompat | undefined
+  const disabledSourceKeys = saved?.__legacyEnabledSourceKeys?.length
+    ? normalizedGrantedSourceKeys.filter(sourceKey => !saved.__legacyEnabledSourceKeys?.includes(sourceKey))
+    : (saved?.disabledSourceKeys ?? []).filter(sourceKey => normalizedGrantedSourceKeys.includes(sourceKey))
+
+  return {
+    disabledSourceKeys,
+    overrides: Object.fromEntries(
+      Object.entries(saved?.overrides ?? {}).filter(([sourceKey]) => normalizedGrantedSourceKeys.includes(sourceKey)),
+    ),
   }
 }

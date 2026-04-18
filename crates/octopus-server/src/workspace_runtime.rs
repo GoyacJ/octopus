@@ -40,6 +40,389 @@ fn strip_runtime_transport_escape_hatches(value: &mut serde_json::Value) {
     }
 }
 
+fn normalize_project_string_list(values: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() && !normalized.iter().any(|item| item == trimmed) {
+            normalized.push(trimmed.to_string());
+        }
+    }
+    normalized
+}
+
+fn normalize_project_assignments(
+    assignments: Option<octopus_core::ProjectWorkspaceAssignments>,
+) -> Option<octopus_core::ProjectWorkspaceAssignments> {
+    assignments.map(|mut assignments| {
+        if let Some(models) = assignments.models.as_mut() {
+            models.configured_model_ids =
+                normalize_project_string_list(std::mem::take(&mut models.configured_model_ids));
+            models.default_configured_model_id =
+                models.default_configured_model_id.trim().to_string();
+        }
+        if let Some(tools) = assignments.tools.as_mut() {
+            tools.source_keys =
+                normalize_project_string_list(std::mem::take(&mut tools.source_keys));
+            tools.excluded_source_keys =
+                normalize_project_string_list(std::mem::take(&mut tools.excluded_source_keys));
+        }
+        if let Some(agents) = assignments.agents.as_mut() {
+            agents.agent_ids = normalize_project_string_list(std::mem::take(&mut agents.agent_ids));
+            agents.team_ids = normalize_project_string_list(std::mem::take(&mut agents.team_ids));
+            agents.excluded_agent_ids =
+                normalize_project_string_list(std::mem::take(&mut agents.excluded_agent_ids));
+            agents.excluded_team_ids =
+                normalize_project_string_list(std::mem::take(&mut agents.excluded_team_ids));
+        }
+        assignments
+    })
+}
+
+#[derive(Debug, Default)]
+struct ProjectGrantedScope {
+    workspace_active_agent_ids: BTreeSet<String>,
+    agents: Vec<octopus_core::AgentRecord>,
+    teams: Vec<octopus_core::TeamRecord>,
+    tool_source_keys: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct ProjectRuntimeDisables {
+    agent_ids: BTreeSet<String>,
+}
+
+fn project_tool_assignments(
+    project: &ProjectRecord,
+) -> Option<&octopus_core::ProjectToolAssignments> {
+    project
+        .assignments
+        .as_ref()
+        .and_then(|assignments| assignments.tools.as_ref())
+}
+
+fn project_agent_assignments(
+    project: &ProjectRecord,
+) -> Option<&octopus_core::ProjectAgentAssignments> {
+    project
+        .assignments
+        .as_ref()
+        .and_then(|assignments| assignments.agents.as_ref())
+}
+
+async fn resolve_project_granted_scope(
+    state: &ServerState,
+    project: &ProjectRecord,
+) -> Result<ProjectGrantedScope, ApiError> {
+    let excluded_agent_ids = project_agent_assignments(project)
+        .map(|assignments| {
+            assignments
+                .excluded_agent_ids
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let excluded_team_ids = project_agent_assignments(project)
+        .map(|assignments| {
+            assignments
+                .excluded_team_ids
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let excluded_tool_source_keys = project_tool_assignments(project)
+        .map(|assignments| {
+            assignments
+                .excluded_source_keys
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+
+    let mut workspace_active_agent_ids = BTreeSet::new();
+    let mut seen_agent_ids = BTreeSet::new();
+    let mut agents = Vec::new();
+    for record in state.services.workspace.list_agents().await? {
+        if record.status != "active" || !agent_visible_in_generic_catalog(&record) {
+            continue;
+        }
+        let is_project_owned = record.project_id.as_deref() == Some(project.id.as_str());
+        let is_workspace_inherited = record.project_id.is_none();
+        if is_workspace_inherited {
+            workspace_active_agent_ids.insert(record.id.clone());
+        }
+        if (is_project_owned
+            || (is_workspace_inherited && !excluded_agent_ids.contains(&record.id)))
+            && seen_agent_ids.insert(record.id.clone())
+        {
+            agents.push(record);
+        }
+    }
+
+    let mut seen_team_ids = BTreeSet::new();
+    let mut teams = Vec::new();
+    for record in state.services.workspace.list_teams().await? {
+        if record.status != "active" {
+            continue;
+        }
+        let is_project_owned = record.project_id.as_deref() == Some(project.id.as_str());
+        let is_workspace_inherited = record.project_id.is_none();
+        if (is_project_owned || (is_workspace_inherited && !excluded_team_ids.contains(&record.id)))
+            && seen_team_ids.insert(record.id.clone())
+        {
+            teams.push(record);
+        }
+    }
+
+    let mut tool_source_keys = BTreeSet::new();
+    for asset in state
+        .services
+        .workspace
+        .get_capability_management_projection()
+        .await?
+        .assets
+    {
+        if !asset.enabled {
+            continue;
+        }
+        let is_project_owned = asset.owner_scope.as_deref() == Some("project")
+            && asset.owner_id.as_deref() == Some(project.id.as_str());
+        let is_workspace_inherited = asset.owner_scope.as_deref() != Some("project");
+        if is_project_owned
+            || (is_workspace_inherited && !excluded_tool_source_keys.contains(&asset.source_key))
+        {
+            tool_source_keys.insert(asset.source_key);
+        }
+    }
+
+    Ok(ProjectGrantedScope {
+        workspace_active_agent_ids,
+        agents,
+        teams,
+        tool_source_keys: tool_source_keys.into_iter().collect(),
+    })
+}
+
+fn merge_runtime_config_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
+    match patch {
+        serde_json::Value::Object(patch_map) => {
+            if !target.is_object() {
+                *target = serde_json::Value::Object(serde_json::Map::new());
+            }
+            let target_map = target
+                .as_object_mut()
+                .expect("target should be an object after initialization");
+            for (key, value) in patch_map {
+                if value.is_null() {
+                    target_map.remove(key);
+                    continue;
+                }
+                if let Some(existing) = target_map.get_mut(key) {
+                    merge_runtime_config_patch(existing, value);
+                } else {
+                    target_map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        _ => *target = patch.clone(),
+    }
+}
+
+async fn load_project_runtime_document(
+    state: &ServerState,
+    project: &ProjectRecord,
+    patch: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, ApiError> {
+    let config = state
+        .services
+        .runtime_config
+        .get_project_config(&project.id, &project.owner_user_id)
+        .await?;
+    let mut document = config
+        .sources
+        .into_iter()
+        .find(|source| source.scope == "project")
+        .and_then(|source| source.document)
+        .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(patch) = patch {
+        merge_runtime_config_patch(&mut document, patch);
+    }
+    Ok(document)
+}
+
+fn normalize_runtime_string_set(value: Option<&serde_json::Value>) -> Option<BTreeSet<String>> {
+    let values = value.and_then(serde_json::Value::as_array)?;
+    Some(
+        values
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
+fn resolve_project_runtime_disables(
+    document: &serde_json::Value,
+    scope: &ProjectGrantedScope,
+) -> ProjectRuntimeDisables {
+    let project_settings = document
+        .get("projectSettings")
+        .and_then(serde_json::Value::as_object);
+    let agents_object = project_settings
+        .and_then(|settings| settings.get("agents"))
+        .and_then(serde_json::Value::as_object);
+
+    let granted_agent_ids = scope
+        .agents
+        .iter()
+        .map(|record| record.id.clone())
+        .collect::<BTreeSet<_>>();
+
+    let disabled_agent_ids = normalize_runtime_string_set(
+        agents_object.and_then(|settings| settings.get("disabledAgentIds")),
+    )
+    .map(|values| {
+        values
+            .into_iter()
+            .filter(|value| granted_agent_ids.contains(value))
+            .collect()
+    })
+    .or_else(|| {
+        normalize_runtime_string_set(
+            agents_object.and_then(|settings| settings.get("enabledAgentIds")),
+        )
+        .map(|enabled| {
+            granted_agent_ids
+                .iter()
+                .filter(|value| !enabled.contains(*value))
+                .cloned()
+                .collect()
+        })
+    })
+    .unwrap_or_default();
+
+    ProjectRuntimeDisables {
+        agent_ids: disabled_agent_ids,
+    }
+}
+
+fn validate_project_leader_against_scope(
+    leader_agent_id: Option<&str>,
+    scope: &ProjectGrantedScope,
+    runtime_disables: &ProjectRuntimeDisables,
+) -> Result<(), ApiError> {
+    let Some(leader_agent_id) = leader_agent_id else {
+        return Ok(());
+    };
+    let granted_agent_ids = scope
+        .agents
+        .iter()
+        .map(|record| record.id.as_str())
+        .collect::<BTreeSet<_>>();
+    if !scope.workspace_active_agent_ids.contains(leader_agent_id) {
+        return Err(AppError::invalid_input(
+            "project leader must reference an active workspace agent",
+        )
+        .into());
+    }
+    if !granted_agent_ids.contains(leader_agent_id) {
+        return Err(AppError::invalid_input(
+            "project leader must remain in the effective project agent scope",
+        )
+        .into());
+    }
+    if runtime_disables.agent_ids.contains(leader_agent_id) {
+        return Err(AppError::invalid_input("project leader must remain runtime enabled").into());
+    }
+    Ok(())
+}
+
+async fn validate_create_project_leader(
+    state: &ServerState,
+    request: &CreateProjectRequest,
+) -> Result<(), ApiError> {
+    let Some(leader_agent_id) = request.leader_agent_id.as_deref() else {
+        return Ok(());
+    };
+    let excluded_agent_ids = request
+        .assignments
+        .as_ref()
+        .and_then(|assignments| assignments.agents.as_ref())
+        .map(|assignments| {
+            assignments
+                .excluded_agent_ids
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let workspace_active_agent_ids = state
+        .services
+        .workspace
+        .list_agents()
+        .await?
+        .into_iter()
+        .filter(|record| {
+            record.project_id.is_none()
+                && record.status == "active"
+                && agent_visible_in_generic_catalog(record)
+        })
+        .map(|record| record.id)
+        .collect::<BTreeSet<_>>();
+    if !workspace_active_agent_ids.contains(leader_agent_id)
+        || excluded_agent_ids.contains(leader_agent_id)
+    {
+        return Err(AppError::invalid_input(
+            "project leader must reference a granted active workspace agent",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+async fn validate_updated_project_leader(
+    state: &ServerState,
+    project: &ProjectRecord,
+    request: &UpdateProjectRequest,
+) -> Result<(), ApiError> {
+    let mut candidate = project.clone();
+    candidate.assignments = request.assignments.clone();
+    candidate.leader_agent_id = request
+        .leader_agent_id
+        .clone()
+        .or(project.leader_agent_id.clone());
+
+    let scope = resolve_project_granted_scope(state, &candidate).await?;
+    let runtime_document = load_project_runtime_document(state, project, None).await?;
+    let runtime_disables = resolve_project_runtime_disables(&runtime_document, &scope);
+    validate_project_leader_against_scope(
+        candidate.leader_agent_id.as_deref(),
+        &scope,
+        &runtime_disables,
+    )
+}
+
+async fn validate_project_runtime_leader(
+    state: &ServerState,
+    project: &ProjectRecord,
+    patch: &RuntimeConfigPatch,
+) -> Result<(), ApiError> {
+    let scope = resolve_project_granted_scope(state, project).await?;
+    let runtime_document =
+        load_project_runtime_document(state, project, Some(&patch.patch)).await?;
+    let runtime_disables = resolve_project_runtime_disables(&runtime_document, &scope);
+    validate_project_leader_against_scope(
+        project.leader_agent_id.as_deref(),
+        &scope,
+        &runtime_disables,
+    )
+}
+
 fn runtime_transport_payload<T: serde::Serialize>(
     value: &T,
     request_id: &str,
@@ -620,6 +1003,18 @@ pub(crate) fn validate_create_project_request(
     if resource_directory.is_empty() {
         return Err(AppError::invalid_input("project resource directory is required").into());
     }
+    let leader_agent_id = match request.leader_agent_id {
+        Some(value) => {
+            let trimmed = value.trim().to_string();
+            if trimmed.is_empty() {
+                return Err(
+                    AppError::invalid_input("project leader agent id cannot be empty").into(),
+                );
+            }
+            Some(trimmed)
+        }
+        None => None,
+    };
 
     Ok(CreateProjectRequest {
         name: name.into(),
@@ -638,7 +1033,8 @@ pub(crate) fn validate_create_project_request(
         }),
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
-        assignments: request.assignments,
+        leader_agent_id,
+        assignments: normalize_project_assignments(request.assignments),
     })
 }
 
@@ -658,6 +1054,18 @@ pub(crate) fn validate_update_project_request(
     if resource_directory.is_empty() {
         return Err(AppError::invalid_input("project resource directory is required").into());
     }
+    let leader_agent_id = match request.leader_agent_id {
+        Some(value) => {
+            let trimmed = value.trim().to_string();
+            if trimmed.is_empty() {
+                return Err(
+                    AppError::invalid_input("project leader agent id cannot be empty").into(),
+                );
+            }
+            Some(trimmed)
+        }
+        None => None,
+    };
 
     Ok(UpdateProjectRequest {
         name: name.into(),
@@ -677,7 +1085,8 @@ pub(crate) fn validate_update_project_request(
         }),
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
-        assignments: request.assignments,
+        leader_agent_id,
+        assignments: normalize_project_assignments(request.assignments),
     })
 }
 
@@ -1279,6 +1688,7 @@ pub(crate) async fn create_project(
     )
     .await?;
     let request = validate_create_project_request(request)?;
+    validate_create_project_leader(&state, &request).await?;
     Ok(Json(
         state.services.workspace.create_project(request).await?,
     ))
@@ -1299,8 +1709,9 @@ pub(crate) async fn update_project(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    let project = ensure_project_owner_session(&state, &headers, &project_id).await?;
     let request = validate_update_project_request(request)?;
+    validate_updated_project_leader(&state, &project, &request).await?;
     Ok(Json(
         state
             .services
@@ -1375,6 +1786,7 @@ pub(crate) async fn project_dashboard(
     .await?;
 
     let project = lookup_project(&state, &project_id).await?;
+    let project_scope = resolve_project_granted_scope(&state, &project).await?;
     let mut sessions = state.services.runtime_session.list_sessions().await?;
     sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     sessions.retain(|record| record.project_id == project_id);
@@ -1411,33 +1823,8 @@ pub(crate) async fn project_dashboard(
         .workspace
         .list_project_knowledge(&project_id)
         .await?;
-    let all_agents = state.services.workspace.list_agents().await?;
-    let project_agent_ids = collect_project_agent_ids(&project);
-    let agents = all_agents
-        .into_iter()
-        .filter(|record| {
-            agent_visible_in_generic_catalog(record)
-                && (record.project_id.as_deref() == Some(project_id.as_str())
-                    || project_agent_ids.contains(&record.id))
-        })
-        .collect::<Vec<_>>();
-    let team_links = state
-        .services
-        .workspace
-        .list_project_team_links(&project_id)
-        .await?;
-    let project_team_ids = collect_project_team_ids(&project, &team_links);
-    let teams = state
-        .services
-        .workspace
-        .list_teams()
-        .await?
-        .into_iter()
-        .filter(|record| {
-            record.project_id.as_deref() == Some(project_id.as_str())
-                || project_team_ids.contains(&record.id)
-        })
-        .collect::<Vec<_>>();
+    let agents = project_scope.agents.clone();
+    let teams = project_scope.teams.clone();
     let cost_entries = state
         .services
         .observation
@@ -1451,7 +1838,7 @@ pub(crate) async fn project_dashboard(
         })
         .collect::<Vec<_>>();
     let session_details = load_project_session_details(&state, &sessions).await?;
-    let tool_source_keys = project_tool_source_keys(&project);
+    let tool_source_keys = project_scope.tool_source_keys.clone();
     let tool_ranking = build_tool_ranking(&session_details, &audit_records);
     let model_breakdown = build_model_breakdown(&cost_entries);
     let trend = build_dashboard_trend(&sessions, &session_details, &cost_entries, &audit_records);
@@ -4424,7 +4811,8 @@ pub(crate) async fn validate_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner(&state, &session, &project_id).await?;
+    let project = ensure_project_owner(&state, &session, &project_id).await?;
+    validate_project_runtime_leader(&state, &project, &patch).await?;
     Ok(Json(
         state
             .services
@@ -4449,7 +4837,8 @@ pub(crate) async fn save_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner(&state, &session, &project_id).await?;
+    let project = ensure_project_owner(&state, &session, &project_id).await?;
+    validate_project_runtime_leader(&state, &project, &patch).await?;
     Ok(Json(
         state
             .services
@@ -4619,54 +5008,6 @@ fn project_member_ids(project: &ProjectRecord) -> Vec<String> {
         }
     }
     members.into_iter().collect()
-}
-
-fn collect_project_agent_ids(project: &ProjectRecord) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    ids.extend(project.linked_workspace_assets.agent_ids.iter().cloned());
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.agents.as_ref())
-    {
-        ids.extend(assignments.agent_ids.iter().cloned());
-    }
-    ids
-}
-
-fn collect_project_team_ids(
-    project: &ProjectRecord,
-    links: &[ProjectTeamLinkRecord],
-) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    ids.extend(links.iter().map(|record| record.team_id.clone()));
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.agents.as_ref())
-    {
-        ids.extend(assignments.team_ids.iter().cloned());
-    }
-    ids
-}
-
-fn project_tool_source_keys(project: &ProjectRecord) -> Vec<String> {
-    let mut source_keys = BTreeSet::new();
-    source_keys.extend(
-        project
-            .linked_workspace_assets
-            .tool_source_keys
-            .iter()
-            .cloned(),
-    );
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.tools.as_ref())
-    {
-        source_keys.extend(assignments.source_keys.iter().cloned());
-    }
-    source_keys.into_iter().collect()
 }
 
 fn workspace_activity_from_audit(record: &AuditRecord) -> WorkspaceActivityRecord {
@@ -5672,6 +6013,61 @@ mod tests {
         }
     }
 
+    fn empty_linked_workspace_assets() -> octopus_core::ProjectLinkedWorkspaceAssets {
+        octopus_core::ProjectLinkedWorkspaceAssets {
+            agent_ids: Vec::new(),
+            resource_ids: Vec::new(),
+            tool_source_keys: Vec::new(),
+            knowledge_ids: Vec::new(),
+        }
+    }
+
+    fn update_request_from_project(project: ProjectRecord) -> UpdateProjectRequest {
+        UpdateProjectRequest {
+            name: project.name,
+            description: project.description,
+            status: project.status,
+            resource_directory: project.resource_directory,
+            owner_user_id: Some(project.owner_user_id),
+            member_user_ids: Some(project.member_user_ids),
+            permission_overrides: Some(project.permission_overrides),
+            linked_workspace_assets: Some(project.linked_workspace_assets),
+            leader_agent_id: project.leader_agent_id,
+            assignments: project.assignments,
+        }
+    }
+
+    fn project_scoped_agent_input(
+        record: &octopus_core::AgentRecord,
+        project_id: &str,
+    ) -> octopus_core::UpsertAgentInput {
+        octopus_core::UpsertAgentInput {
+            workspace_id: record.workspace_id.clone(),
+            project_id: Some(project_id.into()),
+            scope: "project".into(),
+            name: format!("{} Project Copy", record.name),
+            avatar: None,
+            remove_avatar: None,
+            personality: record.personality.clone(),
+            tags: record.tags.clone(),
+            prompt: record.prompt.clone(),
+            builtin_tool_keys: record.builtin_tool_keys.clone(),
+            skill_ids: record.skill_ids.clone(),
+            mcp_server_names: record.mcp_server_names.clone(),
+            task_domains: record.task_domains.clone(),
+            default_model_strategy: Some(record.default_model_strategy.clone()),
+            capability_policy: Some(record.capability_policy.clone()),
+            permission_envelope: Some(record.permission_envelope.clone()),
+            memory_policy: Some(record.memory_policy.clone()),
+            delegation_policy: Some(record.delegation_policy.clone()),
+            approval_preference: Some(record.approval_preference.clone()),
+            output_contract: Some(record.output_contract.clone()),
+            shared_capability_policy: Some(record.shared_capability_policy.clone()),
+            description: record.description.clone(),
+            status: "active".into(),
+        }
+    }
+
     fn auth_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -5683,6 +6079,23 @@ mod tests {
             HeaderValue::from_static(DEFAULT_WORKSPACE_ID),
         );
         headers
+    }
+
+    async fn visible_workspace_agent_actor_ref(state: &ServerState) -> String {
+        let agent = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents")
+            .into_iter()
+            .find(|record| {
+                record.project_id.is_none()
+                    && record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+            })
+            .expect("workspace agent");
+        format!("agent:{}", agent.id)
     }
 
     fn test_server_state(root: &Path) -> ServerState {
@@ -5824,6 +6237,10 @@ mod tests {
     }
 
     fn write_runtime_workspace_config(root: &Path) {
+        std::env::set_var(
+            "OCTOPUS_TEST_ANTHROPIC_API_KEY",
+            "test-octopus-server-anthropic-key",
+        );
         let path = root.join("config").join("runtime").join("workspace.json");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("runtime config dir");
@@ -5832,12 +6249,21 @@ mod tests {
             path,
             serde_json::to_vec_pretty(&json!({
                 "configuredModels": {
+                    "opus": {
+                        "configuredModelId": "opus",
+                        "name": "Opus",
+                        "providerId": "anthropic",
+                        "modelId": "claude-opus-4-6",
+                        "credentialRef": "env:OCTOPUS_TEST_ANTHROPIC_API_KEY",
+                        "enabled": true,
+                        "source": "workspace"
+                    },
                     "quota-model": {
                         "configuredModelId": "quota-model",
                         "name": "Quota Model",
                         "providerId": "anthropic",
                         "modelId": "claude-sonnet-4-5",
-                        "credentialRef": "env:ANTHROPIC_API_KEY",
+                        "credentialRef": "env:OCTOPUS_TEST_ANTHROPIC_API_KEY",
                         "enabled": true,
                         "source": "workspace"
                     }
@@ -5853,7 +6279,7 @@ mod tests {
         connection
             .execute(
                 "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?21)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
                 params![
                     APPROVAL_AGENT_ID,
                     DEFAULT_WORKSPACE_ID,
@@ -6329,6 +6755,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .expect("validated request");
@@ -6348,6 +6775,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .is_err());
@@ -6364,6 +6792,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .expect("validated update");
@@ -6385,6 +6814,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .is_err());
@@ -6397,17 +6827,463 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
+            assignments: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn validate_create_project_request_trims_leader_and_exclusions() {
+        let validated = validate_create_project_request(CreateProjectRequest {
+            name: "  Leader Project  ".into(),
+            description: "  Use live inheritance.  ".into(),
+            resource_directory: "  data/projects/leader-project/resources  ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("  agent-leader  ".into()),
+            assignments: Some(octopus_core::ProjectWorkspaceAssignments {
+                models: None,
+                tools: Some(octopus_core::ProjectToolAssignments {
+                    source_keys: vec![
+                        " builtin:bash ".into(),
+                        "".into(),
+                        "builtin:bash".into(),
+                        " mcp:browser ".into(),
+                    ],
+                    excluded_source_keys: vec![
+                        " builtin:files ".into(),
+                        "builtin:files".into(),
+                        " ".into(),
+                    ],
+                }),
+                agents: Some(octopus_core::ProjectAgentAssignments {
+                    agent_ids: vec![
+                        " agent-architect ".into(),
+                        "".into(),
+                        "agent-architect".into(),
+                    ],
+                    team_ids: vec![" team-studio ".into(), "team-studio".into(), " ".into()],
+                    excluded_agent_ids: vec![
+                        " agent-shadow ".into(),
+                        "agent-shadow".into(),
+                        " ".into(),
+                    ],
+                    excluded_team_ids: vec![
+                        " team-shadow ".into(),
+                        " ".into(),
+                        "team-shadow".into(),
+                    ],
+                }),
+            }),
+        })
+        .expect("validated request");
+
+        assert_eq!(validated.leader_agent_id.as_deref(), Some("agent-leader"));
+        let assignments = validated.assignments.expect("assignments");
+        assert_eq!(
+            assignments
+                .tools
+                .as_ref()
+                .map(|tools| tools.source_keys.clone()),
+            Some(vec!["builtin:bash".into(), "mcp:browser".into()])
+        );
+        assert_eq!(
+            assignments
+                .tools
+                .as_ref()
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["builtin:files".into()])
+        );
+        assert_eq!(
+            assignments
+                .agents
+                .as_ref()
+                .map(|agents| agents.agent_ids.clone()),
+            Some(vec!["agent-architect".into()])
+        );
+        assert_eq!(
+            assignments
+                .agents
+                .as_ref()
+                .map(|agents| agents.team_ids.clone()),
+            Some(vec!["team-studio".into()])
+        );
+        assert_eq!(
+            assignments
+                .agents
+                .as_ref()
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-shadow".into()])
+        );
+        assert_eq!(
+            assignments
+                .agents
+                .as_ref()
+                .map(|agents| agents.excluded_team_ids.clone()),
+            Some(vec!["team-shadow".into()])
+        );
+
+        assert!(validate_create_project_request(CreateProjectRequest {
+            name: "Project".into(),
+            description: String::new(),
+            resource_directory: "data/projects/leader-project/resources".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("   ".into()),
             assignments: None,
         })
         .is_err());
     }
 
     #[tokio::test]
-    async fn project_task_routes_create_launch_rerun_and_intervene_against_project_state() {
+    async fn project_leader_rejects_excluded_workspace_agent_on_update() {
         let temp = tempfile::tempdir().expect("tempdir");
         let state = test_server_state(temp.path());
         let session = bootstrap_owner(&state).await;
         let headers = auth_headers(&session.token);
+
+        let workspace_agent = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents")
+            .into_iter()
+            .find(|record| {
+                record.project_id.is_none()
+                    && record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+            })
+            .expect("workspace agent");
+        let project = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects")
+            .into_iter()
+            .find(|record| record.id == DEFAULT_PROJECT_ID)
+            .expect("default project");
+        let mut request = update_request_from_project(project.clone());
+        request.leader_agent_id = Some(workspace_agent.id.clone());
+        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
+        request.assignments = Some(octopus_core::ProjectWorkspaceAssignments {
+            models: project
+                .assignments
+                .as_ref()
+                .and_then(|value| value.models.clone()),
+            tools: project
+                .assignments
+                .as_ref()
+                .and_then(|value| value.tools.clone()),
+            agents: Some(octopus_core::ProjectAgentAssignments {
+                agent_ids: Vec::new(),
+                team_ids: Vec::new(),
+                excluded_agent_ids: vec![workspace_agent.id.clone()],
+                excluded_team_ids: Vec::new(),
+            }),
+        });
+
+        let error = update_project(
+            State(state.clone()),
+            headers,
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(request),
+        )
+        .await
+        .expect_err("excluded leader should be rejected");
+
+        assert!(
+            error.source.to_string().contains("leader"),
+            "unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn project_leader_rejects_project_owned_agent_on_update() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let workspace_agent = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents")
+            .into_iter()
+            .find(|record| {
+                record.project_id.is_none()
+                    && record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+            })
+            .expect("workspace agent");
+        let project_owned_agent = state
+            .services
+            .workspace
+            .create_agent(project_scoped_agent_input(
+                &workspace_agent,
+                DEFAULT_PROJECT_ID,
+            ))
+            .await
+            .expect("create project agent");
+        let project = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects")
+            .into_iter()
+            .find(|record| record.id == DEFAULT_PROJECT_ID)
+            .expect("default project");
+        let mut request = update_request_from_project(project);
+        request.leader_agent_id = Some(project_owned_agent.id.clone());
+        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
+
+        let error = update_project(
+            State(state.clone()),
+            headers,
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(request),
+        )
+        .await
+        .expect_err("project-owned leader should be rejected");
+
+        assert!(
+            error.source.to_string().contains("workspace agent"),
+            "unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn project_leader_cannot_be_disabled_by_runtime_settings() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let workspace_agent = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents")
+            .into_iter()
+            .find(|record| {
+                record.project_id.is_none()
+                    && record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+            })
+            .expect("workspace agent");
+        let project = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects")
+            .into_iter()
+            .find(|record| record.id == DEFAULT_PROJECT_ID)
+            .expect("default project");
+        let mut request = update_request_from_project(project);
+        request.leader_agent_id = Some(workspace_agent.id.clone());
+        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
+        let _ = update_project(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(request),
+        )
+        .await
+        .expect("set project leader");
+
+        let error = save_project_runtime_config_route(
+            State(state.clone()),
+            headers,
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: json!({
+                    "projectSettings": {
+                        "agents": {
+                            "disabledAgentIds": [workspace_agent.id],
+                        },
+                    },
+                }),
+                configured_model_credentials: Vec::new(),
+            }),
+        )
+        .await
+        .expect_err("disabling the leader should be rejected");
+
+        assert!(
+            error.source.to_string().contains("leader"),
+            "unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn project_scope_uses_live_workspace_inheritance() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let workspace_agents = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents");
+        let excluded_workspace_agent = workspace_agents
+            .iter()
+            .find(|record| {
+                record.project_id.is_none()
+                    && record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+            })
+            .expect("workspace agent")
+            .clone();
+        let expected_agent_ids = workspace_agents
+            .iter()
+            .filter(|record| {
+                record.status == "active"
+                    && agent_visible_in_generic_catalog(record)
+                    && (record.project_id.as_deref() == Some(DEFAULT_PROJECT_ID)
+                        || (record.project_id.is_none()
+                            && record.id != excluded_workspace_agent.id))
+            })
+            .map(|record| record.id.clone())
+            .collect::<BTreeSet<_>>();
+
+        let workspace_teams = state
+            .services
+            .workspace
+            .list_teams()
+            .await
+            .expect("list teams");
+        let excluded_workspace_team = workspace_teams
+            .iter()
+            .find(|record| record.project_id.is_none() && record.status == "active")
+            .expect("workspace team")
+            .clone();
+        let expected_team_ids = workspace_teams
+            .iter()
+            .filter(|record| {
+                record.status == "active"
+                    && (record.project_id.as_deref() == Some(DEFAULT_PROJECT_ID)
+                        || (record.project_id.is_none() && record.id != excluded_workspace_team.id))
+            })
+            .map(|record| record.id.clone())
+            .collect::<BTreeSet<_>>();
+
+        let capability_projection = state
+            .services
+            .workspace
+            .get_capability_management_projection()
+            .await
+            .expect("capability projection");
+        let excluded_source_key = capability_projection
+            .assets
+            .iter()
+            .find(|asset| asset.enabled)
+            .map(|asset| asset.source_key.clone())
+            .expect("enabled tool");
+        let expected_tool_source_keys = capability_projection
+            .assets
+            .iter()
+            .filter(|asset| asset.enabled && asset.source_key != excluded_source_key)
+            .map(|asset| asset.source_key.clone())
+            .collect::<BTreeSet<_>>();
+
+        let project = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects")
+            .into_iter()
+            .find(|record| record.id == DEFAULT_PROJECT_ID)
+            .expect("default project");
+        let mut request = update_request_from_project(project.clone());
+        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
+        request.assignments = Some(octopus_core::ProjectWorkspaceAssignments {
+            models: project
+                .assignments
+                .as_ref()
+                .and_then(|value| value.models.clone()),
+            tools: Some(octopus_core::ProjectToolAssignments {
+                source_keys: Vec::new(),
+                excluded_source_keys: vec![excluded_source_key.clone()],
+            }),
+            agents: Some(octopus_core::ProjectAgentAssignments {
+                agent_ids: Vec::new(),
+                team_ids: Vec::new(),
+                excluded_agent_ids: vec![excluded_workspace_agent.id.clone()],
+                excluded_team_ids: vec![excluded_workspace_team.id.clone()],
+            }),
+        });
+
+        let _ = update_project(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(request),
+        )
+        .await
+        .expect("update project");
+
+        let Json(dashboard) = project_dashboard(
+            State(state.clone()),
+            headers,
+            Path(DEFAULT_PROJECT_ID.into()),
+        )
+        .await
+        .expect("project dashboard");
+
+        assert_eq!(
+            dashboard.overview.agent_count,
+            expected_agent_ids.len() as u64
+        );
+        assert_eq!(
+            dashboard.overview.team_count,
+            expected_team_ids.len() as u64
+        );
+        assert_eq!(
+            dashboard.overview.tool_count,
+            expected_tool_source_keys.len() as u64
+        );
+        assert!(
+            dashboard
+                .resource_breakdown
+                .iter()
+                .find(|item| item.id == "tools")
+                .and_then(|item| item.helper.as_deref())
+                .is_some_and(|description| {
+                    expected_tool_source_keys
+                        .iter()
+                        .all(|source_key| description.contains(source_key))
+                }),
+            "tool breakdown should reflect live workspace tool source keys"
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_create_launch_rerun_and_intervene_against_project_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_runtime_workspace_config(temp.path());
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+        let workspace_agent_ref = visible_workspace_agent_actor_ref(&state).await;
 
         let Json(created) = create_project_task(
             State(state.clone()),
@@ -6417,7 +7293,7 @@ mod tests {
                 title: "Prepare launch checklist".into(),
                 goal: "Create a launch-ready checklist for the redesign rollout.".into(),
                 brief: "Focus on sequencing, dependencies, and handoff notes.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: workspace_agent_ref.clone(),
                 schedule_spec: Some("0 9 * * 1-5".into()),
                 context_bundle: TaskContextBundle {
                     refs: vec![TaskContextRef {
@@ -6450,28 +7326,28 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, created.id);
 
-        let Json(launch_run) = launch_project_task(
+        let Json(launch_run) = Box::pin(launch_project_task(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
             Json(LaunchTaskRequest {
-                actor_ref: Some("team:team-workspace-core".into()),
+                actor_ref: Some(workspace_agent_ref.clone()),
             }),
-        )
+        ))
         .await
         .expect("launch project task");
         assert_eq!(launch_run.task_id, created.id);
         assert!(launch_run.session_id.is_some());
 
-        let Json(rerun) = rerun_project_task(
+        let Json(rerun) = Box::pin(rerun_project_task(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
             Json(RerunTaskRequest {
-                actor_ref: Some("team:team-workspace-core".into()),
+                actor_ref: Some(workspace_agent_ref),
                 source_task_run_id: Some(launch_run.id.clone()),
             }),
-        )
+        ))
         .await
         .expect("rerun project task");
         assert_eq!(rerun.task_id, created.id);
@@ -6485,7 +7361,7 @@ mod tests {
         .expect("list project task runs");
         assert_eq!(runs.len(), 2);
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6497,7 +7373,7 @@ mod tests {
                     "note": "Please keep the checklist aligned with project handoff rules."
                 }),
             }),
-        )
+        ))
         .await
         .expect("create project task intervention");
         assert_eq!(intervention.task_id, created.id);
@@ -6533,7 +7409,7 @@ mod tests {
                 title: "Review launch approval".into(),
                 goal: "Pause the task until an owner approves the plan.".into(),
                 brief: "Route the active run through an approval gate.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -6549,7 +7425,7 @@ mod tests {
             .expect("get created task");
         let seeded_run = seed_task_run(&state, &task, &session.user_id, "waiting_approval").await;
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6559,7 +7435,7 @@ mod tests {
                 r#type: "approve".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("approve task intervention");
 
@@ -6634,8 +7510,12 @@ mod tests {
             .get_task(DEFAULT_PROJECT_ID, &created.id)
             .await
             .expect("get created task");
-        let seeded_run =
-            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let seeded_run = Box::pin(seed_runtime_pending_approval_task_run(
+            &state,
+            &task,
+            &session.user_id,
+        ))
+        .await;
         let runtime_session_id = seeded_run
             .session_id
             .clone()
@@ -6654,7 +7534,7 @@ mod tests {
             .map(|approval| approval.id.clone())
             .expect("runtime pending approval id");
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6664,7 +7544,7 @@ mod tests {
                 r#type: "approve".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("approve task intervention");
 
@@ -6739,8 +7619,12 @@ mod tests {
             .get_task(DEFAULT_PROJECT_ID, &created.id)
             .await
             .expect("get created task");
-        let seeded_run =
-            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let seeded_run = Box::pin(seed_runtime_pending_approval_task_run(
+            &state,
+            &task,
+            &session.user_id,
+        ))
+        .await;
         let runtime_session_id = seeded_run
             .session_id
             .clone()
@@ -6758,7 +7642,7 @@ mod tests {
             .map(|approval| approval.id.clone())
             .expect("initial runtime pending approval id");
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6768,7 +7652,7 @@ mod tests {
                 r#type: "approve".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("approve task intervention");
 
@@ -6853,8 +7737,12 @@ mod tests {
             .get_task(DEFAULT_PROJECT_ID, &created.id)
             .await
             .expect("get created task");
-        let seeded_run =
-            seed_runtime_pending_approval_task_run(&state, &task, &session.user_id).await;
+        let seeded_run = Box::pin(seed_runtime_pending_approval_task_run(
+            &state,
+            &task,
+            &session.user_id,
+        ))
+        .await;
         let runtime_session_id = seeded_run
             .session_id
             .clone()
@@ -6872,7 +7760,7 @@ mod tests {
             .map(|approval| approval.id.clone())
             .expect("runtime pending approval id");
 
-        let Json(rejected) = create_project_task_intervention(
+        let Json(rejected) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6882,7 +7770,7 @@ mod tests {
                 r#type: "reject".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("reject task intervention");
 
@@ -6947,7 +7835,7 @@ mod tests {
                 title: "Review launch approval".into(),
                 goal: "Pause the task until an owner approves the plan.".into(),
                 brief: "Route the active run through an approval gate.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -6967,7 +7855,7 @@ mod tests {
             .clone()
             .expect("seeded pending approval id");
 
-        let error = create_project_task_intervention(
+        let error = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -6977,7 +7865,7 @@ mod tests {
                 r#type: "approve".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect_err("explicit task approval should require runtime resolution");
 
@@ -7022,7 +7910,7 @@ mod tests {
                 title: "Review launch approval".into(),
                 goal: "Pause the task until an owner approves the plan.".into(),
                 brief: "Route the active run through an approval gate.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -7038,7 +7926,7 @@ mod tests {
             .expect("get created task");
         let seeded_run = seed_task_run(&state, &task, &session.user_id, "waiting_approval").await;
 
-        let Json(rejected) = create_project_task_intervention(
+        let Json(rejected) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -7048,7 +7936,7 @@ mod tests {
                 r#type: "reject".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("reject task intervention");
 
@@ -7084,7 +7972,7 @@ mod tests {
             Some(vec!["waiting_input".into()])
         );
 
-        let Json(resumed) = create_project_task_intervention(
+        let Json(resumed) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -7094,7 +7982,7 @@ mod tests {
                 r#type: "resume".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("resume task intervention");
 
@@ -7144,7 +8032,7 @@ mod tests {
                 title: "Prepare release brief".into(),
                 goal: "Keep the release brief aligned with final handoff scope.".into(),
                 brief: "Focus on release sequencing and deliverable links.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -7160,7 +8048,7 @@ mod tests {
             .expect("get created task");
         let seeded_run = seed_task_run(&state, &task, &session.user_id, "running").await;
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -7172,7 +8060,7 @@ mod tests {
                     "brief": "Focus on the final release notes and linked deliverables."
                 }),
             }),
-        )
+        ))
         .await
         .expect("edit brief intervention");
 
@@ -7246,7 +8134,7 @@ mod tests {
                 title: "Prepare release brief".into(),
                 goal: "Keep the release brief aligned with final handoff scope.".into(),
                 brief: "Focus on release sequencing and deliverable links.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -7262,7 +8150,7 @@ mod tests {
             .expect("get created task");
         let seeded_run = seed_task_run(&state, &task, &session.user_id, "running").await;
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -7274,7 +8162,7 @@ mod tests {
                     "actorRef": "agent:release-operator"
                 }),
             }),
-        )
+        ))
         .await
         .expect("change actor intervention");
 
@@ -7341,7 +8229,7 @@ mod tests {
                 title: "Audit workspace menu".into(),
                 goal: "Review navigation labels and routing consistency.".into(),
                 brief: "Validate the desktop project menu before release.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: "team:workspace-core".into(),
                 schedule_spec: None,
                 context_bundle: TaskContextBundle::default(),
             }),
@@ -7349,7 +8237,7 @@ mod tests {
         .await
         .expect("create task");
 
-        let Json(intervention) = create_project_task_intervention(
+        let Json(intervention) = Box::pin(create_project_task_intervention(
             State(state.clone()),
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
@@ -7359,7 +8247,7 @@ mod tests {
                 r#type: "takeover".into(),
                 payload: serde_json::json!({}),
             }),
-        )
+        ))
         .await
         .expect("takeover intervention");
 
@@ -7425,6 +8313,7 @@ mod tests {
                         ..project.permission_overrides
                     }),
                     linked_workspace_assets: Some(project.linked_workspace_assets),
+                    leader_agent_id: project.leader_agent_id,
                     assignments: project.assignments,
                 },
             )

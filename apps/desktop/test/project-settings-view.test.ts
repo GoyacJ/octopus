@@ -136,9 +136,15 @@ describe('Project settings view', () => {
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
     const workspaceModelCount = catalogStore.configuredModelOptions.length
-    const workspaceToolCount = catalogStore.managementProjection.assets.filter(entry => entry.enabled).length
-    const workspaceAgentCount = agentStore.workspaceOwnedAgents.length + agentStore.builtinTemplateAgents.length
-    const workspaceTeamCount = teamStore.workspaceOwnedTeams.length + teamStore.builtinTemplateTeams.length
+    const workspaceBuiltinToolSourceKeys = catalogStore.managementProjection.assets
+      .filter(entry =>
+        entry.enabled
+        && entry.kind === 'builtin'
+        && !(entry.ownerScope === 'project' && entry.ownerId === 'proj-redesign'),
+      )
+      .map(entry => entry.sourceKey)
+    const workspaceAgentCount = agentStore.workspaceAgents.filter(agent => agent.status === 'active').length
+    const workspaceTeamCount = teamStore.workspaceTeams.filter(team => team.status === 'active').length
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
@@ -170,21 +176,43 @@ describe('Project settings view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
 
+    expect(document.body.querySelector('[data-testid="project-settings-grants-tools-tabs"]')).not.toBeNull()
+    const grantToolSearch = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grants-tools-search"]')
     const selectAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-select-all"]')
     const clearAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')
     const saveGrantToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')
 
+    expect(grantToolSearch).not.toBeNull()
     expect(selectAllToolsButton).not.toBeNull()
     expect(clearAllToolsButton).not.toBeNull()
     expect(saveGrantToolsButton).not.toBeNull()
 
+    grantToolSearch!.value = 'bash'
+    grantToolSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    expect(document.body.querySelectorAll('[data-testid^="project-grant-tool-option-"]')).toHaveLength(1)
+    expect(document.body.textContent).toContain('bash')
+
+    grantToolSearch!.value = ''
+    grantToolSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
     selectAllToolsButton?.click()
     await nextTick()
+
+    const builtinToolCheckboxes = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-tool-option-"] input[type="checkbox"]'),
+    )
+    expect(builtinToolCheckboxes).toHaveLength(workspaceBuiltinToolSourceKeys.length)
+    expect(builtinToolCheckboxes.every(input => input.checked)).toBe(true)
+
     saveGrantToolsButton?.click()
 
     await waitFor(() => {
       const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      return project?.assignments?.tools?.sourceKeys.length === workspaceToolCount
+      const excluded = project?.assignments?.tools?.excludedSourceKeys ?? []
+      return workspaceBuiltinToolSourceKeys.every(sourceKey => !excluded.includes(sourceKey))
     })
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
@@ -196,43 +224,86 @@ describe('Project settings view', () => {
 
     await waitFor(() => {
       const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      return project?.assignments?.tools == null
+      const excluded = project?.assignments?.tools?.excludedSourceKeys ?? []
+      return workspaceBuiltinToolSourceKeys.every(sourceKey => excluded.includes(sourceKey))
     })
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
 
+    expect(document.body.querySelector('[data-testid="project-settings-grants-actors-tabs"]')).not.toBeNull()
+    const grantActorSearch = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grants-actors-search"]')
     const selectAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-select-all"]')
     const clearAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-clear-all"]')
-    const selectAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-select-all"]')
-    const clearAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-clear-all"]')
 
+    expect(grantActorSearch).not.toBeNull()
     expect(selectAllAgentsButton).not.toBeNull()
     expect(clearAllAgentsButton).not.toBeNull()
-    expect(selectAllTeamsButton).not.toBeNull()
-    expect(clearAllTeamsButton).not.toBeNull()
+
+    grantActorSearch!.value = 'finance'
+    grantActorSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    expect(document.body.querySelectorAll('[data-testid^="project-grant-agent-option-"]')).toHaveLength(1)
+    expect(document.body.textContent).toContain('Finance Planner Template')
+
+    clearAllAgentsButton?.click()
+    await nextTick()
+
+    expect(document.body.textContent).toContain('当前 Leader 必须保持可授予且未被禁用，请先选择新的 Leader。')
+    expect(
+      document.body
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-agent-option-agent-architect"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+
+    grantActorSearch!.value = ''
+    grantActorSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
 
     selectAllAgentsButton?.click()
-    selectAllTeamsButton?.click()
     await nextTick()
 
     const agentCheckboxes = Array.from(
       document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-agent-option-"] input[type="checkbox"]'),
     )
+
+    expect(agentCheckboxes).toHaveLength(workspaceAgentCount)
+    expect(agentCheckboxes.every(input => input.checked)).toBe(true)
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
+    await nextTick()
+
+    const selectAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-select-all"]')
+    const clearAllTeamsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-teams-clear-all"]')
+
+    expect(selectAllTeamsButton).not.toBeNull()
+    expect(clearAllTeamsButton).not.toBeNull()
+
+    grantActorSearch!.value = 'finance'
+    grantActorSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    expect(document.body.querySelectorAll('[data-testid^="project-grant-team-option-"]')).toHaveLength(1)
+    expect(document.body.textContent).toContain('Finance Ops Template')
+
+    grantActorSearch!.value = ''
+    grantActorSearch!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    selectAllTeamsButton?.click()
+    await nextTick()
+
     const teamCheckboxes = Array.from(
       document.body.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-team-option-"] input[type="checkbox"]'),
     )
 
-    expect(agentCheckboxes).toHaveLength(workspaceAgentCount)
     expect(teamCheckboxes).toHaveLength(workspaceTeamCount)
-    expect(agentCheckboxes.every(input => input.checked)).toBe(true)
     expect(teamCheckboxes.every(input => input.checked)).toBe(true)
 
-    clearAllAgentsButton?.click()
     clearAllTeamsButton?.click()
     await nextTick()
 
-    expect(agentCheckboxes.every(input => !input.checked)).toBe(true)
     expect(teamCheckboxes.every(input => !input.checked)).toBe(true)
 
     mounted.destroy()
@@ -262,15 +333,21 @@ describe('Project settings view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
 
-    const grantBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-agent-option-agent-template-finance"]')
-    const grantBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-team-option-team-template-finance"]')
+    const grantBuiltinAgent = document.body.querySelector<HTMLInputElement>('[data-testid="project-grant-agent-option-agent-template-finance"] input[type="checkbox"]')
     const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
 
     expect(grantBuiltinAgent).not.toBeNull()
-    expect(grantBuiltinTeam).not.toBeNull()
     expect(grantSaveButton).not.toBeNull()
 
     grantBuiltinAgent?.click()
+    await nextTick()
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
+    await nextTick()
+
+    const grantBuiltinTeam = document.body.querySelector<HTMLInputElement>('[data-testid="project-grant-team-option-team-template-finance"] input[type="checkbox"]')
+    expect(grantBuiltinTeam).not.toBeNull()
+
     grantBuiltinTeam?.click()
     await nextTick()
     grantSaveButton?.click()
@@ -279,26 +356,38 @@ describe('Project settings view', () => {
       const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
       const assignments = project?.assignments?.agents
       return Boolean(
-        assignments?.agentIds.includes('agent-template-finance')
-        && assignments?.teamIds.includes('team-template-finance'),
+        assignments
+        && assignments.excludedAgentIds.length === 0
+        && assignments.excludedTeamIds.length === 0,
       )
     })
 
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio'])
+    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.agentIds).toEqual([])
+    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.teamIds).toEqual([])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).toEqual([
+      'agent-coder',
+      'agent-redesign',
+    ])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledTeamIds).toEqual(['team-redesign'])
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-actors"]')?.click()
     await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-actors-dialog"]') !== null)
 
-    const runtimeBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-agent-option-agent-template-finance"]')
-    const runtimeBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-team-option-team-template-finance"]')
+    const runtimeBuiltinAgent = document.body.querySelector<HTMLInputElement>('[data-testid="project-runtime-agent-option-agent-template-finance"] input[type="checkbox"]')
     const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-save-button"]')
 
     expect(runtimeBuiltinAgent).not.toBeNull()
-    expect(runtimeBuiltinTeam).not.toBeNull()
     expect(runtimeSaveButton).not.toBeNull()
 
     runtimeBuiltinAgent?.click()
+    await nextTick()
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')?.click()
+    await nextTick()
+
+    const runtimeBuiltinTeam = document.body.querySelector<HTMLInputElement>('[data-testid="project-runtime-team-option-team-template-finance"] input[type="checkbox"]')
+    expect(runtimeBuiltinTeam).not.toBeNull()
+
     runtimeBuiltinTeam?.click()
     await nextTick()
     runtimeSaveButton?.click()
@@ -306,20 +395,23 @@ describe('Project settings view', () => {
     await waitFor(() => {
       const settings = workspaceStore.getProjectSettings('proj-redesign').agents
       return Boolean(
-        settings?.enabledAgentIds.includes('agent-template-finance')
-        && settings?.enabledTeamIds.includes('team-template-finance'),
+        settings?.disabledAgentIds.includes('agent-template-finance')
+        && settings?.disabledTeamIds.includes('team-template-finance'),
       )
     })
 
     const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-    expect(project?.assignments?.agents?.agentIds).toEqual(['agent-architect', 'agent-template-finance'])
-    expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual([
-      'agent-architect',
+    expect(project?.assignments?.agents?.agentIds).toEqual([])
+    expect(project?.assignments?.agents?.teamIds).toEqual([])
+    expect(project?.assignments?.agents?.excludedAgentIds).toEqual([])
+    expect(project?.assignments?.agents?.excludedTeamIds).toEqual([])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).toEqual([
+      'agent-coder',
+      'agent-redesign',
       'agent-template-finance',
     ])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual([
-      'team-studio',
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledTeamIds).toEqual([
+      'team-redesign',
       'team-template-finance',
     ])
 

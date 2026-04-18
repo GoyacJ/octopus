@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import type { ProjectRecord } from '@octopus/schema'
+import type { AgentRecord, ProjectRecord, TeamRecord } from '@octopus/schema'
 import {
   UiBadge,
   UiButton,
@@ -28,6 +28,9 @@ import { useCatalogStore } from '@/stores/catalog'
 import {
   buildProjectCapabilitySummary,
   buildProjectSetupPresetSeed,
+  resolveProjectGrantedAgents,
+  resolveProjectGrantedTeams,
+  resolveProjectGrantedToolEntries,
   type ProjectCapabilitySummary,
   type ProjectSetupPreset,
 } from '@/stores/project_setup'
@@ -57,13 +60,28 @@ const form = reactive({
   description: '',
   resourceDirectory: '',
   preset: 'general' as ProjectSetupPreset,
+  leaderAgentId: '',
 })
 
 const projects = computed(() => workspaceStore.projects)
 const workspaceConfiguredModels = computed(() => catalogStore.configuredModelOptions)
-const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets.filter(entry => entry.enabled))
-const workspaceAgents = computed(() => agentStore.workspaceAgents)
-const workspaceTeams = computed(() => teamStore.workspaceTeams)
+const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets)
+const workspaceActiveAgents = computed<AgentRecord[]>(() =>
+  agentStore.workspaceAgents.filter(agent => agent.status === 'active'),
+)
+const workspaceActiveTeams = computed<TeamRecord[]>(() =>
+  teamStore.workspaceTeams.filter(team => team.status === 'active'),
+)
+const leaderOptions = computed(() => [
+  {
+    value: '',
+    label: String(t('projects.leader.none')),
+  },
+  ...workspaceActiveAgents.value.map(agent => ({
+    value: agent.id,
+    label: agent.name,
+  })),
+])
 const viewReady = computed(() =>
   Boolean(shell.activeWorkspaceConnectionId)
   && (!workspaceStore.loading || projects.value.length > 0 || Boolean(workspaceStore.error)),
@@ -90,8 +108,8 @@ const presetOptions = computed(() => ([
 const presetSeed = computed(() => buildProjectSetupPresetSeed(form.preset, {
   models: workspaceConfiguredModels.value,
   tools: workspaceToolEntries.value,
-  agents: workspaceAgents.value,
-  teams: workspaceTeams.value,
+  agents: workspaceActiveAgents.value,
+  teams: workspaceActiveTeams.value,
 }))
 
 const selectedAssignedConfiguredModels = computed(() => {
@@ -99,52 +117,68 @@ const selectedAssignedConfiguredModels = computed(() => {
   return workspaceConfiguredModels.value.filter(item => configuredIds.includes(item.value))
 })
 
-const selectedAssignedToolEntries = computed(() => {
-  const sourceKeys = selectedProject.value?.assignments?.tools?.sourceKeys ?? []
-  return workspaceToolEntries.value.filter(entry => sourceKeys.includes(entry.sourceKey))
+const selectedGrantedToolEntries = computed(() =>
+  resolveProjectGrantedToolEntries(selectedProject.value, workspaceToolEntries.value),
+)
+const selectedProjectOwnedAgents = computed(() =>
+  agentStore.agents.filter(agent => agent.projectId === selectedProjectId.value),
+)
+const selectedProjectOwnedTeams = computed(() =>
+  teamStore.teams.filter(team => team.projectId === selectedProjectId.value),
+)
+const selectedGrantedAgents = computed(() =>
+  resolveProjectGrantedAgents(
+    selectedProject.value,
+    workspaceActiveAgents.value,
+    selectedProjectOwnedAgents.value,
+  ),
+)
+const selectedGrantedTeams = computed(() =>
+  resolveProjectGrantedTeams(
+    selectedProject.value,
+    workspaceActiveTeams.value,
+    selectedProjectOwnedTeams.value,
+  ),
+)
+const draftGrantedConfiguredModels = computed(() => {
+  const configuredIds = presetSeed.value.assignments?.models?.configuredModelIds ?? []
+  return workspaceConfiguredModels.value.filter(item => configuredIds.includes(item.value))
 })
+const draftGrantedToolEntries = computed(() =>
+  resolveProjectGrantedToolEntries(null, workspaceToolEntries.value),
+)
+const draftGrantedAgents = computed(() =>
+  resolveProjectGrantedAgents(null, workspaceActiveAgents.value, []),
+)
+const draftGrantedTeams = computed(() =>
+  resolveProjectGrantedTeams(null, workspaceActiveTeams.value, []),
+)
 
 const selectedSummary = computed(() =>
   buildProjectCapabilitySummary({
     project: selectedProject.value,
     projectSettings: selectedProjectSettings.value,
-    assignedConfiguredModels: selectedAssignedConfiguredModels.value,
-    assignedToolEntries: selectedAssignedToolEntries.value,
+    grantedConfiguredModels: selectedAssignedConfiguredModels.value,
+    grantedToolEntries: selectedGrantedToolEntries.value,
     workspaceTools: catalogStore.tools,
+    grantedAgentIds: selectedGrantedAgents.value.map(agent => agent.id),
+    grantedTeamIds: selectedGrantedTeams.value.map(team => team.id),
   }),
 )
 
-const draftSummary = computed<ProjectCapabilitySummary>(() => {
-  const grantedModelIds = presetSeed.value.assignments?.models?.configuredModelIds ?? []
-  const enabledModelIds = presetSeed.value.modelSettings?.allowedConfiguredModelIds ?? grantedModelIds
-  const defaultConfiguredModelId = presetSeed.value.modelSettings?.defaultConfiguredModelId
-    || presetSeed.value.assignments?.models?.defaultConfiguredModelId
-    || ''
-  const defaultModelLabel = workspaceConfiguredModels.value.find(item => item.value === defaultConfiguredModelId)?.label ?? ''
-  const grantedToolCount = presetSeed.value.assignments?.tools?.sourceKeys?.length ?? 0
-  const enabledToolCount = presetSeed.value.toolSettings?.enabledSourceKeys?.length ?? grantedToolCount
-  const grantedActorCount = (presetSeed.value.assignments?.agents?.agentIds?.length ?? 0)
-    + (presetSeed.value.assignments?.agents?.teamIds?.length ?? 0)
-  const enabledActorCount = (presetSeed.value.agentSettings?.enabledAgentIds?.length
-    ?? presetSeed.value.assignments?.agents?.agentIds?.length
-    ?? 0)
-    + (presetSeed.value.agentSettings?.enabledTeamIds?.length
-      ?? presetSeed.value.assignments?.agents?.teamIds?.length
-      ?? 0)
-
-  return {
-    grantedModels: grantedModelIds.length,
-    enabledModels: enabledModelIds.length,
-    defaultModelLabel,
-    grantedTools: grantedToolCount,
-    enabledTools: enabledToolCount,
-    toolOverrideCount: Object.keys(presetSeed.value.toolSettings?.overrides ?? {}).length,
-    grantedActors: grantedActorCount,
-    enabledActors: enabledActorCount,
-    memberCount: 0,
-    editableMemberCount: 0,
-  }
-})
+const draftSummary = computed<ProjectCapabilitySummary>(() =>
+  buildProjectCapabilitySummary({
+    project: null,
+    projectSettings: {
+      models: presetSeed.value.modelSettings,
+    },
+    grantedConfiguredModels: draftGrantedConfiguredModels.value,
+    grantedToolEntries: draftGrantedToolEntries.value,
+    workspaceTools: catalogStore.tools,
+    grantedAgentIds: draftGrantedAgents.value.map(agent => agent.id),
+    grantedTeamIds: draftGrantedTeams.value.map(team => team.id),
+  }),
+)
 
 const capabilitySummary = computed(() =>
   selectedProject.value ? selectedSummary.value : draftSummary.value,
@@ -229,6 +263,7 @@ function applyProject(projectId?: string) {
   form.description = project?.description ?? ''
   form.resourceDirectory = project?.resourceDirectory ?? ''
   form.preset = 'general'
+  form.leaderAgentId = project?.leaderAgentId ?? ''
   detailsError.value = ''
 }
 
@@ -263,6 +298,7 @@ async function submitProject() {
     name: form.name,
     description: form.description,
     resourceDirectory: form.resourceDirectory,
+    leaderAgentId: form.leaderAgentId || undefined,
     assignments: presetSeed.value.assignments,
   })
   if (!created) {
@@ -270,23 +306,13 @@ async function submitProject() {
     return
   }
 
-  const [savedModels, savedTools, savedActors] = await Promise.all([
+  const [savedModels] = await Promise.all([
     presetSeed.value.modelSettings
       ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.value.modelSettings)
       : Promise.resolve(null),
-    presetSeed.value.toolSettings
-      ? workspaceStore.saveProjectToolSettings(created.id, presetSeed.value.toolSettings)
-      : Promise.resolve(null),
-    presetSeed.value.agentSettings
-      ? workspaceStore.saveProjectAgentSettings(created.id, presetSeed.value.agentSettings)
-      : Promise.resolve(null),
   ])
 
-  if (
-    (presetSeed.value.modelSettings && !savedModels)
-    || (presetSeed.value.toolSettings && !savedTools)
-    || (presetSeed.value.agentSettings && !savedActors)
-  ) {
+  if (presetSeed.value.modelSettings && !savedModels) {
     detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
       || workspaceStore.error
       || String(t('projects.errors.seedRuntime'))
@@ -341,6 +367,11 @@ function modelSummaryLabel(summary: ProjectCapabilitySummary) {
 }
 
 function toolSummaryLabel(summary: ProjectCapabilitySummary) {
+  if (!selectedProject.value) {
+    return t('projects.summary.toolsInheritedValue', {
+      count: summary.grantedTools,
+    })
+  }
   return t('projects.summary.toolsValue', {
     granted: summary.grantedTools,
     enabled: summary.enabledTools,
@@ -349,6 +380,11 @@ function toolSummaryLabel(summary: ProjectCapabilitySummary) {
 }
 
 function actorSummaryLabel(summary: ProjectCapabilitySummary) {
+  if (!selectedProject.value) {
+    return t('projects.summary.actorsInheritedValue', {
+      count: summary.grantedActors,
+    })
+  }
   return t('projects.summary.actorsValue', {
     granted: summary.grantedActors,
     enabled: summary.enabledActors,
@@ -474,6 +510,18 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
                 {{ t(`projects.presets.options.${form.preset}.description`) }}
               </div>
             </div>
+
+            <UiField
+              v-if="isCreateMode"
+              :label="t('projects.fields.leader')"
+              :hint="t('projects.leader.hint')"
+            >
+              <UiSelect
+                v-model="form.leaderAgentId"
+                data-testid="projects-leader-select"
+                :options="leaderOptions"
+              />
+            </UiField>
           </section>
 
           <section class="space-y-3 border-t border-border pt-4">
@@ -484,6 +532,14 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
               <div class="text-sm leading-6 text-text-secondary">
                 {{ selectedProject ? t('projects.summary.currentDescription') : t('projects.summary.createDescription') }}
               </div>
+            </div>
+
+            <div
+              v-if="isCreateMode"
+              data-testid="projects-inheritance-summary"
+              class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary"
+            >
+              {{ t('projects.summary.inheritanceDescription') }}
             </div>
 
             <div

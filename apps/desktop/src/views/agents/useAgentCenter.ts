@@ -20,6 +20,7 @@ import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useNotificationStore } from '@/stores/notifications'
 import { usePetStore } from '@/stores/pet'
+import { resolveProjectGrantedToolEntries } from '@/stores/project_setup'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -166,27 +167,36 @@ export function useAgentCenter(scope: CenterScope) {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
   )
-  const currentAgents = computed(() => {
+  const workspaceEnabledToolEntries = computed(() =>
+    catalogStore.managementProjection.assets.filter(entry => entry.enabled),
+  )
+  const grantedProjectToolSourceKeys = computed(() =>
+    new Set(
+      resolveProjectGrantedToolEntries(currentProject.value, workspaceEnabledToolEntries.value)
+        .map(entry => entry.sourceKey),
+    ),
+  )
+  const currentAgents = computed<AgentRecord[]>(() => {
     if (!isProjectScope.value) {
       return [...agentStore.workspaceOwnedAgents, ...agentStore.builtinTemplateAgents]
         .filter(isVisibleAgentRecord)
     }
     return agentStore.effectiveProjectAgents.filter(isVisibleAgentRecord)
   })
-  const currentTeams = computed(() => {
+  const currentTeams = computed<TeamRecord[]>(() => {
     if (!isProjectScope.value) {
       return [...teamStore.workspaceOwnedTeams, ...teamStore.builtinTemplateTeams]
     }
     return teamStore.effectiveProjectTeams
   })
-  const resolvedAgents = computed(() => {
+  const resolvedAgents = computed<AgentRecord[]>(() => {
     const merged = [...currentAgents.value, ...agentStore.agents]
     return merged
       .filter(record => isVisibleAgentRecord(record))
       .filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
   })
-  const effectiveProjectAgents = computed(() => currentAgents.value)
-  const effectiveProjectTeams = computed(() => currentTeams.value)
+  const effectiveProjectAgents = computed<AgentRecord[]>(() => currentAgents.value)
+  const effectiveProjectTeams = computed<TeamRecord[]>(() => currentTeams.value)
   const pageTitle = computed(() =>
     isProjectScope.value ? (currentProject.value?.name ?? t('sidebar.navigation.agents')) : t('sidebar.navigation.agents'),
   )
@@ -235,14 +245,18 @@ export function useAgentCenter(scope: CenterScope) {
       disabled: isProjectScope.value ? !isProjectOwnedRecord(agent) : false,
     })),
   )
-  const currentEditingAgentRecord = computed(() => currentAgents.value.find(agent => agent.id === editingAgentId.value))
-  const currentEditingTeamRecord = computed(() => currentTeams.value.find(team => team.id === editingTeamId.value))
-  const dialogTeamLeader = computed(() =>
+  const currentEditingAgentRecord = computed<AgentRecord | undefined>(() =>
+    currentAgents.value.find(agent => agent.id === editingAgentId.value),
+  )
+  const currentEditingTeamRecord = computed<TeamRecord | undefined>(() =>
+    currentTeams.value.find(team => team.id === editingTeamId.value),
+  )
+  const dialogTeamLeader = computed<AgentRecord | undefined>(() =>
     resolvedAgents.value.find(agent =>
       matchesAgentRef(agent.id, teamForm.leaderRef || currentEditingTeamRecord.value?.leaderRef),
     ),
   )
-  const dialogTeamMembers = computed(() => {
+  const dialogTeamMembers = computed<AgentRecord[]>(() => {
     const selectedRefs = teamForm.memberRefs.length
       ? teamForm.memberRefs
       : (currentEditingTeamRecord.value?.memberRefs ?? [])
@@ -354,12 +368,16 @@ export function useAgentCenter(scope: CenterScope) {
     return parts.join(' ').toLowerCase().includes(keyword)
   }
 
-  const filteredAgents = computed(() => currentAgents.value.filter(agent => matchesQuery(agent, agentQuery.value)))
-  const filteredTeams = computed(() => currentTeams.value.filter(team => matchesQuery(team, teamQuery.value)))
-  const selectedAgents = computed(() =>
+  const filteredAgents = computed<AgentRecord[]>(() =>
+    currentAgents.value.filter(agent => matchesQuery(agent, agentQuery.value)),
+  )
+  const filteredTeams = computed<TeamRecord[]>(() =>
+    currentTeams.value.filter(team => matchesQuery(team, teamQuery.value)),
+  )
+  const selectedAgents = computed<AgentRecord[]>(() =>
     currentAgents.value.filter(agent => selectedAgentIds.value.includes(agent.id)),
   )
-  const selectedTeams = computed(() =>
+  const selectedTeams = computed<TeamRecord[]>(() =>
     currentTeams.value.filter(team => selectedTeamIds.value.includes(team.id)),
   )
   const activeResourceKind = computed<CapabilityManagementEntry['kind'] | null>(() =>
@@ -405,15 +423,27 @@ export function useAgentCenter(scope: CenterScope) {
           return true
         }
 
+        const isProjectOwnedEntry = entry.ownerScope === 'project' && entry.ownerId === projectOwnerId
+        if (isProjectOwnedEntry) {
+          return true
+        }
+
         if (entry.kind === 'builtin') {
-          return entry.builtinKey ? effectiveBuiltinToolKeys.value.has(entry.builtinKey) : false
+          return Boolean(
+            entry.builtinKey
+            && effectiveBuiltinToolKeys.value.has(entry.builtinKey)
+            && grantedProjectToolSourceKeys.value.has(entry.sourceKey),
+          )
         }
         if (entry.kind === 'skill') {
           return effectiveSkillIds.value.has(entry.id)
-            || (entry.ownerScope === 'project' && entry.ownerId === projectOwnerId)
+            && grantedProjectToolSourceKeys.value.has(entry.sourceKey)
         }
-        return (entry.serverName ? effectiveMcpServerNames.value.has(entry.serverName) : false)
-          || (entry.ownerScope === 'project' && entry.ownerId === projectOwnerId)
+        return Boolean(
+          entry.serverName
+          && effectiveMcpServerNames.value.has(entry.serverName)
+          && grantedProjectToolSourceKeys.value.has(entry.sourceKey),
+        )
       })
       .map((entry) => ({
         ...entry,
@@ -466,9 +496,9 @@ export function useAgentCenter(scope: CenterScope) {
     pageSize: 6,
     resetOn: [resourceQuery, activeResourceKind, () => scope, projectId],
   })
-  const pagedAgents = computed(() => agentPagination.pagedItems.value)
-  const pagedTeams = computed(() => teamPagination.pagedItems.value)
-  const pagedResources = computed(() => resourcePagination.pagedItems.value)
+  const pagedAgents = computed<AgentRecord[]>(() => agentPagination.pagedItems.value)
+  const pagedTeams = computed<TeamRecord[]>(() => teamPagination.pagedItems.value)
+  const pagedResources = computed<CapabilityManagementEntry[]>(() => resourcePagination.pagedItems.value)
   const allPagedAgentsSelected = computed(() =>
     pagedAgents.value.some(agent => isSelectableRecord(agent))
       && pagedAgents.value

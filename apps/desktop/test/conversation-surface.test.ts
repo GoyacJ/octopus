@@ -240,13 +240,20 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('shows localized setup guidance and skips session creation when no models or actors are available', async () => {
+  it('shows localized setup guidance and skips session creation when live project scope has no models or actors', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
         if (connection.workspaceId !== 'ws-local') {
           return
         }
+
+        const excludedAgentIds = state.agents
+          .filter(agent => !agent.projectId)
+          .map(agent => agent.id)
+        const excludedTeamIds = state.teams
+          .filter(team => !team.projectId)
+          .map(team => team.id)
 
         state.agents = state.agents.filter(agent => agent.projectId !== 'proj-redesign')
         state.teams = state.teams.filter(team => team.projectId !== 'proj-redesign')
@@ -265,6 +272,8 @@ describe('Conversation surfaces', () => {
           agents: {
             agentIds: [],
             teamIds: [],
+            excludedAgentIds,
+            excludedTeamIds,
           },
         }
 
@@ -280,8 +289,8 @@ describe('Conversation surfaces', () => {
             projectSettings: {
               ...(((projectConfig.effectiveConfig as Record<string, any>)?.projectSettings as Record<string, any>) ?? {}),
               agents: {
-                enabledAgentIds: ['agent-architect'],
-                enabledTeamIds: ['team-studio'],
+                disabledAgentIds: [],
+                disabledTeamIds: [],
               },
             },
           },
@@ -299,8 +308,8 @@ describe('Conversation surfaces', () => {
                         defaultConfiguredModelId: '',
                       },
                       agents: {
-                        enabledAgentIds: [],
-                        enabledTeamIds: [],
+                        disabledAgentIds: [],
+                        disabledTeamIds: [],
                       },
                     },
                   },
@@ -389,8 +398,8 @@ describe('Conversation surfaces', () => {
                         defaultConfiguredModelId: '',
                       },
                       agents: {
-                        enabledAgentIds: ['agent-architect'],
-                        enabledTeamIds: ['team-studio'],
+                        disabledAgentIds: [],
+                        disabledTeamIds: [],
                       },
                     },
                   },
@@ -1158,7 +1167,7 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('scopes the composer model and actor selectors to the project settings assignments', async () => {
+  it('scopes the composer model and actor selectors to the effective live project scope', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       preloadConversationMessages: true,
@@ -1172,8 +1181,14 @@ describe('Conversation surfaces', () => {
           throw new Error('Expected proj-redesign agent assignments')
         }
 
-        project.assignments.agents.agentIds = ['agent-architect', 'agent-template-finance']
-        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+        const visibleAgentIds = new Set(['agent-architect', 'agent-template-finance'])
+        const visibleTeamIds = new Set(['team-studio', 'team-template-finance'])
+        project.assignments.agents.excludedAgentIds = state.agents
+          .filter(agent => !agent.projectId && !visibleAgentIds.has(agent.id))
+          .map(agent => agent.id)
+        project.assignments.agents.excludedTeamIds = state.teams
+          .filter(team => !team.projectId && !visibleTeamIds.has(team.id))
+          .map(team => team.id)
         const projectConfig = state.runtimeProjectConfigs['proj-redesign']
         const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
         if (
@@ -1185,8 +1200,8 @@ describe('Conversation surfaces', () => {
           ;(projectSource.document as Record<string, any>).projectSettings = {
             ...((projectSource.document as Record<string, any>).projectSettings ?? {}),
             agents: {
-              enabledAgentIds: ['agent-architect', 'agent-template-finance'],
-              enabledTeamIds: ['team-studio', 'team-template-finance'],
+              disabledAgentIds: [],
+              disabledTeamIds: [],
             },
           }
         }
@@ -1199,8 +1214,8 @@ describe('Conversation surfaces', () => {
               projectSettings: {
                 ...(effectiveConfig.projectSettings ?? {}),
                 agents: {
-                  enabledAgentIds: ['agent-architect', 'agent-template-finance'],
-                  enabledTeamIds: ['team-studio', 'team-template-finance'],
+                  disabledAgentIds: [],
+                  disabledTeamIds: [],
                 },
               },
             },

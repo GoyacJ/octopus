@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: a96c2af559fa75809e8ec179558c7a96b0d29ae1b1f277b76cb02a18cf98adc0
+// Source hash: 91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "a96c2af559fa75809e8ec179558c7a96b0d29ae1b1f277b76cb02a18cf98adc0"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -584,6 +584,7 @@ export interface CreateProjectPromotionRequestInput {
 export interface CreateProjectRequest {
   assignments?: ProjectWorkspaceAssignments
   description: string
+  leaderAgentId?: string
   linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
   memberUserIds?: string[]
   name: string
@@ -1400,6 +1401,8 @@ export interface PositionUpsertRequest {
 
 export interface ProjectAgentAssignments {
   agentIds: string[]
+  excludedAgentIds: string[]
+  excludedTeamIds: string[]
   teamIds: string[]
 }
 
@@ -1560,6 +1563,7 @@ export interface ProjectRecord {
   assignments?: ProjectWorkspaceAssignments
   description: string
   id: string
+  leaderAgentId?: string
   linkedWorkspaceAssets: ProjectLinkedWorkspaceAssets
   memberUserIds: string[]
   name: string
@@ -1593,6 +1597,7 @@ export interface ProjectTokenUsageRecord {
 }
 
 export interface ProjectToolAssignments {
+  excludedSourceKeys: string[]
   sourceKeys: string[]
 }
 
@@ -2761,6 +2766,7 @@ export interface UpdateCurrentUserProfileRequest {
 export interface UpdateProjectRequest {
   assignments?: ProjectWorkspaceAssignments
   description: string
+  leaderAgentId?: string
   linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
   memberUserIds?: string[]
   name: string

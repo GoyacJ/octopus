@@ -72,6 +72,7 @@ impl WorkspaceService for InfraWorkspaceService {
             status: "active".into(),
             description: Self::normalize_project_description(&request.description),
             resource_directory,
+            leader_agent_id: request.leader_agent_id.clone(),
             owner_user_id: owner_user_id.clone(),
             member_user_ids: normalized_project_member_user_ids(
                 &owner_user_id,
@@ -121,6 +122,10 @@ impl WorkspaceService for InfraWorkspaceService {
             status: Self::normalize_project_status(&request.status)?,
             description: Self::normalize_project_description(&request.description),
             resource_directory: self.normalize_resource_directory(&request.resource_directory)?,
+            leader_agent_id: request
+                .leader_agent_id
+                .clone()
+                .or(existing.leader_agent_id.clone()),
             owner_user_id: request
                 .owner_user_id
                 .clone()
@@ -2150,20 +2155,11 @@ impl InfraWorkspaceService {
     }
 
     fn linked_workspace_assets_from_assignments(
-        assignments: Option<&ProjectWorkspaceAssignments>,
+        _assignments: Option<&ProjectWorkspaceAssignments>,
     ) -> ProjectLinkedWorkspaceAssets {
-        ProjectLinkedWorkspaceAssets {
-            agent_ids: assignments
-                .and_then(|value| value.agents.as_ref())
-                .map(|value| value.agent_ids.clone())
-                .unwrap_or_default(),
-            resource_ids: Vec::new(),
-            tool_source_keys: assignments
-                .and_then(|value| value.tools.as_ref())
-                .map(|value| value.source_keys.clone())
-                .unwrap_or_default(),
-            knowledge_ids: Vec::new(),
-        }
+        // Live-inheritance assignments now describe project-local deltas and project-owned assets.
+        // Workspace links remain an explicit compatibility read model, so do not derive them here.
+        empty_project_linked_workspace_assets()
     }
 
     fn required_workspace_capability_for_project_asset(
@@ -2216,8 +2212,8 @@ impl InfraWorkspaceService {
             "INSERT"
         };
         let sql = format!(
-            "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+            "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
         );
         let assignments_json = record
             .assignments
@@ -2236,6 +2232,7 @@ impl InfraWorkspaceService {
                     record.status,
                     record.description,
                     record.resource_directory,
+                    record.leader_agent_id,
                     assignments_json,
                     record.owner_user_id,
                     serde_json::to_string(&record.member_user_ids)?,
@@ -2901,7 +2898,8 @@ mod tests {
     use octopus_core::{
         AccessUserUpsertRequest, ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy,
         DefaultModelStrategy, DelegationPolicy, LoginRequest, MailboxPolicy, MemoryPolicy,
-        OutputContract, PermissionEnvelope, RegisterBootstrapAdminRequest, SharedCapabilityPolicy,
+        OutputContract, PermissionEnvelope, ProjectAgentAssignments, ProjectToolAssignments,
+        ProjectWorkspaceAssignments, RegisterBootstrapAdminRequest, SharedCapabilityPolicy,
         SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
     };
     use octopus_platform::{AccessControlService, AuthService};
@@ -3472,6 +3470,7 @@ mod tests {
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
+                leader_agent_id: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3485,6 +3484,242 @@ mod tests {
             .root
             .join("data/projects/resource-project/resources")
             .exists());
+    }
+
+    #[test]
+    fn create_project_persists_leader_and_live_inheritance_fields() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let created = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Leader Project".into(),
+                description: "Leader persistence coverage.".into(),
+                resource_directory: "data/projects/leader-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: Some("agent-leader".into()),
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        source_keys: vec![],
+                        excluded_source_keys: vec!["builtin:bash".into(), "skill:ops".into()],
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        agent_ids: vec![],
+                        team_ids: vec![],
+                        excluded_agent_ids: vec!["agent-shadow".into()],
+                        excluded_team_ids: vec!["team-review".into()],
+                    }),
+                }),
+            }))
+            .expect("created project");
+
+        assert_eq!(created.leader_agent_id.as_deref(), Some("agent-leader"));
+        assert_eq!(
+            created
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["builtin:bash".to_string(), "skill:ops".to_string()])
+        );
+        assert_eq!(
+            created
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_team_ids.clone()),
+            Some(vec!["team-review".to_string()])
+        );
+
+        let updated = runtime
+            .block_on(bundle.workspace.update_project(
+                &created.id,
+                UpdateProjectRequest {
+                    name: "Leader Project".into(),
+                    description: "Leader persistence updated.".into(),
+                    status: "active".into(),
+                    resource_directory: created.resource_directory.clone(),
+                    owner_user_id: None,
+                    member_user_ids: None,
+                    permission_overrides: None,
+                    linked_workspace_assets: None,
+                    leader_agent_id: Some("agent-strategist".into()),
+                    assignments: Some(ProjectWorkspaceAssignments {
+                        models: None,
+                        tools: Some(ProjectToolAssignments {
+                            source_keys: vec![],
+                            excluded_source_keys: vec!["mcp:browser".into()],
+                        }),
+                        agents: Some(ProjectAgentAssignments {
+                            agent_ids: vec![],
+                            team_ids: vec![],
+                            excluded_agent_ids: vec!["agent-shadow".into(), "agent-scout".into()],
+                            excluded_team_ids: vec![],
+                        }),
+                    }),
+                },
+            ))
+            .expect("updated project");
+
+        assert_eq!(updated.leader_agent_id.as_deref(), Some("agent-strategist"));
+        assert_eq!(
+            updated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-shadow".to_string(), "agent-scout".to_string()])
+        );
+
+        let listed = runtime
+            .block_on(bundle.workspace.list_projects())
+            .expect("listed projects");
+        let persisted = listed
+            .iter()
+            .find(|project| project.id == created.id)
+            .expect("persisted project");
+
+        assert_eq!(
+            persisted.leader_agent_id.as_deref(),
+            Some("agent-strategist")
+        );
+        assert_eq!(
+            persisted
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["mcp:browser".to_string()])
+        );
+        assert_eq!(
+            persisted
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-shadow".to_string(), "agent-scout".to_string()])
+        );
+    }
+
+    #[test]
+    fn update_project_rewrites_leader_and_live_inheritance_fields() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let created = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Rewrite Leader Project".into(),
+                description: "Rewrite leader persistence coverage.".into(),
+                resource_directory: "data/projects/rewrite-leader-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: Some("agent-alpha".into()),
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        source_keys: vec![],
+                        excluded_source_keys: vec!["builtin:bash".into()],
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        agent_ids: vec![],
+                        team_ids: vec![],
+                        excluded_agent_ids: vec!["agent-shadow".into()],
+                        excluded_team_ids: vec!["team-review".into()],
+                    }),
+                }),
+            }))
+            .expect("created project");
+
+        let updated = runtime
+            .block_on(bundle.workspace.update_project(
+                &created.id,
+                UpdateProjectRequest {
+                    name: "Rewrite Leader Project".into(),
+                    description: "Rewrite leader persistence updated.".into(),
+                    status: "active".into(),
+                    resource_directory: created.resource_directory.clone(),
+                    owner_user_id: None,
+                    member_user_ids: None,
+                    permission_overrides: None,
+                    linked_workspace_assets: None,
+                    leader_agent_id: Some("agent-beta".into()),
+                    assignments: Some(ProjectWorkspaceAssignments {
+                        models: None,
+                        tools: Some(ProjectToolAssignments {
+                            source_keys: vec![],
+                            excluded_source_keys: vec!["mcp:browser".into()],
+                        }),
+                        agents: Some(ProjectAgentAssignments {
+                            agent_ids: vec![],
+                            team_ids: vec![],
+                            excluded_agent_ids: vec!["agent-scout".into()],
+                            excluded_team_ids: vec![],
+                        }),
+                    }),
+                },
+            ))
+            .expect("updated project");
+
+        assert_eq!(updated.leader_agent_id.as_deref(), Some("agent-beta"));
+        assert_eq!(
+            updated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["mcp:browser".to_string()])
+        );
+        assert_eq!(
+            updated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-scout".to_string()])
+        );
+
+        let persisted = runtime
+            .block_on(bundle.workspace.list_projects())
+            .expect("listed projects")
+            .into_iter()
+            .find(|project| project.id == created.id)
+            .expect("persisted project");
+        assert_eq!(persisted.leader_agent_id.as_deref(), Some("agent-beta"));
+        assert_eq!(
+            persisted
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_team_ids.clone()),
+            Some(Vec::new())
+        );
+
+        let connection = bundle.workspace.state.open_db().expect("open db");
+        let (project_count, stored_leader_agent_id, assignments_json): (
+            i64,
+            Option<String>,
+            Option<String>,
+        ) = connection
+            .query_row(
+                "SELECT COUNT(*), leader_agent_id, assignments_json FROM projects WHERE id = ?1 GROUP BY leader_agent_id, assignments_json",
+                params![created.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("load persisted project row");
+        assert_eq!(project_count, 1);
+        assert_eq!(stored_leader_agent_id.as_deref(), Some("agent-beta"));
+        let assignments_json = assignments_json.expect("assignments json");
+        assert!(assignments_json.contains("\"excludedSourceKeys\":[\"mcp:browser\"]"));
+        assert!(assignments_json.contains("\"excludedAgentIds\":[\"agent-scout\"]"));
+        assert!(assignments_json.contains("\"excludedTeamIds\":[]"));
     }
 
     #[test]
@@ -3502,6 +3737,7 @@ mod tests {
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
+                leader_agent_id: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3625,6 +3861,7 @@ mod tests {
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
+                leader_agent_id: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3768,6 +4005,7 @@ mod tests {
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
+                leader_agent_id: None,
                 assignments: None,
             }))
             .expect("created project");

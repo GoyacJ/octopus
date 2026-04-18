@@ -248,6 +248,7 @@ export function createWorkspaceFixtureState(
           workspaceId: workspace.id,
           name: 'Desktop Redesign',
           status: 'active',
+          leaderAgentId: 'agent-architect',
           description: 'Real workspace API migration for the desktop surface.',
           resourceDirectory: 'data/projects/proj-redesign/resources',
           ownerUserId: 'user-owner',
@@ -271,11 +272,26 @@ export function createWorkspaceFixtureState(
               defaultConfiguredModelId: 'anthropic-primary',
             },
             tools: {
-              sourceKeys: ['builtin:bash', 'mcp:ops'],
+              sourceKeys: [],
+              excludedSourceKeys: [
+                'builtin:read_file',
+                'builtin:write_file',
+                'builtin:rg',
+                'builtin:apply_patch',
+                'builtin:web_search',
+                'builtin:image_query',
+                'skill:data/skills/help/SKILL.md',
+                'skill:.claude/skills/external-help/SKILL.md',
+                'skill:.codex/skills/external-checks/SKILL.md',
+                'skill:builtin-assets/skills/financial-calculator/SKILL.md',
+                'mcp:finance-ops',
+              ],
             },
             agents: {
-              agentIds: ['agent-architect'],
-              teamIds: ['team-studio'],
+              agentIds: [],
+              teamIds: [],
+              excludedAgentIds: ['agent-template-finance'],
+              excludedTeamIds: ['team-template-finance'],
             },
           },
         },
@@ -2508,17 +2524,21 @@ export function createWorkspaceFixtureState(
       sources: (() => {
         const projectSource = createRuntimeConfigSource('project', workspace.id, project.id)
         if (project.id === 'proj-redesign') {
-          projectSource.document = {
-            approvals: {
-              defaultMode: 'manual',
-            },
-            projectSettings: {
+            projectSource.document = {
+              approvals: {
+                defaultMode: 'manual',
+              },
+              projectSettings: {
               models: {
                 allowedConfiguredModelIds: ['anthropic-primary'],
                 defaultConfiguredModelId: 'anthropic-primary',
               },
               tools: {
-                enabledSourceKeys: ['builtin:bash'],
+                disabledSourceKeys: [
+                  'mcp:ops',
+                  'skill:data/projects/proj-redesign/skills/redesign-review/SKILL.md',
+                  'mcp:redesign-ops',
+                ],
                 overrides: {
                   'builtin:bash': {
                     permissionMode: 'readonly',
@@ -2529,8 +2549,8 @@ export function createWorkspaceFixtureState(
                 },
               },
               agents: {
-                enabledAgentIds: ['agent-architect'],
-                enabledTeamIds: ['team-studio'],
+                disabledAgentIds: ['agent-coder', 'agent-redesign'],
+                disabledTeamIds: ['team-redesign'],
               },
             },
           }

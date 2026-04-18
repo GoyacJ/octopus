@@ -160,7 +160,7 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('renders project-scoped effective agents and teams from project assignments instead of project links', async () => {
+  it('renders project-scoped effective agents and teams from live inheritance exclusions instead of project links', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
@@ -173,8 +173,8 @@ describe('workspace and project agents pages', () => {
           throw new Error('Expected proj-redesign agent assignments')
         }
 
-        project.assignments.agents.agentIds = ['agent-architect', 'agent-template-finance']
-        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+        project.assignments.agents.excludedAgentIds = []
+        project.assignments.agents.excludedTeamIds = []
         state.projectAgentLinks['proj-redesign'] = []
         state.projectTeamLinks['proj-redesign'] = []
       },
@@ -229,8 +229,8 @@ describe('workspace and project agents pages', () => {
     skillTab?.click()
     await waitForText(mounted.container, 'redesign-review')
 
-    expect(mounted.container.textContent).toContain('help')
     expect(mounted.container.textContent).toContain('redesign-review')
+    expect(mounted.container.textContent).not.toContain('help')
     expect(mounted.container.textContent).not.toContain('external-checks')
     expect(mounted.container.textContent).toContain('项目')
     expect(mounted.container.textContent).toContain('Desktop Redesign')
@@ -481,7 +481,8 @@ describe('workspace and project agents pages', () => {
           throw new Error('Expected proj-redesign agent assignments')
         }
 
-        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+        project.assignments.agents.excludedAgentIds = []
+        project.assignments.agents.excludedTeamIds = []
       },
     })
 

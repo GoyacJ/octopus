@@ -1,18 +1,20 @@
 import type {
   AgentRecord,
   CapabilityAssetManifest,
-  ProjectAgentSettings,
   ProjectModelSettings,
   ProjectRecord,
   ProjectSettingsConfig,
-  ProjectToolSettings,
   ProjectWorkspaceAssignments,
   TeamRecord,
   WorkspaceToolPermissionMode,
 } from '@octopus/schema'
 
 import type { CatalogConfiguredModelOption } from './catalog'
-import { resolveProjectAgentSettings, resolveProjectModelSettings } from './project_settings'
+import {
+  resolveProjectAgentSettings,
+  resolveProjectModelSettings,
+  resolveProjectToolSettings,
+} from './project_settings'
 
 export type ToolPermissionSelection = 'inherit' | WorkspaceToolPermissionMode
 export type ProjectSetupPreset = 'general' | 'engineering' | 'documentation' | 'advanced'
@@ -30,10 +32,10 @@ export interface ProjectRuntimeRefinementState {
   allowedConfiguredModelIds: string[]
   defaultConfiguredModelId: string
   totalTokens: string
-  enabledToolSourceKeys: string[]
+  disabledToolSourceKeys: string[]
   toolPermissionDraft: Record<string, ToolPermissionSelection>
-  enabledAgentIds: string[]
-  enabledTeamIds: string[]
+  disabledAgentIds: string[]
+  disabledTeamIds: string[]
 }
 
 export interface ProjectCapabilitySummary {
@@ -52,8 +54,6 @@ export interface ProjectCapabilitySummary {
 export interface ProjectSetupPresetSeed {
   assignments?: ProjectWorkspaceAssignments
   modelSettings?: ProjectModelSettings
-  toolSettings?: ProjectToolSettings
-  agentSettings?: ProjectAgentSettings
 }
 
 export interface ProjectPresetContext {
@@ -65,6 +65,18 @@ export interface ProjectPresetContext {
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
+}
+
+function uniqueBy<T>(items: T[], keyOf: (item: T) => string) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = keyOf(item)
+    if (!key || seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 
 export function inferWorkspaceToolPermission(
@@ -90,33 +102,129 @@ export function inferWorkspaceToolPermission(
   }
 }
 
-export function resolveProjectToolSettings(
-  projectSettings: ProjectSettingsConfig,
-  assignedToolEntries: CapabilityAssetManifest[],
+export function resolveProjectGrantedToolEntries(
+  project: ProjectRecord | null,
+  toolEntries: CapabilityAssetManifest[],
 ) {
-  const assignedSourceKeys = assignedToolEntries.map(entry => entry.sourceKey)
-  const saved = projectSettings.tools
-  const enabledSourceKeys = saved?.enabledSourceKeys?.length
-    ? saved.enabledSourceKeys.filter(sourceKey => assignedSourceKeys.includes(sourceKey))
-    : assignedSourceKeys
+  const projectId = project?.id ?? ''
+  const excludedSourceKeys = new Set(project?.assignments?.tools?.excludedSourceKeys ?? [])
 
-  return {
-    enabledSourceKeys,
-    overrides: saved?.overrides ?? {},
+  return uniqueBy(
+    toolEntries.filter((entry) => {
+      if (!entry.enabled) {
+        return false
+      }
+
+      const isProjectOwned = entry.ownerScope === 'project' && entry.ownerId === projectId
+      if (isProjectOwned) {
+        return true
+      }
+
+      return entry.ownerScope !== 'project' && !excludedSourceKeys.has(entry.sourceKey)
+    }),
+    entry => entry.sourceKey,
+  )
+}
+
+export function resolveProjectGrantedAgents(
+  project: ProjectRecord | null,
+  workspaceAgents: AgentRecord[],
+  projectOwnedAgents: AgentRecord[],
+) {
+  const excludedAgentIds = new Set(project?.assignments?.agents?.excludedAgentIds ?? [])
+  const inheritedAgents = workspaceAgents.filter(agent =>
+    !agent.projectId
+    && agent.status === 'active'
+    && !excludedAgentIds.has(agent.id),
+  )
+
+  return uniqueBy(
+    [
+      ...projectOwnedAgents.filter(agent => agent.status === 'active'),
+      ...inheritedAgents,
+    ],
+    agent => agent.id,
+  )
+}
+
+export function resolveProjectGrantedTeams(
+  project: ProjectRecord | null,
+  workspaceTeams: TeamRecord[],
+  projectOwnedTeams: TeamRecord[],
+) {
+  const excludedTeamIds = new Set(project?.assignments?.agents?.excludedTeamIds ?? [])
+  const inheritedTeams = workspaceTeams.filter(team =>
+    !team.projectId
+    && team.status === 'active'
+    && !excludedTeamIds.has(team.id),
+  )
+
+  return uniqueBy(
+    [
+      ...projectOwnedTeams.filter(team => team.status === 'active'),
+      ...inheritedTeams,
+    ],
+    team => team.id,
+  )
+}
+
+export function resolveProjectPreferredActorValue(input: {
+  project: ProjectRecord | null
+  projectSettings: ProjectSettingsConfig
+  grantedAgents: AgentRecord[]
+  grantedTeams: TeamRecord[]
+}) {
+  const resolvedActors = resolveProjectAgentSettings(
+    input.projectSettings,
+    input.grantedAgents.map(agent => agent.id),
+    input.grantedTeams.map(team => team.id),
+  )
+  const enabledAgents = input.grantedAgents.filter(agent =>
+    !resolvedActors.disabledAgentIds.includes(agent.id),
+  )
+  const enabledTeams = input.grantedTeams.filter(team =>
+    !resolvedActors.disabledTeamIds.includes(team.id),
+  )
+  const leaderAgentId = input.project?.leaderAgentId?.trim() ?? ''
+
+  if (leaderAgentId) {
+    const leader = enabledAgents.find(agent =>
+      agent.id === leaderAgentId
+      && !agent.projectId
+      && agent.status === 'active',
+    )
+    if (leader) {
+      return `agent:${leader.id}`
+    }
   }
+
+  const preferredAgent = enabledAgents[0]
+  if (preferredAgent) {
+    return `agent:${preferredAgent.id}`
+  }
+
+  const preferredTeam = enabledTeams[0]
+  if (preferredTeam) {
+    return `team:${preferredTeam.id}`
+  }
+
+  return ''
 }
 
 export function buildToolPermissionDraft(
-  assignedToolEntries: CapabilityAssetManifest[],
+  grantedToolEntries: CapabilityAssetManifest[],
   projectSettings: ProjectSettingsConfig,
   workspaceTools: Array<{ kind: string, name: string, permissionMode: WorkspaceToolPermissionMode }>,
 ): Record<string, ToolPermissionSelection> {
-  const resolvedToolSettings = resolveProjectToolSettings(projectSettings, assignedToolEntries)
+  const resolvedToolSettings = resolveProjectToolSettings(
+    projectSettings,
+    grantedToolEntries.map(entry => entry.sourceKey),
+  )
 
   return Object.fromEntries(
-    assignedToolEntries.map((entry) => {
+    grantedToolEntries.map((entry) => {
       const override = resolvedToolSettings.overrides[entry.sourceKey]
-      const disabled = !resolvedToolSettings.enabledSourceKeys.includes(entry.sourceKey)
+      const disabled = resolvedToolSettings.disabledSourceKeys.includes(entry.sourceKey)
       return [
         entry.sourceKey,
         disabled
@@ -144,10 +252,10 @@ export function buildProjectRuntimeRefinementState(input: {
   projectSettings: ProjectSettingsConfig
   assignedConfiguredModels: CatalogConfiguredModelOption[]
   assignmentDefaultConfiguredModelId: string
-  assignedToolEntries: CapabilityAssetManifest[]
+  grantedToolEntries: CapabilityAssetManifest[]
   workspaceTools: Array<{ kind: string, name: string, permissionMode: WorkspaceToolPermissionMode }>
-  assignedAgentIds: string[]
-  assignedTeamIds: string[]
+  grantedAgentIds: string[]
+  grantedTeamIds: string[]
 }): ProjectRuntimeRefinementState {
   const resolvedModels = resolveProjectModelSettings(
     input.projectSettings,
@@ -156,56 +264,63 @@ export function buildProjectRuntimeRefinementState(input: {
   )
   const resolvedActors = resolveProjectAgentSettings(
     input.projectSettings,
-    input.assignedAgentIds,
-    input.assignedTeamIds,
+    input.grantedAgentIds,
+    input.grantedTeamIds,
   )
-  const resolvedTools = resolveProjectToolSettings(input.projectSettings, input.assignedToolEntries)
+  const resolvedTools = resolveProjectToolSettings(
+    input.projectSettings,
+    input.grantedToolEntries.map(entry => entry.sourceKey),
+  )
 
   return {
     allowedConfiguredModelIds: [...resolvedModels.allowedConfiguredModelIds],
     defaultConfiguredModelId: resolvedModels.defaultConfiguredModelId,
     totalTokens: resolvedModels.totalTokens ? String(resolvedModels.totalTokens) : '',
-    enabledToolSourceKeys: [...resolvedTools.enabledSourceKeys],
+    disabledToolSourceKeys: [...resolvedTools.disabledSourceKeys],
     toolPermissionDraft: buildToolPermissionDraft(
-      input.assignedToolEntries,
+      input.grantedToolEntries,
       input.projectSettings,
       input.workspaceTools,
     ),
-    enabledAgentIds: [...resolvedActors.enabledAgentIds],
-    enabledTeamIds: [...resolvedActors.enabledTeamIds],
+    disabledAgentIds: [...resolvedActors.disabledAgentIds],
+    disabledTeamIds: [...resolvedActors.disabledTeamIds],
   }
 }
 
 export function buildProjectCapabilitySummary(input: {
   project: ProjectRecord | null
   projectSettings: ProjectSettingsConfig
-  assignedConfiguredModels: CatalogConfiguredModelOption[]
-  assignedToolEntries: CapabilityAssetManifest[]
+  grantedConfiguredModels: CatalogConfiguredModelOption[]
+  grantedToolEntries: CapabilityAssetManifest[]
   workspaceTools: Array<{ kind: string, name: string, permissionMode: WorkspaceToolPermissionMode }>
+  grantedAgentIds: string[]
+  grantedTeamIds: string[]
 }): ProjectCapabilitySummary {
   const grantState = buildProjectGrantState(input.project)
   const runtimeState = buildProjectRuntimeRefinementState({
     projectSettings: input.projectSettings,
-    assignedConfiguredModels: input.assignedConfiguredModels,
+    assignedConfiguredModels: input.grantedConfiguredModels,
     assignmentDefaultConfiguredModelId: grantState.defaultConfiguredModelId,
-    assignedToolEntries: input.assignedToolEntries,
+    grantedToolEntries: input.grantedToolEntries,
     workspaceTools: input.workspaceTools,
-    assignedAgentIds: grantState.assignedAgentIds,
-    assignedTeamIds: grantState.assignedTeamIds,
+    grantedAgentIds: input.grantedAgentIds,
+    grantedTeamIds: input.grantedTeamIds,
   })
-  const defaultModelLabel = input.assignedConfiguredModels.find(
+  const defaultModelLabel = input.grantedConfiguredModels.find(
     item => item.value === runtimeState.defaultConfiguredModelId,
   )?.label ?? ''
 
   return {
-    grantedModels: grantState.assignedConfiguredModelIds.length,
+    grantedModels: input.grantedConfiguredModels.length,
     enabledModels: runtimeState.allowedConfiguredModelIds.length,
     defaultModelLabel,
-    grantedTools: grantState.assignedToolSourceKeys.length,
-    enabledTools: runtimeState.enabledToolSourceKeys.length,
+    grantedTools: input.grantedToolEntries.length,
+    enabledTools: input.grantedToolEntries.length - runtimeState.disabledToolSourceKeys.length,
     toolOverrideCount: Object.values(runtimeState.toolPermissionDraft).filter(value => value !== 'inherit').length,
-    grantedActors: grantState.assignedAgentIds.length + grantState.assignedTeamIds.length,
-    enabledActors: runtimeState.enabledAgentIds.length + runtimeState.enabledTeamIds.length,
+    grantedActors: input.grantedAgentIds.length + input.grantedTeamIds.length,
+    enabledActors: input.grantedAgentIds.length + input.grantedTeamIds.length
+      - runtimeState.disabledAgentIds.length
+      - runtimeState.disabledTeamIds.length,
     memberCount: grantState.memberUserIds.length,
     editableMemberCount: input.project?.ownerUserId ? 1 : 0,
   }
@@ -240,8 +355,10 @@ function buildAssignmentsFromSeed(input: {
             : configuredModelIds[0] ?? '',
         }
       : undefined,
-    tools: toolSourceKeys.length ? { sourceKeys: toolSourceKeys } : undefined,
-    agents: agentIds.length || teamIds.length ? { agentIds, teamIds } : undefined,
+    tools: toolSourceKeys.length ? { sourceKeys: toolSourceKeys, excludedSourceKeys: [] } : undefined,
+    agents: agentIds.length || teamIds.length
+      ? { agentIds, teamIds, excludedAgentIds: [], excludedTeamIds: [] }
+      : undefined,
   }
 }
 
@@ -251,18 +368,15 @@ export function buildProjectSetupPresetSeed(
 ): ProjectSetupPresetSeed {
   const primaryModel = choosePrimaryModel(context.models)
   const engineeringModels = unique(context.models.map(model => model.value))
-  const engineeringTools = unique(context.tools.map(entry => entry.sourceKey))
-  const engineeringAgents = unique(context.agents.map(agent => agent.id))
-  const engineeringTeams = unique(context.teams.map(team => team.id))
 
   if (preset === 'engineering') {
     return {
       assignments: buildAssignmentsFromSeed({
         configuredModelIds: engineeringModels,
         defaultConfiguredModelId: primaryModel?.value ?? engineeringModels[0] ?? '',
-        toolSourceKeys: engineeringTools,
-        agentIds: engineeringAgents,
-        teamIds: engineeringTeams,
+        toolSourceKeys: [],
+        agentIds: [],
+        teamIds: [],
       }),
       modelSettings: engineeringModels.length
         ? {
@@ -270,34 +384,17 @@ export function buildProjectSetupPresetSeed(
             defaultConfiguredModelId: primaryModel?.value ?? engineeringModels[0] ?? '',
           }
         : undefined,
-      toolSettings: engineeringTools.length
-        ? {
-            enabledSourceKeys: engineeringTools,
-            overrides: {},
-          }
-        : undefined,
-      agentSettings: engineeringAgents.length || engineeringTeams.length
-        ? {
-            enabledAgentIds: engineeringAgents,
-            enabledTeamIds: engineeringTeams,
-          }
-        : undefined,
     }
   }
 
   if (preset === 'documentation') {
     const documentationModels = unique(primaryModel ? [primaryModel.value] : [])
-    const documentationTools = unique(
-      context.tools
-        .filter(entry => entry.kind === 'skill' || entry.sourceKey.includes('help'))
-        .map(entry => entry.sourceKey),
-    )
 
     return {
       assignments: buildAssignmentsFromSeed({
         configuredModelIds: documentationModels,
         defaultConfiguredModelId: documentationModels[0] ?? '',
-        toolSourceKeys: documentationTools,
+        toolSourceKeys: [],
         agentIds: [],
         teamIds: [],
       }),
@@ -307,13 +404,6 @@ export function buildProjectSetupPresetSeed(
             defaultConfiguredModelId: documentationModels[0] ?? '',
           }
         : undefined,
-      toolSettings: documentationTools.length
-        ? {
-            enabledSourceKeys: documentationTools,
-            overrides: {},
-          }
-        : undefined,
-      agentSettings: undefined,
     }
   }
 

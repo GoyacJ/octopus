@@ -445,14 +445,23 @@ pub struct ProjectModelAssignments {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectToolAssignments {
+    #[serde(default)]
     pub source_keys: Vec<String>,
+    #[serde(default)]
+    pub excluded_source_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectAgentAssignments {
+    #[serde(default)]
     pub agent_ids: Vec<String>,
+    #[serde(default)]
     pub team_ids: Vec<String>,
+    #[serde(default)]
+    pub excluded_agent_ids: Vec<String>,
+    #[serde(default)]
+    pub excluded_team_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -511,6 +520,7 @@ pub struct ProjectRecord {
     pub status: String,
     pub description: String,
     pub resource_directory: String,
+    pub leader_agent_id: Option<String>,
     pub owner_user_id: String,
     pub member_user_ids: Vec<String>,
     pub permission_overrides: ProjectPermissionOverrides,
@@ -528,6 +538,7 @@ pub struct CreateProjectRequest {
     pub member_user_ids: Option<Vec<String>>,
     pub permission_overrides: Option<ProjectPermissionOverrides>,
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
+    pub leader_agent_id: Option<String>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -542,6 +553,7 @@ pub struct UpdateProjectRequest {
     pub member_user_ids: Option<Vec<String>>,
     pub permission_overrides: Option<ProjectPermissionOverrides>,
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
+    pub leader_agent_id: Option<String>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 

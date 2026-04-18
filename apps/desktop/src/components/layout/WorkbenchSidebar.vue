@@ -81,6 +81,7 @@ const quickCreateForm = reactive({
   description: '',
   resourceDirectory: '',
   preset: 'general' as ProjectSetupPreset,
+  leaderAgentId: '',
 })
 const workspaceLabel = computed(() =>
   resolveWorkspaceLabel(
@@ -151,6 +152,18 @@ const activeProjects = computed(() =>
 const deleteTargetProject = computed(() =>
   activeProjects.value.find(project => project.id === deleteTargetProjectId.value) ?? null,
 )
+const quickCreateLeaderOptions = computed(() => [
+  {
+    value: '',
+    label: String(t('projects.leader.none')),
+  },
+  ...agentStore.workspaceAgents
+    .filter(agent => agent.status === 'active')
+    .map(agent => ({
+      value: agent.id,
+      label: agent.name,
+    })),
+])
 const hasAccessControlAuthorization = computed(() => Boolean(workspaceAccessControlStore.authorization))
 
 const workspaceNavigation = computed<NavigationItem[]>(() => {
@@ -404,6 +417,7 @@ function resetQuickCreateForm() {
   quickCreateForm.description = ''
   quickCreateForm.resourceDirectory = ''
   quickCreateForm.preset = 'general'
+  quickCreateForm.leaderAgentId = ''
 }
 
 const quickCreatePresetOptions = computed(() => ([
@@ -433,15 +447,16 @@ async function submitQuickCreateProject() {
 
     const presetSeed = buildProjectSetupPresetSeed(quickCreateForm.preset, {
       models: catalogStore.configuredModelOptions,
-      tools: catalogStore.managementProjection.assets.filter(entry => entry.enabled),
-      agents: agentStore.workspaceAgents,
-      teams: teamStore.workspaceTeams,
+      tools: catalogStore.managementProjection.assets,
+      agents: agentStore.workspaceAgents.filter(agent => agent.status === 'active'),
+      teams: teamStore.workspaceTeams.filter(team => team.status === 'active'),
     })
 
     const created = await workspaceStore.createProject({
       name: quickCreateForm.name,
       description: quickCreateForm.description,
       resourceDirectory: quickCreateForm.resourceDirectory,
+      leaderAgentId: quickCreateForm.leaderAgentId || undefined,
       assignments: presetSeed.assignments,
     })
     if (!created) {
@@ -451,12 +466,6 @@ async function submitQuickCreateProject() {
     await Promise.all([
       presetSeed.modelSettings
         ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.modelSettings)
-        : Promise.resolve(null),
-      presetSeed.toolSettings
-        ? workspaceStore.saveProjectToolSettings(created.id, presetSeed.toolSettings)
-        : Promise.resolve(null),
-      presetSeed.agentSettings
-        ? workspaceStore.saveProjectAgentSettings(created.id, presetSeed.agentSettings)
         : Promise.resolve(null),
     ])
 
@@ -608,6 +617,24 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
 
               <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-3 py-2 text-xs leading-5 text-text-secondary">
                 {{ t(`projects.presets.options.${quickCreateForm.preset}.description`) }}
+              </div>
+
+              <UiField
+                :label="t('projects.fields.leader')"
+                :hint="t('projects.leader.hint')"
+              >
+                <UiSelect
+                  v-model="quickCreateForm.leaderAgentId"
+                  data-testid="sidebar-project-create-leader-select"
+                  :options="quickCreateLeaderOptions"
+                />
+              </UiField>
+
+              <div
+                data-testid="sidebar-project-create-inheritance-summary"
+                class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-3 py-2 text-xs leading-5 text-text-secondary"
+              >
+                {{ t('projects.summary.inheritanceDescription') }}
               </div>
 
               <ProjectResourceDirectoryField

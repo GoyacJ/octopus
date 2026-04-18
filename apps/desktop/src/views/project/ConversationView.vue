@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
-import { resolveRuntimePermissionMode, resolveUiPermissionMode, type ConversationActorKind, type Message, type PermissionMode, type WorkspaceResourceRecord } from '@octopus/schema'
+import { resolveRuntimePermissionMode, resolveUiPermissionMode, type AgentRecord, type ConversationActorKind, type Message, type PermissionMode, type TeamRecord, type WorkspaceResourceRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
@@ -27,6 +27,11 @@ import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
+import {
+  resolveProjectGrantedAgents,
+  resolveProjectGrantedTeams,
+  resolveProjectPreferredActorValue,
+} from '@/stores/project_setup'
 
 const route = useRoute()
 const router = useRouter()
@@ -108,11 +113,31 @@ const resolvedModelSettings = computed(() =>
     projectAssignments.value?.models?.defaultConfiguredModelId ?? '',
   ),
 )
+const projectOwnedAgents = computed(() =>
+  agentStore.agents.filter(agent => agent.projectId === projectId.value),
+)
+const projectOwnedTeams = computed(() =>
+  teamStore.teams.filter(team => team.projectId === projectId.value),
+)
+const grantedAgents = computed(() =>
+  resolveProjectGrantedAgents(
+    project.value,
+    agentStore.workspaceAgents,
+    projectOwnedAgents.value,
+  ),
+)
+const grantedTeams = computed(() =>
+  resolveProjectGrantedTeams(
+    project.value,
+    teamStore.workspaceTeams,
+    projectOwnedTeams.value,
+  ),
+)
 const resolvedAgentSettings = computed(() =>
   resolveProjectAgentSettings(
     projectSettings.value,
-    projectAssignments.value?.agents?.agentIds ?? [],
-    projectAssignments.value?.agents?.teamIds ?? [],
+    grantedAgents.value.map(agent => agent.id),
+    grantedTeams.value.map(team => team.id),
   ),
 )
 
@@ -126,22 +151,22 @@ const modelOptions = computed(() => {
     }))
 })
 const actorOptions = computed<ActorOption[]>(() => {
-  const enabledAgentIds = resolvedAgentSettings.value.enabledAgentIds
-  const enabledTeamIds = resolvedAgentSettings.value.enabledTeamIds
-  const visibleAgents = agentStore.effectiveProjectAgents
-    .filter(agent => agent.projectId === projectId.value || enabledAgentIds.includes(agent.id))
-  const visibleTeams = teamStore.effectiveProjectTeams
-    .filter(team => team.projectId === projectId.value || enabledTeamIds.includes(team.id))
+  const disabledAgentIds = new Set(resolvedAgentSettings.value.disabledAgentIds)
+  const disabledTeamIds = new Set(resolvedAgentSettings.value.disabledTeamIds)
+  const visibleAgents = grantedAgents.value
+    .filter((agent: AgentRecord) => agent.projectId === projectId.value || !disabledAgentIds.has(agent.id))
+  const visibleTeams = grantedTeams.value
+    .filter((team: TeamRecord) => team.projectId === projectId.value || !disabledTeamIds.has(team.id))
 
   return [
     ...visibleAgents
-      .map(agent => ({
+      .map((agent: AgentRecord) => ({
         value: `agent:${agent.id}`,
         label: agent.name,
         kind: 'agent' as const,
       })),
     ...visibleTeams
-      .map(team => ({
+      .map((team: TeamRecord) => ({
         value: `team:${team.id}`,
         label: team.name,
         kind: 'team' as const,
@@ -388,7 +413,12 @@ function seedComposerSelections(projectContextKey: string) {
     selectedModelId.value = modelOptions.value[0]?.value ?? ''
   }
   if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
-    selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+    selectedActorValue.value = resolveProjectPreferredActorValue({
+      project: project.value,
+      projectSettings: projectSettings.value,
+      grantedAgents: grantedAgents.value,
+      grantedTeams: grantedTeams.value,
+    }) || actorOptions.value[0]?.value || ''
   }
   if (lastPermissionSeedKey !== projectContextKey) {
     const configuredDefaultMode = resolveProjectDefaultPermissionMode()
@@ -547,11 +577,17 @@ async function ensureRuntimeSession() {
       return
     }
     seedComposerSelections(`${connectionId}:${nextProjectId}`)
+    const preferredActorValue = resolveProjectPreferredActorValue({
+      project: project.value,
+      projectSettings: projectSettings.value,
+      grantedAgents: grantedAgents.value,
+      grantedTeams: grantedTeams.value,
+    }) || actorOptions.value[0]?.value || ''
     await runtime.ensureSession({
       conversationId: nextConversationId,
       projectId: nextProjectId,
       title: `Conversation ${nextConversationId.slice(-6)}`,
-      selectedActorRef: selectedActorValue.value || actorOptions.value[0]?.value || '',
+      selectedActorRef: selectedActorValue.value || preferredActorValue,
       selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
       executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
     })

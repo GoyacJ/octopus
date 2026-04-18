@@ -407,19 +407,30 @@ pub(super) fn validate_project_tool_settings(
         .and_then(|assignments| assignments.tools.as_ref())
         .map(|tools| tools.source_keys.iter().cloned().collect::<HashSet<_>>());
 
-    if let Some(enabled_source_keys) = tools_object.get("enabledSourceKeys") {
+    if let Some(disabled_source_keys) = tools_object.get("disabledSourceKeys") {
+        let Some(disabled_source_keys) = disabled_source_keys.as_array() else {
+            diagnostics
+                .errors
+                .push("projectSettings.tools.disabledSourceKeys must be an array".into());
+            return;
+        };
+        for source_key in disabled_source_keys.iter().filter_map(Value::as_str) {
+            if assigned_source_keys
+                .as_ref()
+                .is_some_and(|assigned| !assigned.contains(source_key))
+            {
+                diagnostics.errors.push(format!(
+                    "projectSettings.tools.disabledSourceKeys contains unassigned sourceKey `{source_key}`"
+                ));
+            }
+        }
+    } else if let Some(enabled_source_keys) = tools_object.get("enabledSourceKeys") {
         let Some(enabled_source_keys) = enabled_source_keys.as_array() else {
             diagnostics
                 .errors
                 .push("projectSettings.tools.enabledSourceKeys must be an array".into());
             return;
         };
-        if enabled_source_keys.is_empty() {
-            diagnostics.errors.push(
-                "projectSettings.tools.enabledSourceKeys must include at least one sourceKey"
-                    .into(),
-            );
-        }
         for source_key in enabled_source_keys.iter().filter_map(Value::as_str) {
             if assigned_source_keys
                 .as_ref()
@@ -525,7 +536,24 @@ pub(super) fn validate_project_agent_settings(
         .and_then(|assignments| assignments.agents.as_ref())
         .map(|agents| agents.team_ids.iter().cloned().collect::<HashSet<_>>());
 
-    if let Some(enabled_agent_ids) = agents_object.get("enabledAgentIds") {
+    if let Some(disabled_agent_ids) = agents_object.get("disabledAgentIds") {
+        let Some(disabled_agent_ids) = disabled_agent_ids.as_array() else {
+            diagnostics
+                .errors
+                .push("projectSettings.agents.disabledAgentIds must be an array".into());
+            return;
+        };
+        for agent_id in disabled_agent_ids.iter().filter_map(Value::as_str) {
+            if assigned_agent_ids
+                .as_ref()
+                .is_some_and(|assigned| !assigned.contains(agent_id))
+            {
+                diagnostics.errors.push(format!(
+                    "projectSettings.agents.disabledAgentIds contains unassigned agent `{agent_id}`"
+                ));
+            }
+        }
+    } else if let Some(enabled_agent_ids) = agents_object.get("enabledAgentIds") {
         let Some(enabled_agent_ids) = enabled_agent_ids.as_array() else {
             diagnostics
                 .errors
@@ -544,7 +572,24 @@ pub(super) fn validate_project_agent_settings(
         }
     }
 
-    if let Some(enabled_team_ids) = agents_object.get("enabledTeamIds") {
+    if let Some(disabled_team_ids) = agents_object.get("disabledTeamIds") {
+        let Some(disabled_team_ids) = disabled_team_ids.as_array() else {
+            diagnostics
+                .errors
+                .push("projectSettings.agents.disabledTeamIds must be an array".into());
+            return;
+        };
+        for team_id in disabled_team_ids.iter().filter_map(Value::as_str) {
+            if assigned_team_ids
+                .as_ref()
+                .is_some_and(|assigned| !assigned.contains(team_id))
+            {
+                diagnostics.errors.push(format!(
+                    "projectSettings.agents.disabledTeamIds contains unassigned team `{team_id}`"
+                ));
+            }
+        }
+    } else if let Some(enabled_team_ids) = agents_object.get("enabledTeamIds") {
         let Some(enabled_team_ids) = enabled_team_ids.as_array() else {
             diagnostics
                 .errors
@@ -561,5 +606,132 @@ pub(super) fn validate_project_agent_settings(
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn diagnostics() -> ModelRegistryDiagnostics {
+        ModelRegistryDiagnostics {
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn workspace_assignments() -> ProjectWorkspaceAssignments {
+        serde_json::from_value(json!({
+            "tools": {
+                "sourceKeys": ["builtin:bash", "mcp:ops"]
+            },
+            "agents": {
+                "agentIds": ["agent-architect"],
+                "teamIds": ["team-studio"]
+            }
+        }))
+        .expect("workspace assignments should parse")
+    }
+
+    #[test]
+    fn accepts_disabled_project_settings_deltas() {
+        let assignments = workspace_assignments();
+        let mut tool_diagnostics = diagnostics();
+        let mut agent_diagnostics = diagnostics();
+
+        validate_project_tool_settings(
+            &json!({
+                "disabledSourceKeys": ["builtin:bash"],
+                "overrides": {
+                    "mcp:ops": {
+                        "permissionMode": "ask"
+                    }
+                }
+            }),
+            Some(&assignments),
+            Some(&json!({
+                "ops": {}
+            })),
+            &mut tool_diagnostics,
+        );
+        validate_project_agent_settings(
+            &json!({
+                "disabledAgentIds": ["agent-architect"],
+                "disabledTeamIds": ["team-studio"]
+            }),
+            Some(&assignments),
+            &mut agent_diagnostics,
+        );
+
+        assert!(tool_diagnostics.errors.is_empty());
+        assert!(agent_diagnostics.errors.is_empty());
+    }
+
+    #[test]
+    fn keeps_legacy_enabled_project_settings_compatible() {
+        let assignments = workspace_assignments();
+        let mut tool_diagnostics = diagnostics();
+        let mut agent_diagnostics = diagnostics();
+
+        validate_project_tool_settings(
+            &json!({
+                "enabledSourceKeys": ["builtin:bash"]
+            }),
+            Some(&assignments),
+            Some(&json!({})),
+            &mut tool_diagnostics,
+        );
+        validate_project_agent_settings(
+            &json!({
+                "enabledAgentIds": ["agent-architect"],
+                "enabledTeamIds": ["team-studio"]
+            }),
+            Some(&assignments),
+            &mut agent_diagnostics,
+        );
+
+        assert!(tool_diagnostics.errors.is_empty());
+        assert!(agent_diagnostics.errors.is_empty());
+    }
+
+    #[test]
+    fn rejects_unassigned_disabled_entries() {
+        let assignments = workspace_assignments();
+        let mut tool_diagnostics = diagnostics();
+        let mut agent_diagnostics = diagnostics();
+
+        validate_project_tool_settings(
+            &json!({
+                "disabledSourceKeys": ["builtin:missing"]
+            }),
+            Some(&assignments),
+            Some(&json!({})),
+            &mut tool_diagnostics,
+        );
+        validate_project_agent_settings(
+            &json!({
+                "disabledAgentIds": ["agent-missing"],
+                "disabledTeamIds": ["team-missing"]
+            }),
+            Some(&assignments),
+            &mut agent_diagnostics,
+        );
+
+        assert_eq!(
+            tool_diagnostics.errors,
+            vec![
+                "projectSettings.tools.disabledSourceKeys contains unassigned sourceKey `builtin:missing`"
+                    .to_string(),
+            ],
+        );
+        assert_eq!(
+            agent_diagnostics.errors,
+            vec![
+                "projectSettings.agents.disabledAgentIds contains unassigned agent `agent-missing`"
+                    .to_string(),
+                "projectSettings.agents.disabledTeamIds contains unassigned team `team-missing`"
+                    .to_string(),
+            ],
+        );
     }
 }
