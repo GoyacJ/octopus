@@ -14,22 +14,41 @@ import type {
 
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
-import { useNotificationStore } from '@/stores/notifications'
+import {
+  buildProjectCapabilitySummary,
+  buildProjectGrantState,
+  buildProjectRuntimeRefinementState,
+  inferWorkspaceToolPermission,
+  type ProjectGrantState,
+  type ProjectRuntimeRefinementState,
+  type ToolPermissionSelection,
+} from '@/stores/project_setup'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
-export type ToolPermissionSelection = 'inherit' | WorkspaceToolPermissionMode
 
 export interface ToolSection {
   kind: WorkspaceToolKind
   entries: CapabilityAssetManifest[]
 }
 
-const TOOL_TAB_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
+type DialogKey =
+  | 'grantModels'
+  | 'grantTools'
+  | 'grantActors'
+  | 'runtimeModels'
+  | 'runtimeTools'
+  | 'runtimeActors'
+  | 'members'
+
+const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
 const TOOL_PERMISSION_VALUES: ToolPermissionSelection[] = ['inherit', 'allow', 'ask', 'readonly', 'deny']
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
+}
 
 export function useProjectSettings() {
   const { t } = useI18n()
@@ -38,45 +57,55 @@ export function useProjectSettings() {
   const agentStore = useAgentStore()
   const catalogStore = useCatalogStore()
   const teamStore = useTeamStore()
-  const notificationStore = useNotificationStore()
   const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 
-  const activeTab = ref<ProjectSettingsTab>('basics')
   const loadingDependencies = ref(false)
-  const savingBasics = ref(false)
-  const savingModels = ref(false)
-  const savingTools = ref(false)
-  const savingAgents = ref(false)
-  const savingUsers = ref(false)
-  const basicsError = ref('')
-  const modelsError = ref('')
-  const toolsError = ref('')
-  const agentsError = ref('')
-  const usersError = ref('')
-
-  const basicsForm = reactive({
-    name: '',
-    description: '',
+  const dialogOpen = reactive<Record<DialogKey, boolean>>({
+    grantModels: false,
+    grantTools: false,
+    grantActors: false,
+    runtimeModels: false,
+    runtimeTools: false,
+    runtimeActors: false,
+    members: false,
+  })
+  const saving = reactive<Record<DialogKey, boolean>>({
+    grantModels: false,
+    grantTools: false,
+    grantActors: false,
+    runtimeModels: false,
+    runtimeTools: false,
+    runtimeActors: false,
+    members: false,
+  })
+  const dialogErrors = reactive<Record<DialogKey, string>>({
+    grantModels: '',
+    grantTools: '',
+    grantActors: '',
+    runtimeModels: '',
+    runtimeTools: '',
+    runtimeActors: '',
+    members: '',
   })
 
-  const modelsForm = reactive({
-    allowedConfiguredModelIds: [] as string[],
+  const grantForm = reactive<ProjectGrantState>({
+    assignedConfiguredModelIds: [],
+    defaultConfiguredModelId: '',
+    assignedToolSourceKeys: [],
+    assignedAgentIds: [],
+    assignedTeamIds: [],
+    memberUserIds: [],
+  })
+  const runtimeForm = reactive<ProjectRuntimeRefinementState>({
+    allowedConfiguredModelIds: [],
     defaultConfiguredModelId: '',
     totalTokens: '',
+    enabledToolSourceKeys: [],
+    toolPermissionDraft: {},
+    enabledAgentIds: [],
+    enabledTeamIds: [],
   })
-
-  const enabledAgentIds = ref<string[]>([])
-  const enabledTeamIds = ref<string[]>([])
-  const selectedMemberUserIds = ref<string[]>([])
-  const toolPermissionDraft = ref<Record<string, ToolPermissionSelection>>({})
-
-  const tabs = computed(() => [
-    { value: 'basics', label: t('projectSettings.tabs.basics') },
-    { value: 'models', label: t('projectSettings.tabs.models') },
-    { value: 'tools', label: t('projectSettings.tabs.tools') },
-    { value: 'agents', label: t('projectSettings.tabs.agents') },
-    { value: 'users', label: t('projectSettings.tabs.users') },
-  ])
+  const memberDraft = ref<string[]>([])
 
   const projectId = computed(() =>
     typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId,
@@ -88,16 +117,15 @@ export function useProjectSettings() {
   const projectSettings = computed(() =>
     projectId.value ? workspaceStore.getProjectSettings(projectId.value) : {},
   )
-  const workspaceAssignments = computed(() => project.value?.assignments)
-  const allowedWorkspaceConfiguredModels = computed(() => {
-    const assignedIds = workspaceAssignments.value?.models?.configuredModelIds ?? []
-    return catalogStore.configuredModelOptions.filter(item => assignedIds.includes(item.value))
-  })
-  const allowedToolSourceKeys = computed(() =>
-    workspaceAssignments.value?.tools?.sourceKeys ?? [],
-  )
-  const allowedToolEntries = computed(() =>
-    catalogStore.managementProjection.assets.filter(entry => allowedToolSourceKeys.value.includes(entry.sourceKey) && entry.enabled),
+  const workspaceConfiguredModels = computed(() => catalogStore.configuredModelOptions)
+  const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets.filter(entry => entry.enabled))
+  const workspaceToolSections = computed<ToolSection[]>(() =>
+    TOOL_GROUP_ORDER
+      .map(kind => ({
+        kind,
+        entries: workspaceToolEntries.value.filter(entry => entry.kind === kind),
+      }))
+      .filter(section => section.entries.length > 0),
   )
   const actorCandidateAgents = computed<AgentRecord[]>(() => [
     ...agentStore.workspaceOwnedAgents,
@@ -113,14 +141,6 @@ export function useProjectSettings() {
   const projectOwnedTeams = computed<TeamRecord[]>(() =>
     teamStore.teams.filter(team => team.projectId === projectId.value),
   )
-  const workspaceAssignedAgents = computed<AgentRecord[]>(() => {
-    const assignedIds = workspaceAssignments.value?.agents?.agentIds ?? []
-    return actorCandidateAgents.value.filter(agent => assignedIds.includes(agent.id))
-  })
-  const workspaceAssignedTeams = computed<TeamRecord[]>(() => {
-    const assignedIds = workspaceAssignments.value?.agents?.teamIds ?? []
-    return actorCandidateTeams.value.filter(team => assignedIds.includes(team.id))
-  })
   const workspaceUsers = computed(() => {
     const records = new Map<string, AccessUserRecord>()
     for (const member of workspaceAccessControlStore.members) {
@@ -131,71 +151,52 @@ export function useProjectSettings() {
       (left.displayName || left.username).localeCompare(right.displayName || right.username),
     )
   })
-  const workspaceDefaultConfiguredModelId = computed(() =>
-    workspaceAssignments.value?.models?.defaultConfiguredModelId
-    ?? allowedWorkspaceConfiguredModels.value[0]?.value
-    ?? '',
+  const grantState = computed(() => buildProjectGrantState(project.value))
+  const grantedConfiguredModels = computed(() =>
+    workspaceConfiguredModels.value.filter(item => grantState.value.assignedConfiguredModelIds.includes(item.value)),
   )
-  const modelTabReady = computed(() => !loadingDependencies.value && Boolean(connectionId.value))
-  const viewReady = computed(() =>
-    Boolean(connectionId.value)
-    && (!workspaceStore.loading || Boolean(project.value) || Boolean(workspaceStore.error)),
+  const grantedToolEntries = computed(() =>
+    workspaceToolEntries.value.filter(entry => grantState.value.assignedToolSourceKeys.includes(entry.sourceKey)),
   )
-
-  const resolvedModelSettings = computed(() => {
-    return resolveProjectModelSettings(
-      projectSettings.value,
-      allowedWorkspaceConfiguredModels.value.map(item => item.value),
-      workspaceDefaultConfiguredModelId.value,
-    )
-  })
-
-  const resolvedToolSettings = computed(() => {
-    const assignedSourceKeys = allowedToolEntries.value.map(entry => entry.sourceKey)
-    const saved = projectSettings.value.tools
-    const enabledSourceKeys = saved?.enabledSourceKeys?.length
-      ? saved.enabledSourceKeys.filter(sourceKey => assignedSourceKeys.includes(sourceKey))
-      : assignedSourceKeys
-
-    return {
-      enabledSourceKeys,
-      overrides: saved?.overrides ?? {},
-    }
-  })
-
-  const resolvedAgentSettings = computed(() => {
-    return resolveProjectAgentSettings(
-      projectSettings.value,
-      workspaceAssignments.value?.agents?.agentIds ?? [],
-      workspaceAssignments.value?.agents?.teamIds ?? [],
-    )
-  })
-
-  const toolSections = computed<ToolSection[]>(() =>
-    TOOL_TAB_ORDER
+  const grantedToolSections = computed<ToolSection[]>(() =>
+    TOOL_GROUP_ORDER
       .map(kind => ({
         kind,
-        entries: allowedToolEntries.value.filter(entry => entry.kind === kind),
+        entries: grantedToolEntries.value.filter(entry => entry.kind === kind),
       }))
       .filter(section => section.entries.length > 0),
   )
-
-  const currentMemberUserIds = computed(() => project.value?.memberUserIds ?? [])
-
-  const summaryAllowedModels = computed(() =>
-    allowedWorkspaceConfiguredModels.value.filter(item => modelsForm.allowedConfiguredModelIds.includes(item.value)),
+  const grantedAgents = computed<AgentRecord[]>(() =>
+    actorCandidateAgents.value.filter(agent => grantState.value.assignedAgentIds.includes(agent.id)),
+  )
+  const grantedTeams = computed<TeamRecord[]>(() =>
+    actorCandidateTeams.value.filter(team => grantState.value.assignedTeamIds.includes(team.id)),
+  )
+  const runtimeState = computed(() => buildProjectRuntimeRefinementState({
+    projectSettings: projectSettings.value,
+    assignedConfiguredModels: grantedConfiguredModels.value,
+    assignmentDefaultConfiguredModelId: grantState.value.defaultConfiguredModelId,
+    assignedToolEntries: grantedToolEntries.value,
+    workspaceTools: catalogStore.tools,
+    assignedAgentIds: grantState.value.assignedAgentIds,
+    assignedTeamIds: grantState.value.assignedTeamIds,
+  }))
+  const capabilitySummary = computed(() =>
+    buildProjectCapabilitySummary({
+      project: project.value,
+      projectSettings: projectSettings.value,
+      assignedConfiguredModels: grantedConfiguredModels.value,
+      assignedToolEntries: grantedToolEntries.value,
+      workspaceTools: catalogStore.tools,
+    }),
   )
   const projectUsedTokens = computed(() => workspaceStore.getProjectDashboard(projectId.value)?.usedTokens ?? 0)
-  const summaryOverrideCount = computed(() =>
-    Object.values(toolPermissionDraft.value).filter(value => value !== 'inherit').length,
+  const permissionOverrideCount = computed(() => Object.keys(project.value?.permissionOverrides ?? {}).length)
+  const viewReady = computed(() =>
+    Boolean(connectionId.value)
+    && !loadingDependencies.value
+    && (!workspaceStore.loading || Boolean(project.value) || Boolean(workspaceStore.error)),
   )
-  const summaryActorCount = computed(() =>
-    projectOwnedAgents.value.length
-    + projectOwnedTeams.value.length
-    + enabledAgentIds.value.length
-    + enabledTeamIds.value.length,
-  )
-  const summaryMemberCount = computed(() => selectedMemberUserIds.value.length)
 
   const toolPermissionOptions = computed(() =>
     TOOL_PERMISSION_VALUES.map(value => ({
@@ -203,18 +204,85 @@ export function useProjectSettings() {
       label: t(`projectSettings.tools.modes.${value}`),
     })),
   )
+  const grantDefaultModelLabel = computed(() =>
+    grantedConfiguredModels.value.find(item => item.value === grantState.value.defaultConfiguredModelId)?.label
+    || grantedConfiguredModels.value[0]?.label
+    || t('common.na'),
+  )
 
-  async function notifyAgentsSaved(projectName: string) {
-    await notificationStore.notify({
-      scopeKind: 'workspace',
-      scopeOwnerId: workspaceStore.currentWorkspaceId || undefined,
-      level: 'success',
-      title: '保存完成',
-      body: `已更新项目「${projectName}」的数字员工与数字团队配置。`,
-      source: 'project-settings',
-      toastDurationMs: 4000,
-    })
-  }
+  const grantSummary = computed(() => ({
+    models: t('projectSettings.sections.grants.modelsValue', {
+      granted: capabilitySummary.value.grantedModels,
+      defaultModel: grantDefaultModelLabel.value,
+    }),
+    tools: t('projectSettings.sections.grants.toolsValue', {
+      granted: capabilitySummary.value.grantedTools,
+    }),
+    actors: t('projectSettings.sections.grants.actorsValue', {
+      granted: capabilitySummary.value.grantedActors,
+    }),
+  }))
+
+  const runtimeSummary = computed(() => ({
+    models: t('projectSettings.sections.runtime.modelsValue', {
+      granted: capabilitySummary.value.grantedModels,
+      enabled: capabilitySummary.value.enabledModels,
+      defaultModel: capabilitySummary.value.defaultModelLabel || t('common.na'),
+      totalTokens: runtimeState.value.totalTokens || t('projectSettings.sections.runtime.unlimited'),
+    }),
+    tools: t('projectSettings.sections.runtime.toolsValue', {
+      enabled: capabilitySummary.value.enabledTools,
+      overrides: capabilitySummary.value.toolOverrideCount,
+    }),
+    actors: t('projectSettings.sections.runtime.actorsValue', {
+      granted: capabilitySummary.value.grantedActors,
+      enabled: capabilitySummary.value.enabledActors,
+    }),
+  }))
+
+  const memberSummary = computed(() =>
+    t('projectSettings.sections.members.membersValue', {
+      members: capabilitySummary.value.memberCount,
+      editors: capabilitySummary.value.editableMemberCount,
+    }),
+  )
+  const accessSummary = computed(() =>
+    permissionOverrideCount.value
+      ? t('projectSettings.sections.members.accessValue', { count: permissionOverrideCount.value })
+      : t('projectSettings.sections.members.accessEmpty'),
+  )
+  const completionItems = computed(() => ([
+    {
+      id: 'grant-models',
+      label: t('projectSettings.nextSteps.grantModels'),
+      done: capabilitySummary.value.grantedModels > 0,
+    },
+    {
+      id: 'runtime-models',
+      label: t('projectSettings.nextSteps.enableModel'),
+      done: capabilitySummary.value.enabledModels > 0,
+    },
+    {
+      id: 'runtime-actors',
+      label: t('projectSettings.nextSteps.enableActor'),
+      done: capabilitySummary.value.enabledActors > 0,
+    },
+    {
+      id: 'members',
+      label: t('projectSettings.nextSteps.addMembers'),
+      done: capabilitySummary.value.memberCount > 0,
+    },
+  ]))
+  const completionProgress = computed(() => {
+    const completed = completionItems.value.filter(item => item.done).length
+    return {
+      completed,
+      total: completionItems.value.length,
+      percent: completionItems.value.length
+        ? Math.round((completed / completionItems.value.length) * 100)
+        : 0,
+    }
+  })
 
   watch(
     () => [
@@ -243,72 +311,99 @@ export function useProjectSettings() {
     { immediate: true },
   )
 
+  function resetGrantModels() {
+    grantForm.assignedConfiguredModelIds = [...grantState.value.assignedConfiguredModelIds]
+    grantForm.defaultConfiguredModelId = grantState.value.defaultConfiguredModelId
+    dialogErrors.grantModels = ''
+  }
+
+  function resetGrantTools() {
+    grantForm.assignedToolSourceKeys = [...grantState.value.assignedToolSourceKeys]
+    dialogErrors.grantTools = ''
+  }
+
+  function resetGrantActors() {
+    grantForm.assignedAgentIds = [...grantState.value.assignedAgentIds]
+    grantForm.assignedTeamIds = [...grantState.value.assignedTeamIds]
+    dialogErrors.grantActors = ''
+  }
+
+  function resetRuntimeModels() {
+    runtimeForm.allowedConfiguredModelIds = [...runtimeState.value.allowedConfiguredModelIds]
+    runtimeForm.defaultConfiguredModelId = runtimeState.value.defaultConfiguredModelId
+    runtimeForm.totalTokens = runtimeState.value.totalTokens
+    dialogErrors.runtimeModels = ''
+  }
+
+  function resetRuntimeTools() {
+    runtimeForm.enabledToolSourceKeys = [...runtimeState.value.enabledToolSourceKeys]
+    runtimeForm.toolPermissionDraft = { ...runtimeState.value.toolPermissionDraft }
+    dialogErrors.runtimeTools = ''
+  }
+
+  function resetRuntimeActors() {
+    runtimeForm.enabledAgentIds = [...runtimeState.value.enabledAgentIds]
+    runtimeForm.enabledTeamIds = [...runtimeState.value.enabledTeamIds]
+    dialogErrors.runtimeActors = ''
+  }
+
+  function resetMembers() {
+    memberDraft.value = [...(project.value?.memberUserIds ?? [])]
+    dialogErrors.members = ''
+  }
+
   watch(
-    () => [project.value?.id, project.value?.name, project.value?.description].join('|'),
+    () => `${projectId.value}|${grantState.value.assignedConfiguredModelIds.join(',')}|${grantState.value.defaultConfiguredModelId}|${grantState.value.assignedToolSourceKeys.join(',')}|${grantState.value.assignedAgentIds.join(',')}|${grantState.value.assignedTeamIds.join(',')}`,
     () => {
-      basicsForm.name = project.value?.name ?? ''
-      basicsForm.description = project.value?.description ?? ''
-      basicsError.value = ''
+      resetGrantModels()
+      resetGrantTools()
+      resetGrantActors()
     },
     { immediate: true },
   )
 
   watch(
-    () => `${projectId.value}|${resolvedModelSettings.value.allowedConfiguredModelIds.join(',')}|${resolvedModelSettings.value.defaultConfiguredModelId}|${resolvedModelSettings.value.totalTokens ?? ''}|${projectUsedTokens.value}`,
+    () => `${projectId.value}|${runtimeState.value.allowedConfiguredModelIds.join(',')}|${runtimeState.value.defaultConfiguredModelId}|${runtimeState.value.totalTokens}|${runtimeState.value.enabledToolSourceKeys.join(',')}|${JSON.stringify(runtimeState.value.toolPermissionDraft)}|${runtimeState.value.enabledAgentIds.join(',')}|${runtimeState.value.enabledTeamIds.join(',')}`,
     () => {
-      modelsForm.allowedConfiguredModelIds = [...resolvedModelSettings.value.allowedConfiguredModelIds]
-      modelsForm.defaultConfiguredModelId = resolvedModelSettings.value.defaultConfiguredModelId
-      modelsForm.totalTokens = resolvedModelSettings.value.totalTokens ? String(resolvedModelSettings.value.totalTokens) : ''
-      modelsError.value = ''
+      resetRuntimeModels()
+      resetRuntimeTools()
+      resetRuntimeActors()
     },
     { immediate: true },
   )
 
   watch(
-    () => `${projectId.value}|${resolvedToolSettings.value.enabledSourceKeys.join(',')}|${JSON.stringify(resolvedToolSettings.value.overrides)}`,
+    () => `${projectId.value}|${(project.value?.memberUserIds ?? []).join(',')}`,
     () => {
-      const nextDraft = Object.fromEntries(
-        allowedToolEntries.value.map(entry => {
-          const override = resolvedToolSettings.value.overrides[entry.sourceKey]
-          const disabled = !resolvedToolSettings.value.enabledSourceKeys.includes(entry.sourceKey)
-          return [entry.sourceKey, disabled ? 'deny' : (override?.permissionMode ?? 'inherit')]
-        }),
-      ) as Record<string, ToolPermissionSelection>
-      toolPermissionDraft.value = nextDraft
-      toolsError.value = ''
+      resetMembers()
     },
     { immediate: true },
   )
 
   watch(
-    () => `${projectId.value}|${resolvedAgentSettings.value.enabledAgentIds.join(',')}|${resolvedAgentSettings.value.enabledTeamIds.join(',')}`,
-    () => {
-      enabledAgentIds.value = [...resolvedAgentSettings.value.enabledAgentIds]
-      enabledTeamIds.value = [...resolvedAgentSettings.value.enabledTeamIds]
-      agentsError.value = ''
+    () => grantForm.assignedConfiguredModelIds.join(','),
+    (value) => {
+      const assignedIds = value ? value.split(',').filter(Boolean) : []
+      if (!assignedIds.length) {
+        grantForm.defaultConfiguredModelId = ''
+        return
+      }
+      if (!assignedIds.includes(grantForm.defaultConfiguredModelId)) {
+        grantForm.defaultConfiguredModelId = assignedIds[0] ?? ''
+      }
     },
-    { immediate: true },
   )
 
   watch(
-    () => `${projectId.value}|${currentMemberUserIds.value.join(',')}`,
-    () => {
-      selectedMemberUserIds.value = [...currentMemberUserIds.value]
-      usersError.value = ''
-    },
-    { immediate: true },
-  )
-
-  watch(
-    () => [...modelsForm.allowedConfiguredModelIds].join(','),
+    () => runtimeForm.allowedConfiguredModelIds.join(','),
     (value) => {
       const allowedIds = value ? value.split(',').filter(Boolean) : []
       if (!allowedIds.length) {
-        modelsForm.defaultConfiguredModelId = ''
+        runtimeForm.defaultConfiguredModelId = ''
         return
       }
-      if (!allowedIds.includes(modelsForm.defaultConfiguredModelId)) {
-        modelsForm.defaultConfiguredModelId = allowedIds[0] ?? ''
+      if (!allowedIds.includes(runtimeForm.defaultConfiguredModelId)) {
+        runtimeForm.defaultConfiguredModelId = allowedIds[0] ?? ''
       }
     },
   )
@@ -322,82 +417,6 @@ export function useProjectSettings() {
 
   function badgeTone(status: ProjectRecord['status']) {
     return status === 'archived' ? 'warning' : 'success'
-  }
-
-  function inferWorkspaceToolPermission(entry: CapabilityAssetManifest): WorkspaceToolPermissionMode {
-    const matchedTool = catalogStore.tools.find(tool =>
-      tool.kind === entry.kind
-      && tool.name.trim().toLowerCase() === entry.name.trim().toLowerCase(),
-    )
-    if (matchedTool) {
-      return matchedTool.permissionMode
-    }
-
-    switch (entry.requiredPermission) {
-      case 'readonly':
-        return 'readonly'
-      case 'workspace-write':
-      case 'danger-full-access':
-        return 'ask'
-      default:
-        return 'allow'
-    }
-  }
-
-  function resolveToolSelection(sourceKey: string) {
-    return toolPermissionDraft.value[sourceKey] ?? 'inherit'
-  }
-
-  function toolPermissionSummaryLabel(entry: CapabilityAssetManifest) {
-    const selection = resolveToolSelection(entry.sourceKey)
-    if (selection === 'inherit') {
-      return `${t('projectSettings.tools.modes.inherit')} · ${t(`projectSettings.tools.modes.${inferWorkspaceToolPermission(entry)}`)}`
-    }
-    return t(`projectSettings.tools.modes.${selection}`)
-  }
-
-  function updateToolPermission(sourceKey: string, nextValue: string) {
-    toolPermissionDraft.value = {
-      ...toolPermissionDraft.value,
-      [sourceKey]: TOOL_PERMISSION_VALUES.includes(nextValue as ToolPermissionSelection)
-        ? nextValue as ToolPermissionSelection
-        : 'inherit',
-    }
-  }
-
-  function resetBasics() {
-    basicsForm.name = project.value?.name ?? ''
-    basicsForm.description = project.value?.description ?? ''
-    basicsError.value = ''
-  }
-
-  function resetModels() {
-    modelsForm.allowedConfiguredModelIds = [...resolvedModelSettings.value.allowedConfiguredModelIds]
-    modelsForm.defaultConfiguredModelId = resolvedModelSettings.value.defaultConfiguredModelId
-    modelsForm.totalTokens = resolvedModelSettings.value.totalTokens ? String(resolvedModelSettings.value.totalTokens) : ''
-    modelsError.value = ''
-  }
-
-  function resetTools() {
-    toolPermissionDraft.value = Object.fromEntries(
-      allowedToolEntries.value.map(entry => {
-        const override = resolvedToolSettings.value.overrides[entry.sourceKey]
-        const disabled = !resolvedToolSettings.value.enabledSourceKeys.includes(entry.sourceKey)
-        return [entry.sourceKey, disabled ? 'deny' : (override?.permissionMode ?? 'inherit')]
-      }),
-    ) as Record<string, ToolPermissionSelection>
-    toolsError.value = ''
-  }
-
-  function resetAgents() {
-    enabledAgentIds.value = [...resolvedAgentSettings.value.enabledAgentIds]
-    enabledTeamIds.value = [...resolvedAgentSettings.value.enabledTeamIds]
-    agentsError.value = ''
-  }
-
-  function resetUsers() {
-    selectedMemberUserIds.value = [...currentMemberUserIds.value]
-    usersError.value = ''
   }
 
   function buildProjectUpdateInput(overrides: Partial<ProjectRecord>) {
@@ -418,51 +437,181 @@ export function useProjectSettings() {
     }
   }
 
-  async function submitBasics() {
-    if (!project.value || !basicsForm.name.trim() || savingBasics.value) {
-      return
+  function openGrantModelsDialog() {
+    resetGrantModels()
+    dialogOpen.grantModels = true
+  }
+
+  function openGrantToolsDialog() {
+    resetGrantTools()
+    dialogOpen.grantTools = true
+  }
+
+  function openGrantActorsDialog() {
+    resetGrantActors()
+    dialogOpen.grantActors = true
+  }
+
+  function openRuntimeModelsDialog() {
+    resetRuntimeModels()
+    dialogOpen.runtimeModels = true
+  }
+
+  function openRuntimeToolsDialog() {
+    resetRuntimeTools()
+    dialogOpen.runtimeTools = true
+  }
+
+  function openRuntimeActorsDialog() {
+    resetRuntimeActors()
+    dialogOpen.runtimeActors = true
+  }
+
+  function openMembersDialog() {
+    resetMembers()
+    dialogOpen.members = true
+  }
+
+  function resolveRuntimeToolSelection(sourceKey: string) {
+    return runtimeForm.toolPermissionDraft[sourceKey] ?? 'inherit'
+  }
+
+  function runtimeToolPermissionSummaryLabel(entry: CapabilityAssetManifest) {
+    const selection = resolveRuntimeToolSelection(entry.sourceKey)
+    if (selection === 'inherit') {
+      return `${t('projectSettings.tools.modes.inherit')} · ${t(`projectSettings.tools.modes.${inferWorkspaceToolPermission(entry, catalogStore.tools)}`)}`
     }
+    return t(`projectSettings.tools.modes.${selection}`)
+  }
 
-    basicsError.value = ''
-    savingBasics.value = true
-
-    try {
-      const input = buildProjectUpdateInput({
-        name: basicsForm.name,
-        description: basicsForm.description,
-      })
-      if (!input) {
-        return
-      }
-      const updated = await workspaceStore.updateProject(project.value.id, input)
-      if (!updated) {
-        basicsError.value = workspaceStore.error || t('projectSettings.basics.saveError')
-      }
-    } finally {
-      savingBasics.value = false
+  function updateRuntimeToolPermission(sourceKey: string, nextValue: string) {
+    runtimeForm.toolPermissionDraft = {
+      ...runtimeForm.toolPermissionDraft,
+      [sourceKey]: TOOL_PERMISSION_VALUES.includes(nextValue as ToolPermissionSelection)
+        ? nextValue as ToolPermissionSelection
+        : 'inherit',
     }
   }
 
-  async function saveModels() {
-    if (!project.value || savingModels.value) {
+  async function saveGrantModels() {
+    if (!project.value || saving.grantModels) {
       return
     }
 
-    const allowedConfiguredModelIds = [...new Set(modelsForm.allowedConfiguredModelIds)]
-    if (allowedConfiguredModelIds.length && !allowedConfiguredModelIds.includes(modelsForm.defaultConfiguredModelId)) {
-      modelsError.value = t('projectSettings.models.validation.defaultMustBeAllowed')
+    const assignedConfiguredModelIds = unique(grantForm.assignedConfiguredModelIds)
+    if (assignedConfiguredModelIds.length && !assignedConfiguredModelIds.includes(grantForm.defaultConfiguredModelId)) {
+      dialogErrors.grantModels = t('projectSettings.models.validation.defaultMustBeAllowed')
       return
     }
 
-    modelsError.value = ''
-    savingModels.value = true
+    dialogErrors.grantModels = ''
+    saving.grantModels = true
+
+    try {
+      const assignments = {
+        ...(project.value.assignments ?? {}),
+        models: assignedConfiguredModelIds.length
+          ? {
+              configuredModelIds: assignedConfiguredModelIds,
+              defaultConfiguredModelId: grantForm.defaultConfiguredModelId || assignedConfiguredModelIds[0] || '',
+            }
+          : undefined,
+      }
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({ assignments })!,
+      )
+      if (!updated) {
+        dialogErrors.grantModels = workspaceStore.error || t('projectSettings.sections.grants.saveError')
+        return
+      }
+      dialogOpen.grantModels = false
+    } finally {
+      saving.grantModels = false
+    }
+  }
+
+  async function saveGrantTools() {
+    if (!project.value || saving.grantTools) {
+      return
+    }
+
+    dialogErrors.grantTools = ''
+    saving.grantTools = true
+
+    try {
+      const sourceKeys = unique(grantForm.assignedToolSourceKeys)
+      const assignments = {
+        ...(project.value.assignments ?? {}),
+        tools: sourceKeys.length ? { sourceKeys } : undefined,
+      }
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({ assignments })!,
+      )
+      if (!updated) {
+        dialogErrors.grantTools = workspaceStore.error || t('projectSettings.sections.grants.saveError')
+        return
+      }
+      dialogOpen.grantTools = false
+    } finally {
+      saving.grantTools = false
+    }
+  }
+
+  async function saveGrantActors() {
+    if (!project.value || saving.grantActors) {
+      return
+    }
+
+    dialogErrors.grantActors = ''
+    saving.grantActors = true
+
+    try {
+      const agentIds = unique(grantForm.assignedAgentIds)
+      const teamIds = unique(grantForm.assignedTeamIds)
+      const assignments = {
+        ...(project.value.assignments ?? {}),
+        agents: agentIds.length || teamIds.length
+          ? { agentIds, teamIds }
+          : undefined,
+      }
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({ assignments })!,
+      )
+      if (!updated) {
+        dialogErrors.grantActors = workspaceStore.error || t('projectSettings.sections.grants.saveError')
+        return
+      }
+      dialogOpen.grantActors = false
+    } finally {
+      saving.grantActors = false
+    }
+  }
+
+  async function saveRuntimeModels() {
+    if (!project.value || saving.runtimeModels) {
+      return
+    }
+
+    const allowedConfiguredModelIds = unique(runtimeForm.allowedConfiguredModelIds)
+    if (allowedConfiguredModelIds.length && !allowedConfiguredModelIds.includes(runtimeForm.defaultConfiguredModelId)) {
+      dialogErrors.runtimeModels = t('projectSettings.models.validation.defaultMustBeAllowed')
+      return
+    }
+
+    dialogErrors.runtimeModels = ''
+    saving.runtimeModels = true
 
     try {
       const saved = await workspaceStore.saveProjectModelSettings(project.value.id, {
         allowedConfiguredModelIds,
-        defaultConfiguredModelId: allowedConfiguredModelIds.length ? modelsForm.defaultConfiguredModelId : '',
+        defaultConfiguredModelId: allowedConfiguredModelIds.length
+          ? runtimeForm.defaultConfiguredModelId
+          : '',
         totalTokens: (() => {
-          const trimmed = modelsForm.totalTokens.trim()
+          const trimmed = runtimeForm.totalTokens.trim()
           if (!trimmed) {
             return undefined
           }
@@ -472,31 +621,37 @@ export function useProjectSettings() {
         })(),
       })
       if (!saved) {
-        modelsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+        dialogErrors.runtimeModels = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
           || workspaceStore.error
           || t('projectSettings.models.saveError')
+        return
       }
+      dialogOpen.runtimeModels = false
     } finally {
-      savingModels.value = false
+      saving.runtimeModels = false
     }
   }
 
-  async function saveTools() {
-    if (!project.value || savingTools.value) {
+  async function saveRuntimeTools() {
+    if (!project.value || saving.runtimeTools) {
       return
     }
 
-    toolsError.value = ''
-    savingTools.value = true
+    dialogErrors.runtimeTools = ''
+    saving.runtimeTools = true
 
     try {
-      const enabledSourceKeys = allowedToolEntries.value
+      const enabledSourceKeys = grantedToolEntries.value
         .map(entry => entry.sourceKey)
-        .filter(sourceKey => resolveToolSelection(sourceKey) !== 'deny')
+        .filter(sourceKey => resolveRuntimeToolSelection(sourceKey) !== 'deny')
       const overrides = Object.fromEntries(
-        allowedToolEntries.value.flatMap((entry) => {
-          const selection = resolveToolSelection(entry.sourceKey)
-          if (selection === 'inherit' || selection === 'deny' || selection === inferWorkspaceToolPermission(entry)) {
+        grantedToolEntries.value.flatMap((entry) => {
+          const selection = resolveRuntimeToolSelection(entry.sourceKey)
+          if (
+            selection === 'inherit'
+            || selection === 'deny'
+            || selection === inferWorkspaceToolPermission(entry, catalogStore.tools)
+          ) {
             return []
           }
           return [[entry.sourceKey, { permissionMode: selection }]]
@@ -504,136 +659,118 @@ export function useProjectSettings() {
       )
       const saved = await workspaceStore.saveProjectToolSettings(project.value.id, { enabledSourceKeys, overrides })
       if (!saved) {
-        toolsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+        dialogErrors.runtimeTools = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
           || workspaceStore.error
           || t('projectSettings.tools.saveError')
+        return
       }
+      dialogOpen.runtimeTools = false
     } finally {
-      savingTools.value = false
+      saving.runtimeTools = false
     }
   }
 
-  async function saveAgents() {
-    if (!project.value || savingAgents.value) {
+  async function saveRuntimeActors() {
+    if (!project.value || saving.runtimeActors) {
       return
     }
 
-    agentsError.value = ''
-    savingAgents.value = true
+    dialogErrors.runtimeActors = ''
+    saving.runtimeActors = true
 
     try {
-      const nextAgentIds = [...new Set(enabledAgentIds.value)]
-      const nextTeamIds = [...new Set(enabledTeamIds.value)]
-      const updated = await workspaceStore.updateProject(
-        project.value.id,
-        buildProjectUpdateInput({
-          assignments: {
-            ...(project.value.assignments ?? {}),
-            agents: {
-              agentIds: nextAgentIds,
-              teamIds: nextTeamIds,
-            },
-          },
-        })!,
-      )
-      if (!updated) {
-        agentsError.value = workspaceStore.error || t('projectSettings.agents.saveError')
-        return
-      }
       const saved = await workspaceStore.saveProjectAgentSettings(project.value.id, {
-        enabledAgentIds: nextAgentIds,
-        enabledTeamIds: nextTeamIds,
+        enabledAgentIds: unique(runtimeForm.enabledAgentIds),
+        enabledTeamIds: unique(runtimeForm.enabledTeamIds),
       })
       if (!saved) {
-        agentsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+        dialogErrors.runtimeActors = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
           || workspaceStore.error
           || t('projectSettings.agents.saveError')
         return
       }
-      await notifyAgentsSaved(project.value.name)
+      dialogOpen.runtimeActors = false
     } finally {
-      savingAgents.value = false
+      saving.runtimeActors = false
     }
   }
 
-  async function saveUsers() {
-    if (!project.value || savingUsers.value) {
+  async function saveMembers() {
+    if (!project.value || saving.members) {
       return
     }
 
-    usersError.value = ''
-    savingUsers.value = true
+    dialogErrors.members = ''
+    saving.members = true
 
     try {
       const updated = await workspaceStore.updateProject(
         project.value.id,
         buildProjectUpdateInput({
-          memberUserIds: [...new Set(selectedMemberUserIds.value)],
+          memberUserIds: unique(memberDraft.value),
         })!,
       )
       if (!updated) {
-        usersError.value = workspaceStore.error || t('projectSettings.users.saveError')
+        dialogErrors.members = workspaceStore.error || t('projectSettings.users.saveError')
+        return
       }
-    } catch (cause) {
-      usersError.value = cause instanceof Error ? cause.message : t('projectSettings.users.saveError')
+      dialogOpen.members = false
     } finally {
-      savingUsers.value = false
+      saving.members = false
     }
   }
 
   return {
     t,
     workspaceStore,
-    activeTab,
-    basicsForm,
-    modelsForm,
-    enabledAgentIds,
-    enabledTeamIds,
-    selectedMemberUserIds,
-    tabs,
     project,
-    allowedWorkspaceConfiguredModels,
+    loadingDependencies,
+    dialogOpen,
+    dialogErrors,
+    saving,
+    grantForm,
+    runtimeForm,
+    memberDraft,
+    workspaceConfiguredModels,
+    workspaceToolSections,
+    grantedConfiguredModels,
+    grantedToolSections,
     actorCandidateAgents,
     actorCandidateTeams,
+    grantedAgents,
+    grantedTeams,
     projectOwnedAgents,
     projectOwnedTeams,
-    workspaceAssignedAgents,
-    workspaceAssignedTeams,
     workspaceUsers,
-    modelTabReady,
-    viewReady,
-    toolSections,
-    summaryAllowedModels,
-    projectUsedTokens,
-    summaryOverrideCount,
-    summaryActorCount,
-    summaryMemberCount,
     toolPermissionOptions,
-    loadingDependencies,
-    savingBasics,
-    savingModels,
-    savingTools,
-    savingAgents,
-    savingUsers,
-    basicsError,
-    modelsError,
-    toolsError,
-    agentsError,
-    usersError,
+    capabilitySummary,
+    grantSummary,
+    runtimeSummary,
+    memberSummary,
+    accessSummary,
+    permissionOverrideCount,
+    completionItems,
+    completionProgress,
+    projectUsedTokens,
+    viewReady,
     statusLabel,
     badgeTone,
-    resolveToolSelection,
-    toolPermissionSummaryLabel,
-    updateToolPermission,
-    resetBasics,
-    resetModels,
-    resetTools,
-    resetAgents,
-    resetUsers,
-    submitBasics,
-    saveModels,
-    saveTools,
-    saveAgents,
-    saveUsers,
+    openGrantModelsDialog,
+    openGrantToolsDialog,
+    openGrantActorsDialog,
+    openRuntimeModelsDialog,
+    openRuntimeToolsDialog,
+    openRuntimeActorsDialog,
+    openMembersDialog,
+    resolveRuntimeToolSelection,
+    runtimeToolPermissionSummaryLabel,
+    updateRuntimeToolPermission,
+    saveGrantModels,
+    saveGrantTools,
+    saveGrantActors,
+    saveRuntimeModels,
+    saveRuntimeTools,
+    saveRuntimeActors,
+    saveMembers,
   }
 }

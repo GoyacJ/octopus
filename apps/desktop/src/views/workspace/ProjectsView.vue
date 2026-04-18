@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
-import type { CapabilityAssetManifest, ProjectRecord, WorkspaceToolKind } from '@octopus/schema'
+import type { ProjectRecord } from '@octopus/schema'
 import {
   UiBadge,
   UiButton,
-  UiCheckbox,
   UiEmptyState,
   UiField,
   UiInput,
@@ -16,13 +16,21 @@ import {
   UiMetricCard,
   UiPageHeader,
   UiPageShell,
+  UiSelect,
   UiStatusCallout,
   UiTextarea,
 } from '@octopus/ui'
 
 import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
+import { createProjectSurfaceTarget } from '@/i18n/navigation'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
+import {
+  buildProjectCapabilitySummary,
+  buildProjectSetupPresetSeed,
+  type ProjectCapabilitySummary,
+  type ProjectSetupPreset,
+} from '@/stores/project_setup'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -34,6 +42,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+const router = useRouter()
 const agentStore = useAgentStore()
 const catalogStore = useCatalogStore()
 const shell = useShellStore()
@@ -41,16 +50,13 @@ const teamStore = useTeamStore()
 const workspaceStore = useWorkspaceStore()
 
 const selectedProjectId = ref('')
+const detailsError = ref('')
+
 const form = reactive({
   name: '',
   description: '',
   resourceDirectory: '',
-  configuredModelIds: [] as string[],
-  defaultConfiguredModelId: '',
-  totalTokens: '',
-  toolSourceKeys: [] as string[],
-  agentIds: [] as string[],
-  teamIds: [] as string[],
+  preset: 'general' as ProjectSetupPreset,
 })
 
 const projects = computed(() => workspaceStore.projects)
@@ -72,21 +78,84 @@ const selectedProjectDashboard = computed(() =>
   selectedProjectId.value ? workspaceStore.getProjectDashboard(selectedProjectId.value) : null,
 )
 const usedTokens = computed(() => selectedProjectDashboard.value?.usedTokens ?? 0)
-const detailsError = ref('')
-const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
-const workspaceToolSections = computed<{ kind: WorkspaceToolKind, entries: CapabilityAssetManifest[] }[]>(() =>
-  TOOL_GROUP_ORDER
-    .map(kind => ({
-      kind,
-      entries: workspaceToolEntries.value.filter(entry => entry.kind === kind),
-    }))
-    .filter(section => section.entries.length > 0),
+const isCreateMode = computed(() => !selectedProject.value)
+
+const presetOptions = computed(() => ([
+  { value: 'general', label: String(t('projects.presets.options.general.label')) },
+  { value: 'engineering', label: String(t('projects.presets.options.engineering.label')) },
+  { value: 'documentation', label: String(t('projects.presets.options.documentation.label')) },
+  { value: 'advanced', label: String(t('projects.presets.options.advanced.label')) },
+]))
+
+const presetSeed = computed(() => buildProjectSetupPresetSeed(form.preset, {
+  models: workspaceConfiguredModels.value,
+  tools: workspaceToolEntries.value,
+  agents: workspaceAgents.value,
+  teams: workspaceTeams.value,
+}))
+
+const selectedAssignedConfiguredModels = computed(() => {
+  const configuredIds = selectedProject.value?.assignments?.models?.configuredModelIds ?? []
+  return workspaceConfiguredModels.value.filter(item => configuredIds.includes(item.value))
+})
+
+const selectedAssignedToolEntries = computed(() => {
+  const sourceKeys = selectedProject.value?.assignments?.tools?.sourceKeys ?? []
+  return workspaceToolEntries.value.filter(entry => sourceKeys.includes(entry.sourceKey))
+})
+
+const selectedSummary = computed(() =>
+  buildProjectCapabilitySummary({
+    project: selectedProject.value,
+    projectSettings: selectedProjectSettings.value,
+    assignedConfiguredModels: selectedAssignedConfiguredModels.value,
+    assignedToolEntries: selectedAssignedToolEntries.value,
+    workspaceTools: catalogStore.tools,
+  }),
 )
+
+const draftSummary = computed<ProjectCapabilitySummary>(() => {
+  const grantedModelIds = presetSeed.value.assignments?.models?.configuredModelIds ?? []
+  const enabledModelIds = presetSeed.value.modelSettings?.allowedConfiguredModelIds ?? grantedModelIds
+  const defaultConfiguredModelId = presetSeed.value.modelSettings?.defaultConfiguredModelId
+    || presetSeed.value.assignments?.models?.defaultConfiguredModelId
+    || ''
+  const defaultModelLabel = workspaceConfiguredModels.value.find(item => item.value === defaultConfiguredModelId)?.label ?? ''
+  const grantedToolCount = presetSeed.value.assignments?.tools?.sourceKeys?.length ?? 0
+  const enabledToolCount = presetSeed.value.toolSettings?.enabledSourceKeys?.length ?? grantedToolCount
+  const grantedActorCount = (presetSeed.value.assignments?.agents?.agentIds?.length ?? 0)
+    + (presetSeed.value.assignments?.agents?.teamIds?.length ?? 0)
+  const enabledActorCount = (presetSeed.value.agentSettings?.enabledAgentIds?.length
+    ?? presetSeed.value.assignments?.agents?.agentIds?.length
+    ?? 0)
+    + (presetSeed.value.agentSettings?.enabledTeamIds?.length
+      ?? presetSeed.value.assignments?.agents?.teamIds?.length
+      ?? 0)
+
+  return {
+    grantedModels: grantedModelIds.length,
+    enabledModels: enabledModelIds.length,
+    defaultModelLabel,
+    grantedTools: grantedToolCount,
+    enabledTools: enabledToolCount,
+    toolOverrideCount: Object.keys(presetSeed.value.toolSettings?.overrides ?? {}).length,
+    grantedActors: grantedActorCount,
+    enabledActors: enabledActorCount,
+    memberCount: 0,
+    editableMemberCount: 0,
+  }
+})
+
+const capabilitySummary = computed(() =>
+  selectedProject.value ? selectedSummary.value : draftSummary.value,
+)
+
 const metrics = computed(() => [
   { id: 'total', label: t('projects.metrics.total'), value: String(projects.value.length) },
   { id: 'active', label: t('projects.metrics.active'), value: String(projects.value.filter(project => project.status === 'active').length) },
   { id: 'archived', label: t('projects.metrics.archived'), value: String(projects.value.filter(project => project.status === 'archived').length) },
 ])
+
 const errorMessage = computed(() => {
   const message = workspaceStore.error
   if (!message) {
@@ -99,7 +168,6 @@ const errorMessage = computed(() => {
 
   return message
 })
-const isCreateMode = computed(() => !selectedProject.value)
 
 watch(
   () => shell.activeWorkspaceConnectionId,
@@ -118,9 +186,14 @@ watch(
 )
 
 watch(
-  () => projects.value.map(project => `${project.id}:${project.status}:${project.name}:${project.description}:${JSON.stringify(project.assignments ?? {})}`).join('|'),
+  () => projects.value.map(project => `${project.id}:${project.status}:${project.name}:${project.description}:${JSON.stringify(project.assignments ?? {})}:${(project.memberUserIds ?? []).join(',')}`).join('|'),
   () => {
     if (!selectedProjectId.value) {
+      const fallbackProjectId = projects.value.find(project => project.id === workspaceStore.currentProjectId)?.id
+        ?? projects.value[0]?.id
+      if (fallbackProjectId) {
+        applyProject(fallbackProjectId)
+      }
       return
     }
 
@@ -148,31 +221,6 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => `${selectedProjectId.value}|${selectedProjectSettings.value.models?.totalTokens ?? ''}|${usedTokens.value}`,
-  () => {
-    form.totalTokens = selectedProjectSettings.value.models?.totalTokens
-      ? String(selectedProjectSettings.value.models.totalTokens)
-      : ''
-    detailsError.value = ''
-  },
-  { immediate: true },
-)
-
-watch(
-  () => [...form.configuredModelIds].join(','),
-  (value) => {
-    const selectedIds = value ? value.split(',').filter(Boolean) : []
-    if (!selectedIds.length) {
-      form.defaultConfiguredModelId = ''
-      return
-    }
-    if (!selectedIds.includes(form.defaultConfiguredModelId)) {
-      form.defaultConfiguredModelId = selectedIds[0] ?? ''
-    }
-  },
-)
-
 function applyProject(projectId?: string) {
   const project = projects.value.find(item => item.id === projectId)
   selectedProjectId.value = project?.id ?? ''
@@ -180,46 +228,8 @@ function applyProject(projectId?: string) {
   form.name = project?.name ?? ''
   form.description = project?.description ?? ''
   form.resourceDirectory = project?.resourceDirectory ?? ''
-  form.configuredModelIds = [...(project?.assignments?.models?.configuredModelIds ?? [])]
-  form.defaultConfiguredModelId = project?.assignments?.models?.defaultConfiguredModelId ?? ''
-  form.totalTokens = projectSettingsTotalTokens(project?.id)
-  form.toolSourceKeys = [...(project?.assignments?.tools?.sourceKeys ?? [])]
-  form.agentIds = [...(project?.assignments?.agents?.agentIds ?? [])]
-  form.teamIds = [...(project?.assignments?.agents?.teamIds ?? [])]
+  form.preset = 'general'
   detailsError.value = ''
-}
-
-function projectSettingsTotalTokens(projectId?: string) {
-  if (!projectId) {
-    return ''
-  }
-
-  const totalTokens = workspaceStore.getProjectSettings(projectId).models?.totalTokens
-  return totalTokens ? String(totalTokens) : ''
-}
-
-function buildAssignments() {
-  const configuredModelIds = [...new Set(form.configuredModelIds)]
-  const toolSourceKeys = [...new Set(form.toolSourceKeys)]
-  const agentIds = [...new Set(form.agentIds)]
-  const teamIds = [...new Set(form.teamIds)]
-
-  return {
-    models: configuredModelIds.length
-      ? {
-          configuredModelIds,
-          defaultConfiguredModelId: configuredModelIds.includes(form.defaultConfiguredModelId)
-            ? form.defaultConfiguredModelId
-            : configuredModelIds[0] ?? '',
-        }
-      : undefined,
-    tools: toolSourceKeys.length
-      ? { sourceKeys: toolSourceKeys }
-      : undefined,
-    agents: agentIds.length || teamIds.length
-      ? { agentIds, teamIds }
-      : undefined,
-  }
 }
 
 async function submitProject() {
@@ -228,16 +238,6 @@ async function submitProject() {
   }
 
   detailsError.value = ''
-  const assignments = buildAssignments()
-  const totalTokens = (() => {
-    const trimmed = form.totalTokens.trim()
-    if (!trimmed) {
-      return undefined
-    }
-
-    const parsed = Number(trimmed)
-    return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
-  })()
 
   if (selectedProject.value) {
     const updated = await workspaceStore.updateProject(selectedProject.value.id, {
@@ -245,23 +245,17 @@ async function submitProject() {
       description: form.description,
       resourceDirectory: form.resourceDirectory,
       status: selectedProject.value.status,
-      assignments,
+      assignments: selectedProject.value.assignments,
+      ownerUserId: selectedProject.value.ownerUserId,
+      memberUserIds: selectedProject.value.memberUserIds,
+      permissionOverrides: selectedProject.value.permissionOverrides,
+      linkedWorkspaceAssets: selectedProject.value.linkedWorkspaceAssets,
     })
-    if (updated) {
-      const saved = await workspaceStore.saveProjectModelSettings(updated.id, {
-        allowedConfiguredModelIds: [...new Set(form.configuredModelIds)],
-        defaultConfiguredModelId: form.configuredModelIds.includes(form.defaultConfiguredModelId)
-          ? form.defaultConfiguredModelId
-          : '',
-        totalTokens,
-      })
-      if (!saved) {
-        detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
-          || workspaceStore.error
-          || String(t('projectSettings.models.saveError'))
-      }
-      applyProject(updated.id)
+    if (!updated) {
+      detailsError.value = workspaceStore.error || String(t('projects.errors.saveMetadata'))
+      return
     }
+    applyProject(updated.id)
     return
   }
 
@@ -269,23 +263,45 @@ async function submitProject() {
     name: form.name,
     description: form.description,
     resourceDirectory: form.resourceDirectory,
-    assignments,
+    assignments: presetSeed.value.assignments,
   })
-  if (created) {
-    const saved = await workspaceStore.saveProjectModelSettings(created.id, {
-      allowedConfiguredModelIds: [...new Set(form.configuredModelIds)],
-      defaultConfiguredModelId: form.configuredModelIds.includes(form.defaultConfiguredModelId)
-        ? form.defaultConfiguredModelId
-        : '',
-      totalTokens,
-    })
-    if (!saved) {
-      detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
-        || workspaceStore.error
-        || String(t('projectSettings.models.saveError'))
-    }
-    applyProject(created.id)
+  if (!created) {
+    detailsError.value = workspaceStore.error || String(t('projects.errors.create'))
+    return
   }
+
+  const [savedModels, savedTools, savedActors] = await Promise.all([
+    presetSeed.value.modelSettings
+      ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.value.modelSettings)
+      : Promise.resolve(null),
+    presetSeed.value.toolSettings
+      ? workspaceStore.saveProjectToolSettings(created.id, presetSeed.value.toolSettings)
+      : Promise.resolve(null),
+    presetSeed.value.agentSettings
+      ? workspaceStore.saveProjectAgentSettings(created.id, presetSeed.value.agentSettings)
+      : Promise.resolve(null),
+  ])
+
+  if (
+    (presetSeed.value.modelSettings && !savedModels)
+    || (presetSeed.value.toolSettings && !savedTools)
+    || (presetSeed.value.agentSettings && !savedActors)
+  ) {
+    detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+      || workspaceStore.error
+      || String(t('projects.errors.seedRuntime'))
+  }
+
+  applyProject(created.id)
+}
+
+async function openSelectedProjectSettings() {
+  const workspaceId = workspaceStore.currentWorkspaceId
+  if (!workspaceId || !selectedProject.value) {
+    return
+  }
+
+  await router.push(createProjectSurfaceTarget('project-settings', workspaceId, selectedProject.value.id))
 }
 
 async function archiveSelectedProject() {
@@ -314,6 +330,36 @@ function statusLabel(status: ProjectRecord['status']) {
   return status === 'archived'
     ? t('projects.status.archived')
     : t('projects.status.active')
+}
+
+function modelSummaryLabel(summary: ProjectCapabilitySummary) {
+  return t('projects.summary.modelsValue', {
+    granted: summary.grantedModels,
+    enabled: summary.enabledModels,
+    defaultModel: summary.defaultModelLabel || t('common.na'),
+  })
+}
+
+function toolSummaryLabel(summary: ProjectCapabilitySummary) {
+  return t('projects.summary.toolsValue', {
+    granted: summary.grantedTools,
+    enabled: summary.enabledTools,
+    overrides: summary.toolOverrideCount,
+  })
+}
+
+function actorSummaryLabel(summary: ProjectCapabilitySummary) {
+  return t('projects.summary.actorsValue', {
+    granted: summary.grantedActors,
+    enabled: summary.enabledActors,
+  })
+}
+
+function memberSummaryLabel(summary: ProjectCapabilitySummary) {
+  return t('projects.summary.membersValue', {
+    members: summary.memberCount,
+    editors: summary.editableMemberCount,
+  })
 }
 </script>
 
@@ -361,255 +407,192 @@ function statusLabel(status: ProjectRecord['status']) {
     <UiListDetailShell list-class="p-3" detail-class="p-3">
       <template #list>
         <section class="space-y-3">
-        <UiListRow
-          v-for="project in projects"
-          :key="project.id"
-          :data-testid="`projects-select-${project.id}`"
-          :title="project.name"
-          :subtitle="project.description || project.resourceDirectory || t('common.na')"
-          interactive
-          class="cursor-pointer"
-          :active="selectedProjectId === project.id"
-          @click="applyProject(project.id)"
-        >
-          <div class="flex flex-wrap gap-1.5 pt-1">
-            <UiBadge :label="statusLabel(project.status)" subtle />
-          </div>
-          <template #meta>
-            <span class="line-clamp-1 text-xs text-text-tertiary">{{ project.resourceDirectory }}</span>
-          </template>
-        </UiListRow>
-        <UiEmptyState
-          v-if="!projects.length"
-          :title="t('projects.empty.title')"
-          :description="t('projects.empty.description')"
-        />
+          <UiListRow
+            v-for="project in projects"
+            :key="project.id"
+            :data-testid="`projects-select-${project.id}`"
+            :title="project.name"
+            :subtitle="project.description || project.resourceDirectory || t('common.na')"
+            interactive
+            class="cursor-pointer"
+            :active="selectedProjectId === project.id"
+            @click="applyProject(project.id)"
+          >
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <UiBadge :label="statusLabel(project.status)" subtle />
+            </div>
+            <template #meta>
+              <span class="line-clamp-1 text-xs text-text-tertiary">{{ project.resourceDirectory }}</span>
+            </template>
+          </UiListRow>
+          <UiEmptyState
+            v-if="!projects.length"
+            :title="t('projects.empty.title')"
+            :description="t('projects.empty.description')"
+          />
         </section>
       </template>
 
       <UiInspectorPanel :title="isCreateMode ? t('projects.actions.create') : t('projects.actions.edit')">
-        <div class="space-y-4">
-        <h3 class="sr-only">
-          {{ isCreateMode ? t('projects.actions.create') : t('projects.actions.edit') }}
-        </h3>
-        <UiField :label="t('projects.fields.name')">
-          <UiInput v-model="form.name" data-testid="projects-name-input" />
-        </UiField>
-        <UiField :label="t('projects.fields.description')">
-          <UiTextarea v-model="form.description" data-testid="projects-description-input" :rows="8" />
-        </UiField>
-        <ProjectResourceDirectoryField
-          v-model="form.resourceDirectory"
-          path-test-id="projects-resource-directory-path"
-          pick-test-id="projects-resource-directory-pick"
-        />
+        <div class="space-y-6">
+          <section class="space-y-4">
+            <div class="grid gap-4 md:grid-cols-2">
+              <UiField :label="t('projects.fields.name')">
+                <UiInput v-model="form.name" data-testid="projects-name-input" />
+              </UiField>
 
-        <div class="grid gap-4 md:grid-cols-2">
-          <UiField :label="t('projects.fields.totalTokens')" :hint="t('projects.hints.totalTokens')">
-            <UiInput
-              v-model="form.totalTokens"
-              data-testid="projects-total-tokens-input"
-              type="number"
-              :placeholder="t('projectSettings.models.totalTokensPlaceholder')"
-            />
-          </UiField>
-
-          <UiField :label="t('projects.fields.usedTokens')" :hint="t('projects.hints.usedTokens')">
-            <div
-              data-testid="projects-used-tokens-value"
-              class="flex min-h-8 items-center rounded-[var(--radius-s)] border border-border bg-surface-muted px-3 text-sm text-text-primary"
-            >
-              {{ usedTokens.toLocaleString() }}
-            </div>
-          </UiField>
-        </div>
-
-        <UiField
-          :label="t('projects.fields.models')"
-          :hint="t('projects.hints.models')"
-        >
-          <div v-if="workspaceConfiguredModels.length" class="space-y-3">
-            <label
-              v-for="modelOption in workspaceConfiguredModels"
-              :key="modelOption.value"
-              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-            >
-              <div class="min-w-0 space-y-1">
-                <div class="text-sm font-semibold text-text-primary">
-                  {{ modelOption.label }}
-                </div>
-                <div class="text-xs text-text-secondary">
-                  {{ modelOption.providerLabel }} · {{ modelOption.modelLabel }}
-                </div>
-              </div>
-              <UiCheckbox
-                v-model="form.configuredModelIds"
-                :value="modelOption.value"
-                :aria-label="modelOption.label"
-              />
-            </label>
-          </div>
-          <div v-else class="text-sm text-text-secondary">
-            {{ t('projects.emptyAssignments.models') }}
-          </div>
-        </UiField>
-
-        <UiField
-          :label="t('projects.fields.defaultModel')"
-          :hint="t('projects.hints.defaultModel')"
-        >
-          <select
-            v-model="form.defaultConfiguredModelId"
-            data-testid="projects-default-model-select"
-            class="w-full rounded-[var(--radius-xs)] border border-input bg-transparent px-3 py-2 text-sm text-text-primary outline-none"
-            :disabled="!form.configuredModelIds.length"
-          >
-            <option value="">
-              {{ t('common.na') }}
-            </option>
-            <option
-              v-for="modelOption in workspaceConfiguredModels.filter(option => form.configuredModelIds.includes(option.value))"
-              :key="modelOption.value"
-              :value="modelOption.value"
-            >
-              {{ `${modelOption.label} · ${modelOption.providerLabel}` }}
-            </option>
-          </select>
-        </UiField>
-
-        <UiField
-          :label="t('projects.fields.tools')"
-          :hint="t('projects.hints.tools')"
-        >
-          <div v-if="workspaceToolSections.length" class="space-y-5">
-            <section
-              v-for="section in workspaceToolSections"
-              :key="section.kind"
-              class="space-y-3"
-            >
-              <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
-                {{ t(`projectSettings.tools.groups.${section.kind}`) }}
-              </div>
-              <label
-                v-for="entry in section.entries"
-                :key="entry.sourceKey"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ entry.name }}
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ entry.sourceKey }}
-                  </div>
-                </div>
-                <UiCheckbox
-                  v-model="form.toolSourceKeys"
-                  :value="entry.sourceKey"
-                  :aria-label="entry.name"
+              <UiField :label="t('projects.fields.resourceDirectory')">
+                <ProjectResourceDirectoryField
+                  v-model="form.resourceDirectory"
+                  path-test-id="projects-resource-directory-path"
+                  pick-test-id="projects-resource-directory-pick"
                 />
-              </label>
-            </section>
-          </div>
-          <div v-else class="text-sm text-text-secondary">
-            {{ t('projects.emptyAssignments.tools') }}
-          </div>
-        </UiField>
+              </UiField>
+            </div>
 
-        <UiField
-          :label="t('projects.fields.agents')"
-          :hint="t('projects.hints.agents')"
-        >
-          <div v-if="workspaceAgents.length" class="space-y-3">
-            <label
-              v-for="agent in workspaceAgents"
-              :key="agent.id"
-              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            <UiField :label="t('projects.fields.description')">
+              <UiTextarea v-model="form.description" data-testid="projects-description-input" :rows="6" />
+            </UiField>
+
+            <UiField
+              :label="t('projects.fields.preset')"
+              :hint="isCreateMode ? t('projects.presets.hint') : t('projects.presets.editHint')"
             >
-              <div class="min-w-0 space-y-1">
+              <UiSelect
+                v-model="form.preset"
+                data-testid="projects-preset-select"
+                :disabled="!isCreateMode"
+                :options="presetOptions"
+              />
+            </UiField>
+
+            <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+              <div class="font-medium text-text-primary">
+                {{ t(`projects.presets.options.${form.preset}.label`) }}
+              </div>
+              <div class="mt-1 leading-6">
+                {{ t(`projects.presets.options.${form.preset}.description`) }}
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-t border-border pt-4">
+            <div class="space-y-1">
+              <div class="text-sm font-semibold text-text-primary">
+                {{ t('projects.summary.title') }}
+              </div>
+              <div class="text-sm leading-6 text-text-secondary">
+                {{ selectedProject ? t('projects.summary.currentDescription') : t('projects.summary.createDescription') }}
+              </div>
+            </div>
+
+            <div
+              data-testid="projects-summary-models"
+              class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                {{ t('projects.summary.models') }}
+              </div>
+              <div class="mt-1 text-sm leading-6 text-text-primary">
+                {{ modelSummaryLabel(capabilitySummary) }}
+              </div>
+            </div>
+
+            <div
+              data-testid="projects-summary-tools"
+              class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                {{ t('projects.summary.tools') }}
+              </div>
+              <div class="mt-1 text-sm leading-6 text-text-primary">
+                {{ toolSummaryLabel(capabilitySummary) }}
+              </div>
+            </div>
+
+            <div
+              data-testid="projects-summary-actors"
+              class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                {{ t('projects.summary.actors') }}
+              </div>
+              <div class="mt-1 text-sm leading-6 text-text-primary">
+                {{ actorSummaryLabel(capabilitySummary) }}
+              </div>
+            </div>
+
+            <div
+              data-testid="projects-summary-members"
+              class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                {{ t('projects.summary.members') }}
+              </div>
+              <div class="mt-1 text-sm leading-6 text-text-primary">
+                {{ memberSummaryLabel(capabilitySummary) }}
+              </div>
+            </div>
+          </section>
+
+          <section v-if="selectedProject" class="space-y-3 border-t border-border pt-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="space-y-1">
                 <div class="text-sm font-semibold text-text-primary">
-                  {{ agent.name }}
+                  {{ t('projects.summary.advancedTitle') }}
                 </div>
-                <div class="text-xs text-text-secondary">
-                  {{ agent.description || t('common.na') }}
+                <div class="text-sm leading-6 text-text-secondary">
+                  {{ t('projects.summary.advancedDescription') }}
                 </div>
               </div>
-              <UiCheckbox
-                v-model="form.agentIds"
-                :value="agent.id"
-                :aria-label="agent.name"
-              />
-            </label>
-          </div>
-          <div v-else class="text-sm text-text-secondary">
-            {{ t('projects.emptyAssignments.agents') }}
-          </div>
-        </UiField>
 
-        <UiField
-          :label="t('projects.fields.teams')"
-          :hint="t('projects.hints.teams')"
-        >
-          <div v-if="workspaceTeams.length" class="space-y-3">
-            <label
-              v-for="team in workspaceTeams"
-              :key="team.id"
-              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+              <UiBadge :label="statusLabel(selectedProject.status)" subtle />
+            </div>
+
+            <UiButton
+              data-testid="projects-open-settings-button"
+              variant="ghost"
+              @click="openSelectedProjectSettings"
             >
-              <div class="min-w-0 space-y-1">
-                <div class="text-sm font-semibold text-text-primary">
-                  {{ team.name }}
-                </div>
-                <div class="text-xs text-text-secondary">
-                  {{ team.description || t('common.na') }}
-                </div>
-              </div>
-              <UiCheckbox
-                v-model="form.teamIds"
-                :value="team.id"
-                :aria-label="team.name"
-              />
-            </label>
-          </div>
-          <div v-else class="text-sm text-text-secondary">
-            {{ t('projects.emptyAssignments.teams') }}
-          </div>
-        </UiField>
+              {{ t('projects.actions.openSettings') }}
+            </UiButton>
+          </section>
 
-        <div class="flex flex-wrap gap-3">
-          <UiButton
-            :data-testid="isCreateMode ? 'projects-create-button' : 'projects-save-button'"
-            :disabled="!form.name.trim() || !form.resourceDirectory.trim()"
-            @click="submitProject"
-          >
-            {{ isCreateMode ? t('projects.actions.create') : t('common.save') }}
-          </UiButton>
-          <UiButton variant="ghost" @click="applyProject()">
-            {{ t('common.reset') }}
-          </UiButton>
-          <UiButton
-            v-if="selectedProject && selectedProject.status === 'active'"
-            data-testid="projects-archive-button"
-            variant="ghost"
-            @click="archiveSelectedProject"
-          >
-            {{ t('projects.actions.archive') }}
-          </UiButton>
-          <UiButton
-            v-if="selectedProject && selectedProject.status === 'archived'"
-            data-testid="projects-restore-button"
-            variant="ghost"
-            @click="restoreSelectedProject"
-          >
-            {{ t('projects.actions.restore') }}
-          </UiButton>
-        </div>
-        <UiStatusCallout
-          v-if="detailsError"
-          data-testid="projects-detail-error"
-          tone="error"
-          :description="detailsError"
-        />
+          <div class="flex flex-wrap gap-3">
+            <UiButton
+              :data-testid="isCreateMode ? 'projects-create-button' : 'projects-save-button'"
+              :disabled="!form.name.trim() || !form.resourceDirectory.trim()"
+              @click="submitProject"
+            >
+              {{ isCreateMode ? t('projects.actions.create') : t('common.save') }}
+            </UiButton>
+            <UiButton variant="ghost" @click="applyProject(selectedProject?.id)">
+              {{ t('common.reset') }}
+            </UiButton>
+            <UiButton
+              v-if="selectedProject && selectedProject.status === 'active'"
+              data-testid="projects-archive-button"
+              variant="ghost"
+              @click="archiveSelectedProject"
+            >
+              {{ t('projects.actions.archive') }}
+            </UiButton>
+            <UiButton
+              v-if="selectedProject && selectedProject.status === 'archived'"
+              data-testid="projects-restore-button"
+              variant="ghost"
+              @click="restoreSelectedProject"
+            >
+              {{ t('projects.actions.restore') }}
+            </UiButton>
+          </div>
+
+          <UiStatusCallout
+            v-if="detailsError"
+            data-testid="projects-detail-error"
+            tone="error"
+            :description="detailsError"
+          />
         </div>
       </UiInspectorPanel>
     </UiListDetailShell>

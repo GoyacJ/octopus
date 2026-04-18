@@ -9,6 +9,7 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
+import { useWorkspaceStore } from '@/stores/workspace'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
@@ -906,6 +907,7 @@ describe('Workbench shell layout', () => {
     await router.isReady()
 
     const mounted = mountApp()
+    const workspaceStore = useWorkspaceStore()
     await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-create-trigger"]') !== null)
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-trigger"]')?.click()
@@ -913,9 +915,13 @@ describe('Workbench shell layout', () => {
 
     const nameInput = document.body.querySelector<HTMLInputElement>('[data-testid="sidebar-project-create-name-input"]')
     const descriptionInput = document.body.querySelector<HTMLTextAreaElement>('[data-testid="sidebar-project-create-description-input"]')
+    const presetSelect = document.body.querySelector<HTMLSelectElement>('[data-testid="sidebar-project-create-preset-select"]')
     expect(nameInput).not.toBeNull()
     expect(descriptionInput).not.toBeNull()
+    expect(presetSelect).not.toBeNull()
 
+    presetSelect!.value = 'documentation'
+    presetSelect!.dispatchEvent(new Event('change', { bubbles: true }))
     nameInput!.value = 'Strategy Launch'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
     descriptionInput!.value = 'Launch checklist and delivery alignment.'
@@ -942,6 +948,9 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-strategy-launch"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Strategy Launch')
+    expect(
+      workspaceStore.projects.find(project => project.name === 'Strategy Launch')?.assignments?.models?.configuredModelIds,
+    ).toHaveLength(1)
 
     mounted.destroy()
   })

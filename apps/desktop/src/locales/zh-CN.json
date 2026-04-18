@@ -23,6 +23,8 @@
     "confirm": "确定",
     "confirmDelete": "确认删除当前项？",
     "save": "保存",
+    "done": "已完成",
+    "pending": "待处理",
     "reset": "重置",
     "edit": "编辑",
     "delete": "删除",
@@ -645,7 +647,10 @@
     "header": {
       "eyebrow": "项目配置",
       "title": "项目配置",
-      "subtitle": "统一维护当前项目的基础信息、模型、工具权限与项目成员。"
+      "subtitle": "在一个文档式页面里查看此项目可用的能力、已启用项和成员访问。"
+    },
+    "actions": {
+      "openProjects": "返回项目管理"
     },
     "tabs": {
       "basics": "基础信息",
@@ -723,12 +728,107 @@
     },
     "summary": {
       "title": "项目概览",
-      "description": "查看当前项目在工作区中的基础状态。",
+      "description": "查看当前项目的配置完成度和建议下一步。",
       "status": "项目状态",
       "models": "已选模型",
       "toolOverrides": "工具覆盖数",
       "actors": "已启用数字员工数",
-      "members": "项目成员数"
+      "members": "项目成员数",
+      "completion": "配置完成度",
+      "completionValue": "已完成 {completed}/{total} 项",
+      "nextTitle": "建议下一步",
+      "nextDone": "当前关键配置项已经完成。"
+    },
+    "labels": {
+      "workspaceGrant": "工作区授予",
+      "projectEnablement": "项目启用",
+      "projectOverride": "项目覆盖",
+      "members": "成员与访问"
+    },
+    "sections": {
+      "overview": {
+        "title": "配置概览",
+        "description": "这里展示项目台账信息。名称、说明和资源目录只在项目管理页编辑。",
+        "editHint": "如需修改项目名称、说明、资源目录或归档状态，请回到项目管理页处理。"
+      },
+      "grants": {
+        "title": "可用于此项目",
+        "description": "从工作区已有资源中授予当前项目可见的能力范围。",
+        "modelsTitle": "模型授予",
+        "toolsTitle": "工具授予",
+        "actorsTitle": "数字员工授予",
+        "modelsValue": "已授予 {granted} 个，默认 {defaultModel}",
+        "toolsValue": "已授予 {granted} 个工具",
+        "actorsValue": "已授予 {granted} 个数字员工 / 团队",
+        "saveError": "保存项目可用范围失败。"
+      },
+      "runtime": {
+        "title": "在此项目中启用",
+        "description": "在已授予范围内细化默认项、启用状态和覆盖规则。",
+        "modelsTitle": "模型与 Token",
+        "toolsTitle": "工具启用与覆盖",
+        "actorsTitle": "数字员工启用",
+        "modelsValue": "已授予 {granted} 个，启用 {enabled} 个，默认 {defaultModel}，Token {totalTokens}",
+        "toolsValue": "已启用 {enabled} 个工具，{overrides} 个覆盖",
+        "actorsValue": "已授予 {granted} 个，启用 {enabled} 个",
+        "unlimited": "不限量"
+      },
+      "members": {
+        "title": "成员与访问",
+        "description": "维护项目成员，并说明权限覆盖来自访问控制体系。",
+        "membersTitle": "项目成员",
+        "membersValue": "{members} 人，其中 {editors} 人可编辑",
+        "accessTitle": "权限覆盖",
+        "accessHint": "完整 ACL 编辑器不在本轮实现范围内，这里只做摘要与定位说明。",
+        "accessValue": "已有 {count} 条项目级权限覆盖",
+        "accessEmpty": "当前没有项目级权限覆盖，默认继承工作区访问控制。"
+      }
+    },
+    "dialogs": {
+      "grantModels": {
+        "title": "编辑模型授予",
+        "description": "决定这个项目最多能看见哪些工作区模型。",
+        "hint": "只显示工作区已配置的模型。",
+        "defaultHint": "这里的默认值只是项目授予层的默认模型。"
+      },
+      "grantTools": {
+        "title": "编辑工具授予",
+        "description": "决定这个项目最多能看见哪些工作区工具。"
+      },
+      "grantActors": {
+        "title": "编辑数字员工授予",
+        "description": "决定这个项目可以接入哪些工作区数字员工和团队。",
+        "agentsHint": "这里只做授予，不会自动启用。",
+        "teamsHint": "这里只做授予，不会自动启用。"
+      },
+      "runtimeModels": {
+        "title": "编辑模型与 Token",
+        "description": "在已授予的模型范围内启用项目实际可用的模型，并设置默认模型和 Token 配额。",
+        "hint": "这里只显示已授予给当前项目的模型。"
+      },
+      "runtimeTools": {
+        "title": "编辑工具启用与覆盖",
+        "description": "在已授予的工具范围内设置项目启用状态和权限覆盖。"
+      },
+      "runtimeActors": {
+        "title": "编辑数字员工启用",
+        "description": "在已授予范围内选择项目实际启用的数字员工和团队。",
+        "agentsHint": "这里只显示已经授予给当前项目的数字员工。",
+        "teamsHint": "这里只显示已经授予给当前项目的团队。",
+        "projectOwnedTitle": "项目自有数字员工",
+        "projectOwnedDescription": "项目内创建的数字员工和团队默认属于当前项目，不需要再次授予。"
+      },
+      "members": {
+        "title": "编辑项目成员",
+        "description": "维护当前项目成员名单。",
+        "hint": "这里仅维护成员归属，不编辑完整权限规则。"
+      }
+    },
+    "nextSteps": {
+      "grantModels": "先授予至少一个模型",
+      "enableModel": "在项目内启用一个默认模型",
+      "enableActor": "启用至少一个数字员工或团队",
+      "addMembers": "补充项目成员"
     },
     "emptyTitle": "当前无法读取项目配置",
     "emptyDescription": "未找到当前项目，或项目数据尚未加载完成。"
@@ -1986,7 +2086,7 @@
   "projects": {
     "header": {
       "eyebrow": "项目管理",
-      "subtitle": "集中维护项目基础信息、工作区分配项与归档状态。"
+      "subtitle": "集中维护项目台账、生命周期和高级配置摘要。"
     },
     "metrics": {
       "total": "项目总数",
@@ -2002,12 +2102,14 @@
       "edit": "编辑项目",
       "archive": "归档项目",
       "restore": "恢复项目",
-      "pickResourceDirectory": "选择目录"
+      "pickResourceDirectory": "选择目录",
+      "openSettings": "打开项目配置"
     },
     "fields": {
       "name": "项目名称",
       "description": "项目说明",
       "resourceDirectory": "资源目录",
+      "preset": "初始化预设",
       "totalTokens": "Token 总量",
       "usedTokens": "已使用量",
       "models": "已分配模型",
@@ -2041,7 +2143,47 @@
       "archived": "已归档"
     },
     "errors": {
-      "lastActiveProject": "至少保留一个活跃项目，无法归档最后一个活跃项目。"
+      "lastActiveProject": "至少保留一个活跃项目，无法归档最后一个活跃项目。",
+      "create": "创建项目失败。",
+      "saveMetadata": "保存项目基础信息失败。",
+      "seedRuntime": "项目已创建，但初始化高级配置失败。"
+    },
+    "presets": {
+      "hint": "预设只会为新建项目生成建议值，创建后仍可在项目配置页继续细化。",
+      "editHint": "已有项目的高级配置请在项目配置页继续维护，预设只用于新建时初始化。",
+      "options": {
+        "general": {
+          "label": "通用项目",
+          "description": "保持最小初始化，创建后再按需进入项目配置页启用模型、工具和数字员工。"
+        },
+        "engineering": {
+          "label": "研发项目",
+          "description": "优先授予常用模型、工具和数字员工，便于快速进入研发协作。"
+        },
+        "documentation": {
+          "label": "文档项目",
+          "description": "优先保留文档写作常用模型与知识辅助工具，减少无关配置噪音。"
+        },
+        "advanced": {
+          "label": "高级自定义",
+          "description": "不做额外初始化，适合后续完全手动配置。"
+        }
+      }
+    },
+    "summary": {
+      "title": "配置摘要",
+      "currentDescription": "这里只看摘要，不在此页编辑高级能力配置。",
+      "createDescription": "先完成最小创建；高级能力配置稍后在项目配置页细化。",
+      "advancedTitle": "高级配置入口",
+      "advancedDescription": "模型、工具、数字员工、成员与访问都统一在项目配置页编辑。",
+      "models": "模型",
+      "tools": "工具",
+      "actors": "数字员工",
+      "members": "成员",
+      "modelsValue": "已授予 {granted} 个，项目启用 {enabled} 个，默认 {defaultModel}",
+      "toolsValue": "已授予 {granted} 个，项目启用 {enabled} 个，{overrides} 个覆盖",
+      "actorsValue": "已授予 {granted} 个，已启用 {enabled} 个",
+      "membersValue": "{members} 人，其中 {editors} 人可编辑"
     }
   },
   "teams": {

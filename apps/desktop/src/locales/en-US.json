@@ -23,6 +23,8 @@
     "confirm": "Confirm",
     "confirmDelete": "Delete this item?",
     "save": "Save",
+    "done": "Done",
+    "pending": "Pending",
     "reset": "Reset",
     "edit": "Edit",
     "delete": "Delete",
@@ -645,7 +647,10 @@
     "header": {
       "eyebrow": "Project Settings",
       "title": "Project Settings",
-      "subtitle": "Manage project basics, model selection, tool permissions, and project members in one place."
+      "subtitle": "Review granted capabilities, project-level enablement, and member access from one document-style page."
+    },
+    "actions": {
+      "openProjects": "Back to Projects"
     },
     "tabs": {
       "basics": "Basics",
@@ -723,12 +728,107 @@
     },
     "summary": {
       "title": "Project Summary",
-      "description": "Review the active project's current workspace state.",
+      "description": "Track completion progress and the next recommended setup step.",
       "status": "Project status",
       "models": "Allowed models",
       "toolOverrides": "Tool overrides",
       "actors": "Enabled actors",
-      "members": "Project members"
+      "members": "Project members",
+      "completion": "Completion",
+      "completionValue": "{completed}/{total} complete",
+      "nextTitle": "Suggested next step",
+      "nextDone": "The core setup items are already complete."
+    },
+    "labels": {
+      "workspaceGrant": "Workspace grant",
+      "projectEnablement": "Project enablement",
+      "projectOverride": "Project override",
+      "members": "Members & access"
+    },
+    "sections": {
+      "overview": {
+        "title": "Configuration Overview",
+        "description": "This section mirrors the project registry. Name, description, and resource directory only change in Projects.",
+        "editHint": "To edit the project name, description, resource directory, or archive state, go back to Projects."
+      },
+      "grants": {
+        "title": "Available To This Project",
+        "description": "Grant the workspace-level capabilities that this project is allowed to see.",
+        "modelsTitle": "Model grants",
+        "toolsTitle": "Tool grants",
+        "actorsTitle": "Actor grants",
+        "modelsValue": "{granted} granted, default {defaultModel}",
+        "toolsValue": "{granted} tools granted",
+        "actorsValue": "{granted} agents / teams granted",
+        "saveError": "Failed to save the project grant scope."
+      },
+      "runtime": {
+        "title": "Enabled In This Project",
+        "description": "Refine defaults, enabled scope, and project-level overrides inside the granted range.",
+        "modelsTitle": "Models & token quota",
+        "toolsTitle": "Tool enablement & overrides",
+        "actorsTitle": "Actor enablement",
+        "modelsValue": "{granted} granted, {enabled} enabled, default {defaultModel}, quota {totalTokens}",
+        "toolsValue": "{enabled} tools enabled, {overrides} overrides",
+        "actorsValue": "{granted} granted, {enabled} enabled",
+        "unlimited": "Unlimited"
+      },
+      "members": {
+        "title": "Members & Access",
+        "description": "Maintain project membership and explain that deeper ACL editing stays in access control.",
+        "membersTitle": "Project members",
+        "membersValue": "{members} members, {editors} editors",
+        "accessTitle": "Permission overrides",
+        "accessHint": "A full project ACL editor is out of scope for this round. This page only shows a summary and where to manage it.",
+        "accessValue": "{count} project-level permission overrides",
+        "accessEmpty": "No project-level overrides. Access currently inherits from the workspace."
+      }
+    },
+    "dialogs": {
+      "grantModels": {
+        "title": "Edit model grants",
+        "description": "Choose which workspace models this project can see at all.",
+        "hint": "Only workspace-configured models appear here.",
+        "defaultHint": "This default only applies to the project grant layer."
+      },
+      "grantTools": {
+        "title": "Edit tool grants",
+        "description": "Choose which workspace tools this project can see at all."
+      },
+      "grantActors": {
+        "title": "Edit actor grants",
+        "description": "Choose which workspace agents and teams this project can connect.",
+        "agentsHint": "This action only grants access. It does not enable them for runtime yet.",
+        "teamsHint": "This action only grants access. It does not enable them for runtime yet."
+      },
+      "runtimeModels": {
+        "title": "Edit models & token quota",
+        "description": "Within the granted model scope, choose the enabled models, default model, and token quota.",
+        "hint": "Only models already granted to this project appear here."
+      },
+      "runtimeTools": {
+        "title": "Edit tool enablement & overrides",
+        "description": "Within the granted tool scope, choose the enabled tools and project-level overrides."
+      },
+      "runtimeActors": {
+        "title": "Edit actor enablement",
+        "description": "Within the granted scope, choose which agents and teams are actually enabled in this project.",
+        "agentsHint": "Only agents already granted to this project appear here.",
+        "teamsHint": "Only teams already granted to this project appear here.",
+        "projectOwnedTitle": "Project-owned actors",
+        "projectOwnedDescription": "Agents and teams created inside this project already belong to it and do not need an extra grant."
+      },
+      "members": {
+        "title": "Edit project members",
+        "description": "Maintain the member roster for this project.",
+        "hint": "This dialog only manages membership, not the full permission model."
+      }
+    },
+    "nextSteps": {
+      "grantModels": "Grant at least one model",
+      "enableModel": "Enable a default model in the project",
+      "enableActor": "Enable at least one agent or team",
+      "addMembers": "Add project members"
     },
     "emptyTitle": "Project settings are unavailable",
     "emptyDescription": "The active project could not be found or has not finished loading yet."
@@ -1986,7 +2086,7 @@
   "projects": {
     "header": {
       "eyebrow": "Projects",
-      "subtitle": "Manage project basics, workspace assignments, and archive status from one surface."
+      "subtitle": "Maintain the project registry, lifecycle, and advanced configuration summaries from one surface."
     },
     "metrics": {
       "total": "Total projects",
@@ -2002,12 +2102,14 @@
       "edit": "Edit project",
       "archive": "Archive project",
       "restore": "Restore project",
-      "pickResourceDirectory": "Choose directory"
+      "pickResourceDirectory": "Choose directory",
+      "openSettings": "Open project settings"
     },
     "fields": {
       "name": "Project name",
       "description": "Description",
       "resourceDirectory": "Resource directory",
+      "preset": "Setup preset",
       "totalTokens": "Token quota",
       "usedTokens": "Used tokens",
       "models": "Assigned models",
@@ -2041,7 +2143,47 @@
       "archived": "Archived"
     },
     "errors": {
-      "lastActiveProject": "Keep at least one active project. The last active project cannot be archived."
+      "lastActiveProject": "Keep at least one active project. The last active project cannot be archived.",
+      "create": "Failed to create the project.",
+      "saveMetadata": "Failed to save project basics.",
+      "seedRuntime": "The project was created, but the initial advanced configuration could not be saved."
+    },
+    "presets": {
+      "hint": "Presets only seed suggested values for a new project. You can still refine everything later in Project Settings.",
+      "editHint": "Use Project Settings for advanced edits on an existing project. Presets only apply during creation.",
+      "options": {
+        "general": {
+          "label": "General project",
+          "description": "Keep creation minimal, then enable models, tools, and actors later from Project Settings."
+        },
+        "engineering": {
+          "label": "Engineering project",
+          "description": "Pre-grant common models, tools, and actors so an engineering project can start faster."
+        },
+        "documentation": {
+          "label": "Documentation project",
+          "description": "Bias toward writing models and knowledge-friendly tools while keeping the surface lighter."
+        },
+        "advanced": {
+          "label": "Advanced custom",
+          "description": "Skip extra seeding and configure everything manually afterward."
+        }
+      }
+    },
+    "summary": {
+      "title": "Configuration Summary",
+      "currentDescription": "This page only shows the summary. Advanced capability editing lives in Project Settings.",
+      "createDescription": "Create the project with the minimum required fields first. Refine advanced capability settings afterward.",
+      "advancedTitle": "Advanced configuration",
+      "advancedDescription": "Models, tools, actors, members, and access are edited from Project Settings.",
+      "models": "Models",
+      "tools": "Tools",
+      "actors": "Actors",
+      "members": "Members",
+      "modelsValue": "{granted} granted, {enabled} enabled, default {defaultModel}",
+      "toolsValue": "{granted} granted, {enabled} enabled, {overrides} overrides",
+      "actorsValue": "{granted} granted, {enabled} enabled",
+      "membersValue": "{members} members, {editors} editors"
     }
   },
   "teams": {

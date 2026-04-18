@@ -58,9 +58,13 @@ async function mountProjectsView(
   const container = document.createElement('div')
   document.body.appendChild(container)
 
+  await router.push('/workspaces/ws-local/console/projects')
+  await router.isReady()
+
   const app = createApp(ProjectsView, props)
   app.use(pinia)
   app.use(i18n)
+  app.use(router)
   app.mount(container)
 
   const shellStore = useShellStore()
@@ -108,10 +112,26 @@ describe('Workspace project management view', () => {
     expect(mounted.container.textContent).toContain('Workspace Governance')
     expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-description-input"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.builtin')))
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.skill')))
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.mcp')))
+    expect(mounted.container.querySelector('[data-testid="projects-preset-select"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-summary-tools"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-total-tokens-input"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('renders a lightweight registry detail with capability summaries and an advanced settings entry', async () => {
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-projects-embedded"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-summary-tools"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-summary-actors"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-summary-members"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Claude Primary')
 
     mounted.destroy()
   })
@@ -149,283 +169,152 @@ describe('Workspace project management view', () => {
     mounted.destroy()
   })
 
-  it('creates a new active project and persists workspace assignments', async () => {
+  it('creates a new project with minimum required fields only', async () => {
     vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
       .mockResolvedValue('/workspace/projects/agent-studio/resources')
 
     const mounted = mountApp()
     const workspaceStore = useWorkspaceStore()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-create-button"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-create-header-button"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-header-button"]')?.click()
+    await nextTick()
 
     const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="projects-description-input"]')
-    const defaultModelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="projects-default-model-select"]')
     expect(nameInput).not.toBeNull()
-    expect(descriptionInput).not.toBeNull()
-    expect(defaultModelSelect).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]')).not.toBeNull()
 
     nameInput!.value = 'Agent Studio'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Project management workspace surface.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
+
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
     await waitFor(() =>
       mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')?.value
         === '/workspace/projects/agent-studio/resources',
     )
 
-    mounted.container.querySelector<HTMLElement>('[aria-label="Claude Primary"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLElement>('[aria-label="bash"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLElement>('[aria-label="help"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLElement>('[aria-label="ops"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLElement>('[aria-label="Architect Agent"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLElement>('[aria-label="Studio Direction Team"]')?.click()
-    await nextTick()
-
-    defaultModelSelect!.value = 'anthropic-primary'
-    defaultModelSelect!.dispatchEvent(new Event('change', { bubbles: true }))
-    await nextTick()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
-
-    await waitFor(() => mounted.container.textContent?.includes('Agent Studio') ?? false)
-    const created = workspaceStore.projects.find(project => project.name === 'Agent Studio')
-    expect(created).toBeTruthy()
-    expect(created?.assignments?.models?.configuredModelIds).toEqual(['anthropic-primary'])
-    expect(created?.assignments?.models?.defaultConfiguredModelId).toBe('anthropic-primary')
-    expect(created?.assignments?.tools?.sourceKeys).toEqual([
-      'builtin:bash',
-      'skill:data/skills/help/SKILL.md',
-      'mcp:ops',
-    ])
-    expect(created?.assignments?.agents?.agentIds).toEqual(['agent-architect'])
-    expect(created?.assignments?.agents?.teamIds).toEqual(['team-studio'])
-
-    mounted.destroy()
-  })
-
-  it('requires selecting a resource directory when creating a project', async () => {
-    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
-      .mockResolvedValue('/workspace/projects/agent-studio/resources')
-
-    const mounted = mountApp()
-    const workspaceStore = useWorkspaceStore()
-
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]') !== null)
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="projects-description-input"]')
-    const resourceDirectoryPath = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')
-    const pickButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')
-
-    expect(resourceDirectoryPath).not.toBeNull()
-    expect(pickButton).not.toBeNull()
-
-    nameInput!.value = 'Agent Studio'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Project management workspace surface.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-
-    pickButton!.click()
-    await waitFor(() => resourceDirectoryPath!.value === '/workspace/projects/agent-studio/resources')
-
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
 
     await waitFor(() => workspaceStore.projects.some(project => project.name === 'Agent Studio'))
 
     const created = workspaceStore.projects.find(project => project.name === 'Agent Studio')
-    expect(created?.resourceDirectory).toBe('/workspace/projects/agent-studio/resources')
+    expect(created).toBeTruthy()
+    expect(created?.description).toBe('')
+    expect(created?.assignments).toBeUndefined()
+    expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
 
     mounted.destroy()
   })
 
-  it('creates a project with a remotely selected resource directory', async () => {
-    const pickResourceDirectorySpy = vi.spyOn(
-      tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> },
-      'pickResourceDirectory',
-    ).mockResolvedValue('/local/path/should/not/be/used')
+  it('updates preset summary and uses preset seeding without exposing advanced lists', async () => {
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('/workspace/projects/docs-workbench/resources')
 
-    const mounted = await mountProjectsView(undefined, 'ws-enterprise', 'proj-launch')
-    const shellStore = useShellStore()
+    const mounted = mountApp()
     const workspaceStore = useWorkspaceStore()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-create-header-button"]') !== null)
 
-    expect(shellStore.activeWorkspaceConnection?.workspaceId).toBe('ws-enterprise')
-    expect(shellStore.activeWorkspaceConnection?.transportSecurity).toBe('trusted')
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-header-button"]')?.click()
+    await nextTick()
+
+    const presetSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="projects-preset-select"]')
+    expect(presetSelect).not.toBeNull()
+
+    presetSelect!.value = 'documentation'
+    presetSelect!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')?.textContent).toContain('默认 GPT-4o')
+    expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).toBeNull()
 
     const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="projects-description-input"]')
-    const resourceDirectoryPath = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')
-
-    nameInput!.value = 'Remote Studio'
+    nameInput!.value = 'Docs Workbench'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Remote project resource directory selection.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
-
-    await waitFor(() => document.body.querySelector('[data-testid="remote-resource-directory-dialog"]') !== null)
-
-    const waitForDialogPath = async (path: string) => {
-      await waitFor(() =>
-        document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')?.textContent?.includes(path) ?? false,
-      )
-    }
-
-    const clickDialogEntry = async (label: string, expectedPath: string) => {
-      await waitFor(() => {
-        const dialog = document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')
-        return Array.from(dialog?.querySelectorAll('button') ?? [])
-          .some(item => item.textContent?.includes(label))
-      })
-
-      const dialog = document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')
-      const button = Array.from(dialog?.querySelectorAll('button') ?? [])
-        .find(item => item.textContent?.includes(label))
-      button?.click()
-      await waitForDialogPath(expectedPath)
-    }
-
-    await waitForDialogPath('/remote')
-    await clickDialogEntry('projects', '/remote/projects')
-    await clickDialogEntry('launch-readiness', '/remote/projects/launch-readiness')
-    await clickDialogEntry('resources', '/remote/projects/launch-readiness/resources')
-
-    Array.from(document.body.querySelectorAll('button'))
-      .find(button => button.textContent?.includes(String(i18n.global.t('resources.remoteBrowser.actions.chooseCurrent'))))
-      ?.click()
-
     await waitFor(() =>
-      resourceDirectoryPath?.value === '/remote/projects/launch-readiness/resources',
+      mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')?.value
+        === '/workspace/projects/docs-workbench/resources',
     )
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
 
-    await waitFor(() => workspaceStore.projects.some(project => project.name === 'Remote Studio'))
+    await waitFor(() => workspaceStore.projects.some(project => project.name === 'Docs Workbench'))
 
-    const created = workspaceStore.projects.find(project => project.name === 'Remote Studio')
-    expect(created?.resourceDirectory).toBe('/remote/projects/launch-readiness/resources')
-    expect(pickResourceDirectorySpy).not.toHaveBeenCalled()
+    const created = workspaceStore.projects.find(project => project.name === 'Docs Workbench')
+    expect(created?.assignments?.models?.configuredModelIds).toHaveLength(1)
+    expect(created?.assignments?.models?.defaultConfiguredModelId).toBe(
+      created?.assignments?.models?.configuredModelIds[0],
+    )
 
     mounted.destroy()
   })
 
-  it('selects the edited project as the active project scope for downstream project surfaces', async () => {
+  it('opens project settings from the registry summary action', async () => {
     const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-open-settings-button"]')?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-settings')
+    expect(router.currentRoute.value.name).toBe('project-settings')
+    expect(String(router.currentRoute.value.params.projectId)).toBe('proj-redesign')
+
+    mounted.destroy()
+  })
+
+  it('archives and restores the selected project without changing the registry flow', async () => {
+    const mounted = await mountProjectsView()
     const workspaceStore = useWorkspaceStore()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-archive-button"]') !== null)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-governance"]')?.click()
-    await waitFor(() => workspaceStore.currentProjectId === 'proj-governance')
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
 
-    expect(workspaceStore.currentProjectId).toBe('proj-governance')
+    await waitFor(() =>
+      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'archived',
+    )
+
+    mounted.container.querySelector<HTMLElement>('[data-testid="projects-select-proj-redesign"]')?.click()
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-restore-button"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-restore-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'active',
+    )
 
     mounted.destroy()
   })
 
-  it('shows and saves token quota fields in the selected project detail', async () => {
+  it('prevents archiving the last active project and surfaces an error', async () => {
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
         if (connection.workspaceId !== 'ws-local') {
           return
         }
 
-        const projectSource = state.runtimeProjectConfigs['proj-redesign']?.sources.find(source => source.scope === 'project')
-        const projectDocument = (projectSource?.document ?? {}) as Record<string, any>
-        projectSource!.document = projectDocument
-        const projectSettings = (projectDocument.projectSettings ??= {}) as Record<string, any>
-        const models = (projectSettings.models ??= {}) as Record<string, any>
+        const redesign = state.projects.find(project => project.id === 'proj-redesign')
+        const governance = state.projects.find(project => project.id === 'proj-governance')
 
-        models.totalTokens = 500000
-        ;(state.dashboards['proj-redesign'] as Record<string, any>).usedTokens = 125000
+        if (!redesign || !governance) {
+          throw new Error('Expected local workspace fixture projects')
+        }
+
+        governance.status = 'archived'
       },
     })
 
-    const mounted = mountApp()
-    const workspaceStore = useWorkspaceStore()
+    const mounted = await mountProjectsView()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-archive-button"]') !== null)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-redesign"]')?.click()
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-total-tokens-input"]') !== null)
-
-    const totalTokensInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-total-tokens-input"]')
-    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-save-button"]')
-
-    await waitFor(() =>
-      mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-total-tokens-input"]')?.value === '500000',
-    )
-
-    expect(totalTokensInput).not.toBeNull()
-    expect(saveButton).not.toBeNull()
-    expect(totalTokensInput?.value).toBe('500000')
-    expect(mounted.container.querySelector('[data-testid="projects-used-tokens-value"]')?.textContent).toContain('125,000')
-
-    totalTokensInput!.value = '750000'
-    totalTokensInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    totalTokensInput!.dispatchEvent(new Event('change', { bubbles: true }))
-    await nextTick()
-
-    saveButton?.click()
-
-    await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 750000)
-
-    expect(mounted.container.querySelector('[data-testid="projects-used-tokens-value"]')?.textContent).toContain('125,000')
-
-    mounted.destroy()
-  })
-
-  it('archives the current project, hides it from the sidebar tree, and switches to the next active project', async () => {
-    const mounted = mountApp()
-    const workspaceStore = useWorkspaceStore()
-
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]') !== null)
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-redesign"]')?.click()
-    await waitFor(() => workspaceStore.currentProjectId === 'proj-redesign')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
-
-    await waitFor(() =>
-      workspaceStore.currentProjectId === 'proj-governance'
-      && mounted.container.textContent?.includes('Workspace Governance')
-      && mounted.container.textContent?.includes(String(i18n.global.t('projects.status.archived'))),
-    )
-
-    expect(workspaceStore.currentProjectId).toBe('proj-governance')
-    expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]')).toBeNull()
-    expect(mounted.container.textContent).toContain('Desktop Redesign')
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projects.status.archived')))
-
-    mounted.destroy()
-  })
-
-  it('prevents archiving the last active project and surfaces an error', async () => {
-    const mounted = mountApp()
-
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-redesign"]')?.click()
-    await nextTick()
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
-    await waitFor(() =>
-      mounted.container.textContent?.includes(String(i18n.global.t('projects.status.archived'))) ?? false,
-    )
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-governance"]')?.click()
-    await nextTick()
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
 
     await waitFor(() => mounted.container.querySelector('[data-testid="projects-error"]') !== null)
+
     expect(mounted.container.textContent).toContain(String(i18n.global.t('projects.errors.lastActiveProject')))
 
     mounted.destroy()

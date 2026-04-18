@@ -7,7 +7,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
-import { useNotificationStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -84,59 +83,116 @@ describe('Project settings view', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders the project settings form from the project route', async () => {
+  it('renders document sections instead of tabs and keeps runtime inputs inside dialogs', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-basics"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-models"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-tools"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-agents"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-users"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-settings-name-input"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-settings-description-input"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('Desktop Redesign')
+    expect(mounted.container.querySelector('[data-testid="project-settings-overview-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-grants-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-runtime-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-members-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-basics"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-name-input"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-runtime-total-tokens-input"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-models-dialog"]') !== null)
+
+    expect(document.body.querySelector('[data-testid="project-runtime-total-tokens-input"]')).not.toBeNull()
 
     mounted.destroy()
   })
 
-  it('loads assigned models, tools, agents, and project members in the project settings tabs', async () => {
+  it('shows grant and runtime summaries separately on the document page', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-models"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Claude Primary') ?? false)
-    expect(mounted.container.textContent).toContain('Claude Primary')
-    expect(mounted.container.textContent).toContain('Claude Alt')
+    const grantsSection = mounted.container.querySelector('[data-testid="project-settings-grants-section"]')
+    const runtimeSection = mounted.container.querySelector('[data-testid="project-settings-runtime-section"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-tools"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('builtin') ?? false)
-    expect(mounted.container.textContent).toContain('bash')
-    expect(mounted.container.textContent).toContain('ops')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
-    expect(mounted.container.textContent).toContain('Redesign Copilot')
-    expect(mounted.container.textContent).toContain('Architect Agent')
-    expect(mounted.container.textContent).toContain('Coder Agent')
-    expect(mounted.container.textContent).toContain('Finance Planner Template')
-    expect(mounted.container.textContent).toContain('Redesign Tiger Team')
-    expect(mounted.container.textContent).toContain('Studio Direction Team')
-    expect(mounted.container.textContent).toContain('Finance Ops Template')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Workspace Operator') ?? false)
-    expect(mounted.container.textContent).toContain('Workspace Operator')
-    expect(mounted.container.textContent).toContain('Octopus Owner')
+    expect(grantsSection?.textContent).toContain('已授予 2 个，默认 Claude Primary')
+    expect(runtimeSection?.textContent).toContain('已授予 2 个，启用 1 个，默认 Claude Primary')
+    expect(runtimeSection?.textContent).toContain('已启用 1 个工具')
 
     mounted.destroy()
   })
 
-  it('reads project members from project governance fields instead of selected-projects data policies', async () => {
-    vi.restoreAllMocks()
-    window.localStorage.clear()
+  it('saves project grants and runtime actor refinement through separate flows', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
+
+    const grantBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-agent-option-agent-template-finance"]')
+    const grantBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-grant-team-option-team-template-finance"]')
+    const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
+
+    expect(grantBuiltinAgent).not.toBeNull()
+    expect(grantBuiltinTeam).not.toBeNull()
+    expect(grantSaveButton).not.toBeNull()
+
+    grantBuiltinAgent?.click()
+    grantBuiltinTeam?.click()
+    await nextTick()
+    grantSaveButton?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      const assignments = project?.assignments?.agents
+      return Boolean(
+        assignments?.agentIds.includes('agent-template-finance')
+        && assignments?.teamIds.includes('team-template-finance'),
+      )
+    })
+
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio'])
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-actors"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-actors-dialog"]') !== null)
+
+    const runtimeBuiltinAgent = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-agent-option-agent-template-finance"]')
+    const runtimeBuiltinTeam = document.body.querySelector<HTMLLabelElement>('[data-testid="project-runtime-team-option-team-template-finance"]')
+    const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-save-button"]')
+
+    expect(runtimeBuiltinAgent).not.toBeNull()
+    expect(runtimeBuiltinTeam).not.toBeNull()
+    expect(runtimeSaveButton).not.toBeNull()
+
+    runtimeBuiltinAgent?.click()
+    runtimeBuiltinTeam?.click()
+    await nextTick()
+    runtimeSaveButton?.click()
+
+    await waitFor(() => {
+      const settings = workspaceStore.getProjectSettings('proj-redesign').agents
+      return Boolean(
+        settings?.enabledAgentIds.includes('agent-template-finance')
+        && settings?.enabledTeamIds.includes('team-template-finance'),
+      )
+    })
+
+    const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+    expect(project?.assignments?.agents?.agentIds).toEqual(['agent-architect', 'agent-template-finance'])
+    expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual([
+      'agent-architect',
+      'agent-template-finance',
+    ])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual([
+      'team-studio',
+      'team-template-finance',
+    ])
+
+    mounted.destroy()
+  })
+
+  it('reads project members from project governance fields inside the member dialog', async () => {
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
         if (connection.workspaceId !== 'ws-local') {
@@ -157,223 +213,51 @@ describe('Project settings view', () => {
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Octopus Owner') ?? false)
+    expect(mounted.container.textContent).toContain('1 人，其中 1 人可编辑')
 
-    expect(mounted.container.textContent).toContain('Octopus Owner')
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-members"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-members-dialog"]') !== null)
+
     expect(
-      mounted.container
+      document.body
         .querySelector<HTMLInputElement>('[data-testid="project-member-option-user-owner"] input[type="checkbox"]')
         ?.checked,
     ).toBe(true)
     expect(
-      mounted.container
+      document.body
         .querySelector<HTMLInputElement>('[data-testid="project-member-option-user-operator"] input[type="checkbox"]')
         ?.checked,
     ).toBe(false)
-    expect(mounted.container.textContent).toContain('项目成员数1')
 
     mounted.destroy()
   })
 
-  it('shows project refinement limited to assigned workspace scope', async () => {
+  it('saves runtime model quota from the runtime dialog only', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-models"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Claude Primary') ?? false)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-models-dialog"]') !== null)
+
+    const quotaInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-runtime-total-tokens-input"]')
+    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-models-save-button"]')
+
+    expect(quotaInput).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+
+    quotaInput!.value = '500000'
+    quotaInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    saveButton?.click()
+
+    await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 500000)
+
+    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.models?.configuredModelIds).toEqual([
+      'anthropic-primary',
+      'anthropic-alt',
+    ])
     expect(workspaceStore.getProjectSettings('proj-redesign').models?.allowedConfiguredModelIds).toEqual(['anthropic-primary'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').models?.defaultConfiguredModelId).toBe('anthropic-primary')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-tools"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('bash') ?? false)
-    const toolSelects = [...mounted.container.querySelectorAll('select')]
-    expect(toolSelects).toHaveLength(2)
-    expect(workspaceStore.getProjectSettings('proj-redesign').tools?.enabledSourceKeys).toEqual(['builtin:bash'])
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
-    expect(mounted.container.querySelector('[data-testid="project-owned-agent-agent-redesign"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-owned-team-team-redesign"]')).not.toBeNull()
-    expect(
-      mounted.container
-        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-architect"] input[type="checkbox"]')
-        ?.checked,
-    ).toBe(true)
-    expect(
-      mounted.container
-        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-coder"] input[type="checkbox"]')
-        ?.checked,
-    ).toBe(false)
-    expect(
-      mounted.container
-        .querySelector<HTMLInputElement>('[data-testid="project-team-option-team-studio"] input[type="checkbox"]')
-        ?.checked,
-    ).toBe(true)
-    expect(
-      mounted.container
-        .querySelector<HTMLInputElement>('[data-testid="project-team-option-team-template-finance"] input[type="checkbox"]')
-        ?.checked,
-    ).toBe(false)
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio'])
-
-    mounted.destroy()
-  })
-
-  it('shows and saves project token quota in the models tab', async () => {
-    installWorkspaceApiFixture({
-      stateTransform(state, connection) {
-        if (connection.workspaceId !== 'ws-local') {
-          return
-        }
-
-        const projectSource = state.runtimeProjectConfigs['proj-redesign']?.sources.find(source => source.scope === 'project')
-        const projectDocument = (projectSource?.document ?? {}) as Record<string, any>
-        projectSource!.document = projectDocument
-        const projectSettings = (projectDocument.projectSettings ??= {}) as Record<string, any>
-        const models = (projectSettings.models ??= {}) as Record<string, any>
-
-        models.totalTokens = 500000
-        ;(state.dashboards['proj-redesign'] as Record<string, any>).usedTokens = 125000
-      },
-    })
-
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-    const workspaceStore = useWorkspaceStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-models"]')?.click()
-    await waitFor(() => mounted.container.querySelector('[data-testid="project-settings-total-tokens-input"]') !== null)
-
-    const totalTokensInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-total-tokens-input"]')
-    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-models-save-button"]')
-
-    expect(totalTokensInput).not.toBeNull()
-    expect(saveButton).not.toBeNull()
-    expect(totalTokensInput?.value).toBe('500000')
-    expect(mounted.container.querySelector('[data-testid="project-settings-used-tokens-value"]')?.textContent).toContain('125,000')
-
-    totalTokensInput!.value = '750000'
-    totalTokensInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    totalTokensInput!.dispatchEvent(new Event('change', { bubbles: true }))
-    await nextTick()
-
-    saveButton?.click()
-
-    await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 750000)
-
-    expect(mounted.container.querySelector('[data-testid="project-settings-used-tokens-value"]')?.textContent).toContain('125,000')
-
-    mounted.destroy()
-  })
-
-  it('saves workspace and builtin actor selections back into project assignments and runtime settings', async () => {
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-    const workspaceStore = useWorkspaceStore()
-    const notificationStore = useNotificationStore()
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Finance Planner Template') ?? false)
-
-    const builtinAgent = mounted.container.querySelector<HTMLLabelElement>('[data-testid="project-agent-option-agent-template-finance"]')
-    const builtinTeam = mounted.container.querySelector<HTMLLabelElement>('[data-testid="project-team-option-team-template-finance"]')
-    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-agents-save-button"]')
-
-    expect(builtinAgent).not.toBeNull()
-    expect(builtinTeam).not.toBeNull()
-    expect(saveButton).not.toBeNull()
-
-    builtinAgent?.click()
-    builtinTeam?.click()
-    await nextTick()
-    saveButton?.click()
-
-    await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      const assignments = project?.assignments?.agents
-      return assignments?.agentIds.includes('agent-template-finance') && assignments?.teamIds.includes('team-template-finance')
-    })
-
-    const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-    expect(project?.assignments?.agents?.agentIds).toEqual(['agent-architect', 'agent-template-finance'])
-    expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect', 'agent-template-finance'])
-    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio', 'team-template-finance'])
-    expect(
-      notificationStore.notificationsState.some(notification =>
-        notification.title.includes('保存完成')
-        && (notification.body?.includes('Desktop Redesign') ?? false),
-      ),
-    ).toBe(true)
-
-    mounted.destroy()
-  })
-
-  it('shows project actor candidates but keeps them unchecked when no assignments exist', async () => {
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings')
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-models"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes(String(i18n.global.t('projectSettings.models.emptyTitle'))) ?? false)
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.models.emptyTitle')))
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.models.emptyDescription')))
-    expect(mounted.container.textContent).not.toContain('Claude Primary')
-    expect(mounted.container.textContent).not.toContain('Claude Alt')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-tools"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes(String(i18n.global.t('projectSettings.tools.emptyTitle'))) ?? false)
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.emptyTitle')))
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.emptyDescription')))
-    expect(mounted.container.textContent).not.toContain('bash')
-    expect(mounted.container.textContent).not.toContain('ops')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
-    expect(mounted.container.textContent).toContain('Architect Agent')
-    expect(
-      mounted.container
-        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-architect"] input[type="checkbox"]')
-        ?.checked,
-    ).toBe(false)
-    expect(mounted.container.textContent).toContain('Finance Planner Template')
-    expect(mounted.container.textContent).toContain('工作区')
-
-    mounted.destroy()
-  })
-
-  it('updates project basics and keeps sidebar and topbar in sync', async () => {
-    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
-
-    await waitForSelector(mounted.container, '[data-testid="project-settings-save-button"]')
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-name-input"]')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="project-settings-description-input"]')
-    expect(nameInput).not.toBeNull()
-    expect(descriptionInput).not.toBeNull()
-
-    nameInput!.value = 'Redesign HQ'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Refined launch scope for the desktop refresh.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-save-button"]')?.click()
-
-    await waitFor(() =>
-      (mounted.container.textContent?.includes('Redesign HQ') ?? false)
-      && (mounted.container.textContent?.includes('Refined launch scope for the desktop refresh.') ?? false),
-    )
-
-    expect(mounted.container.textContent).toContain('Redesign HQ')
-    expect(mounted.container.textContent).toContain('Refined launch scope for the desktop refresh.')
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('sidebar.navigation.projectSettings')))
 
     mounted.destroy()
   })

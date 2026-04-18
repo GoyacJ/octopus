@@ -114,6 +114,7 @@ import {
   createEvent,
   createPetPresenceState,
   createPetSnapshot,
+  createRuntimeConfigSource,
   createRuntimeMessage,
   createSessionDetail,
   createTraceItem,
@@ -184,6 +185,43 @@ export function createWorkspaceClientFixture(
   let accessResourcePolicies = clone(workspaceState.resourcePolicies)
 
   let accessMenuPolicies = clone(workspaceState.menuPolicies)
+
+  function ensureRuntimeProjectConfig(projectId: string): RuntimeEffectiveConfig {
+    const existing = workspaceState.runtimeProjectConfigs[projectId]
+    if (existing) {
+      return existing
+    }
+
+    const project = workspaceState.projects.find(item => item.id === projectId)
+    const ownerId = project?.ownerUserId || 'user-owner'
+    const config: RuntimeEffectiveConfig = {
+      effectiveConfig: {
+        provider: {
+          defaultModel: 'claude-sonnet-4-5',
+        },
+        ...clone(workspaceState.runtimeWorkspaceConfig.effectiveConfig),
+        approvals: {
+          defaultMode: 'manual',
+        },
+      },
+      effectiveConfigHash: `${workspaceState.workspace.id}-${projectId}-project-cfg-hash-${Date.now()}`,
+      sources: [
+        createRuntimeConfigSource('user', workspaceState.workspace.id, ownerId),
+        createRuntimeConfigSource('workspace', workspaceState.workspace.id),
+        createRuntimeConfigSource('project', workspaceState.workspace.id, projectId),
+      ],
+      validation: {
+        valid: true,
+        errors: [],
+        warnings: [],
+      },
+      secretReferences: [],
+    }
+
+    workspaceState.runtimeProjectConfigs[projectId] = config
+    return config
+  }
+
   const protectedResourceMetadata = new Map(
     workspaceState.protectedResourceMetadata.map(record => [
       protectedResourceKey(record.resourceType, record.id),
@@ -2356,6 +2394,7 @@ export function createWorkspaceClientFixture(
       async create(input) {
         const project = createProjectRecord(workspaceState.workspace.id, input)
         workspaceState.projects = [...workspaceState.projects, project]
+        ensureRuntimeProjectConfig(project.id)
         workspaceState.dashboards[project.id] = {
           project: clone(project),
           usedTokens: 0,
@@ -4247,7 +4286,7 @@ export function createWorkspaceClientFixture(
         return clone(workspaceState.runtimeWorkspaceConfig)
       },
       async getProjectConfig(projectId: string): Promise<RuntimeEffectiveConfig> {
-        return clone(workspaceState.runtimeProjectConfigs[projectId])
+        return clone(ensureRuntimeProjectConfig(projectId))
       },
       async validateProjectConfig(_projectId: string, _patch: RuntimeConfigPatch): Promise<RuntimeConfigValidationResult> {
         return {
@@ -4257,7 +4296,7 @@ export function createWorkspaceClientFixture(
         }
       },
       async saveProjectConfig(projectId: string, patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
-        const config = workspaceState.runtimeProjectConfigs[projectId]
+        const config = ensureRuntimeProjectConfig(projectId)
         const source = config.sources.find(item => item.scope === 'project')
         if (source) {
           const current = (source.document ?? {}) as Record<string, any>

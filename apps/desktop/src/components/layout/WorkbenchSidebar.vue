@@ -26,7 +26,7 @@ import {
 } from 'lucide-vue-next'
 
 import type { ProjectRecord, WorkspaceConnectionRecord } from '@octopus/schema'
-import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiStatusCallout, UiTextarea } from '@octopus/ui'
+import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConnectWorkspaceDialog from '@/components/layout/ConnectWorkspaceDialog.vue'
 import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
@@ -48,8 +48,12 @@ import {
   createWorkspaceOverviewTarget,
 } from '@/i18n/navigation'
 import { type MenuIconKey } from '@/navigation/menuRegistry'
+import { useAgentStore } from '@/stores/agent'
+import { useCatalogStore } from '@/stores/catalog'
+import { buildProjectSetupPresetSeed, type ProjectSetupPreset } from '@/stores/project_setup'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
+import { useTeamStore } from '@/stores/team'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -57,6 +61,9 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const shell = useShellStore()
+const agentStore = useAgentStore()
+const catalogStore = useCatalogStore()
+const teamStore = useTeamStore()
 const workspaceStore = useWorkspaceStore()
 const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const runtime = useRuntimeStore()
@@ -73,6 +80,7 @@ const quickCreateForm = reactive({
   name: '',
   description: '',
   resourceDirectory: '',
+  preset: 'general' as ProjectSetupPreset,
 })
 const workspaceLabel = computed(() =>
   resolveWorkspaceLabel(
@@ -395,7 +403,15 @@ function resetQuickCreateForm() {
   quickCreateForm.name = ''
   quickCreateForm.description = ''
   quickCreateForm.resourceDirectory = ''
+  quickCreateForm.preset = 'general'
 }
+
+const quickCreatePresetOptions = computed(() => ([
+  { value: 'general', label: String(t('projects.presets.options.general.label')) },
+  { value: 'engineering', label: String(t('projects.presets.options.engineering.label')) },
+  { value: 'documentation', label: String(t('projects.presets.options.documentation.label')) },
+  { value: 'advanced', label: String(t('projects.presets.options.advanced.label')) },
+]))
 
 async function submitQuickCreateProject() {
   const workspaceId = currentWorkspaceId.value
@@ -406,14 +422,43 @@ async function submitQuickCreateProject() {
   quickCreateSubmitting.value = true
 
   try {
+    const connectionId = workspaceStore.activeConnectionId
+    if (connectionId) {
+      await Promise.all([
+        catalogStore.load(connectionId),
+        agentStore.load(connectionId),
+        teamStore.load(connectionId),
+      ])
+    }
+
+    const presetSeed = buildProjectSetupPresetSeed(quickCreateForm.preset, {
+      models: catalogStore.configuredModelOptions,
+      tools: catalogStore.managementProjection.assets.filter(entry => entry.enabled),
+      agents: agentStore.workspaceAgents,
+      teams: teamStore.workspaceTeams,
+    })
+
     const created = await workspaceStore.createProject({
       name: quickCreateForm.name,
       description: quickCreateForm.description,
       resourceDirectory: quickCreateForm.resourceDirectory,
+      assignments: presetSeed.assignments,
     })
     if (!created) {
       return
     }
+
+    await Promise.all([
+      presetSeed.modelSettings
+        ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.modelSettings)
+        : Promise.resolve(null),
+      presetSeed.toolSettings
+        ? workspaceStore.saveProjectToolSettings(created.id, presetSeed.toolSettings)
+        : Promise.resolve(null),
+      presetSeed.agentSettings
+        ? workspaceStore.saveProjectAgentSettings(created.id, presetSeed.agentSettings)
+        : Promise.resolve(null),
+    ])
 
     quickCreateOpen.value = false
     resetQuickCreateForm()
@@ -549,6 +594,21 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
                   :rows="4"
                 />
               </UiField>
+
+              <UiField
+                :label="t('projects.fields.preset')"
+                :hint="t('projects.presets.hint')"
+              >
+                <UiSelect
+                  v-model="quickCreateForm.preset"
+                  data-testid="sidebar-project-create-preset-select"
+                  :options="quickCreatePresetOptions"
+                />
+              </UiField>
+
+              <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-3 py-2 text-xs leading-5 text-text-secondary">
+                {{ t(`projects.presets.options.${quickCreateForm.preset}.description`) }}
+              </div>
 
               <ProjectResourceDirectoryField
                 v-model="quickCreateForm.resourceDirectory"
