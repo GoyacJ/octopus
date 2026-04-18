@@ -516,11 +516,6 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             "/config/configured-models/probe",
             post(probe_runtime_configured_model_route),
         )
-        .route(
-            "/config/configured-models/:configured_model_id/credential",
-            put(upsert_runtime_configured_model_credential_route)
-                .delete(delete_runtime_configured_model_credential_route),
-        )
         .route("/config/scopes/:scope", patch(save_runtime_config_route))
         .route(
             "/sessions",

@@ -5,9 +5,15 @@ use octopus_core::{
     ConfiguredModelTokenUsage, CredentialBinding, DefaultSelection, ModelCatalogSnapshot,
     ModelRegistryDiagnostics, ModelRegistryRecord, ModelSurfaceBinding,
     ProjectWorkspaceAssignments, ProviderConfig, ProviderRegistryRecord, ResolvedExecutionTarget,
-    SurfaceDescriptor,
+    ResolvedRequestPolicyInput, RuntimeExecutionSupport, SurfaceDescriptor,
 };
 use serde_json::{json, Value};
+
+use crate::model_runtime::{
+    resolve_request_base_url, CanonicalModelPolicy, ModelDriverRegistry,
+    CREDENTIAL_SOURCE_CONFIGURED_MODEL_OVERRIDE, CREDENTIAL_SOURCE_PROVIDER_INHERITED,
+    CREDENTIAL_SOURCE_UNCONFIGURED,
+};
 
 #[path = "registry_baseline.rs"]
 pub(super) mod baseline;
@@ -44,6 +50,7 @@ impl EffectiveModelRegistry {
         let mut providers = baseline_providers();
         let mut models = baseline_models();
         let mut default_selections = baseline_default_selections();
+        let driver_registry = ModelDriverRegistry::installed();
         let mut diagnostics = ModelRegistryDiagnostics {
             warnings: Vec::new(),
             errors: Vec::new(),
@@ -66,6 +73,8 @@ impl EffectiveModelRegistry {
                 apply_default_selections(&mut default_selections, defaults);
             }
         }
+
+        apply_runtime_support(&driver_registry, &mut providers, &mut models);
 
         let credential_bindings =
             build_credential_bindings(&providers, effective_config.get("credentialRefs"))?;
@@ -170,11 +179,11 @@ impl EffectiveModelRegistry {
                     selection.provider_id, configured_model_id
                 ));
             }
-            if !model
-                .surface_bindings
-                .iter()
-                .any(|binding| binding.enabled && binding.surface == selection.surface)
-            {
+            if !model.surface_bindings.iter().any(|binding| {
+                binding.enabled
+                    && binding.surface == selection.surface
+                    && binding.runtime_support.executable()
+            }) {
                 diagnostics.errors.push(format!(
                     "default selection `{purpose}` model `{}` does not support surface `{}`",
                     configured_model.model_id, selection.surface
@@ -246,13 +255,15 @@ impl EffectiveModelRegistry {
     }
 
     pub fn default_provider_config(&self) -> ProviderConfig {
+        let policy = CanonicalModelPolicy::default();
+        let fallback_selection = policy.default_conversation_selection();
         let fallback = ProviderConfig {
-            provider_id: "anthropic".into(),
+            provider_id: fallback_selection.provider_id.into(),
             credential_ref: None,
             base_url: None,
-            default_model: Some("claude-sonnet-4-5".into()),
-            default_surface: Some("conversation".into()),
-            protocol_family: Some("anthropic_messages".into()),
+            default_model: Some(fallback_selection.model_id.into()),
+            default_surface: Some(fallback_selection.surface.into()),
+            protocol_family: Some(fallback_selection.protocol_family.into()),
         };
         let Some(selection) = self.snapshot.default_selections.get("conversation") else {
             return fallback;
@@ -340,20 +351,21 @@ impl EffectiveModelRegistry {
 
         let model_surface = preferred_surface
             .and_then(|surface| {
-                model
-                    .surface_bindings
-                    .iter()
-                    .find(|binding| binding.enabled && binding.surface == surface)
+                model.surface_bindings.iter().find(|binding| {
+                    binding.enabled
+                        && binding.runtime_support.executable()
+                        && binding.surface == surface
+                })
             })
             .or_else(|| {
                 model
                     .surface_bindings
                     .iter()
-                    .find(|binding| binding.enabled)
+                    .find(|binding| binding.enabled && binding.runtime_support.executable())
             })
             .ok_or_else(|| {
                 AppError::invalid_input(format!(
-                    "model `{}` does not expose an enabled surface",
+                    "model `{}` does not expose a runtime-supported surface",
                     model.model_id
                 ))
             })?;
@@ -363,6 +375,7 @@ impl EffectiveModelRegistry {
             .iter()
             .find(|surface| {
                 surface.enabled
+                    && surface.runtime_support.executable()
                     && surface.surface == model_surface.surface
                     && surface.protocol_family == model_surface.protocol_family
             })
@@ -370,7 +383,11 @@ impl EffectiveModelRegistry {
                 provider
                     .surfaces
                     .iter()
-                    .find(|surface| surface.enabled && surface.surface == model_surface.surface)
+                    .find(|surface| {
+                        surface.enabled
+                            && surface.runtime_support.executable()
+                            && surface.surface == model_surface.surface
+                    })
             })
             .ok_or_else(|| {
                 AppError::invalid_input(format!(
@@ -383,27 +400,34 @@ impl EffectiveModelRegistry {
             .credential_bindings_by_provider
             .get(&provider.provider_id)
             .cloned();
-        let credential_ref = configured_model.credential_ref.clone().or_else(|| {
-            credential_binding
-                .as_ref()
-                .map(|binding| binding.credential_ref.clone())
-        });
-        let base_url = configured_model
-            .base_url
-            .clone()
-            .or_else(|| {
-                credential_binding
-                    .as_ref()
-                    .and_then(|binding| binding.base_url.clone())
-            })
-            .or_else(|| Some(provider_surface.base_url.clone()))
-            .map(|value| {
-                normalize_execution_base_url(
-                    &provider.provider_id,
-                    &provider_surface.protocol_family,
-                    value,
+        let (credential_ref, credential_source) =
+            if let Some(reference) = configured_model.credential_ref.clone() {
+                (
+                    Some(reference),
+                    CREDENTIAL_SOURCE_CONFIGURED_MODEL_OVERRIDE.to_string(),
                 )
-            });
+            } else if let Some(binding) = credential_binding.as_ref() {
+                (
+                    Some(binding.credential_ref.clone()),
+                    CREDENTIAL_SOURCE_PROVIDER_INHERITED.to_string(),
+                )
+            } else {
+                (None, CREDENTIAL_SOURCE_UNCONFIGURED.to_string())
+            };
+        let request_policy = ResolvedRequestPolicyInput {
+            auth_strategy: provider_surface.auth_strategy.clone(),
+            base_url_policy: provider_surface.base_url_policy.clone(),
+            default_base_url: provider_surface.base_url.clone(),
+            provider_base_url: credential_binding
+                .as_ref()
+                .and_then(|binding| binding.base_url.clone()),
+            configured_base_url: configured_model.base_url.clone(),
+        };
+        let base_url = Some(resolve_request_base_url(
+            &request_policy,
+            &provider.provider_id,
+            &provider_surface.protocol_family,
+        )?);
 
         Ok(ResolvedExecutionTarget {
             configured_model_id: configured_model.configured_model_id.clone(),
@@ -414,11 +438,40 @@ impl EffectiveModelRegistry {
             surface: model_surface.surface.clone(),
             protocol_family: provider_surface.protocol_family.clone(),
             credential_ref,
+            credential_source,
+            request_policy,
             base_url,
             max_output_tokens: self.plugin_max_output_tokens.or(model.max_output_tokens),
             capabilities: model.capabilities.clone(),
         })
     }
+}
+
+fn apply_runtime_support(
+    driver_registry: &ModelDriverRegistry,
+    providers: &mut BTreeMap<String, ProviderRegistryRecord>,
+    models: &mut BTreeMap<String, ModelRegistryRecord>,
+) {
+    for provider in providers.values_mut() {
+        for surface in &mut provider.surfaces {
+            surface.runtime_support =
+                runtime_support_for_protocol(driver_registry, &surface.protocol_family);
+        }
+    }
+
+    for model in models.values_mut() {
+        for binding in &mut model.surface_bindings {
+            binding.runtime_support =
+                runtime_support_for_protocol(driver_registry, &binding.protocol_family);
+        }
+    }
+}
+
+fn runtime_support_for_protocol(
+    driver_registry: &ModelDriverRegistry,
+    protocol_family: &str,
+) -> RuntimeExecutionSupport {
+    driver_registry.runtime_support_for(protocol_family)
 }
 
 #[cfg(test)]

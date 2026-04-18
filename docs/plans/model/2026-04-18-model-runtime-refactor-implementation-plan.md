@@ -10,6 +10,12 @@
 
 ---
 
+## Status Update (2026-04-18)
+
+- Completed in code: the driver-based runtime split now exists under `crates/octopus-runtime-adapter/src/model_runtime/*`, with dedicated registry, auth, request-policy, and protocol-driver tests under `crates/octopus-runtime-adapter/tests/*`.
+- Completed in code: Team transport and persistence are now refs-only end-to-end. `TeamRecord` and `UpsertTeamInput`, infra persistence, runtime-adapter consumers, OpenAPI, generated TypeScript schema, and the desktop team management surface no longer expose `leaderAgentId` or `memberAgentIds`.
+- Completed in code: the project settings document page now routes its summary-row triggers through shared `UiButton` controls, clearing the previous frontend-governance violation in `apps/desktop/src/views/project/ProjectSettingsView.vue`.
+- Verified in the merged branch candidate: `cargo test -p octopus-runtime-adapter --tests`, `cargo test -p octopus-runtime-adapter --lib`, `cargo test -p octopus-infra --lib`, `cargo test -p octopus-server project_task_routes_approve_intervention_keeps_waiting_when_runtime_chains_to_next_approval` with provider env stubs, `pnpm schema:check`, and `pnpm check:frontend`.
 ## Design Decisions
 
 1. `octopus-core` remains the source of truth for catalog contracts and resolved execution targets.

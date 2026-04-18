@@ -42,8 +42,7 @@ import type {
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
-  RuntimeConfiguredModelCredentialRecord,
-  RuntimeConfiguredModelCredentialUpsertInput,
+  RuntimeConfiguredModelCredentialInput,
   RuntimeEffectiveConfig,
   RuntimeRunSnapshot,
   RuntimeSessionSummary,
@@ -84,6 +83,7 @@ import { resolveRuntimePermissionMode } from '@octopus/schema'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import { WorkspaceApiError } from '@/tauri/shared'
 import { deriveCapabilityManagementProjection } from '@/stores/catalog_management'
+import { agentIdFromRef, canonicalAgentRef } from '@/views/agents/agent-refs'
 
 import { clone, createWorkspaceSessionEnvelope } from './workspace-fixture-bootstrap'
 import type { FixtureOptions, WorkspaceFixtureState } from './workspace-fixture-state'
@@ -229,6 +229,44 @@ export function createWorkspaceClientFixture(
     ] as const),
   )
   const managedConfiguredModelSecrets = new Map<string, string>()
+  const managedConfiguredModelCredentialRef = (configuredModelId: string) => `secret-ref:fixture:${configuredModelId}`
+  const collectManagedConfiguredModelRefs = (configuredModels?: Record<string, any>) =>
+    new Set(
+      Object.entries(configuredModels ?? {})
+        .flatMap(([entryKey, entry]) => {
+          const configuredModelId = entry?.configuredModelId ?? entryKey
+          const expectedRef = managedConfiguredModelCredentialRef(configuredModelId)
+          return entry?.credentialRef === expectedRef ? [expectedRef] : []
+        }),
+    )
+  const applyManagedConfiguredModelCredentials = (
+    document: Record<string, any>,
+    inputs: RuntimeConfiguredModelCredentialInput[] = [],
+  ) => {
+    if (!inputs.length) {
+      return document
+    }
+
+    const configuredModels = { ...(document.configuredModels ?? {}) }
+    for (const input of inputs) {
+      const current = configuredModels[input.configuredModelId]
+      if (!current) {
+        continue
+      }
+
+      const credentialRef = managedConfiguredModelCredentialRef(input.configuredModelId)
+      managedConfiguredModelSecrets.set(credentialRef, input.apiKey)
+      configuredModels[input.configuredModelId] = {
+        ...current,
+        credentialRef,
+      }
+    }
+
+    return {
+      ...document,
+      configuredModels,
+    }
+  }
   const auditRecords: AuditRecord[] = [
     {
       id: `audit-${connection.workspaceId}-bootstrap`,
@@ -2251,9 +2289,9 @@ export function createWorkspaceClientFixture(
     }
 
     const referencedAgentIds = Array.from(new Set([
-      ...(source.leaderAgentId ? [source.leaderAgentId] : []),
-      ...source.memberAgentIds,
-    ]))
+      agentIdFromRef(source.leaderRef),
+      ...source.memberRefs.map(agentIdFromRef),
+    ].filter(Boolean)))
     const agentIdMap = new Map<string, string>()
     for (const referencedAgentId of referencedAgentIds) {
       const copiedAgent = copyAgentToScope(referencedAgentId, projectId)
@@ -2277,10 +2315,11 @@ export function createWorkspaceClientFixture(
         builtinToolKeys: clone(source.builtinToolKeys),
         skillIds: clone(source.skillIds),
         mcpServerNames: clone(source.mcpServerNames),
-        leaderAgentId: source.leaderAgentId ? agentIdMap.get(source.leaderAgentId) : undefined,
-        memberAgentIds: source.memberAgentIds
-          .map(agentId => agentIdMap.get(agentId) ?? agentId)
-          .filter((agentId, index, list) => list.indexOf(agentId) === index),
+        leaderRef: canonicalAgentRef(agentIdMap.get(agentIdFromRef(source.leaderRef)) ?? agentIdFromRef(source.leaderRef)),
+        memberRefs: source.memberRefs
+          .map(actorRef => agentIdMap.get(agentIdFromRef(actorRef)) ?? agentIdFromRef(actorRef))
+          .map(canonicalAgentRef)
+          .filter((actorRef, index, list) => Boolean(actorRef) && list.indexOf(actorRef) === index),
         description: source.description,
         status: source.status,
       },
@@ -3093,8 +3132,8 @@ export function createWorkspaceClientFixture(
             builtinToolKeys: ['bash'],
             skillIds: [],
             mcpServerNames: [],
-            leaderAgentId: importedAgentId,
-            memberAgentIds: [importedAgentId],
+            leaderRef: canonicalAgentRef(importedAgentId),
+            memberRefs: [canonicalAgentRef(importedAgentId)],
             description: 'Imported from an agent bundle.',
             personality: 'Imported fixture team',
             tags: ['imported'],
@@ -4231,22 +4270,6 @@ export function createWorkspaceClientFixture(
           warnings: [],
         }
       },
-      async upsertConfiguredModelCredential(
-        configuredModelId: string,
-        input: RuntimeConfiguredModelCredentialUpsertInput,
-      ): Promise<RuntimeConfiguredModelCredentialRecord> {
-        const credentialRef = `secret-ref:fixture:${configuredModelId}`
-        managedConfiguredModelSecrets.set(credentialRef, input.apiKey)
-        return {
-          configuredModelId,
-          credentialRef,
-          storageKind: 'os-keyring',
-          status: 'configured',
-        }
-      },
-      async deleteConfiguredModelCredential(configuredModelId: string) {
-        managedConfiguredModelSecrets.delete(`secret-ref:fixture:${configuredModelId}`)
-      },
       async validateConfiguredModel(input) {
         const configuredModel = workspaceState.catalog.configuredModels.find(model => model.configuredModelId === input.configuredModelId)
         return {
@@ -4262,19 +4285,29 @@ export function createWorkspaceClientFixture(
       },
       async saveConfig(patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
         const source = workspaceState.runtimeWorkspaceConfig.sources.find(item => item.scope === 'workspace')
+        const currentDocument = ((source?.document ?? {}) as Record<string, any>)
+        const previousManagedRefs = collectManagedConfiguredModelRefs(currentDocument.configuredModels)
+        const nextDocument = applyManagedConfiguredModelCredentials(
+          applyJsonMergePatch(currentDocument, patch.patch as Record<string, any>),
+          patch.configuredModelCredentials,
+        )
+
         if (source) {
-          const current = (source.document ?? {}) as Record<string, any>
-          source.document = applyJsonMergePatch(current, patch.patch as Record<string, any>)
+          source.document = nextDocument
           source.exists = true
           source.loaded = true
         }
 
+        const nextManagedRefs = collectManagedConfiguredModelRefs(nextDocument.configuredModels)
+        for (const reference of previousManagedRefs) {
+          if (!nextManagedRefs.has(reference)) {
+            managedConfiguredModelSecrets.delete(reference)
+          }
+        }
+
         workspaceState.runtimeWorkspaceConfig = {
           ...workspaceState.runtimeWorkspaceConfig,
-          effectiveConfig: applyJsonMergePatch(
-            workspaceState.runtimeWorkspaceConfig.effectiveConfig as Record<string, any>,
-            patch.patch as Record<string, any>,
-          ),
+          effectiveConfig: nextDocument,
           effectiveConfigHash: `${workspaceState.workspace.id}-cfg-hash-${Date.now()}`,
           validation: {
             valid: true,

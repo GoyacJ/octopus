@@ -106,6 +106,15 @@ fn normalize_agent_actor_ref(actor_ref: &str) -> String {
     }
 }
 
+fn validate_team_actor_refs(team_id: &str, leader_ref: &str) -> Result<(), AppError> {
+    if leader_ref.trim().is_empty() {
+        return Err(AppError::invalid_input(format!(
+            "team `{team_id}` must provide leader_ref"
+        )));
+    }
+    Ok(())
+}
+
 impl CompiledActorManifest {
     fn capability_policy(&self) -> &octopus_core::CapabilityPolicy {
         match self {
@@ -448,10 +457,10 @@ impl RuntimeAdapter {
                     builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
                     default_model_strategy_json, capability_policy_json, permission_envelope_json,
                     memory_policy_json, delegation_policy_json, approval_preference_json,
-                    output_contract_json, shared_capability_policy_json, leader_agent_id,
-                    member_agent_ids, leader_ref, member_refs, team_topology_json,
-                    shared_memory_policy_json, mailbox_policy_json, artifact_handoff_policy_json,
-                    workflow_affordance_json, worker_concurrency_limit, description, status, updated_at
+                    output_contract_json, shared_capability_policy_json, leader_ref, member_refs,
+                    team_topology_json, shared_memory_policy_json, mailbox_policy_json,
+                    artifact_handoff_policy_json, workflow_affordance_json, worker_concurrency_limit,
+                    description, status, updated_at
                  FROM teams
                  WHERE id = ?1",
                 [team_id],
@@ -469,60 +478,28 @@ impl RuntimeAdapter {
                     let approval_preference_raw: String = row.get(19)?;
                     let output_contract_raw: String = row.get(20)?;
                     let shared_capability_policy_raw: String = row.get(21)?;
-                    let leader_agent_id: Option<String> = row.get(22)?;
-                    let member_agent_ids_raw: String = row.get(23)?;
-                    let leader_ref_raw: String = row.get(24)?;
-                    let member_refs_raw: String = row.get(25)?;
-                    let team_topology_raw: String = row.get(26)?;
-                    let shared_memory_policy_raw: String = row.get(27)?;
-                    let mailbox_policy_raw: String = row.get(28)?;
-                    let artifact_handoff_policy_raw: String = row.get(29)?;
-                    let workflow_affordance_raw: String = row.get(30)?;
+                    let leader_ref_raw: String = row.get(22)?;
+                    let member_refs_raw: String = row.get(23)?;
+                    let team_topology_raw: String = row.get(24)?;
+                    let shared_memory_policy_raw: String = row.get(25)?;
+                    let mailbox_policy_raw: String = row.get(26)?;
+                    let artifact_handoff_policy_raw: String = row.get(27)?;
+                    let workflow_affordance_raw: String = row.get(28)?;
                     let builtin_tool_keys: Vec<String> =
                         serde_json::from_str(&builtin_tool_keys_raw).unwrap_or_default();
                     let skill_ids: Vec<String> =
                         serde_json::from_str(&skill_ids_raw).unwrap_or_default();
                     let mcp_server_names: Vec<String> =
                         serde_json::from_str(&mcp_server_names_raw).unwrap_or_default();
-                    let member_agent_ids: Vec<String> =
-                        serde_json::from_str(&member_agent_ids_raw).unwrap_or_default();
-                    let mut leader_ref = normalize_agent_actor_ref(&leader_ref_raw);
-                    if leader_ref.is_empty() {
-                        leader_ref = leader_agent_id
-                            .as_deref()
-                            .map(normalize_agent_actor_ref)
-                            .or_else(|| {
-                                member_agent_ids
-                                    .first()
-                                    .map(|agent_id| normalize_agent_actor_ref(agent_id))
-                            })
-                            .unwrap_or_default();
-                    }
-                    let parsed_member_refs: Vec<String> =
-                        serde_json::from_str(&member_refs_raw).unwrap_or_default();
-                    let legacy_member_refs = parsed_member_refs.is_empty() && !member_agent_ids.is_empty();
-                    let mut member_refs = if parsed_member_refs.is_empty() {
-                        member_agent_ids
-                            .iter()
-                            .map(|agent_id| normalize_agent_actor_ref(agent_id))
-                            .collect::<Vec<_>>()
-                    } else {
-                        parsed_member_refs
-                            .into_iter()
-                            .map(|actor_ref| normalize_agent_actor_ref(&actor_ref))
-                            .filter(|actor_ref| !actor_ref.is_empty())
-                            .collect::<Vec<_>>()
-                    };
-                    if member_refs.is_empty() && !leader_ref.is_empty() {
-                        member_refs.push(leader_ref.clone());
-                    }
-                    let worker_concurrency_limit = row.get::<_, i64>(31)? as u64;
-                    let worker_concurrency_limit = if legacy_member_refs
-                        && worker_concurrency_limit <= 1
-                        && member_refs.len() > 1
-                    {
-                        member_refs.len() as u64
-                    } else if worker_concurrency_limit == 0 {
+                    let leader_ref = normalize_agent_actor_ref(&leader_ref_raw);
+                    let member_refs = serde_json::from_str::<Vec<String>>(&member_refs_raw)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|actor_ref| normalize_agent_actor_ref(&actor_ref))
+                        .filter(|actor_ref| !actor_ref.is_empty())
+                        .collect::<Vec<_>>();
+                    let worker_concurrency_limit = row.get::<_, i64>(29)? as u64;
+                    let worker_concurrency_limit = if worker_concurrency_limit == 0 {
                         member_refs.len().max(1) as u64
                     } else {
                         worker_concurrency_limit
@@ -580,8 +557,6 @@ impl RuntimeAdapter {
                             &shared_capability_policy_raw,
                             octopus_core::default_team_shared_capability_policy,
                         ),
-                        leader_agent_id,
-                        member_agent_ids,
                         leader_ref: leader_ref.clone(),
                         member_refs: member_refs.clone(),
                         team_topology: parse_json_or_default(&team_topology_raw, || {
@@ -614,9 +589,9 @@ impl RuntimeAdapter {
                         trust_metadata: octopus_core::default_asset_trust_metadata(),
                         dependency_resolution: Vec::new(),
                         import_metadata: octopus_core::default_asset_import_metadata(),
-                        description: row.get(32)?,
-                        status: row.get(33)?,
-                        updated_at: row.get::<_, i64>(34)? as u64,
+                        description: row.get(30)?,
+                        status: row.get(31)?,
+                        updated_at: row.get::<_, i64>(32)? as u64,
                     })
                 },
             )
@@ -637,6 +612,10 @@ impl RuntimeAdapter {
                 } else {
                     Err(error)
                 }
+            })
+            .and_then(|record| {
+                validate_team_actor_refs(&record.id, &record.leader_ref)?;
+                Ok(record)
             })
     }
 }

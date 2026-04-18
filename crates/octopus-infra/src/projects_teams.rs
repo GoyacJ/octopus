@@ -3296,8 +3296,6 @@ mod tests {
                 builtin_tool_keys: vec!["bash".into()],
                 skill_ids: vec!["skill-research".into(), "skill-synthesis".into()],
                 mcp_server_names: vec!["browser".into(), "notion".into()],
-                leader_agent_id: Some("agent-lead".into()),
-                member_agent_ids: vec!["agent-research".into(), "agent-browser".into()],
                 description: "Coordinates research and browsing specialists.".into(),
                 status: "active".into(),
                 task_domains: vec!["research".into(), "browser".into()],
@@ -3352,7 +3350,7 @@ mod tests {
                     deny_direct_member_escalation: true,
                     shared_capability_refs: vec!["skill://research/common".into()],
                 }),
-                leader_ref: Some("agent://workspace/lead".into()),
+                leader_ref: "agent://workspace/lead".into(),
                 member_refs: vec![
                     "agent://workspace/research".into(),
                     "agent://workspace/browser".into(),
@@ -3396,11 +3394,6 @@ mod tests {
             .find(|team| team.id == created.id)
             .expect("reloaded team");
 
-        assert_eq!(reloaded.leader_agent_id.as_deref(), Some("agent-lead"));
-        assert_eq!(
-            reloaded.member_agent_ids,
-            vec!["agent-research", "agent-browser"]
-        );
         assert_eq!(reloaded.leader_ref, "agent://workspace/lead");
         assert_eq!(
             reloaded.member_refs,
@@ -3418,6 +3411,50 @@ mod tests {
         assert_eq!(reloaded.delegation_policy.max_worker_count, 3);
         assert_eq!(reloaded.trust_metadata.trust_level, "trusted");
         assert_eq!(reloaded.import_metadata.origin_kind, "native");
+    }
+
+    #[test]
+    fn create_team_rejects_missing_leader_ref() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let error = runtime()
+            .block_on(bundle.workspace.create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Invalid Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Missing leader ref".into(),
+                tags: vec!["research".into()],
+                prompt: "This should fail closed.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["research".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_ref: String::new(),
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Legacy-only team input".into(),
+                status: "active".into(),
+            }))
+            .expect_err("missing leader_ref should fail");
+
+        assert!(error.to_string().contains("leader_ref"));
     }
 
     #[test]
@@ -3520,10 +3557,8 @@ mod tests {
                 approval_preference: None,
                 output_contract: None,
                 shared_capability_policy: None,
-                leader_agent_id: Some(project_agent.id.clone()),
-                member_agent_ids: vec![project_agent.id.clone()],
-                leader_ref: None,
-                member_refs: Vec::new(),
+                leader_ref: crate::canonical_agent_ref(&project_agent.id),
+                member_refs: vec![crate::canonical_agent_ref(&project_agent.id)],
                 team_topology: None,
                 shared_memory_policy: None,
                 mailbox_policy: None,

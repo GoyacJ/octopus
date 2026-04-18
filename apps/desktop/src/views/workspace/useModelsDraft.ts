@@ -6,6 +6,7 @@ import type {
   JsonValue,
   ModelRegistryRecord,
   ProviderRegistryRecord,
+  RuntimeConfiguredModelCredentialInput,
   RuntimeConfigSource,
 } from '@octopus/schema'
 
@@ -375,12 +376,6 @@ export function useModelsDraft() {
       || t(fallbackKey)
   }
 
-  function resolveUnknownError(error: unknown, fallbackKey: string) {
-    return error instanceof Error
-      ? localizeModelRuntimeMessage(t, error.message, fallbackKey)
-      : t(fallbackKey)
-  }
-
   function updateSelectedConfiguredModel(patch: Partial<ConfiguredModelRecord>) {
     const current = selectedConfiguredModel.value
     if (!current) {
@@ -463,12 +458,19 @@ export function useModelsDraft() {
     }
   }
 
-  async function upsertManagedCredential(configuredModelId: string, providerId: string, apiKey: string) {
-    return await runtime.upsertConfiguredModelCredential(configuredModelId, {
+  function buildManagedCredentialInputs(
+    configuredModelId: string,
+    apiKey: string,
+  ): RuntimeConfiguredModelCredentialInput[] {
+    const trimmedApiKey = apiKey.trim()
+    if (!trimmedApiKey) {
+      return []
+    }
+
+    return [{
       configuredModelId,
-      providerId,
-      apiKey,
-    })
+      apiKey: trimmedApiKey,
+    }]
   }
 
   async function deleteSelectedConfiguredModel() {
@@ -505,18 +507,8 @@ export function useModelsDraft() {
     }
 
     detailDialogOpen.value = false
-
-    try {
-      await runtime.deleteConfiguredModelCredential(removedConfiguredModelId)
-      await notifications.notifyDeleteSuccess(removedModelName)
-    } catch (error) {
-      await notifications.notifyDeleteWarning(
-        removedModelName,
-        resolveUnknownError(error, 'models.messages.secretCleanupFailed'),
-      )
-    }
-
     await refreshWorkspaceModels()
+    await notifications.notifyDeleteSuccess(removedModelName)
   }
 
   function openCreateDialog() {
@@ -574,24 +566,7 @@ export function useModelsDraft() {
     const previousModelOverrides = cloneJson(draftModelOverrides.value)
     const previousSelectedConfiguredModelId = selectedConfiguredModelId.value
     const trimmedApiKey = createApiKey.value.trim()
-    let managedCredentialCreated = false
-    let credentialRef: string | undefined
-
-    try {
-      if (trimmedApiKey) {
-        const credentialRecord = await upsertManagedCredential(
-          configuredModelId,
-          providerId,
-          trimmedApiKey,
-        )
-        credentialRef = credentialRecord.credentialRef
-        managedCredentialCreated = true
-      }
-    } catch (error) {
-      createFormError.value = resolveUnknownError(error, 'models.messages.createFailed')
-      await notifications.notifyCreateFailed(name, createFormError.value)
-      return
-    }
+    const configuredModelCredentials = buildManagedCredentialInputs(configuredModelId, trimmedApiKey)
 
     if (providerType === CUSTOM_PROVIDER_MODE) {
       draftProviderOverrides.value = {
@@ -625,7 +600,6 @@ export function useModelsDraft() {
         name,
         providerId,
         modelId: registryModelId,
-        credentialRef,
         baseUrl,
         tokenQuota: totalTokens && totalTokens > 0 ? { totalTokens } : undefined,
         tokenUsage: {
@@ -635,25 +609,22 @@ export function useModelsDraft() {
         },
         enabled: createEnabled.value,
         source: 'workspace',
-        status: credentialRef ? 'configured' : 'unconfigured',
-        configured: Boolean(credentialRef),
+        status: 'unconfigured',
+        configured: false,
       },
     }
     selectedConfiguredModelId.value = configuredModelId
     syncRuntimeDraft()
 
-    const saved = await runtime.saveConfig('workspace')
+    const saved = await runtime.saveConfig('workspace', {
+      configuredModelCredentials,
+    })
     if (!saved) {
       draftConfiguredModels.value = previousConfiguredModels
       draftProviderOverrides.value = previousProviderOverrides
       draftModelOverrides.value = previousModelOverrides
       selectedConfiguredModelId.value = previousSelectedConfiguredModelId
       syncRuntimeDraft()
-      if (managedCredentialCreated) {
-        try {
-          await runtime.deleteConfiguredModelCredential(configuredModelId)
-        } catch {}
-      }
       createFormError.value = resolveWorkspaceMessage('models.messages.createFailed')
       await notifications.notifyCreateFailed(name, createFormError.value)
       return
@@ -735,32 +706,16 @@ export function useModelsDraft() {
     }
 
     const trimmedApiKey = selectedApiKey.value.trim()
-
-    if (trimmedApiKey) {
-      try {
-        const credentialRecord = await upsertManagedCredential(
-          selectedConfiguredModel.value.configuredModelId,
-          selectedConfiguredModel.value.providerId,
-          trimmedApiKey,
-        )
-        updateSelectedConfiguredModel({
-          credentialRef: credentialRecord.credentialRef,
-          status: 'configured',
-          configured: true,
-        })
-        selectedApiKey.value = ''
-      } catch (error) {
-        await notifications.notifySaveFailed(
-          selectedConfiguredModel.value.name,
-          resolveUnknownError(error, 'models.messages.saveFailed'),
-        )
-        return
-      }
-    }
+    const configuredModelCredentials = buildManagedCredentialInputs(
+      selectedConfiguredModel.value.configuredModelId,
+      trimmedApiKey,
+    )
 
     syncRuntimeDraft()
 
-    const saved = await runtime.saveConfig('workspace')
+    const saved = await runtime.saveConfig('workspace', {
+      configuredModelCredentials,
+    })
     if (!saved) {
       await notifications.notifySaveFailed(
         selectedConfiguredModel.value.name,
@@ -770,6 +725,7 @@ export function useModelsDraft() {
     }
 
     await refreshWorkspaceModels()
+    selectedApiKey.value = ''
     await notifications.notifySaveSuccess(selectedConfiguredModel.value.name)
   }
 

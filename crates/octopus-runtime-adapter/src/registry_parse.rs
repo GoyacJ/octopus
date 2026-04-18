@@ -40,6 +40,7 @@ pub(super) fn parse_surface_descriptor(value: &Value) -> Result<SurfaceDescripto
             .map(|entries| parse_capabilities(entries))
             .transpose()?
             .unwrap_or_default(),
+        runtime_support: RuntimeExecutionSupport::default(),
     })
 }
 
@@ -55,6 +56,7 @@ pub(super) fn parse_surface_binding(value: &Value) -> Result<ModelSurfaceBinding
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        runtime_support: RuntimeExecutionSupport::default(),
     })
 }
 
@@ -128,17 +130,12 @@ pub(super) fn reference_present(reference: &str) -> Result<bool, AppError> {
     Ok(!reference.trim().is_empty())
 }
 
-pub(super) fn normalize_execution_base_url(
-    provider_id: &str,
-    protocol_family: &str,
-    base_url: String,
-) -> String {
-    let normalized = base_url.trim_end_matches('/').to_string();
-    if provider_id == "minimax"
-        && protocol_family == "anthropic_messages"
-        && normalized == "https://api.minimaxi.com"
-    {
-        return "https://api.minimaxi.com/anthropic".to_string();
+#[cfg(test)]
+mod tests {
+    use super::titleize;
+
+    #[test]
+    fn titleizes_registry_labels() {
+        assert_eq!(titleize("workspace_models"), "Workspace Models");
     }
-    normalized
 }

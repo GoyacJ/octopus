@@ -86,17 +86,16 @@ pub(super) fn resolve_actor_system_prompt(
             .flatten(),
         "team" => connection
             .query_row(
-                "SELECT name, personality, prompt, leader_agent_id, member_agent_ids FROM teams WHERE id = ?1",
+                "SELECT name, personality, prompt, leader_ref, member_refs FROM teams WHERE id = ?1",
                 params![actor_id],
                 |row| {
                     let name: String = row.get(0)?;
                     let personality: String = row.get(1)?;
                     let prompt: String = row.get(2)?;
-                    let leader_agent_id: Option<String> = row.get(3)?;
-                    let member_agent_ids_raw: String = row.get(4)?;
-                    let member_agent_ids =
-                        serde_json::from_str::<Vec<String>>(&member_agent_ids_raw)
-                            .unwrap_or_default();
+                    let leader_ref: String = row.get(3)?;
+                    let member_refs_raw: String = row.get(4)?;
+                    let member_refs =
+                        serde_json::from_str::<Vec<String>>(&member_refs_raw).unwrap_or_default();
                     Ok(build_actor_system_prompt(vec![
                         Some(format!(
                             "You are the team `{name}` operating as a single execution actor."
@@ -105,11 +104,10 @@ pub(super) fn resolve_actor_system_prompt(
                             .then(|| format!("Team personality: {personality}")),
                         (!prompt.trim().is_empty())
                             .then(|| format!("Team instructions: {prompt}")),
-                        leader_agent_id
-                            .filter(|value| !value.trim().is_empty())
-                            .map(|value| format!("Leader agent id: {value}")),
-                        (!member_agent_ids.is_empty())
-                            .then(|| format!("Member agent ids: {}", member_agent_ids.join(", "))),
+                        (!leader_ref.trim().is_empty())
+                            .then(|| format!("Leader ref: {leader_ref}")),
+                        (!member_refs.is_empty())
+                            .then(|| format!("Member refs: {}", member_refs.join(", "))),
                     ]))
                 },
             )
@@ -118,5 +116,22 @@ pub(super) fn resolve_actor_system_prompt(
             .flatten()
             .flatten(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_actor_system_prompt;
+
+    #[test]
+    fn builds_prompt_sections() {
+        let prompt = build_actor_system_prompt([
+            Some(" Alpha ".to_string()),
+            None,
+            Some(String::new()),
+            Some("Beta".to_string()),
+        ]);
+
+        assert_eq!(prompt.as_deref(), Some("Alpha\n\nBeta"));
     }
 }

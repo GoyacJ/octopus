@@ -536,8 +536,6 @@ TeamRecord:
         - kind
         - sourceId
       type: object
-    leaderAgentId:
-      type: string
     leaderRef:
       type: string
     mailboxPolicy:
@@ -545,10 +543,6 @@ TeamRecord:
     manifestRevision:
       type: string
     mcpServerNames:
-      items:
-        type: string
-      type: array
-    memberAgentIds:
       items:
         type: string
       type: array
@@ -615,7 +609,6 @@ TeamRecord:
     - builtinToolKeys
     - skillIds
     - mcpServerNames
-    - memberAgentIds
     - description
     - status
     - taskDomains
@@ -703,17 +696,11 @@ UpsertTeamInput:
       type: string
     delegationPolicy:
       $ref: "#/components/schemas/DelegationPolicy"
-    leaderAgentId:
-      type: string
     leaderRef:
       type: string
     mailboxPolicy:
       $ref: "#/components/schemas/MailboxPolicy"
     mcpServerNames:
-      items:
-        type: string
-      type: array
-    memberAgentIds:
       items:
         type: string
       type: array
@@ -775,7 +762,7 @@ UpsertTeamInput:
     - builtinToolKeys
     - skillIds
     - mcpServerNames
-    - memberAgentIds
+    - leaderRef
     - description
     - status
   type: object

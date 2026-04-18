@@ -89,8 +89,6 @@ import type {
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
-  RuntimeConfiguredModelCredentialRecord,
-  RuntimeConfiguredModelCredentialUpsertInput,
   RuntimeConfiguredModelProbeInput,
   RuntimeConfiguredModelProbeResult,
   RuntimeEventEnvelope,
@@ -401,11 +399,6 @@ export interface WorkspaceClient {
     bootstrap: () => Promise<RuntimeBootstrap>
     getConfig: () => Promise<RuntimeEffectiveConfig>
     validateConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
-    upsertConfiguredModelCredential: (
-      configuredModelId: string,
-      input: RuntimeConfiguredModelCredentialUpsertInput,
-    ) => Promise<RuntimeConfiguredModelCredentialRecord>
-    deleteConfiguredModelCredential: (configuredModelId: string) => Promise<void>
     validateConfiguredModel: (input: RuntimeConfiguredModelProbeInput) => Promise<RuntimeConfiguredModelProbeResult>
     saveConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
     getProjectConfig: (projectId: string) => Promise<RuntimeEffectiveConfig>

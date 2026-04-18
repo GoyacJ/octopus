@@ -1,4 +1,7 @@
 use super::*;
+use crate::model_runtime::{
+    parse_model_credential_reference, validate_runtime_credential_reference, CredentialReference,
+};
 
 pub(super) fn validate_configured_models(
     providers: &BTreeMap<String, ProviderRegistryRecord>,
@@ -113,10 +116,15 @@ pub(super) fn build_configured_models(
             .map(ToOwned::to_owned)
             .or_else(|| models.get(&model_id).map(|model| model.provider_id.clone()))
             .unwrap_or_default();
-        let credential_ref = value
-            .get("credentialRef")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned);
+        let credential_ref = match value.get("credentialRef").and_then(Value::as_str) {
+            Some(reference) => match parse_model_credential_reference(Some(reference))? {
+                Some(CredentialReference::Env(env_key)) => Some(format!("env:{env_key}")),
+                Some(CredentialReference::ManagedSecret(reference)) => Some(reference.to_string()),
+                Some(CredentialReference::Inline(value)) => Some(value.to_string()),
+                None => None,
+            },
+            None => None,
+        };
         let configured = credential_ref
             .as_deref()
             .map(reference_present)
@@ -271,14 +279,20 @@ pub(super) fn build_credential_bindings(
         if let Some(value) = configured_value {
             source = "runtime_config".into();
             if let Some(reference) = value.as_str() {
-                credential_ref = Some(reference.to_string());
+                credential_ref = validate_runtime_credential_reference(
+                    reference,
+                    &format!("provider credential binding `{}`", provider.provider_id),
+                )?;
             } else if let Some(object) = value.as_object() {
                 if let Some(reference) = object
                     .get("credentialRef")
                     .or_else(|| object.get("reference"))
                     .and_then(Value::as_str)
                 {
-                    credential_ref = Some(reference.to_string());
+                    credential_ref = validate_runtime_credential_reference(
+                        reference,
+                        &format!("provider credential binding `{}`", provider.provider_id),
+                    )?;
                 }
                 if let Some(configured_label) = object.get("label").and_then(Value::as_str) {
                     label = configured_label.to_string();

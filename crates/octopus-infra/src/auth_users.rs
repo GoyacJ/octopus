@@ -504,8 +504,6 @@ impl InfraWorkspaceService {
             approval_preference: input_approval_preference,
             output_contract: input_output_contract,
             shared_capability_policy: input_shared_capability_policy,
-            leader_agent_id: input_leader_agent_id,
-            member_agent_ids: input_member_agent_ids,
             leader_ref: input_leader_ref,
             member_refs: input_member_refs,
             team_topology: input_team_topology,
@@ -527,17 +525,11 @@ impl InfraWorkspaceService {
         };
         let avatar = agent_avatar(&self.state.paths, next_avatar_path.as_deref());
 
-        let member_agent_ids = input_member_agent_ids;
-        let member_refs = if input_member_refs.is_empty() {
-            crate::canonical_agent_refs(&member_agent_ids)
-        } else {
-            input_member_refs
-        };
-        let leader_agent_id = input_leader_agent_id.filter(|value| !value.trim().is_empty());
-        let leader_ref = input_leader_ref
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| leader_agent_id.clone().map(|value| crate::canonical_agent_ref(&value)))
-            .unwrap_or_default();
+        let member_refs = crate::canonical_agent_refs(&input_member_refs);
+        let leader_ref = crate::canonical_agent_ref(&input_leader_ref);
+        if leader_ref.is_empty() {
+            return Err(AppError::invalid_input("team leader_ref is required"));
+        }
         let task_domains = normalize_task_domains(task_domains);
         let delegation_policy =
             input_delegation_policy.unwrap_or_else(default_team_delegation_policy);
@@ -588,8 +580,6 @@ impl InfraWorkspaceService {
             output_contract: input_output_contract.unwrap_or_else(default_output_contract),
             shared_capability_policy: input_shared_capability_policy
                 .unwrap_or_else(default_team_shared_capability_policy),
-            leader_agent_id,
-            member_agent_ids,
             leader_ref: leader_ref.clone(),
             member_refs: member_refs.clone(),
             team_topology,

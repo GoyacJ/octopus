@@ -4,9 +4,7 @@ use crate::project_tasks::{
     load_project_tasks,
 };
 use octopus_core::ArtifactVersionReference;
-use octopus_core::{
-    BundleAssetDescriptorRecord, ProjectModelAssignments,
-};
+use octopus_core::{BundleAssetDescriptorRecord, ProjectModelAssignments};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -527,8 +525,6 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               approval_preference_json TEXT NOT NULL DEFAULT '{}',
               output_contract_json TEXT NOT NULL DEFAULT '{}',
               shared_capability_policy_json TEXT NOT NULL DEFAULT '{}',
-              leader_agent_id TEXT,
-              member_agent_ids TEXT NOT NULL,
               leader_ref TEXT NOT NULL DEFAULT '',
               member_refs TEXT NOT NULL DEFAULT '[]',
               team_topology_json TEXT NOT NULL DEFAULT '{}',
@@ -1310,7 +1306,11 @@ pub(super) fn ensure_user_avatar_columns(connection: &Connection) -> Result<(), 
 }
 
 pub(super) fn ensure_project_task_run_columns(connection: &Connection) -> Result<(), AppError> {
-    ensure_columns(connection, "project_task_runs", &[("pending_approval_id", "TEXT")])
+    ensure_columns(
+        connection,
+        "project_task_runs",
+        &[("pending_approval_id", "TEXT")],
+    )
 }
 
 fn json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -1474,8 +1474,6 @@ fn ensure_pet_projection_columns(connection: &Connection) -> Result<(), AppError
 }
 
 pub(super) fn ensure_team_record_columns(connection: &Connection) -> Result<(), AppError> {
-    let columns = table_columns(connection, "teams")?;
-
     ensure_columns(
         connection,
         "teams",
@@ -1503,8 +1501,6 @@ pub(super) fn ensure_team_record_columns(connection: &Connection) -> Result<(), 
                 "shared_capability_policy_json",
                 "TEXT NOT NULL DEFAULT '{}'",
             ),
-            ("leader_agent_id", "TEXT"),
-            ("member_agent_ids", "TEXT NOT NULL DEFAULT '[]'"),
             ("leader_ref", "TEXT NOT NULL DEFAULT ''"),
             ("member_refs", "TEXT NOT NULL DEFAULT '[]'"),
             ("team_topology_json", "TEXT NOT NULL DEFAULT '{}'"),
@@ -1519,15 +1515,6 @@ pub(super) fn ensure_team_record_columns(connection: &Connection) -> Result<(), 
             ("import_metadata_json", "TEXT NOT NULL DEFAULT '{}'"),
         ],
     )?;
-
-    if columns.iter().any(|column| column == "member_ids") {
-        connection
-            .execute(
-                "UPDATE teams SET member_agent_ids = member_ids WHERE member_agent_ids = '[]' AND member_ids IS NOT NULL",
-                [],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-    }
 
     Ok(())
 }
@@ -1669,73 +1656,39 @@ pub(super) fn write_team_record(
     record: &TeamRecord,
     replace: bool,
 ) -> Result<(), AppError> {
-    let member_agent_ids_json = serde_json::to_string(&record.member_agent_ids)?;
     let member_refs_json = json_string(&record.member_refs)?;
-    let has_legacy_member_ids = table_columns(connection, "teams")?
-        .iter()
-        .any(|column| column == "member_ids");
     let verb = if replace {
         "INSERT OR REPLACE"
     } else {
         "INSERT"
     };
 
-    let sql = if has_legacy_member_ids {
-        format!(
-            "{verb} INTO teams (
-                id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
-                builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
-                default_model_strategy_json, capability_policy_json, permission_envelope_json,
-                memory_policy_json, delegation_policy_json, approval_preference_json,
-                output_contract_json, shared_capability_policy_json, leader_agent_id, member_ids,
-                member_agent_ids, leader_ref, member_refs, team_topology_json,
-                shared_memory_policy_json, mailbox_policy_json, artifact_handoff_policy_json,
-                workflow_affordance_json, worker_concurrency_limit, integration_source_json,
-                trust_metadata_json, dependency_resolution_json, import_metadata_json,
-                description, status, updated_at
-            ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
-                ?10, ?11, ?12, ?13, ?14,
-                ?15, ?16, ?17,
-                ?18, ?19, ?20,
-                ?21, ?22, ?23, ?24,
-                ?25, ?26, ?27, ?28,
-                ?29, ?30, ?31, ?32,
-                ?33, ?34, ?35,
-                ?36, ?37, ?38,
-                ?39, ?40, ?41
-            )"
-        )
-    } else {
-        format!(
-            "{verb} INTO teams (
-                id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
-                builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
-                default_model_strategy_json, capability_policy_json, permission_envelope_json,
-                memory_policy_json, delegation_policy_json, approval_preference_json,
-                output_contract_json, shared_capability_policy_json, leader_agent_id,
-                member_agent_ids, leader_ref, member_refs, team_topology_json,
-                shared_memory_policy_json, mailbox_policy_json, artifact_handoff_policy_json,
-                workflow_affordance_json, worker_concurrency_limit, integration_source_json,
-                trust_metadata_json, dependency_resolution_json, import_metadata_json,
-                description, status, updated_at
-            ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
-                ?10, ?11, ?12, ?13, ?14,
-                ?15, ?16, ?17,
-                ?18, ?19, ?20,
-                ?21, ?22, ?23,
-                ?24, ?25, ?26, ?27,
-                ?28, ?29, ?30, ?31,
-                ?32, ?33, ?34,
-                ?35, ?36, ?37,
-                ?38, ?39
-            )"
-        )
-    };
+    let sql = format!(
+        "{verb} INTO teams (
+            id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt,
+            builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
+            default_model_strategy_json, capability_policy_json, permission_envelope_json,
+            memory_policy_json, delegation_policy_json, approval_preference_json,
+            output_contract_json, shared_capability_policy_json, leader_ref, member_refs,
+            team_topology_json, shared_memory_policy_json, mailbox_policy_json,
+            artifact_handoff_policy_json, workflow_affordance_json, worker_concurrency_limit,
+            integration_source_json, trust_metadata_json, dependency_resolution_json,
+            import_metadata_json, description, status, updated_at
+        ) VALUES (
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+            ?10, ?11, ?12, ?13, ?14,
+            ?15, ?16, ?17,
+            ?18, ?19, ?20,
+            ?21, ?22, ?23, ?24,
+            ?25, ?26, ?27,
+            ?28, ?29, ?30,
+            ?31, ?32, ?33,
+            ?34, ?35, ?36, ?37
+        )"
+    );
 
-    if has_legacy_member_ids {
-        connection.execute(
+    connection
+        .execute(
             &sql,
             params![
                 record.id,
@@ -1760,9 +1713,6 @@ pub(super) fn write_team_record(
                 json_string(&record.approval_preference)?,
                 json_string(&record.output_contract)?,
                 json_string(&record.shared_capability_policy)?,
-                record.leader_agent_id,
-                member_agent_ids_json,
-                member_agent_ids_json,
                 record.leader_ref,
                 member_refs_json,
                 json_string(&record.team_topology)?,
@@ -1784,57 +1734,7 @@ pub(super) fn write_team_record(
                 record.updated_at as i64,
             ],
         )
-    } else {
-        connection.execute(
-            &sql,
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.scope,
-                record.name,
-                record.avatar_path,
-                record.personality,
-                serde_json::to_string(&record.tags)?,
-                record.prompt,
-                serde_json::to_string(&record.builtin_tool_keys)?,
-                serde_json::to_string(&record.skill_ids)?,
-                serde_json::to_string(&record.mcp_server_names)?,
-                json_string(&record.task_domains)?,
-                record.manifest_revision,
-                json_string(&record.default_model_strategy)?,
-                json_string(&record.capability_policy)?,
-                json_string(&record.permission_envelope)?,
-                json_string(&record.memory_policy)?,
-                json_string(&record.delegation_policy)?,
-                json_string(&record.approval_preference)?,
-                json_string(&record.output_contract)?,
-                json_string(&record.shared_capability_policy)?,
-                record.leader_agent_id,
-                member_agent_ids_json,
-                record.leader_ref,
-                member_refs_json,
-                json_string(&record.team_topology)?,
-                json_string(&record.shared_memory_policy)?,
-                json_string(&record.mailbox_policy)?,
-                json_string(&record.artifact_handoff_policy)?,
-                json_string(&record.workflow_affordance)?,
-                record.worker_concurrency_limit as i64,
-                record
-                    .integration_source
-                    .as_ref()
-                    .map(json_string)
-                    .transpose()?,
-                json_string(&record.trust_metadata)?,
-                json_string(&record.dependency_resolution)?,
-                json_string(&record.import_metadata)?,
-                record.description,
-                record.status,
-                record.updated_at as i64,
-            ],
-        )
-    }
-    .map_err(|error| AppError::database(error.to_string()))?;
+        .map_err(|error| AppError::database(error.to_string()))?;
 
     Ok(())
 }
@@ -4186,8 +4086,8 @@ pub(super) fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, App
                 builtin_tool_keys, skill_ids, mcp_server_names, task_domains, manifest_revision,
                 default_model_strategy_json, capability_policy_json, permission_envelope_json,
                 memory_policy_json, delegation_policy_json, approval_preference_json,
-                output_contract_json, shared_capability_policy_json, leader_agent_id,
-                member_agent_ids, leader_ref, member_refs, team_topology_json,
+                output_contract_json, shared_capability_policy_json, leader_ref, member_refs,
+                team_topology_json,
                 shared_memory_policy_json, mailbox_policy_json, artifact_handoff_policy_json,
                 workflow_affordance_json, worker_concurrency_limit, integration_source_json,
                 trust_metadata_json, dependency_resolution_json, import_metadata_json,
@@ -4217,21 +4117,17 @@ pub(super) fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, App
             let approval_preference_raw: String = row.get(19)?;
             let output_contract_raw: String = row.get(20)?;
             let shared_capability_policy_raw: String = row.get(21)?;
-            let member_agent_ids_raw: String = row.get(23)?;
-            let member_refs_raw: String = row.get(25)?;
-            let team_topology_raw: String = row.get(26)?;
-            let shared_memory_policy_raw: String = row.get(27)?;
-            let mailbox_policy_raw: String = row.get(28)?;
-            let artifact_handoff_policy_raw: String = row.get(29)?;
-            let workflow_affordance_raw: String = row.get(30)?;
-            let integration_source_raw: Option<String> = row.get(32)?;
-            let trust_metadata_raw: String = row.get(33)?;
-            let dependency_resolution_raw: String = row.get(34)?;
-            let import_metadata_raw: String = row.get(35)?;
-            let leader_agent_id: Option<String> = row.get(22)?;
-            let member_agent_ids: Vec<String> =
-                serde_json::from_str(&member_agent_ids_raw).unwrap_or_default();
-            let leader_ref: String = row.get(24)?;
+            let leader_ref: String = row.get(22)?;
+            let member_refs_raw: String = row.get(23)?;
+            let team_topology_raw: String = row.get(24)?;
+            let shared_memory_policy_raw: String = row.get(25)?;
+            let mailbox_policy_raw: String = row.get(26)?;
+            let artifact_handoff_policy_raw: String = row.get(27)?;
+            let workflow_affordance_raw: String = row.get(28)?;
+            let integration_source_raw: Option<String> = row.get(30)?;
+            let trust_metadata_raw: String = row.get(31)?;
+            let dependency_resolution_raw: String = row.get(32)?;
+            let import_metadata_raw: String = row.get(33)?;
             let member_refs = parse_json_or_default(&member_refs_raw, Vec::new);
             Ok(TeamRecord {
                 id: row.get(0)?,
@@ -4286,8 +4182,6 @@ pub(super) fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, App
                     &shared_capability_policy_raw,
                     default_team_shared_capability_policy,
                 ),
-                leader_agent_id: leader_agent_id.clone(),
-                member_agent_ids: member_agent_ids.clone(),
                 leader_ref: leader_ref.clone(),
                 member_refs: member_refs.clone(),
                 team_topology: parse_json_or_default(&team_topology_raw, || {
@@ -4305,7 +4199,7 @@ pub(super) fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, App
                 workflow_affordance: parse_json_or_default(&workflow_affordance_raw, || {
                     workflow_affordance_from_task_domains(&Vec::new(), true, true)
                 }),
-                worker_concurrency_limit: row.get::<_, i64>(31)? as u64,
+                worker_concurrency_limit: row.get::<_, i64>(29)? as u64,
                 integration_source: integration_source_raw
                     .as_deref()
                     .and_then(|value| serde_json::from_str(value).ok()),
@@ -4318,9 +4212,9 @@ pub(super) fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, App
                     &import_metadata_raw,
                     default_asset_import_metadata,
                 ),
-                description: row.get(36)?,
-                status: row.get(37)?,
-                updated_at: row.get::<_, i64>(38)? as u64,
+                description: row.get(34)?,
+                status: row.get(35)?,
+                updated_at: row.get::<_, i64>(36)? as u64,
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -4610,7 +4504,6 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
         },
     ]
 }
-
 
 pub(super) fn default_model_catalog() -> Vec<ModelCatalogRecord> {
     vec![

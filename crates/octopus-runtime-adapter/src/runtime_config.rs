@@ -1,4 +1,5 @@
 use super::*;
+use crate::model_runtime::{parse_model_credential_reference, CredentialReference};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RuntimeConfigScopeKind {
@@ -147,40 +148,43 @@ impl RuntimeAdapter {
         )
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn resolve_secret_reference(
         &self,
         reference: &str,
     ) -> Result<Option<String>, AppError> {
-        if let Some(env_key) = reference.strip_prefix("env:") {
-            return Ok(std::env::var(env_key).ok());
+        match parse_model_credential_reference(Some(reference))? {
+            Some(CredentialReference::Env(env_key)) => Ok(std::env::var(env_key).ok()),
+            Some(CredentialReference::ManagedSecret(reference)) => {
+                self.state.secret_store.get_secret(reference)
+            }
+            Some(CredentialReference::Inline(_)) => Err(AppError::invalid_input(
+                "resolve_secret_reference only supports `env:` and `secret-ref:` values",
+            )),
+            None => Ok(None),
         }
-        if reference.starts_with("secret-ref:") {
-            return self.state.secret_store.get_secret(reference);
-        }
-        if reference.trim().is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(reference.to_string()))
     }
 
     fn configured_model_secret_status(&self, reference: &str) -> Result<&'static str, AppError> {
-        if let Some(env_key) = reference.strip_prefix("env:") {
-            return Ok(if std::env::var_os(env_key).is_some() {
-                "reference-present"
-            } else {
-                "reference-missing"
-            });
-        }
-        if reference.starts_with("secret-ref:") {
-            return Ok(
+        match parse_model_credential_reference(Some(reference)) {
+            Ok(Some(CredentialReference::Env(env_key))) => {
+                Ok(if std::env::var_os(env_key).is_some() {
+                    "reference-present"
+                } else {
+                    "reference-missing"
+                })
+            }
+            Ok(Some(CredentialReference::ManagedSecret(reference))) => Ok(
                 if self.state.secret_store.get_secret(reference)?.is_some() {
                     "reference-present"
                 } else {
                     "reference-missing"
                 },
-            );
+            ),
+            Ok(Some(CredentialReference::Inline(_))) => Ok("reference-inline"),
+            Ok(None) => Ok("reference-missing"),
+            Err(_) => Ok("reference-unsupported"),
         }
-        Ok("reference-present")
     }
 
     fn migrate_inline_configured_model_credentials(
@@ -768,5 +772,19 @@ impl RuntimeAdapter {
                     "runtime config snapshot `{snapshot_id}` is unavailable"
                 ))
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RuntimeAdapter, RuntimeConfigScopeKind};
+
+    #[test]
+    fn parses_supported_scope_labels() {
+        assert!(matches!(
+            RuntimeAdapter::parse_scope("workspace").expect("workspace scope"),
+            RuntimeConfigScopeKind::Workspace
+        ));
+        assert!(RuntimeAdapter::parse_scope("unsupported").is_err());
     }
 }

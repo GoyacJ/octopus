@@ -1234,32 +1234,267 @@ ModelCatalogSnapshot:
   properties:
     configuredModels:
       items:
-        additionalProperties: true
-        type: object
+        $ref: "#/components/schemas/ConfiguredModelRecord"
       type: array
     credentialBindings:
       items:
-        additionalProperties: true
-        type: object
+        $ref: "#/components/schemas/CredentialBinding"
       type: array
     defaultSelections:
       additionalProperties:
-        additionalProperties: true
-        type: object
+        $ref: "#/components/schemas/DefaultSelection"
       type: object
     diagnostics:
-      additionalProperties: true
-      type: object
+      $ref: "#/components/schemas/ModelRegistryDiagnostics"
     models:
       items:
-        additionalProperties: true
-        type: object
+        $ref: "#/components/schemas/ModelRegistryRecord"
       type: array
     providers:
       items:
-        additionalProperties: true
-        type: object
+        $ref: "#/components/schemas/ProviderRegistryRecord"
       type: array
+  required:
+    - providers
+    - models
+    - configuredModels
+    - credentialBindings
+    - defaultSelections
+    - diagnostics
+  type: object
+RuntimeExecutionSupport:
+  additionalProperties: false
+  properties:
+    prompt:
+      type: boolean
+    conversation:
+      type: boolean
+    toolLoop:
+      type: boolean
+    streaming:
+      type: boolean
+  required:
+    - prompt
+    - conversation
+    - toolLoop
+    - streaming
+  type: object
+SurfaceDescriptor:
+  additionalProperties: false
+  properties:
+    surface:
+      type: string
+    protocolFamily:
+      type: string
+    transport:
+      items:
+        type: string
+      type: array
+    authStrategy:
+      type: string
+    baseUrl:
+      type: string
+    baseUrlPolicy:
+      type: string
+    enabled:
+      type: boolean
+    capabilities:
+      items:
+        $ref: "#/components/schemas/CapabilityDescriptor"
+      type: array
+    runtimeSupport:
+      $ref: "#/components/schemas/RuntimeExecutionSupport"
+  required:
+    - surface
+    - protocolFamily
+    - transport
+    - authStrategy
+    - baseUrl
+    - baseUrlPolicy
+    - enabled
+    - capabilities
+    - runtimeSupport
+  type: object
+ProviderRegistryRecord:
+  additionalProperties: false
+  properties:
+    providerId:
+      type: string
+    label:
+      type: string
+    enabled:
+      type: boolean
+    surfaces:
+      items:
+        $ref: "#/components/schemas/SurfaceDescriptor"
+      type: array
+    metadata:
+      additionalProperties: true
+      type: object
+  required:
+    - providerId
+    - label
+    - enabled
+    - surfaces
+    - metadata
+  type: object
+ModelSurfaceBinding:
+  additionalProperties: false
+  properties:
+    surface:
+      type: string
+    protocolFamily:
+      type: string
+    enabled:
+      type: boolean
+    runtimeSupport:
+      $ref: "#/components/schemas/RuntimeExecutionSupport"
+  required:
+    - surface
+    - protocolFamily
+    - enabled
+    - runtimeSupport
+  type: object
+ModelRegistryRecord:
+  additionalProperties: false
+  properties:
+    modelId:
+      type: string
+    providerId:
+      type: string
+    label:
+      type: string
+    description:
+      type: string
+    family:
+      type: string
+    track:
+      type: string
+    enabled:
+      type: boolean
+    recommendedFor:
+      type: string
+    availability:
+      type: string
+    defaultPermission:
+      type: string
+    surfaceBindings:
+      items:
+        $ref: "#/components/schemas/ModelSurfaceBinding"
+      type: array
+    capabilities:
+      items:
+        $ref: "#/components/schemas/CapabilityDescriptor"
+      type: array
+    contextWindow:
+      type: integer
+    maxOutputTokens:
+      type: integer
+    metadata:
+      additionalProperties: true
+      type: object
+  required:
+    - modelId
+    - providerId
+    - label
+    - description
+    - family
+    - track
+    - enabled
+    - recommendedFor
+    - availability
+    - defaultPermission
+    - surfaceBindings
+    - capabilities
+    - metadata
+  type: object
+DefaultSelection:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    providerId:
+      type: string
+    modelId:
+      type: string
+    surface:
+      type: string
+  required:
+    - providerId
+    - modelId
+    - surface
+  type: object
+ConfiguredModelTokenQuota:
+  additionalProperties: false
+  properties:
+    totalTokens:
+      type: integer
+  type: object
+ConfiguredModelTokenUsage:
+  additionalProperties: false
+  properties:
+    usedTokens:
+      type: integer
+    remainingTokens:
+      type: integer
+    exhausted:
+      type: boolean
+  required:
+    - usedTokens
+    - exhausted
+  type: object
+ConfiguredModelRecord:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    name:
+      type: string
+    providerId:
+      type: string
+    modelId:
+      type: string
+    credentialRef:
+      type: string
+    baseUrl:
+      type: string
+    tokenQuota:
+      $ref: "#/components/schemas/ConfiguredModelTokenQuota"
+    tokenUsage:
+      $ref: "#/components/schemas/ConfiguredModelTokenUsage"
+    enabled:
+      type: boolean
+    source:
+      type: string
+    status:
+      type: string
+    configured:
+      type: boolean
+  required:
+    - configuredModelId
+    - name
+    - providerId
+    - modelId
+    - tokenUsage
+    - enabled
+    - source
+    - status
+    - configured
+  type: object
+ModelRegistryDiagnostics:
+  additionalProperties: false
+  properties:
+    warnings:
+      items:
+        type: string
+      type: array
+    errors:
+      items:
+        type: string
+      type: array
+  required:
+    - warnings
+    - errors
   type: object
 ToolRecord:
   additionalProperties: false

@@ -2112,19 +2112,16 @@ pub(crate) fn build_team_record(
     builtin_tool_keys: &[String],
     skill_ids: &[String],
     mcp_server_names: &[String],
-    leader_agent_id: Option<String>,
-    member_agent_ids: Vec<String>,
+    leader_ref: String,
+    member_refs: Vec<String>,
 ) -> TeamRecord {
     let builtin_tool_keys = builtin_tool_keys.to_vec();
     let skill_ids = skill_ids.to_vec();
     let mcp_server_names = mcp_server_names.to_vec();
     let task_domains = normalize_task_domains(tags.to_vec());
     let delegation_policy = default_team_delegation_policy();
-    let leader_ref = leader_agent_id
-        .as_deref()
-        .map(crate::canonical_agent_ref)
-        .unwrap_or_default();
-    let member_refs = crate::canonical_agent_refs(&member_agent_ids);
+    let leader_ref = crate::canonical_agent_ref(&leader_ref);
+    let member_refs = crate::canonical_agent_refs(&member_refs);
     TeamRecord {
         id: team_id.to_string(),
         workspace_id: workspace_id.to_string(),
@@ -2153,8 +2150,6 @@ pub(crate) fn build_team_record(
         approval_preference: default_approval_preference(),
         output_contract: default_output_contract(),
         shared_capability_policy: default_team_shared_capability_policy(),
-        leader_agent_id,
-        member_agent_ids: member_agent_ids.clone(),
         leader_ref: leader_ref.clone(),
         member_refs: member_refs.clone(),
         team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),
@@ -2219,8 +2214,8 @@ fn compute_team_hash(
     target: &AssetTargetScope<'_>,
     record: &PlannedTeam,
     skill_ids: &[String],
-    leader_agent_id: Option<&str>,
-    member_agent_ids: &[String],
+    leader_ref: &str,
+    member_refs: &[String],
 ) -> Result<String, AppError> {
     Ok(hash_text(&serde_json::to_string(&json!({
         "workspaceId": workspace_id,
@@ -2234,8 +2229,8 @@ fn compute_team_hash(
         "builtinToolKeys": record.builtin_tool_keys,
         "skillIds": skill_ids,
         "mcpServerNames": record.mcp_server_names,
-        "leaderAgentId": leader_agent_id,
-        "memberAgentIds": member_agent_ids,
+        "leaderRef": leader_ref,
+        "memberRefs": member_refs,
         "model": record.model,
         "status": "active",
     }))?))
@@ -2254,8 +2249,8 @@ fn compute_existing_team_hash(record: &TeamRecord) -> Result<String, AppError> {
         "builtinToolKeys": record.builtin_tool_keys,
         "skillIds": record.skill_ids,
         "mcpServerNames": record.mcp_server_names,
-        "leaderAgentId": record.leader_agent_id,
-        "memberAgentIds": record.member_agent_ids,
+        "leaderRef": record.leader_ref,
+        "memberRefs": record.member_refs,
         "model": record.default_model_strategy.preferred_model_ref,
         "status": record.status,
     }))?))
@@ -2289,8 +2284,8 @@ pub(crate) fn resolve_team_action(
     existing_teams: &HashMap<String, TeamRecord>,
     planned: &PlannedTeam,
     skill_ids: &[String],
-    leader_agent_id: Option<&str>,
-    member_agent_ids: &[String],
+    leader_ref: &str,
+    member_refs: &[String],
 ) -> Result<ImportAction, AppError> {
     let team_id = planned
         .team_id
@@ -2301,8 +2296,8 @@ pub(crate) fn resolve_team_action(
         target,
         planned,
         skill_ids,
-        leader_agent_id,
-        member_agent_ids,
+        leader_ref,
+        member_refs,
     )?;
     let Some(existing) = existing_teams.get(&team_id) else {
         return Ok(ImportAction::Create);
@@ -2884,6 +2879,30 @@ fn yaml_inline_string(value: &str) -> String {
     }
 }
 
+fn agent_matches_ref(agent: &AgentRecord, agent_ref: &str) -> bool {
+    let trimmed = agent_ref.trim();
+    !trimmed.is_empty() && (trimmed == agent.id || trimmed == crate::canonical_agent_ref(&agent.id))
+}
+
+fn team_leader_agent<'a>(agents: &'a [AgentRecord], team: &TeamRecord) -> Option<&'a AgentRecord> {
+    agents
+        .iter()
+        .find(|agent| agent_matches_ref(agent, &team.leader_ref))
+}
+
+fn team_member_agents<'a>(agents: &'a [AgentRecord], team: &TeamRecord) -> Vec<&'a AgentRecord> {
+    let mut seen = BTreeSet::new();
+    team.member_refs
+        .iter()
+        .filter_map(|member_ref| {
+            agents
+                .iter()
+                .find(|agent| agent_matches_ref(agent, member_ref))
+                .filter(|agent| seen.insert(agent.id.clone()))
+        })
+        .collect()
+}
+
 pub(crate) fn export_team_files(
     paths: &WorkspacePaths,
     context: &ExportContext,
@@ -2909,16 +2928,12 @@ pub(crate) fn export_team_files(
     } else {
         String::from("头像")
     };
-    let member_names = team
-        .member_agent_ids
+    let member_agents = team_member_agents(&context.agents, team);
+    let member_names = member_agents
         .iter()
-        .filter_map(|agent_id| context.agents.iter().find(|agent| &agent.id == agent_id))
         .map(|agent| agent.name.clone())
         .collect::<Vec<_>>();
-    let leader_name = team
-        .leader_agent_id
-        .as_ref()
-        .and_then(|agent_id| context.agents.iter().find(|agent| &agent.id == agent_id))
+    let leader_name = team_leader_agent(&context.agents, team)
         .map(|agent| agent.name.clone())
         .unwrap_or_default();
     files.push(encode_file(
@@ -2926,10 +2941,7 @@ pub(crate) fn export_team_files(
         "text/markdown",
         render_team_markdown(team, &avatar_name, &leader_name, &member_names).into_bytes(),
     ));
-    for agent_id in &team.member_agent_ids {
-        let Some(agent) = context.agents.iter().find(|item| &item.id == agent_id) else {
-            continue;
-        };
+    for agent in member_agents {
         files.extend(export_agent_files(
             paths,
             context,
@@ -3234,22 +3246,30 @@ pub(crate) fn build_export_context(
     agents.retain(|agent| seen_agent_ids.insert(agent.id.clone()));
     let mut seen_team_ids = BTreeSet::new();
     teams.retain(|team| seen_team_ids.insert(team.id.clone()));
+    let combined_agents = stored_agents
+        .iter()
+        .chain(builtin_agents.iter())
+        .cloned()
+        .collect::<Vec<_>>();
     for team in &teams {
-        for member_agent_id in &team.member_agent_ids {
-            if seen_agent_ids.contains(member_agent_id) {
+        for agent in team_member_agents(&combined_agents, team) {
+            if seen_agent_ids.contains(&agent.id) {
                 continue;
             }
-            if let Some(agent) = stored_agents
-                .iter()
-                .chain(builtin_agents.iter())
-                .find(|candidate| &candidate.id == member_agent_id)
-                .cloned()
-            {
-                seen_agent_ids.insert(agent.id.clone());
-                agents.push(agent);
-            }
+            seen_agent_ids.insert(agent.id.clone());
+            agents.push(agent.clone());
         }
     }
+
+    let single_team_export_member_ids = teams
+        .first()
+        .map(|team| {
+            team_member_agents(&agents, team)
+                .into_iter()
+                .map(|agent| agent.id.clone())
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
 
     let skill_paths = resolve_skill_paths(paths, &agents, &teams)?;
     let builtin_skill_assets = resolve_builtin_skill_assets(&agents, &teams)?;
@@ -3262,7 +3282,7 @@ pub(crate) fn build_export_context(
         && teams.len() == 1
         && agents
             .iter()
-            .all(|agent| teams[0].member_agent_ids.contains(&agent.id))
+            .all(|agent| single_team_export_member_ids.contains(&agent.id))
     {
         sanitize_export_dir_name(&teams[0].name)
     } else if input.mode == "single" && agents.len() == 1 && teams.is_empty() {
@@ -3519,8 +3539,8 @@ mod tests {
                     builtin_tool_keys TEXT NOT NULL,
                     skill_ids TEXT NOT NULL,
                     mcp_server_names TEXT NOT NULL,
-                    leader_agent_id TEXT,
-                    member_agent_ids TEXT NOT NULL,
+                    leader_ref TEXT NOT NULL DEFAULT '',
+                    member_refs TEXT NOT NULL DEFAULT '[]',
                     description TEXT NOT NULL,
                     status TEXT NOT NULL,
                     updated_at INTEGER NOT NULL
@@ -3633,17 +3653,17 @@ mod tests {
         personality: &str,
         tags: Vec<String>,
         prompt: &str,
-        leader_agent_id: Option<String>,
-        member_agent_ids: Vec<String>,
+        leader_actor_ref: Option<String>,
+        member_actor_refs: Vec<String>,
         description: &str,
     ) -> TeamRecord {
         let task_domains = normalize_task_domains(tags.clone());
         let delegation_policy = default_team_delegation_policy();
-        let leader_ref = leader_agent_id
+        let leader_ref = leader_actor_ref
             .as_deref()
             .map(crate::canonical_agent_ref)
             .unwrap_or_default();
-        let member_refs = crate::canonical_agent_refs(&member_agent_ids);
+        let member_refs = crate::canonical_agent_refs(&member_actor_refs);
         TeamRecord {
             id: id.into(),
             workspace_id: workspace_id.into(),
@@ -3668,8 +3688,6 @@ mod tests {
             approval_preference: default_approval_preference(),
             output_contract: default_output_contract(),
             shared_capability_policy: default_team_shared_capability_policy(),
-            leader_agent_id,
-            member_agent_ids: member_agent_ids.clone(),
             leader_ref: leader_ref.clone(),
             member_refs: member_refs.clone(),
             team_topology: team_topology_from_refs(Some(leader_ref), member_refs.clone()),

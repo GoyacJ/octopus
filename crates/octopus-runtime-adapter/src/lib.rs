@@ -16,12 +16,12 @@ mod event_bus;
 mod execution_events;
 mod execution_service;
 mod execution_target;
-mod executor;
 mod handoff_runtime;
 mod mailbox_runtime;
 mod memory_runtime;
 mod memory_selector;
 mod memory_writer;
+mod model_runtime;
 mod model_usage;
 mod persistence;
 mod policy_compiler;
@@ -38,11 +38,8 @@ mod trace_context;
 mod worker_runtime;
 mod workflow_runtime;
 
-#[cfg(test)]
-mod split_module_tests;
-
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::{self, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -62,10 +59,9 @@ use octopus_core::{
     RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
     RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
     RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
-    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialRecord,
-    RuntimeConfiguredModelCredentialUpsertInput, RuntimeConfiguredModelProbeInput,
-    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
-    RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMediationOutcome,
+    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialInput,
+    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
+    RuntimeEventEnvelope, RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMediationOutcome,
     RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
     RuntimeMemorySelectionSummary, RuntimeMemorySummary, RuntimeMessage,
     RuntimePendingMediationSummary, RuntimePolicyDecisionSummary, RuntimeRunCheckpoint,
@@ -95,11 +91,13 @@ use adapter_state::{
     merge_project_assignments, optional_project_id, sync_runtime_session_detail,
     PendingRuntimeDeliverable, RuntimeAggregate, RuntimeAggregateMetadata, RuntimeState,
 };
-pub use executor::{
-    LiveRuntimeModelDriver, MockRuntimeModelDriver, RuntimeConversationExecution,
-    RuntimeConversationRequest, RuntimeModelDriver,
+pub use model_runtime::{
+    resolve_model_auth_source, resolve_request_policy, CanonicalDefaultSelection,
+    CanonicalModelAlias, CanonicalModelPolicy, LiveRuntimeModelDriver, MockRuntimeModelDriver,
+    ModelDriverRegistry, ModelExecutionDeliverable, ModelExecutionResult, ProtocolDriver,
+    ProtocolDriverCapability, ResolvedModelAuth, ResolvedModelAuthMode,
+    RuntimeConversationExecution, RuntimeConversationRequest, RuntimeModelDriver,
 };
-use executor::{ModelExecutionDeliverable, ModelExecutionResult};
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
 #[cfg(not(test))]
