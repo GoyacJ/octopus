@@ -745,11 +745,20 @@
       "projectOverride": "项目覆盖",
       "members": "成员与访问"
     },
+    "leader": {
+      "hint": "Leader 拥有项目内最高权限，并且必须保持在已授予与已启用的数字员工列表中。",
+      "validation": {
+        "required": "请选择一个 Leader 数字员工。",
+        "invalid": "所选 Leader 不在当前工作区可用数字员工范围内。",
+        "mustRemainEnabled": "当前项目的 Leader 必须保持已授予且已启用。"
+      }
+    },
     "sections": {
       "overview": {
         "title": "配置概览",
         "description": "这里展示项目台账信息。名称、说明和资源目录只在项目管理页编辑。",
-        "editHint": "如需修改项目名称、说明、资源目录或归档状态，请回到项目管理页处理。"
+        "editHint": "如需修改项目名称、说明、资源目录或归档状态，请回到项目管理页处理。",
+        "saveError": "保存项目概览失败。"
       },
       "grants": {
         "title": "可用于此项目",
@@ -785,6 +794,21 @@
       }
     },
     "dialogs": {
+      "overview": {
+        "title": "编辑项目概览",
+        "description": "在这里调整项目 Leader。项目名称、说明和资源目录仍在项目管理页维护。"
+      },
+      "assetPicker": {
+        "searchTools": "搜索名称、说明或标识",
+        "searchActors": "搜索名称、说明或 ID",
+        "results": "当前标签页 {count} 项",
+        "selectVisible": "全选当前标签页",
+        "clearVisible": "清空当前标签页",
+        "emptyTabTitle": "当前标签页暂无可选项",
+        "emptyTabDescription": "切换标签页或调整上层授予范围后再试。",
+        "emptySearchTitle": "没有匹配结果",
+        "emptySearchDescription": "试试更换关键词或清空搜索。"
+      },
       "grantModels": {
         "title": "编辑模型授予",
         "description": "决定这个项目最多能看见哪些工作区模型。",
@@ -808,13 +832,17 @@
       },
       "runtimeTools": {
         "title": "编辑工具启用与覆盖",
-        "description": "在已授予的工具范围内设置项目启用状态和权限覆盖。"
+        "description": "在已授予的工具范围内设置项目启用状态和权限覆盖。",
+        "inheritVisible": "当前标签页改为继承",
+        "denyVisible": "当前标签页设为禁用"
       },
       "runtimeActors": {
         "title": "编辑数字员工启用",
         "description": "在已授予范围内选择项目实际启用的数字员工和团队。",
         "agentsHint": "这里只显示已经授予给当前项目的数字员工。",
         "teamsHint": "这里只显示已经授予给当前项目的团队。",
+        "enableVisible": "启用当前标签页",
+        "disableVisible": "停用当前标签页",
         "projectOwnedTitle": "项目自有数字员工",
         "projectOwnedDescription": "项目内创建的数字员工和团队默认属于当前项目，不需要再次授予。"
       },
@@ -2110,6 +2138,8 @@
       "description": "项目说明",
       "resourceDirectory": "资源目录",
       "preset": "初始化预设",
+      "leader": "Leader 数字员工",
+      "leaderHint": "从当前工作区已启用的数字员工中选择项目负责人。创建会话时默认优先选中 Leader，项目会实时跟随工作区变更。",
       "totalTokens": "Token 总量",
       "usedTokens": "已使用量",
       "models": "已分配模型",
@@ -2148,6 +2178,7 @@
       "saveMetadata": "保存项目基础信息失败。",
       "seedRuntime": "项目已创建，但初始化高级配置失败。"
     },
+    "inheritanceHint": "新建项目默认实时继承工作区已启用的工具、数字员工和数字团队；这里不做显式勾选，后续可在项目配置中按需排除或覆盖。",
     "presets": {
       "hint": "预设只会为新建项目生成建议值，创建后仍可在项目配置页继续细化。",
       "editHint": "已有项目的高级配置请在项目配置页继续维护，预设只用于新建时初始化。",

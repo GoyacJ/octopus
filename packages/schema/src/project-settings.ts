@@ -11,13 +11,13 @@ export interface ProjectToolPermissionOverride {
 }
 
 export interface ProjectToolSettings {
-  enabledSourceKeys: string[]
+  disabledSourceKeys: string[]
   overrides: Record<string, ProjectToolPermissionOverride>
 }
 
 export interface ProjectAgentSettings {
-  enabledAgentIds: string[]
-  enabledTeamIds: string[]
+  disabledAgentIds: string[]
+  disabledTeamIds: string[]
 }
 
 export interface ProjectSettingsConfig {

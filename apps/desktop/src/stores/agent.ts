@@ -19,6 +19,7 @@ import {
   ensureWorkspaceClientForConnection,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
+import { resolveProjectGrantedActorIds } from './project_setup'
 import { useWorkspaceStore } from './workspace'
 
 function withIntegrationSource(
@@ -56,8 +57,12 @@ export const useAgentStore = defineStore('agent', () => {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
   )
-  const assignedProjectAgentIds = computed(() =>
-    currentProject.value?.assignments?.agents?.agentIds ?? [],
+  const grantedProjectAgentIds = computed(() =>
+    resolveProjectGrantedActorIds(
+      currentProject.value?.assignments,
+      workspaceAgents.value.map(record => record.id),
+      [],
+    ).assignedAgentIds,
   )
   const projectLinks = computed<Record<string, ProjectAgentLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
@@ -68,7 +73,7 @@ export const useAgentStore = defineStore('agent', () => {
   const integratedProjectAgents = computed(() => {
     const linkMap = new Map(currentProjectLinks.value.map(link => [link.agentId, link]))
     return workspaceOwnedAgents.value
-      .filter(record => assignedProjectAgentIds.value.includes(record.id) || linkMap.has(record.id))
+      .filter(record => grantedProjectAgentIds.value.includes(record.id) || linkMap.has(record.id))
       .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
         workspaceId: record.workspaceId,
         projectId: workspaceStore.currentProjectId,
@@ -77,10 +82,10 @@ export const useAgentStore = defineStore('agent', () => {
       }))
   })
   const assignedWorkspaceAgents = computed(() =>
-    workspaceOwnedAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
+    workspaceOwnedAgents.value.filter(record => grantedProjectAgentIds.value.includes(record.id)),
   )
   const assignedBuiltinAgents = computed(() =>
-    builtinTemplateAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
+    builtinTemplateAgents.value.filter(record => grantedProjectAgentIds.value.includes(record.id)),
   )
   const effectiveProjectAgents = computed(() => {
     const merged = [

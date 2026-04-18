@@ -4,9 +4,7 @@ use crate::project_tasks::{
     load_project_tasks,
 };
 use octopus_core::ArtifactVersionReference;
-use octopus_core::{
-    BundleAssetDescriptorRecord, ProjectModelAssignments,
-};
+use octopus_core::{BundleAssetDescriptorRecord, ProjectModelAssignments};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -64,6 +62,46 @@ pub(super) fn empty_project_linked_workspace_assets() -> ProjectLinkedWorkspaceA
         agent_ids: Vec::new(),
         resource_ids: Vec::new(),
         tool_source_keys: Vec::new(),
+        knowledge_ids: Vec::new(),
+    }
+}
+
+fn legacy_linked_workspace_assets_from_assignments_json(
+    assignments_json: Option<&str>,
+) -> ProjectLinkedWorkspaceAssets {
+    let Some(assignments_json) = assignments_json.filter(|value| !value.trim().is_empty()) else {
+        return empty_project_linked_workspace_assets();
+    };
+    let Ok(assignments) = serde_json::from_str::<serde_json::Value>(assignments_json) else {
+        return empty_project_linked_workspace_assets();
+    };
+    let collect_string_array = |value: Option<&serde_json::Value>| -> Vec<String> {
+        value
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    ProjectLinkedWorkspaceAssets {
+        agent_ids: collect_string_array(
+            assignments
+                .get("agents")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("agentIds")),
+        ),
+        resource_ids: Vec::new(),
+        tool_source_keys: collect_string_array(
+            assignments
+                .get("tools")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("sourceKeys")),
+        ),
         knowledge_ids: Vec::new(),
     }
 }
@@ -283,6 +321,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               status TEXT NOT NULL,
               description TEXT NOT NULL,
               resource_directory TEXT NOT NULL,
+              leader_agent_id TEXT,
               assignments_json TEXT,
               owner_user_id TEXT,
               member_user_ids_json TEXT,
@@ -1049,8 +1088,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         connection
             .execute(
                 "INSERT INTO projects
-                 (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 (id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     DEFAULT_PROJECT_ID,
                     DEFAULT_WORKSPACE_ID,
@@ -1058,6 +1097,7 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                     "active",
                     "Bootstrap project for the local workspace.",
                     default_project_resource_directory,
+                    Option::<String>::None,
                     Some(default_project_assignments),
                     "user-owner",
                     default_member_user_ids,
@@ -1310,7 +1350,11 @@ pub(super) fn ensure_user_avatar_columns(connection: &Connection) -> Result<(), 
 }
 
 pub(super) fn ensure_project_task_run_columns(connection: &Connection) -> Result<(), AppError> {
-    ensure_columns(connection, "project_task_runs", &[("pending_approval_id", "TEXT")])
+    ensure_columns(
+        connection,
+        "project_task_runs",
+        &[("pending_approval_id", "TEXT")],
+    )
 }
 
 fn json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -1899,6 +1943,7 @@ pub(super) fn ensure_project_assignment_columns(connection: &Connection) -> Resu
         &[
             ("assignments_json", "TEXT"),
             ("resource_directory", "TEXT"),
+            ("leader_agent_id", "TEXT"),
             ("owner_user_id", "TEXT"),
             ("member_user_ids_json", "TEXT"),
             ("permission_overrides_json", "TEXT"),
@@ -3006,27 +3051,7 @@ fn backfill_project_governance(
             .map(serde_json::from_str::<ProjectLinkedWorkspaceAssets>)
             .transpose()?
             .unwrap_or_else(|| {
-                let assignments = assignments_json
-                    .as_deref()
-                    .filter(|value| !value.trim().is_empty())
-                    .map(serde_json::from_str::<ProjectWorkspaceAssignments>)
-                    .transpose()
-                    .ok()
-                    .flatten();
-                ProjectLinkedWorkspaceAssets {
-                    agent_ids: assignments
-                        .as_ref()
-                        .and_then(|value| value.agents.as_ref())
-                        .map(|value| value.agent_ids.clone())
-                        .unwrap_or_default(),
-                    resource_ids: Vec::new(),
-                    tool_source_keys: assignments
-                        .as_ref()
-                        .and_then(|value| value.tools.as_ref())
-                        .map(|value| value.source_keys.clone())
-                        .unwrap_or_default(),
-                    knowledge_ids: Vec::new(),
-                }
+                legacy_linked_workspace_assets_from_assignments_json(assignments_json.as_deref())
             });
         let normalized_members =
             normalized_project_member_user_ids(&owner_user_id, member_user_ids);
@@ -3295,12 +3320,13 @@ fn reset_legacy_sessions_table(connection: &Connection) -> Result<(), AppError> 
 pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
+            "SELECT id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let assignments_json: Option<String> = row.get(6)?;
+            let leader_agent_id: Option<String> = row.get(6)?;
+            let assignments_json: Option<String> = row.get(7)?;
             let assignments = assignments_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3308,31 +3334,17 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        6,
+                        7,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?;
-            let owner_user_id: Option<String> = row.get(7)?;
-            let member_user_ids_json: Option<String> = row.get(8)?;
+            let owner_user_id: Option<String> = row.get(8)?;
+            let member_user_ids_json: Option<String> = row.get(9)?;
             let member_user_ids = member_user_ids_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
                 .map(serde_json::from_str::<Vec<String>>)
-                .transpose()
-                .map_err(|error| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        8,
-                        rusqlite::types::Type::Text,
-                        Box::new(error),
-                    )
-                })?
-                .unwrap_or_default();
-            let permission_overrides_json: Option<String> = row.get(9)?;
-            let permission_overrides = permission_overrides_json
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .map(serde_json::from_str::<ProjectPermissionOverrides>)
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -3341,8 +3353,22 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                         Box::new(error),
                     )
                 })?
+                .unwrap_or_default();
+            let permission_overrides_json: Option<String> = row.get(10)?;
+            let permission_overrides = permission_overrides_json
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str::<ProjectPermissionOverrides>)
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?
                 .unwrap_or_else(default_project_permission_overrides);
-            let linked_workspace_assets_json: Option<String> = row.get(10)?;
+            let linked_workspace_assets_json: Option<String> = row.get(11)?;
             let linked_workspace_assets = linked_workspace_assets_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3350,7 +3376,7 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        10,
+                        11,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
@@ -3364,6 +3390,7 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 status: row.get(3)?,
                 description: row.get(4)?,
                 resource_directory: row.get(5)?,
+                leader_agent_id,
                 owner_user_id: owner_user_id.clone(),
                 member_user_ids: normalized_project_member_user_ids(
                     &owner_user_id,
@@ -4610,7 +4637,6 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
         },
     ]
 }
-
 
 pub(super) fn default_model_catalog() -> Vec<ModelCatalogRecord> {
     vec![

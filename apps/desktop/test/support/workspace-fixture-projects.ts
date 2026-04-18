@@ -142,6 +142,7 @@ export function createProjectRecord(
     status: 'active',
     description: input.description.trim(),
     resourceDirectory: input.resourceDirectory.trim(),
+    leaderAgentId: input.leaderAgentId?.trim() || undefined,
     ownerUserId: input.ownerUserId?.trim() || 'user-owner',
     memberUserIds: [...new Set([input.ownerUserId?.trim() || 'user-owner', ...(input.memberUserIds ?? [])].filter(Boolean))],
     permissionOverrides: input.permissionOverrides ?? {
@@ -171,6 +172,7 @@ export function updateProjectRecord(
     description: input.description.trim(),
     resourceDirectory: input.resourceDirectory.trim(),
     status: input.status,
+    leaderAgentId: input.leaderAgentId?.trim() || undefined,
     ownerUserId: input.ownerUserId?.trim() || current.ownerUserId,
     memberUserIds: [...new Set(
       [

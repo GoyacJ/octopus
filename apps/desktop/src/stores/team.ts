@@ -15,6 +15,7 @@ import {
   ensureWorkspaceClientForConnection,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
+import { resolveProjectGrantedActorIds } from './project_setup'
 import { useWorkspaceStore } from './workspace'
 
 function withIntegrationSource(
@@ -52,8 +53,12 @@ export const useTeamStore = defineStore('team', () => {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
   )
-  const assignedProjectTeamIds = computed(() =>
-    currentProject.value?.assignments?.agents?.teamIds ?? [],
+  const grantedProjectTeamIds = computed(() =>
+    resolveProjectGrantedActorIds(
+      currentProject.value?.assignments,
+      [],
+      workspaceTeams.value.map(record => record.id),
+    ).assignedTeamIds,
   )
   const projectLinks = computed<Record<string, ProjectTeamLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
@@ -64,7 +69,7 @@ export const useTeamStore = defineStore('team', () => {
   const integratedProjectTeams = computed(() => {
     const linkMap = new Map(currentProjectLinks.value.map(link => [link.teamId, link]))
     return workspaceOwnedTeams.value
-      .filter(record => assignedProjectTeamIds.value.includes(record.id) || linkMap.has(record.id))
+      .filter(record => grantedProjectTeamIds.value.includes(record.id) || linkMap.has(record.id))
       .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
         workspaceId: record.workspaceId,
         projectId: workspaceStore.currentProjectId,
@@ -73,10 +78,10 @@ export const useTeamStore = defineStore('team', () => {
       }))
   })
   const assignedWorkspaceTeams = computed(() =>
-    workspaceOwnedTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
+    workspaceOwnedTeams.value.filter(record => grantedProjectTeamIds.value.includes(record.id)),
   )
   const assignedBuiltinTeams = computed(() =>
-    builtinTemplateTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
+    builtinTemplateTeams.value.filter(record => grantedProjectTeamIds.value.includes(record.id)),
   )
   const effectiveProjectTeams = computed(() => {
     const merged = [

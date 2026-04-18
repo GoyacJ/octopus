@@ -17,7 +17,8 @@ use octopus_core::{
     timestamp_now, workflow_affordance_from_task_domains, AgentRecord, AppError,
     AssetBundleManifestV2, AssetDependency, AssetDependencyResolution, AssetTranslationReport,
     BundleAssetDescriptorRecord, DefaultModelStrategy, ExportWorkspaceAgentBundleInput,
-    ImportIssue, TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
+    ImportIssue, ProjectWorkspaceAssignments, TeamRecord, WorkspaceDirectoryUploadEntry,
+    ASSET_MANIFEST_REVISION_V2,
 };
 use rusqlite::{params, Connection};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -25,7 +26,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     infra_state::{
-        agent_avatar, load_agents, load_bundle_asset_descriptor_records, load_projects, load_teams,
+        agent_avatar, load_agents, load_bundle_asset_descriptor_records, load_project_agent_links,
+        load_project_team_links, load_projects, load_teams,
     },
     resources_skills::{
         discover_skill_roots, load_skills_from_roots, load_workspace_asset_state_document,
@@ -3082,6 +3084,51 @@ fn sanitize_export_dir_name(name: &str) -> String {
         .collect()
 }
 
+fn resolve_project_granted_actor_ids(
+    assignments: Option<&ProjectWorkspaceAssignments>,
+    workspace_agent_ids: &[String],
+    workspace_team_ids: &[String],
+) -> (BTreeSet<String>, BTreeSet<String>) {
+    let agent_ids = workspace_agent_ids
+        .iter()
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let team_ids = workspace_team_ids
+        .iter()
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let Some(agents) = assignments.and_then(|assignments| assignments.agents.as_ref()) else {
+        return (agent_ids, team_ids);
+    };
+
+    let excluded_agent_ids = agents
+        .excluded_agent_ids
+        .iter()
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let excluded_team_ids = agents
+        .excluded_team_ids
+        .iter()
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    (
+        agent_ids
+            .into_iter()
+            .filter(|agent_id| !excluded_agent_ids.contains(agent_id))
+            .collect(),
+        team_ids
+            .into_iter()
+            .filter(|team_id| !excluded_team_ids.contains(team_id))
+            .collect(),
+    )
+}
+
 pub(crate) fn build_export_context(
     connection: &Connection,
     paths: &WorkspacePaths,
@@ -3142,19 +3189,52 @@ pub(crate) fn build_export_context(
         }
         AssetTargetScope::Project(project_id) => {
             let project_id = project_id.to_string();
-            let assigned = load_projects(connection)?
+            let project = load_projects(connection)?
                 .into_iter()
-                .find(|project| project.id == project_id)
-                .and_then(|project| project.assignments)
-                .and_then(|assignments| assignments.agents);
-            let assigned_agent_ids = assigned
+                .find(|project| project.id == project_id);
+            let workspace_agent_ids = stored_agents
+                .iter()
+                .filter(|agent| agent.project_id.is_none())
+                .map(|agent| agent.id.clone())
+                .chain(builtin_agents.iter().map(|agent| agent.id.clone()))
+                .collect::<Vec<_>>();
+            let workspace_team_ids = stored_teams
+                .iter()
+                .filter(|team| team.project_id.is_none())
+                .map(|team| team.id.clone())
+                .chain(builtin_teams.iter().map(|team| team.id.clone()))
+                .collect::<Vec<_>>();
+            let (assigned_agent_ids, assigned_team_ids) = resolve_project_granted_actor_ids(
+                project
+                    .as_ref()
+                    .and_then(|project| project.assignments.as_ref()),
+                &workspace_agent_ids,
+                &workspace_team_ids,
+            );
+            let mut linked_agent_ids = project
                 .as_ref()
-                .map(|agents| agents.agent_ids.iter().cloned().collect::<BTreeSet<_>>())
+                .map(|project| {
+                    project
+                        .linked_workspace_assets
+                        .agent_ids
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>()
+                })
                 .unwrap_or_default();
-            let assigned_team_ids = assigned
-                .as_ref()
-                .map(|teams| teams.team_ids.iter().cloned().collect::<BTreeSet<_>>())
-                .unwrap_or_default();
+            linked_agent_ids.extend(assigned_agent_ids);
+            linked_agent_ids.extend(
+                load_project_agent_links(connection)?
+                    .into_iter()
+                    .filter(|link| link.project_id == project_id)
+                    .map(|link| link.agent_id),
+            );
+            let mut linked_team_ids = load_project_team_links(connection)?
+                .into_iter()
+                .filter(|link| link.project_id == project_id)
+                .map(|link| link.team_id)
+                .collect::<BTreeSet<_>>();
+            linked_team_ids.extend(assigned_team_ids);
 
             teams.extend(
                 stored_teams
@@ -3163,7 +3243,7 @@ pub(crate) fn build_export_context(
                         input.team_ids.iter().any(|id| id == &team.id)
                             && (team.project_id.as_deref() == Some(project_id.as_str())
                                 || (team.project_id.is_none()
-                                    && assigned_team_ids.contains(&team.id)))
+                                    && linked_team_ids.contains(&team.id)))
                     })
                     .cloned(),
             );
@@ -3172,7 +3252,7 @@ pub(crate) fn build_export_context(
                     .iter()
                     .filter(|team| {
                         input.team_ids.iter().any(|id| id == &team.id)
-                            && assigned_team_ids.contains(&team.id)
+                            && linked_team_ids.contains(&team.id)
                     })
                     .cloned(),
             );
@@ -3183,7 +3263,7 @@ pub(crate) fn build_export_context(
                         input.agent_ids.iter().any(|id| id == &agent.id)
                             && (agent.project_id.as_deref() == Some(project_id.as_str())
                                 || (agent.project_id.is_none()
-                                    && assigned_agent_ids.contains(&agent.id)))
+                                    && linked_agent_ids.contains(&agent.id)))
                     })
                     .cloned(),
             );
@@ -3192,7 +3272,7 @@ pub(crate) fn build_export_context(
                     .iter()
                     .filter(|agent| {
                         input.agent_ids.iter().any(|id| id == &agent.id)
-                            && assigned_agent_ids.contains(&agent.id)
+                            && linked_agent_ids.contains(&agent.id)
                     })
                     .cloned(),
             );
@@ -3201,29 +3281,28 @@ pub(crate) fn build_export_context(
                     .iter()
                     .filter(|team| {
                         team.project_id.as_deref() == Some(project_id.as_str())
-                            || (team.project_id.is_none() && assigned_team_ids.contains(&team.id))
+                            || (team.project_id.is_none() && linked_team_ids.contains(&team.id))
                     })
                     .cloned()
                     .collect();
                 teams.extend(
                     builtin_teams
                         .iter()
-                        .filter(|team| assigned_team_ids.contains(&team.id))
+                        .filter(|team| linked_team_ids.contains(&team.id))
                         .cloned(),
                 );
                 agents = stored_agents
                     .iter()
                     .filter(|agent| {
                         agent.project_id.as_deref() == Some(project_id.as_str())
-                            || (agent.project_id.is_none()
-                                && assigned_agent_ids.contains(&agent.id))
+                            || (agent.project_id.is_none() && linked_agent_ids.contains(&agent.id))
                     })
                     .cloned()
                     .collect();
                 agents.extend(
                     builtin_agents
                         .iter()
-                        .filter(|agent| assigned_agent_ids.contains(&agent.id))
+                        .filter(|agent| linked_agent_ids.contains(&agent.id))
                         .cloned(),
                 );
             }
@@ -3450,7 +3529,7 @@ mod tests {
     use crate::catalog_hash_id;
     use crate::infra_state::{
         ensure_agent_record_columns, ensure_bundle_asset_descriptor_columns,
-        ensure_pet_agent_extension_columns, ensure_team_record_columns,
+        ensure_pet_agent_extension_columns, ensure_team_record_columns, load_agents, load_teams,
     };
     use octopus_core::{
         ExportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundleInput,
@@ -3544,6 +3623,7 @@ mod tests {
                     status TEXT NOT NULL,
                     description TEXT NOT NULL,
                     resource_directory TEXT NOT NULL,
+                    leader_agent_id TEXT,
                     assignments_json TEXT,
                     owner_user_id TEXT,
                     member_user_ids_json TEXT,
@@ -4343,6 +4423,22 @@ mod tests {
             "验证项目导出闭包",
         );
         write_agent_record(&connection, &record, false).expect("write workspace agent");
+        let team_id = "team-linked-roundtrip";
+        let team_record = test_team_record(
+            team_id,
+            "ws-local",
+            None,
+            "workspace",
+            "导出回导小队",
+            "负责导出回导小队验证",
+            vec!["回归".into()],
+            "# 小队定义\n导出后重新导入\n",
+            Some(agent_id.into()),
+            vec![agent_id.into()],
+            "验证项目导出小队闭包",
+        );
+        crate::infra_state::write_team_record(&connection, &team_record, false)
+            .expect("write workspace team");
         connection
             .execute(
                 "INSERT INTO projects (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
@@ -4357,7 +4453,7 @@ mod tests {
                     serde_json::to_string(&json!({
                         "agents": {
                             "agentIds": [agent_id],
-                            "teamIds": []
+                            "teamIds": [team_id]
                         }
                     }))
                     .expect("serialize assignments"),
@@ -4372,6 +4468,7 @@ mod tests {
                     .expect("serialize permission overrides"),
                     serde_json::to_string(&json!({
                         "agentIds": [agent_id],
+                        "teamIds": [team_id],
                         "resourceIds": [],
                         "toolSourceKeys": [],
                         "knowledgeIds": []
@@ -4388,8 +4485,8 @@ mod tests {
             crate::agent_bundle::BundleTarget::Project("proj-export"),
             ExportWorkspaceAgentBundleInput {
                 mode: "single".into(),
-                agent_ids: vec![agent_id.into()],
-                team_ids: Vec::new(),
+                agent_ids: Vec::new(),
+                team_ids: vec![team_id.into()],
             },
         )
         .expect("export");
@@ -4407,10 +4504,43 @@ mod tests {
 
         assert_eq!(imported.failure_count, 0);
         assert_eq!(imported.agent_count, 1);
-        assert_eq!(imported.team_count, 0);
+        assert_eq!(imported.team_count, 1);
         assert_eq!(imported.skill_count, 1);
         assert_eq!(imported.mcp_count, 0);
-        assert_eq!(imported.avatar_count, 1);
+        assert!(imported.avatar_count >= 1);
+
+        let imported_agent = load_agents(&connection)
+            .expect("load agents")
+            .into_iter()
+            .find(|agent| {
+                agent.project_id.as_deref() == Some("proj-import")
+                    && agent.scope == "project"
+                    && agent.name == "导出回导员工"
+            })
+            .expect("imported project agent");
+        assert_ne!(imported_agent.id, agent_id);
+
+        let imported_team = load_teams(&connection)
+            .expect("load teams")
+            .into_iter()
+            .find(|team| {
+                team.project_id.as_deref() == Some("proj-import")
+                    && team.scope == "project"
+                    && team.name == "导出回导小队"
+            })
+            .expect("imported project team");
+        assert_eq!(
+            imported_team.leader_agent_id.as_deref(),
+            Some(imported_agent.id.as_str())
+        );
+        assert_eq!(
+            imported_team.member_agent_ids,
+            vec![imported_agent.id.clone()]
+        );
+        assert!(!imported_team
+            .member_agent_ids
+            .iter()
+            .any(|id| id == agent_id));
     }
 
     #[test]
@@ -4551,5 +4681,208 @@ mod tests {
         assert!(destination_asset_state["assets"]
             .get(mcp_source_key.as_str())
             .is_none());
+    }
+
+    #[test]
+    fn export_project_bundle_uses_live_inheritance_for_workspace_and_builtin_assets() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        ensure_test_tables(&connection);
+
+        let allowed_agent = test_agent_record(
+            "agent-allowed",
+            "ws-local",
+            None,
+            "workspace",
+            "允许导出的员工",
+            "允许",
+            vec!["导出".into()],
+            "# 角色定义\n允许导出\n",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "项目继承的工作区员工",
+        );
+        let blocked_agent = test_agent_record(
+            "agent-blocked",
+            "ws-local",
+            None,
+            "workspace",
+            "排除员工",
+            "排除",
+            vec!["排除".into()],
+            "# 角色定义\n排除导出\n",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "不应进入项目生效集合",
+        );
+        let team_leader = test_agent_record(
+            "agent-team-leader",
+            "ws-local",
+            None,
+            "workspace",
+            "团队负责人",
+            "负责人",
+            vec!["团队".into()],
+            "# 角色定义\n统筹团队\n",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "项目继承团队负责人",
+        );
+        let team_member = test_agent_record(
+            "agent-team-member",
+            "ws-local",
+            None,
+            "workspace",
+            "团队成员",
+            "成员",
+            vec!["团队".into()],
+            "# 角色定义\n支持团队\n",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "项目继承团队成员",
+        );
+        write_agent_record(&connection, &allowed_agent, false).expect("write allowed agent");
+        write_agent_record(&connection, &blocked_agent, false).expect("write blocked agent");
+        write_agent_record(&connection, &team_leader, false).expect("write team leader");
+        write_agent_record(&connection, &team_member, false).expect("write team member");
+
+        let workspace_team = test_team_record(
+            "team-allowed",
+            "ws-local",
+            None,
+            "workspace",
+            "允许导出的团队",
+            "团队",
+            vec!["团队".into()],
+            "# 团队职责\n支持导出\n",
+            Some(team_leader.id.clone()),
+            vec![team_leader.id.clone(), team_member.id.clone()],
+            "项目继承的工作区团队",
+        );
+        crate::infra_state::write_team_record(&connection, &workspace_team, false)
+            .expect("write workspace team");
+
+        connection
+            .execute(
+                "INSERT INTO projects (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    "proj-live-inheritance",
+                    "ws-local",
+                    "Live Inheritance Export",
+                    "active",
+                    "Project export should use effective inherited assets",
+                    "data/projects/proj-live-inheritance/resources",
+                    serde_json::to_string(&json!({
+                        "agents": {
+                            "excludedAgentIds": [blocked_agent.id],
+                            "excludedTeamIds": []
+                        }
+                    }))
+                    .expect("serialize assignments"),
+                    "user-owner",
+                    serde_json::to_string(&vec!["user-owner"]).expect("serialize members"),
+                    serde_json::to_string(&json!({
+                        "agents": "inherit",
+                        "resources": "inherit",
+                        "tools": "inherit",
+                        "knowledge": "inherit"
+                    }))
+                    .expect("serialize permission overrides"),
+                    serde_json::to_string(&json!({
+                        "agentIds": [],
+                        "resourceIds": [],
+                        "toolSourceKeys": [],
+                        "knowledgeIds": []
+                    }))
+                    .expect("serialize linked assets"),
+                ],
+            )
+            .expect("insert project");
+
+        let allowed_agent_export = crate::agent_bundle::export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            crate::agent_bundle::BundleTarget::Project("proj-live-inheritance"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: vec![allowed_agent.id.clone()],
+                team_ids: Vec::new(),
+            },
+        )
+        .expect("export allowed workspace agent");
+        assert_eq!(allowed_agent_export.agent_count, 1);
+        assert_eq!(allowed_agent_export.team_count, 0);
+        assert!(allowed_agent_export.files.iter().any(|file| {
+            file.relative_path == "允许导出的员工/允许导出的员工.md"
+        }));
+
+        let blocked_agent_export = crate::agent_bundle::export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            crate::agent_bundle::BundleTarget::Project("proj-live-inheritance"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: vec![blocked_agent.id.clone()],
+                team_ids: Vec::new(),
+            },
+        )
+        .expect("export blocked workspace agent");
+        assert_eq!(blocked_agent_export.agent_count, 0);
+        assert_eq!(blocked_agent_export.team_count, 0);
+        assert!(blocked_agent_export.files.is_empty());
+
+        let builtin_team = crate::agent_bundle::list_builtin_team_templates("ws-local")
+            .expect("builtin teams")
+            .into_iter()
+            .next()
+            .expect("builtin team");
+        let builtin_team_export = crate::agent_bundle::export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            crate::agent_bundle::BundleTarget::Project("proj-live-inheritance"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: Vec::new(),
+                team_ids: vec![builtin_team.id.clone()],
+            },
+        )
+        .expect("export builtin team");
+        assert_eq!(builtin_team_export.team_count, 1);
+        assert!(builtin_team_export.agent_count >= 1);
+        assert!(builtin_team_export.files.iter().any(|file| {
+            file.relative_path
+                .contains(&format!("{}/", builtin_team.name))
+        }));
+
+        let workspace_team_export = crate::agent_bundle::export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            crate::agent_bundle::BundleTarget::Project("proj-live-inheritance"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: Vec::new(),
+                team_ids: vec![workspace_team.id.clone()],
+            },
+        )
+        .expect("export inherited workspace team");
+        assert_eq!(workspace_team_export.team_count, 1);
+        assert_eq!(workspace_team_export.agent_count, 2);
+        assert!(workspace_team_export.files.iter().any(|file| {
+            file.relative_path == "允许导出的团队/团队负责人/团队负责人.md"
+        }));
+        assert!(workspace_team_export.files.iter().any(|file| {
+            file.relative_path == "允许导出的团队/团队成员/团队成员.md"
+        }));
     }
 }

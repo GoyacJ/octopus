@@ -7,12 +7,37 @@ import type {
 } from '@octopus/schema'
 import type { WorkspaceToolPermissionMode } from '@octopus/schema'
 
+interface ParsedProjectToolSettings extends ProjectToolSettings {
+  __hasDisabledSourceKeys?: boolean
+  __hasLegacyEnabledSourceKeys?: boolean
+  __legacyEnabledSourceKeys?: string[]
+}
+
+interface ParsedProjectAgentSettings extends ProjectAgentSettings {
+  __hasDisabledAgentIds?: boolean
+  __hasDisabledTeamIds?: boolean
+  __hasLegacyEnabledAgentIds?: boolean
+  __hasLegacyEnabledTeamIds?: boolean
+  __legacyEnabledAgentIds?: string[]
+  __legacyEnabledTeamIds?: string[]
+}
+
 export function isObjectRecord(value: unknown): value is Record<string, JsonValue> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 export function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function hasOwnProperty(value: Record<string, JsonValue>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key)
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
 }
 
 export function findProjectRuntimeSourceDocument(config: { sources: Array<{ scope: string, document?: unknown }> } | null) {
@@ -53,7 +78,10 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
     return undefined
   }
 
-  const enabledSourceKeys = Array.isArray(value.enabledSourceKeys)
+  const disabledSourceKeys = Array.isArray(value.disabledSourceKeys)
+    ? value.disabledSourceKeys.filter((item): item is string => typeof item === 'string')
+    : []
+  const legacyEnabledSourceKeys = Array.isArray(value.enabledSourceKeys)
     ? value.enabledSourceKeys.filter((item): item is string => typeof item === 'string')
     : []
   const overrides = isObjectRecord(value.overrides)
@@ -68,11 +96,21 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
       )
     : {}
 
-  if (!enabledSourceKeys.length && !Object.keys(overrides).length) {
+  const hasDisabledSourceKeys = hasOwnProperty(value, 'disabledSourceKeys')
+  const hasLegacyEnabledSourceKeys = hasOwnProperty(value, 'enabledSourceKeys')
+  if (!hasDisabledSourceKeys && !hasLegacyEnabledSourceKeys && !Object.keys(overrides).length) {
     return undefined
   }
 
-  return { enabledSourceKeys, overrides }
+  const parsed: ParsedProjectToolSettings = {
+    disabledSourceKeys,
+    overrides,
+    __hasDisabledSourceKeys: hasDisabledSourceKeys,
+    __hasLegacyEnabledSourceKeys: hasLegacyEnabledSourceKeys,
+    __legacyEnabledSourceKeys: legacyEnabledSourceKeys,
+  }
+
+  return parsed
 }
 
 export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings | undefined {
@@ -80,21 +118,44 @@ export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings 
     return undefined
   }
 
-  const enabledAgentIds = Array.isArray(value.enabledAgentIds)
+  const disabledAgentIds = Array.isArray(value.disabledAgentIds)
+    ? value.disabledAgentIds.filter((item): item is string => typeof item === 'string')
+    : []
+  const disabledTeamIds = Array.isArray(value.disabledTeamIds)
+    ? value.disabledTeamIds.filter((item): item is string => typeof item === 'string')
+    : []
+  const legacyEnabledAgentIds = Array.isArray(value.enabledAgentIds)
     ? value.enabledAgentIds.filter((item): item is string => typeof item === 'string')
     : []
-  const enabledTeamIds = Array.isArray(value.enabledTeamIds)
+  const legacyEnabledTeamIds = Array.isArray(value.enabledTeamIds)
     ? value.enabledTeamIds.filter((item): item is string => typeof item === 'string')
     : []
 
-  if (!enabledAgentIds.length && !enabledTeamIds.length) {
+  const hasDisabledAgentIds = hasOwnProperty(value, 'disabledAgentIds')
+  const hasDisabledTeamIds = hasOwnProperty(value, 'disabledTeamIds')
+  const hasLegacyEnabledAgentIds = hasOwnProperty(value, 'enabledAgentIds')
+  const hasLegacyEnabledTeamIds = hasOwnProperty(value, 'enabledTeamIds')
+  if (
+    !hasDisabledAgentIds
+    && !hasDisabledTeamIds
+    && !hasLegacyEnabledAgentIds
+    && !hasLegacyEnabledTeamIds
+  ) {
     return undefined
   }
 
-  return {
-    enabledAgentIds,
-    enabledTeamIds,
+  const parsed: ParsedProjectAgentSettings = {
+    disabledAgentIds,
+    disabledTeamIds,
+    __hasDisabledAgentIds: hasDisabledAgentIds,
+    __hasDisabledTeamIds: hasDisabledTeamIds,
+    __hasLegacyEnabledAgentIds: hasLegacyEnabledAgentIds,
+    __hasLegacyEnabledTeamIds: hasLegacyEnabledTeamIds,
+    __legacyEnabledAgentIds: legacyEnabledAgentIds,
+    __legacyEnabledTeamIds: legacyEnabledTeamIds,
   }
+
+  return parsed
 }
 
 export function parseProjectSettingsDocument(document: Record<string, JsonValue>): ProjectSettingsConfig {
@@ -139,14 +200,59 @@ export function resolveProjectAgentSettings(
 ): ProjectAgentSettings {
   const normalizedAssignedAgentIds = [...new Set(assignedAgentIds.filter(Boolean))]
   const normalizedAssignedTeamIds = [...new Set(assignedTeamIds.filter(Boolean))]
-  const saved = projectSettings.agents
+  const saved = projectSettings.agents as (ParsedProjectAgentSettings & {
+    enabledAgentIds?: string[]
+    enabledTeamIds?: string[]
+  }) | undefined
+  const hasDisabledAgentIds = saved?.__hasDisabledAgentIds ?? Array.isArray(saved?.disabledAgentIds)
+  const hasDisabledTeamIds = saved?.__hasDisabledTeamIds ?? Array.isArray(saved?.disabledTeamIds)
 
   return {
-    enabledAgentIds: saved?.enabledAgentIds?.length
-      ? saved.enabledAgentIds.filter(agentId => normalizedAssignedAgentIds.includes(agentId))
-      : normalizedAssignedAgentIds,
-    enabledTeamIds: saved?.enabledTeamIds?.length
-      ? saved.enabledTeamIds.filter(teamId => normalizedAssignedTeamIds.includes(teamId))
-      : normalizedAssignedTeamIds,
+    disabledAgentIds: (
+      hasDisabledAgentIds
+        ? readStringArray(saved?.disabledAgentIds).filter(agentId => normalizedAssignedAgentIds.includes(agentId))
+        : []
+    ),
+    disabledTeamIds: (
+      hasDisabledTeamIds
+        ? readStringArray(saved?.disabledTeamIds).filter(teamId => normalizedAssignedTeamIds.includes(teamId))
+        : []
+    ),
+  }
+}
+
+export function resolveEnabledProjectAgentIds(
+  projectSettings: ProjectSettingsConfig,
+  assignedAgentIds: string[],
+  assignedTeamIds: string[],
+) {
+  const normalizedAssignedAgentIds = [...new Set(assignedAgentIds.filter(Boolean))]
+  const normalizedAssignedTeamIds = [...new Set(assignedTeamIds.filter(Boolean))]
+  const saved = projectSettings.agents as (ParsedProjectAgentSettings & {
+    enabledAgentIds?: string[]
+    enabledTeamIds?: string[]
+  }) | undefined
+  const hasDisabledAgentIds = saved?.__hasDisabledAgentIds ?? Array.isArray(saved?.disabledAgentIds)
+  const hasDisabledTeamIds = saved?.__hasDisabledTeamIds ?? Array.isArray(saved?.disabledTeamIds)
+  const hasLegacyEnabledAgentIds = !hasDisabledAgentIds
+    && (saved?.__hasLegacyEnabledAgentIds ?? Array.isArray(saved?.enabledAgentIds))
+  const hasLegacyEnabledTeamIds = !hasDisabledTeamIds
+    && (saved?.__hasLegacyEnabledTeamIds ?? Array.isArray(saved?.enabledTeamIds))
+  const legacyEnabledAgentIds = saved?.__legacyEnabledAgentIds ?? readStringArray(saved?.enabledAgentIds)
+  const legacyEnabledTeamIds = saved?.__legacyEnabledTeamIds ?? readStringArray(saved?.enabledTeamIds)
+  const disabledAgentIds = readStringArray(saved?.disabledAgentIds)
+  const disabledTeamIds = readStringArray(saved?.disabledTeamIds)
+
+  return {
+    enabledAgentIds: hasDisabledAgentIds
+      ? normalizedAssignedAgentIds.filter(agentId => !disabledAgentIds.includes(agentId))
+      : hasLegacyEnabledAgentIds
+        ? legacyEnabledAgentIds.filter(agentId => normalizedAssignedAgentIds.includes(agentId))
+        : normalizedAssignedAgentIds,
+    enabledTeamIds: hasDisabledTeamIds
+      ? normalizedAssignedTeamIds.filter(teamId => !disabledTeamIds.includes(teamId))
+      : hasLegacyEnabledTeamIds
+        ? legacyEnabledTeamIds.filter(teamId => normalizedAssignedTeamIds.includes(teamId))
+        : normalizedAssignedTeamIds,
   }
 }

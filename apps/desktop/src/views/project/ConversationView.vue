@@ -26,7 +26,8 @@ import { useArtifactStore } from '@/stores/artifact'
 import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
+import { resolveEnabledProjectAgentIds, resolveProjectModelSettings } from '@/stores/project_settings'
+import { resolvePreferredProjectActorRef, resolveProjectGrantedActorIds } from '@/stores/project_setup'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,6 +63,10 @@ interface ConversationSetupState {
     id: 'open-models' | 'open-settings'
     label: string
   }>
+}
+
+function uniqueActorRecords<T extends { id: string }>(records: T[]) {
+  return records.filter((record, index) => records.findIndex(item => item.id === record.id) === index)
 }
 
 const messageDraft = ref('')
@@ -108,11 +113,18 @@ const resolvedModelSettings = computed(() =>
     projectAssignments.value?.models?.defaultConfiguredModelId ?? '',
   ),
 )
+const grantedProjectActorIds = computed(() =>
+  resolveProjectGrantedActorIds(
+    projectAssignments.value,
+    agentStore.workspaceAgents.map(agent => agent.id),
+    teamStore.workspaceTeams.map(team => team.id),
+  ),
+)
 const resolvedAgentSettings = computed(() =>
-  resolveProjectAgentSettings(
+  resolveEnabledProjectAgentIds(
     projectSettings.value,
-    projectAssignments.value?.agents?.agentIds ?? [],
-    projectAssignments.value?.agents?.teamIds ?? [],
+    grantedProjectActorIds.value.assignedAgentIds,
+    grantedProjectActorIds.value.assignedTeamIds,
   ),
 )
 
@@ -128,10 +140,16 @@ const modelOptions = computed(() => {
 const actorOptions = computed<ActorOption[]>(() => {
   const enabledAgentIds = resolvedAgentSettings.value.enabledAgentIds
   const enabledTeamIds = resolvedAgentSettings.value.enabledTeamIds
-  const visibleAgents = agentStore.effectiveProjectAgents
-    .filter(agent => agent.projectId === projectId.value || enabledAgentIds.includes(agent.id))
-  const visibleTeams = teamStore.effectiveProjectTeams
-    .filter(team => team.projectId === projectId.value || enabledTeamIds.includes(team.id))
+  const visibleAgents = uniqueActorRecords([
+    ...agentStore.assignedWorkspaceAgents.filter(agent => enabledAgentIds.includes(agent.id)),
+    ...agentStore.assignedBuiltinAgents.filter(agent => enabledAgentIds.includes(agent.id)),
+    ...agentStore.projectOwnedAgents.filter(agent => agent.projectId === projectId.value),
+  ])
+  const visibleTeams = uniqueActorRecords([
+    ...teamStore.assignedWorkspaceTeams.filter(team => enabledTeamIds.includes(team.id)),
+    ...teamStore.assignedBuiltinTeams.filter(team => enabledTeamIds.includes(team.id)),
+    ...teamStore.projectOwnedTeams.filter(team => team.projectId === projectId.value),
+  ])
 
   return [
     ...visibleAgents
@@ -388,7 +406,13 @@ function seedComposerSelections(projectContextKey: string) {
     selectedModelId.value = modelOptions.value[0]?.value ?? ''
   }
   if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
-    selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+    selectedActorValue.value = resolvePreferredProjectActorRef(
+      actorOptions.value.map(option => ({
+        value: option.value,
+        kind: option.kind,
+      })),
+      project.value?.leaderAgentId,
+    )
   }
   if (lastPermissionSeedKey !== projectContextKey) {
     const configuredDefaultMode = resolveProjectDefaultPermissionMode()
@@ -542,7 +566,7 @@ async function ensureRuntimeSession() {
     }
 
     await ensureConversationComposerContext(connectionId, nextProjectId)
-    if (baseConversationSetupState.value) {
+    if (baseConversationSetupState.value || !modelOptions.value.length || !actorOptions.value.length) {
       logDevTiming('session-create-skipped', startedAt, `${nextProjectId}:${nextConversationId}`)
       return
     }
@@ -551,7 +575,13 @@ async function ensureRuntimeSession() {
       conversationId: nextConversationId,
       projectId: nextProjectId,
       title: `Conversation ${nextConversationId.slice(-6)}`,
-      selectedActorRef: selectedActorValue.value || actorOptions.value[0]?.value || '',
+      selectedActorRef: selectedActorValue.value || resolvePreferredProjectActorRef(
+        actorOptions.value.map(option => ({
+          value: option.value,
+          kind: option.kind,
+        })),
+        project.value?.leaderAgentId,
+      ),
       selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
       executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
     })

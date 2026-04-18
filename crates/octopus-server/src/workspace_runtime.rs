@@ -10,12 +10,12 @@ use octopus_core::{
     ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSnapshot,
     ProjectDashboardSummary, ProjectDashboardTrendPoint, ProjectDashboardUserStat,
     ProjectPromotionRequest, ProjectTaskInterventionRecord, ProjectTaskRecord,
-    ProjectTaskRunRecord, ProjectTokenUsageRecord, PromoteDeliverableInput,
-    ProtectedResourceDescriptor, RerunTaskRequest, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
-    RuntimeRunSnapshot, TaskAnalyticsSummary, TaskContextBundle, TaskDetail,
-    TaskInterventionRecord, TaskRunSummary, TaskStateTransitionSummary, TaskSummary,
-    UpdateTaskRequest,
+    ProjectTaskRunRecord, ProjectTokenUsageRecord, ProjectWorkspaceAssignments,
+    PromoteDeliverableInput, ProtectedResourceDescriptor, RerunTaskRequest,
+    ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput,
+    ReviewProjectPromotionRequestInput, RuntimeMessage, RuntimeRunSnapshot, TaskAnalyticsSummary,
+    TaskContextBundle, TaskDetail, TaskInterventionRecord, TaskRunSummary,
+    TaskStateTransitionSummary, TaskSummary, UpdateTaskRequest,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -638,7 +638,8 @@ pub(crate) fn validate_create_project_request(
         }),
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
-        assignments: request.assignments,
+        leader_agent_id: validate_optional_project_leader_input(request.leader_agent_id)?,
+        assignments: normalize_project_workspace_assignments(request.assignments),
     })
 }
 
@@ -677,8 +678,54 @@ pub(crate) fn validate_update_project_request(
         }),
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
-        assignments: request.assignments,
+        leader_agent_id: validate_optional_project_leader_input(request.leader_agent_id)?,
+        assignments: normalize_project_workspace_assignments(request.assignments),
     })
+}
+
+fn normalize_project_assignment_values(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn normalize_project_workspace_assignments(
+    assignments: Option<ProjectWorkspaceAssignments>,
+) -> Option<ProjectWorkspaceAssignments> {
+    assignments.map(|mut assignments| {
+        if let Some(tools) = assignments.tools.as_mut() {
+            tools.excluded_source_keys = normalize_project_assignment_values(std::mem::take(
+                &mut tools.excluded_source_keys,
+            ));
+        }
+
+        if let Some(agents) = assignments.agents.as_mut() {
+            agents.excluded_agent_ids =
+                normalize_project_assignment_values(std::mem::take(&mut agents.excluded_agent_ids));
+            agents.excluded_team_ids =
+                normalize_project_assignment_values(std::mem::take(&mut agents.excluded_team_ids));
+        }
+
+        assignments
+    })
+}
+
+fn validate_optional_project_leader_input(
+    value: Option<String>,
+) -> Result<Option<String>, ApiError> {
+    match value {
+        Some(value) => {
+            let value = value.trim();
+            if value.is_empty() {
+                Err(AppError::invalid_input("project leader agent id must not be empty").into())
+            } else {
+                Ok(Some(value.to_string()))
+            }
+        }
+        None => Ok(None),
+    }
 }
 
 fn trim_optional_task_input(value: Option<String>) -> Option<String> {
@@ -1279,6 +1326,13 @@ pub(crate) async fn create_project(
     )
     .await?;
     let request = validate_create_project_request(request)?;
+    ensure_project_leader_granted(
+        &state,
+        request.leader_agent_id.as_deref(),
+        None,
+        request.assignments.as_ref(),
+    )
+    .await?;
     Ok(Json(
         state.services.workspace.create_project(request).await?,
     ))
@@ -1299,8 +1353,18 @@ pub(crate) async fn update_project(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    let existing_project = ensure_project_owner_session(&state, &headers, &project_id).await?;
     let request = validate_update_project_request(request)?;
+    ensure_project_leader_granted(
+        &state,
+        request
+            .leader_agent_id
+            .as_deref()
+            .or(existing_project.leader_agent_id.as_deref()),
+        Some(&project_id),
+        request.assignments.as_ref(),
+    )
+    .await?;
     Ok(Json(
         state
             .services
@@ -1412,7 +1476,7 @@ pub(crate) async fn project_dashboard(
         .list_project_knowledge(&project_id)
         .await?;
     let all_agents = state.services.workspace.list_agents().await?;
-    let project_agent_ids = collect_project_agent_ids(&project);
+    let project_agent_ids = effective_project_agent_ids(&state, &project).await?;
     let agents = all_agents
         .into_iter()
         .filter(|record| {
@@ -1421,12 +1485,7 @@ pub(crate) async fn project_dashboard(
                     || project_agent_ids.contains(&record.id))
         })
         .collect::<Vec<_>>();
-    let team_links = state
-        .services
-        .workspace
-        .list_project_team_links(&project_id)
-        .await?;
-    let project_team_ids = collect_project_team_ids(&project, &team_links);
+    let project_team_ids = effective_project_team_ids(&state, &project).await?;
     let teams = state
         .services
         .workspace
@@ -1451,7 +1510,7 @@ pub(crate) async fn project_dashboard(
         })
         .collect::<Vec<_>>();
     let session_details = load_project_session_details(&state, &sessions).await?;
-    let tool_source_keys = project_tool_source_keys(&project);
+    let tool_source_keys = effective_project_tool_source_keys(&state, &project).await?;
     let tool_ranking = build_tool_ranking(&session_details, &audit_records);
     let model_breakdown = build_model_breakdown(&cost_entries);
     let trend = build_dashboard_trend(&sessions, &session_details, &cost_entries, &audit_records);
@@ -1899,49 +1958,49 @@ pub(crate) async fn create_project_task_intervention(
                         };
                     if let Some(runtime_session) = runtime_session {
                         if let Some(approval_id) = explicit_approval_id.clone().or_else(|| {
-                                runtime_session
-                                    .pending_approval
-                                    .as_ref()
-                                    .map(|approval| approval.id.clone())
-                            }) {
-                                let previous_run = target_run.clone();
-                                let runtime_run = state
-                                    .services
-                                    .runtime_execution
-                                    .resolve_approval(
-                                        session_id,
-                                        &approval_id,
-                                        octopus_core::ResolveRuntimeApprovalInput {
-                                            decision: if intervention_type == "approve" {
-                                                "approve".into()
-                                            } else {
-                                                "reject".into()
-                                            },
+                            runtime_session
+                                .pending_approval
+                                .as_ref()
+                                .map(|approval| approval.id.clone())
+                        }) {
+                            let previous_run = target_run.clone();
+                            let runtime_run = state
+                                .services
+                                .runtime_execution
+                                .resolve_approval(
+                                    session_id,
+                                    &approval_id,
+                                    octopus_core::ResolveRuntimeApprovalInput {
+                                        decision: if intervention_type == "approve" {
+                                            "approve".into()
+                                        } else {
+                                            "reject".into()
                                         },
-                                    )
-                                    .await?;
-                                let refreshed_session = state
-                                    .services
-                                    .runtime_session
-                                    .get_session(session_id)
-                                    .await?;
-                                runtime_synced_run = Some((
-                                    previous_run.clone(),
-                                    if intervention_type == "approve" {
-                                        sync_task_run_record_from_runtime(
-                                            &previous_run,
-                                            &refreshed_session,
-                                            &runtime_run,
-                                        )
-                                    } else {
-                                        sync_rejected_task_run_record_from_runtime(
-                                            &previous_run,
-                                            &refreshed_session,
-                                            &runtime_run,
-                                        )
                                     },
-                                ));
-                            }
+                                )
+                                .await?;
+                            let refreshed_session = state
+                                .services
+                                .runtime_session
+                                .get_session(session_id)
+                                .await?;
+                            runtime_synced_run = Some((
+                                previous_run.clone(),
+                                if intervention_type == "approve" {
+                                    sync_task_run_record_from_runtime(
+                                        &previous_run,
+                                        &refreshed_session,
+                                        &runtime_run,
+                                    )
+                                } else {
+                                    sync_rejected_task_run_record_from_runtime(
+                                        &previous_run,
+                                        &refreshed_session,
+                                        &runtime_run,
+                                    )
+                                },
+                            ));
+                        }
                     }
                 }
             }
@@ -4475,14 +4534,19 @@ pub(crate) async fn validate_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner(&state, &session, &project_id).await?;
-    Ok(Json(
-        state
-            .services
-            .runtime_config
-            .validate_project_config(&project_id, &session.user_id, patch)
-            .await?,
-    ))
+    let project = ensure_project_owner(&state, &session, &project_id).await?;
+    let mut validation = state
+        .services
+        .runtime_config
+        .validate_project_config(&project_id, &session.user_id, patch.clone())
+        .await?;
+    if let Some(message) = project_runtime_patch_leader_error(&project, &patch) {
+        validation.valid = false;
+        if !validation.errors.iter().any(|error| error == &message) {
+            validation.errors.push(message);
+        }
+    }
+    Ok(Json(validation))
 }
 
 pub(crate) async fn save_project_runtime_config_route(
@@ -4500,7 +4564,10 @@ pub(crate) async fn save_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
-    ensure_project_owner(&state, &session, &project_id).await?;
+    let project = ensure_project_owner(&state, &session, &project_id).await?;
+    if let Some(message) = project_runtime_patch_leader_error(&project, &patch) {
+        return Err(ApiError::from(AppError::invalid_input(message)));
+    }
     Ok(Json(
         state
             .services
@@ -4672,52 +4739,233 @@ fn project_member_ids(project: &ProjectRecord) -> Vec<String> {
     members.into_iter().collect()
 }
 
-fn collect_project_agent_ids(project: &ProjectRecord) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    ids.extend(project.linked_workspace_assets.agent_ids.iter().cloned());
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.agents.as_ref())
-    {
-        ids.extend(assignments.agent_ids.iter().cloned());
-    }
-    ids
+fn project_leader_validation_message(leader_agent_id: &str) -> String {
+    format!(
+        "project leader agent `{leader_agent_id}` must remain an active workspace agent granted to the project"
+    )
 }
 
-fn collect_project_team_ids(
-    project: &ProjectRecord,
-    links: &[ProjectTeamLinkRecord],
+fn project_assignment_excluded_agent_ids(
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
 ) -> BTreeSet<String> {
     let mut ids = BTreeSet::new();
-    ids.extend(links.iter().map(|record| record.team_id.clone()));
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.agents.as_ref())
-    {
-        ids.extend(assignments.team_ids.iter().cloned());
+    if let Some(agents) = assignments.and_then(|assignments| assignments.agents.as_ref()) {
+        ids.extend(
+            agents
+                .excluded_agent_ids
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+        );
     }
     ids
 }
 
-fn project_tool_source_keys(project: &ProjectRecord) -> Vec<String> {
+fn project_assignment_excluded_team_ids(
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
+) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    if let Some(agents) = assignments.and_then(|assignments| assignments.agents.as_ref()) {
+        ids.extend(
+            agents
+                .excluded_team_ids
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+        );
+    }
+    ids
+}
+
+fn project_assignment_excluded_tool_source_keys(
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
+) -> BTreeSet<String> {
     let mut source_keys = BTreeSet::new();
-    source_keys.extend(
-        project
-            .linked_workspace_assets
-            .tool_source_keys
-            .iter()
-            .cloned(),
-    );
-    if let Some(assignments) = project
-        .assignments
-        .as_ref()
-        .and_then(|value| value.tools.as_ref())
-    {
-        source_keys.extend(assignments.source_keys.iter().cloned());
+    if let Some(tools) = assignments.and_then(|assignments| assignments.tools.as_ref()) {
+        source_keys.extend(
+            tools
+                .excluded_source_keys
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+        );
     }
     source_keys.into_iter().collect()
+}
+
+fn workspace_agent_inherits_to_projects(record: &AgentRecord) -> bool {
+    record.project_id.is_none() && record.status == "active" && agent_visible_in_generic_catalog(record)
+}
+
+fn workspace_team_inherits_to_projects(record: &TeamRecord) -> bool {
+    record.project_id.is_none() && record.status == "active"
+}
+
+fn workspace_agent_is_valid_project_leader(record: &AgentRecord) -> bool {
+    workspace_agent_inherits_to_projects(record)
+        && record
+            .integration_source
+            .as_ref()
+            .map(|source| source.kind.as_str())
+            != Some("builtin-template")
+}
+
+async fn effective_project_agent_ids_from_assignments(
+    state: &ServerState,
+    project_id: Option<&str>,
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
+) -> Result<BTreeSet<String>, ApiError> {
+    let excluded_agent_ids = project_assignment_excluded_agent_ids(assignments);
+    let linked_agent_ids = if let Some(project_id) = project_id {
+        state
+            .services
+            .workspace
+            .list_project_agent_links(project_id)
+            .await?
+            .into_iter()
+            .map(|record| record.agent_id)
+            .collect::<BTreeSet<_>>()
+    } else {
+        BTreeSet::new()
+    };
+
+    Ok(state
+        .services
+        .workspace
+        .list_agents()
+        .await?
+        .into_iter()
+        .filter(|record| workspace_agent_inherits_to_projects(record))
+        .filter(|record| {
+            linked_agent_ids.contains(&record.id) || !excluded_agent_ids.contains(&record.id)
+        })
+        .map(|record| record.id)
+        .collect())
+}
+
+async fn effective_project_agent_ids(
+    state: &ServerState,
+    project: &ProjectRecord,
+) -> Result<BTreeSet<String>, ApiError> {
+    effective_project_agent_ids_from_assignments(
+        state,
+        Some(project.id.as_str()),
+        project.assignments.as_ref(),
+    )
+    .await
+}
+
+async fn effective_project_team_ids(
+    state: &ServerState,
+    project: &ProjectRecord,
+) -> Result<BTreeSet<String>, ApiError> {
+    let excluded_team_ids = project_assignment_excluded_team_ids(project.assignments.as_ref());
+    let linked_team_ids = state
+        .services
+        .workspace
+        .list_project_team_links(&project.id)
+        .await?
+        .into_iter()
+        .map(|record| record.team_id)
+        .collect::<BTreeSet<_>>();
+
+    Ok(state
+        .services
+        .workspace
+        .list_teams()
+        .await?
+        .into_iter()
+        .filter(|record| workspace_team_inherits_to_projects(record))
+        .filter(|record| linked_team_ids.contains(&record.id) || !excluded_team_ids.contains(&record.id))
+        .map(|record| record.id)
+        .collect())
+}
+
+async fn effective_project_tool_source_keys(
+    state: &ServerState,
+    project: &ProjectRecord,
+) -> Result<Vec<String>, ApiError> {
+    let excluded_source_keys = project_assignment_excluded_tool_source_keys(project.assignments.as_ref());
+    Ok(state
+        .services
+        .workspace
+        .get_capability_management_projection()
+        .await?
+        .assets
+        .into_iter()
+        .filter(|asset| asset.enabled)
+        .map(|asset| asset.source_key)
+        .filter(|source_key| !excluded_source_keys.contains(source_key))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect())
+}
+
+async fn ensure_project_leader_granted(
+    state: &ServerState,
+    leader_agent_id: Option<&str>,
+    project_id: Option<&str>,
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
+) -> Result<(), ApiError> {
+    let Some(leader_agent_id) = leader_agent_id
+        .map(str::trim)
+        .filter(|leader_agent_id| !leader_agent_id.is_empty())
+    else {
+        return Ok(());
+    };
+
+    let granted_agent_ids =
+        effective_project_agent_ids_from_assignments(state, project_id, assignments).await?;
+    if !granted_agent_ids.contains(leader_agent_id) {
+        return Err(ApiError::from(AppError::invalid_input(
+            project_leader_validation_message(leader_agent_id),
+        )));
+    }
+
+    let valid_leader = state
+        .services
+        .workspace
+        .list_agents()
+        .await?
+        .into_iter()
+        .any(|record| {
+            record.id == leader_agent_id && workspace_agent_is_valid_project_leader(&record)
+        });
+    if !valid_leader {
+        return Err(ApiError::from(AppError::invalid_input(
+            project_leader_validation_message(leader_agent_id),
+        )));
+    }
+
+    Ok(())
+}
+
+fn project_runtime_patch_leader_error(
+    project: &ProjectRecord,
+    patch: &RuntimeConfigPatch,
+) -> Option<String> {
+    let leader_agent_id = project
+        .leader_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|leader_agent_id| !leader_agent_id.is_empty())?;
+    let agents = patch
+        .patch
+        .as_object()?
+        .get("projectSettings")?
+        .as_object()?
+        .get("agents")?
+        .as_object()?;
+    let disabled_agent_ids = agents.get("disabledAgentIds")?.as_array()?;
+    disabled_agent_ids
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .find(|agent_id| *agent_id == leader_agent_id)
+        .map(|_| project_leader_validation_message(leader_agent_id))
 }
 
 fn workspace_activity_from_audit(record: &AuditRecord) -> WorkspaceActivityRecord {
@@ -5685,11 +5933,14 @@ mod tests {
     };
 
     use octopus_core::{
-        default_connection_stubs, default_host_state, default_preferences,
+        default_connection_stubs, default_host_state, default_preferences, CreateProjectRequest,
         CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest,
-        DesktopBackendConnection, LaunchTaskRequest, ProjectPermissionOverrides,
-        RegisterBootstrapAdminRequest, RerunTaskRequest, SubmitRuntimeTurnInput, TaskContextBundle,
-        TaskContextRef, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+        DesktopBackendConnection, ExportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundleInput,
+        LaunchTaskRequest, ProjectAgentAssignments, ProjectPermissionOverrides,
+        ProjectToolAssignments, ProjectWorkspaceAssignments, RegisterBootstrapAdminRequest,
+        RerunTaskRequest, RuntimeConfigPatch, SubmitRuntimeTurnInput, TaskContextBundle,
+        TaskContextRef, UpsertAgentInput, UpsertTeamInput, DEFAULT_PROJECT_ID,
+        DEFAULT_WORKSPACE_ID,
     };
     use octopus_infra::build_infra_bundle;
     use octopus_platform::PlatformServices;
@@ -5700,6 +5951,7 @@ mod tests {
     const APPROVAL_AGENT_ID: &str = "agent-task-runtime-approval";
     const APPROVAL_AGENT_REF: &str = "agent:agent-task-runtime-approval";
     const CHAINED_APPROVAL_TEAM_REF: &str = "team:team-spawn-workflow-approval";
+    const WORKSPACE_CORE_TEAM_REF: &str = "team:team-workspace-core";
 
     fn sample_session() -> SessionRecord {
         SessionRecord {
@@ -5897,6 +6149,90 @@ mod tests {
             .expect("runtime config json"),
         )
         .expect("write runtime config");
+    }
+
+    fn insert_workspace_core_team(root: &Path) {
+        let connection = Connection::open(root.join("data").join("main.db")).expect("db");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    "agent-orchestrator",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Orchestrator Agent",
+                    Option::<String>::None,
+                    "Systems thinker",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Coordinate the team response.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Leads team execution.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert workspace core leader");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    "agent-project-delivery",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Project Delivery Agent",
+                    Option::<String>::None,
+                    "Structured and pragmatic",
+                    serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                    "Keep project execution on track.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Supports cross-functional delivery.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert workspace core member");
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                params![
+                    "team-workspace-core",
+                    DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Workspace Core",
+                    Option::<String>::None,
+                    "Cross-functional design review board",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Debate options, then return a single aligned answer.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    serde_json::to_string(&json!({
+                        "toolExecution": "auto",
+                        "memoryWrite": "require-approval",
+                        "mcpAuth": "require-approval",
+                        "teamSpawn": "auto",
+                        "workflowEscalation": "auto"
+                    }))
+                    .expect("approval preference"),
+                    "agent-orchestrator",
+                    serde_json::to_string(&vec!["agent-orchestrator", "agent-project-delivery"])
+                        .expect("member ids"),
+                    "Core workspace decision board.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert workspace core team");
     }
 
     fn insert_approval_required_agent(root: &Path) {
@@ -6380,6 +6716,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .expect("validated request");
@@ -6399,6 +6736,79 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
+            assignments: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn validate_create_project_request_trims_leader_and_exclusions() {
+        let validated = validate_create_project_request(CreateProjectRequest {
+            name: "  Leader Project  ".into(),
+            description: "  Leader validation coverage. ".into(),
+            resource_directory: " data/projects/leader-project/resources ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("  agent-leader  ".into()),
+            assignments: Some(ProjectWorkspaceAssignments {
+                models: None,
+                tools: Some(ProjectToolAssignments {
+                    excluded_source_keys: vec![
+                        " builtin:bash ".into(),
+                        "  ".into(),
+                        " skill:ops ".into(),
+                    ],
+                }),
+                agents: Some(ProjectAgentAssignments {
+                    excluded_agent_ids: vec![
+                        " agent-shadow ".into(),
+                        "".into(),
+                        "agent-scout".into(),
+                    ],
+                    excluded_team_ids: vec![" team-review ".into(), " ".into()],
+                }),
+            }),
+        })
+        .expect("validated request");
+
+        assert_eq!(validated.leader_agent_id.as_deref(), Some("agent-leader"));
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["builtin:bash".to_string(), "skill:ops".to_string()])
+        );
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-shadow".to_string(), "agent-scout".to_string()])
+        );
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_team_ids.clone()),
+            Some(vec!["team-review".to_string()])
+        );
+
+        assert!(validate_create_project_request(CreateProjectRequest {
+            name: "Leader Project".into(),
+            description: String::new(),
+            resource_directory: "data/projects/leader-project/resources".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("   ".into()),
             assignments: None,
         })
         .is_err());
@@ -6415,6 +6825,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .expect("validated update");
@@ -6436,6 +6847,7 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
             assignments: None,
         })
         .is_err());
@@ -6448,15 +6860,904 @@ mod tests {
             member_user_ids: None,
             permission_overrides: None,
             linked_workspace_assets: None,
+            leader_agent_id: None,
+            assignments: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn validate_update_project_request_trims_leader_and_exclusions() {
+        let validated = validate_update_project_request(UpdateProjectRequest {
+            name: "  Leader Project  ".into(),
+            description: "  Updated leader validation coverage. ".into(),
+            status: " active ".into(),
+            resource_directory: " data/projects/leader-project/resources ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("  agent-strategist  ".into()),
+            assignments: Some(ProjectWorkspaceAssignments {
+                models: None,
+                tools: Some(ProjectToolAssignments {
+                    excluded_source_keys: vec![" mcp:browser ".into(), " ".into()],
+                }),
+                agents: Some(ProjectAgentAssignments {
+                    excluded_agent_ids: vec![" agent-shadow ".into(), " ".into()],
+                    excluded_team_ids: vec![" team-review ".into(), "".into()],
+                }),
+            }),
+        })
+        .expect("validated update");
+
+        assert_eq!(
+            validated.leader_agent_id.as_deref(),
+            Some("agent-strategist")
+        );
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.excluded_source_keys.clone()),
+            Some(vec!["mcp:browser".to_string()])
+        );
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_agent_ids.clone()),
+            Some(vec!["agent-shadow".to_string()])
+        );
+        assert_eq!(
+            validated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.agents.as_ref())
+                .map(|agents| agents.excluded_team_ids.clone()),
+            Some(vec!["team-review".to_string()])
+        );
+
+        assert!(validate_update_project_request(UpdateProjectRequest {
+            name: "Leader Project".into(),
+            description: String::new(),
+            status: "active".into(),
+            resource_directory: "data/projects/leader-project/resources".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
+            leader_agent_id: Some("   ".into()),
             assignments: None,
         })
         .is_err());
     }
 
     #[tokio::test]
-    async fn project_task_routes_create_launch_rerun_and_intervene_against_project_state() {
+    async fn project_leader_update_route_rejects_excluding_current_leader() {
         let temp = tempfile::tempdir().expect("tempdir");
         let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let workspace_leader = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Leader Validation Workspace Agent".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Coordinator".into(),
+                tags: vec!["leader-validation".into()],
+                prompt: "Lead the project.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Workspace leader validation agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create workspace leader");
+
+        let Json(project) = create_project(
+            State(state.clone()),
+            headers.clone(),
+            Json(CreateProjectRequest {
+                name: "Leader Validation Project".into(),
+                description: "Reject excluding the current leader.".into(),
+                resource_directory: "data/projects/leader-validation/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: Some(workspace_leader.id.clone()),
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        excluded_source_keys: Vec::new(),
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        excluded_agent_ids: Vec::new(),
+                        excluded_team_ids: Vec::new(),
+                    }),
+                }),
+            }),
+        )
+        .await
+        .expect("create project with leader");
+
+        let error = update_project(
+            State(state.clone()),
+            headers,
+            Path(project.id.clone()),
+            Json(UpdateProjectRequest {
+                name: project.name.clone(),
+                description: project.description.clone(),
+                status: project.status.clone(),
+                resource_directory: project.resource_directory.clone(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        excluded_source_keys: Vec::new(),
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        excluded_agent_ids: vec![workspace_leader.id.clone()],
+                        excluded_team_ids: Vec::new(),
+                    }),
+                }),
+            }),
+        )
+        .await
+        .expect_err("excluding the current leader should be rejected");
+
+        assert!(
+            error
+                .source
+                .to_string()
+                .contains("project leader agent"),
+            "unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn project_leader_runtime_disable_is_rejected_by_validate_and_save_routes() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let workspace_leader = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Leader Runtime Guard Agent".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Coordinator".into(),
+                tags: vec!["leader-runtime-guard".into()],
+                prompt: "Stay enabled for runtime validation.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Workspace leader runtime guard agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create workspace leader");
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Leader Runtime Guard Project".into(),
+                description: "Reject disabling the current leader in runtime config.".into(),
+                resource_directory: "data/projects/leader-runtime-guard/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: Some(workspace_leader.id.clone()),
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        excluded_source_keys: Vec::new(),
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        excluded_agent_ids: Vec::new(),
+                        excluded_team_ids: Vec::new(),
+                    }),
+                }),
+            })
+            .await
+            .expect("create guarded project");
+
+        let patch = RuntimeConfigPatch {
+            scope: "project".into(),
+            patch: json!({
+                "projectSettings": {
+                    "agents": {
+                        "disabledAgentIds": [workspace_leader.id.clone()],
+                        "disabledTeamIds": []
+                    }
+                }
+            }),
+        };
+
+        let Json(validation) = validate_project_runtime_config_route(
+            State(state.clone()),
+            headers.clone(),
+            Path(project.id.clone()),
+            Json(patch.clone()),
+        )
+        .await
+        .expect("validate runtime config");
+
+        assert!(!validation.valid);
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("project leader agent")),
+            "unexpected validation errors: {:?}",
+            validation.errors
+        );
+
+        let error = save_project_runtime_config_route(
+            State(state.clone()),
+            headers,
+            Path(project.id.clone()),
+            Json(patch),
+        )
+        .await
+        .expect_err("saving a disabled leader should be rejected");
+
+        assert!(
+            error
+                .source
+                .to_string()
+                .contains("project leader agent"),
+            "unexpected error: {:?}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn project_scope_uses_live_workspace_inheritance_helpers_when_linked_assets_are_empty() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let _session = bootstrap_owner(&state).await;
+
+        let included_agent = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Included Workspace Agent".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Included".into(),
+                tags: vec!["live-scope".into()],
+                prompt: "Remain available through live inheritance.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Included workspace agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create included workspace agent");
+        let excluded_agent = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Excluded Workspace Agent".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Excluded".into(),
+                tags: vec!["live-scope".into()],
+                prompt: "Should be removed by project exclusions.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Excluded workspace agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create excluded workspace agent");
+
+        let included_team = state
+            .services
+            .workspace
+            .create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Included Workspace Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Included".into(),
+                tags: vec!["live-scope".into()],
+                prompt: "Remain available through live inheritance.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_agent_id: Some(included_agent.id.clone()),
+                member_agent_ids: vec![included_agent.id.clone()],
+                leader_ref: None,
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Included workspace team".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create included workspace team");
+        let excluded_team = state
+            .services
+            .workspace
+            .create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Excluded Workspace Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Excluded".into(),
+                tags: vec!["live-scope".into()],
+                prompt: "Should be removed by project exclusions.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["coordination".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_agent_id: Some(excluded_agent.id.clone()),
+                member_agent_ids: vec![excluded_agent.id.clone()],
+                leader_ref: None,
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Excluded workspace team".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create excluded workspace team");
+
+        let enabled_assets = state
+            .services
+            .workspace
+            .get_capability_management_projection()
+            .await
+            .expect("capability projection")
+            .assets
+            .into_iter()
+            .filter(|asset| asset.enabled)
+            .collect::<Vec<_>>();
+        let excluded_tool_source_key = enabled_assets
+            .first()
+            .expect("at least one enabled workspace tool")
+            .source_key
+            .clone();
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Live Inheritance Helper Project".into(),
+                description: "Resolve effective project scope from live workspace state.".into(),
+                resource_directory: "data/projects/live-inheritance-helper/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: Some(included_agent.id.clone()),
+                assignments: Some(ProjectWorkspaceAssignments {
+                    models: None,
+                    tools: Some(ProjectToolAssignments {
+                        excluded_source_keys: vec![excluded_tool_source_key.clone()],
+                    }),
+                    agents: Some(ProjectAgentAssignments {
+                        excluded_agent_ids: vec![excluded_agent.id.clone()],
+                        excluded_team_ids: vec![excluded_team.id.clone()],
+                    }),
+                }),
+            })
+            .await
+            .expect("create live inheritance project");
+
+        assert!(project.linked_workspace_assets.agent_ids.is_empty());
+        assert!(project.linked_workspace_assets.tool_source_keys.is_empty());
+
+        let effective_agent_ids = effective_project_agent_ids(&state, &project)
+            .await
+            .expect("effective project agent ids");
+        assert!(effective_agent_ids.contains(&included_agent.id));
+        assert!(!effective_agent_ids.contains(&excluded_agent.id));
+
+        let effective_team_ids = effective_project_team_ids(&state, &project)
+            .await
+            .expect("effective project team ids");
+        assert!(effective_team_ids.contains(&included_team.id));
+        assert!(!effective_team_ids.contains(&excluded_team.id));
+
+        let effective_tool_source_keys = effective_project_tool_source_keys(&state, &project)
+            .await
+            .expect("effective project tool source keys");
+        assert!(!effective_tool_source_keys.contains(&excluded_tool_source_key));
+        assert_eq!(
+            effective_tool_source_keys.len(),
+            enabled_assets.len().saturating_sub(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn project_agent_bundle_routes_import_team_bundles_into_project_scope_and_export_them() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Server Route Import Project".into(),
+                description: "Project bundle route coverage.".into(),
+                resource_directory: "data/projects/server-route-import/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                assignments: None,
+            })
+            .await
+            .expect("create target project");
+
+        let workspace_agent = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Server Route Import Analyst".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Workspace analyst".into(),
+                tags: vec!["server-route".into()],
+                prompt: "Export this workspace agent into a project bundle.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["server-route".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Workspace source agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create workspace agent");
+
+        let workspace_team = state
+            .services
+            .workspace
+            .create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Server Route Import Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Workspace team".into(),
+                tags: vec!["server-route".into()],
+                prompt: "Export this workspace team into a project bundle.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["server-route".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_agent_id: Some(workspace_agent.id.clone()),
+                member_agent_ids: vec![workspace_agent.id.clone()],
+                leader_ref: None,
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Workspace source team".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create workspace team");
+
+        let exported = state
+            .services
+            .workspace
+            .export_agent_bundle(ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: Vec::new(),
+                team_ids: vec![workspace_team.id.clone()],
+            })
+            .await
+            .expect("export workspace bundle");
+
+        let Json(imported) = import_project_agent_bundle_route(
+            State(state.clone()),
+            headers.clone(),
+            Path(project.id.clone()),
+            Json(ImportWorkspaceAgentBundleInput {
+                files: exported.files,
+            }),
+        )
+        .await
+        .expect("import project bundle route");
+
+        assert_eq!(imported.failure_count, 0);
+        assert_eq!(imported.agent_count, 1);
+        assert_eq!(imported.team_count, 1);
+
+        let imported_agent = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents")
+            .into_iter()
+            .find(|agent| {
+                agent.name == "Server Route Import Analyst"
+                    && agent.project_id.as_deref() == Some(project.id.as_str())
+            })
+            .expect("imported project agent");
+        assert_eq!(imported_agent.scope, "project");
+        assert_ne!(imported_agent.id, workspace_agent.id);
+
+        let imported_team = state
+            .services
+            .workspace
+            .list_teams()
+            .await
+            .expect("list teams")
+            .into_iter()
+            .find(|team| {
+                team.name == "Server Route Import Team"
+                    && team.project_id.as_deref() == Some(project.id.as_str())
+            })
+            .expect("imported project team");
+        assert_eq!(imported_team.scope, "project");
+        assert_eq!(
+            imported_team.leader_agent_id.as_deref(),
+            Some(imported_agent.id.as_str())
+        );
+        assert_eq!(
+            imported_team.member_agent_ids,
+            vec![imported_agent.id.clone()]
+        );
+
+        let Json(project_exported) = export_project_agent_bundle_route(
+            State(state.clone()),
+            headers,
+            Path(project.id.clone()),
+            Json(ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: Vec::new(),
+                team_ids: vec![imported_team.id.clone()],
+            }),
+        )
+        .await
+        .expect("export project bundle route");
+
+        assert_eq!(project_exported.agent_count, 1);
+        assert_eq!(project_exported.team_count, 1);
+        assert!(project_exported.file_count > 0);
+    }
+
+    #[tokio::test]
+    async fn copy_to_workspace_routes_promote_project_owned_agents_and_teams_without_repointing_project_team(
+    ) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Server Route Promotion Project".into(),
+                description: "Promotion route coverage.".into(),
+                resource_directory: "data/projects/server-route-promotion/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                assignments: None,
+            })
+            .await
+            .expect("create promotion project");
+
+        let project_agent = state
+            .services
+            .workspace
+            .create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Server Route Promotion Analyst".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project analyst".into(),
+                tags: vec!["server-route".into()],
+                prompt: "Promote this project agent into workspace scope.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["server-route".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Project promotion source agent".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create project agent");
+
+        let project_team = state
+            .services
+            .workspace
+            .create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Server Route Promotion Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project team".into(),
+                tags: vec!["server-route".into()],
+                prompt: "Promote this project team into workspace scope.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["server-route".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_agent_id: Some(project_agent.id.clone()),
+                member_agent_ids: vec![project_agent.id.clone()],
+                leader_ref: None,
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Project promotion source team".into(),
+                status: "active".into(),
+            })
+            .await
+            .expect("create project team");
+
+        let Json(promoted_agent) = copy_workspace_agent_from_builtin_route(
+            State(state.clone()),
+            headers.clone(),
+            Path(project_agent.id.clone()),
+        )
+        .await
+        .expect("promote project agent route");
+        assert_eq!(promoted_agent.failure_count, 0);
+        assert_eq!(promoted_agent.agent_count, 1);
+
+        let Json(promoted_team) = copy_workspace_team_from_builtin_route(
+            State(state.clone()),
+            headers,
+            Path(project_team.id.clone()),
+        )
+        .await
+        .expect("promote project team route");
+        assert_eq!(promoted_team.failure_count, 0);
+        assert_eq!(promoted_team.team_count, 1);
+        assert_eq!(promoted_team.agent_count, 1);
+
+        let agents = state
+            .services
+            .workspace
+            .list_agents()
+            .await
+            .expect("list agents after promotion");
+        let original_project_agent = agents
+            .iter()
+            .find(|agent| agent.id == project_agent.id)
+            .expect("original project agent");
+        assert_eq!(
+            original_project_agent.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(original_project_agent.scope, "project");
+
+        let workspace_agents = agents
+            .iter()
+            .filter(|agent| {
+                agent.name == "Server Route Promotion Analyst" && agent.project_id.is_none()
+            })
+            .collect::<Vec<_>>();
+        assert!(!workspace_agents.is_empty());
+        assert!(workspace_agents
+            .iter()
+            .all(|agent| agent.scope == "workspace"));
+
+        let teams = state
+            .services
+            .workspace
+            .list_teams()
+            .await
+            .expect("list teams after promotion");
+        let original_project_team = teams
+            .iter()
+            .find(|team| team.id == project_team.id)
+            .expect("original project team");
+        assert_eq!(
+            original_project_team.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(original_project_team.scope, "project");
+        assert_eq!(
+            original_project_team.leader_agent_id.as_deref(),
+            Some(project_agent.id.as_str())
+        );
+        assert_eq!(
+            original_project_team.member_agent_ids,
+            vec![project_agent.id.clone()]
+        );
+
+        let workspace_team = teams
+            .iter()
+            .find(|team| team.name == "Server Route Promotion Team" && team.project_id.is_none())
+            .expect("promoted workspace team");
+        assert_eq!(workspace_team.scope, "workspace");
+
+        let workspace_team_leader_id = workspace_team
+            .leader_agent_id
+            .as_deref()
+            .expect("workspace team leader");
+        assert_ne!(workspace_team_leader_id, project_agent.id.as_str());
+        assert!(
+            agents.iter().any(|agent| {
+                agent.id == workspace_team_leader_id
+                    && agent.project_id.is_none()
+                    && agent.scope == "workspace"
+            }),
+            "workspace team leader should resolve to a workspace-owned agent copy"
+        );
+        assert!(
+            workspace_team
+                .member_agent_ids
+                .iter()
+                .all(|agent_id| agent_id != &project_agent.id),
+            "workspace team should not keep project agent ids as members"
+        );
+        assert!(
+            workspace_team.member_agent_ids.iter().all(|agent_id| {
+                agents.iter().any(|agent| {
+                    agent.id == *agent_id
+                        && agent.project_id.is_none()
+                        && agent.scope == "workspace"
+                })
+            }),
+            "workspace team members should resolve to workspace-owned agent copies"
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_routes_create_launch_rerun_and_intervene_against_project_state() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_runtime_workspace_config(temp.path());
+        let state = test_server_state(temp.path());
+        insert_workspace_core_team(temp.path());
         let session = bootstrap_owner(&state).await;
         let headers = auth_headers(&session.token);
 
@@ -6468,7 +7769,7 @@ mod tests {
                 title: "Prepare launch checklist".into(),
                 goal: "Create a launch-ready checklist for the redesign rollout.".into(),
                 brief: "Focus on sequencing, dependencies, and handoff notes.".into(),
-                default_actor_ref: "team:team-workspace-core".into(),
+                default_actor_ref: WORKSPACE_CORE_TEAM_REF.into(),
                 schedule_spec: Some("0 9 * * 1-5".into()),
                 context_bundle: TaskContextBundle {
                     refs: vec![TaskContextRef {
@@ -6506,7 +7807,7 @@ mod tests {
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
             Json(LaunchTaskRequest {
-                actor_ref: Some("team:team-workspace-core".into()),
+                actor_ref: Some(WORKSPACE_CORE_TEAM_REF.into()),
             }),
         )
         .await
@@ -6519,7 +7820,7 @@ mod tests {
             headers.clone(),
             Path((DEFAULT_PROJECT_ID.into(), created.id.clone())),
             Json(RerunTaskRequest {
-                actor_ref: Some("team:team-workspace-core".into()),
+                actor_ref: Some(WORKSPACE_CORE_TEAM_REF.into()),
                 source_task_run_id: Some(launch_run.id.clone()),
             }),
         )
@@ -7476,6 +8777,7 @@ mod tests {
                         ..project.permission_overrides
                     }),
                     linked_workspace_assets: Some(project.linked_workspace_assets),
+                    leader_agent_id: project.leader_agent_id,
                     assignments: project.assignments,
                 },
             )

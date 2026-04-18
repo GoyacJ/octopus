@@ -393,7 +393,7 @@ pub(super) fn apply_project_model_settings(
 
 pub(super) fn validate_project_tool_settings(
     tools_value: &Value,
-    workspace_assignments: Option<&ProjectWorkspaceAssignments>,
+    _workspace_assignments: Option<&ProjectWorkspaceAssignments>,
     mcp_servers_value: Option<&Value>,
     diagnostics: &mut ModelRegistryDiagnostics,
 ) {
@@ -403,31 +403,19 @@ pub(super) fn validate_project_tool_settings(
             .push("projectSettings.tools must be an object".into());
         return;
     };
-    let assigned_source_keys = workspace_assignments
-        .and_then(|assignments| assignments.tools.as_ref())
-        .map(|tools| tools.source_keys.iter().cloned().collect::<HashSet<_>>());
 
-    if let Some(enabled_source_keys) = tools_object.get("enabledSourceKeys") {
-        let Some(enabled_source_keys) = enabled_source_keys.as_array() else {
+    if let Some(disabled_source_keys) = tools_object.get("disabledSourceKeys") {
+        let Some(disabled_source_keys) = disabled_source_keys.as_array() else {
             diagnostics
                 .errors
-                .push("projectSettings.tools.enabledSourceKeys must be an array".into());
+                .push("projectSettings.tools.disabledSourceKeys must be an array".into());
             return;
         };
-        if enabled_source_keys.is_empty() {
-            diagnostics.errors.push(
-                "projectSettings.tools.enabledSourceKeys must include at least one sourceKey"
-                    .into(),
-            );
-        }
-        for source_key in enabled_source_keys.iter().filter_map(Value::as_str) {
-            if assigned_source_keys
-                .as_ref()
-                .is_some_and(|assigned| !assigned.contains(source_key))
-            {
-                diagnostics.errors.push(format!(
-                    "projectSettings.tools.enabledSourceKeys contains unassigned sourceKey `{source_key}`"
-                ));
+        for source_key in disabled_source_keys.iter().filter_map(Value::as_str) {
+            if source_key.trim().is_empty() {
+                diagnostics.errors.push(
+                    "projectSettings.tools.disabledSourceKeys contains an empty sourceKey".into(),
+                );
             }
         }
     }
@@ -448,14 +436,6 @@ pub(super) fn validate_project_tool_settings(
         .unwrap_or_default();
 
     for (source_key, override_value) in overrides_object {
-        if assigned_source_keys
-            .as_ref()
-            .is_some_and(|assigned| !assigned.contains(source_key))
-        {
-            diagnostics.errors.push(format!(
-                "projectSettings.tools.overrides contains unassigned sourceKey `{source_key}`"
-            ));
-        }
         let Some(override_object) = override_value.as_object() else {
             diagnostics.errors.push(format!(
                 "projectSettings.tools.overrides.{source_key} must be an object"
@@ -508,7 +488,7 @@ pub(super) fn validate_project_tool_settings(
 
 pub(super) fn validate_project_agent_settings(
     agents_value: &Value,
-    workspace_assignments: Option<&ProjectWorkspaceAssignments>,
+    _workspace_assignments: Option<&ProjectWorkspaceAssignments>,
     diagnostics: &mut ModelRegistryDiagnostics,
 ) {
     let Some(agents_object) = agents_value.as_object() else {
@@ -518,48 +498,36 @@ pub(super) fn validate_project_agent_settings(
         return;
     };
 
-    let assigned_agent_ids = workspace_assignments
-        .and_then(|assignments| assignments.agents.as_ref())
-        .map(|agents| agents.agent_ids.iter().cloned().collect::<HashSet<_>>());
-    let assigned_team_ids = workspace_assignments
-        .and_then(|assignments| assignments.agents.as_ref())
-        .map(|agents| agents.team_ids.iter().cloned().collect::<HashSet<_>>());
-
-    if let Some(enabled_agent_ids) = agents_object.get("enabledAgentIds") {
-        let Some(enabled_agent_ids) = enabled_agent_ids.as_array() else {
+    if let Some(disabled_agent_ids) = agents_object.get("disabledAgentIds") {
+        let Some(disabled_agent_ids) = disabled_agent_ids.as_array() else {
             diagnostics
                 .errors
-                .push("projectSettings.agents.enabledAgentIds must be an array".into());
+                .push("projectSettings.agents.disabledAgentIds must be an array".into());
             return;
         };
-        for agent_id in enabled_agent_ids.iter().filter_map(Value::as_str) {
-            if assigned_agent_ids
-                .as_ref()
-                .is_some_and(|assigned| !assigned.contains(agent_id))
-            {
-                diagnostics.errors.push(format!(
-                    "projectSettings.agents.enabledAgentIds contains unassigned agent `{agent_id}`"
-                ));
+        for agent_id in disabled_agent_ids.iter().filter_map(Value::as_str) {
+            if agent_id.trim().is_empty() {
+                diagnostics.errors.push(
+                    "projectSettings.agents.disabledAgentIds contains an empty agent id".into(),
+                );
             }
         }
     }
 
-    if let Some(enabled_team_ids) = agents_object.get("enabledTeamIds") {
-        let Some(enabled_team_ids) = enabled_team_ids.as_array() else {
+    if let Some(disabled_team_ids) = agents_object.get("disabledTeamIds") {
+        let Some(disabled_team_ids) = disabled_team_ids.as_array() else {
             diagnostics
                 .errors
-                .push("projectSettings.agents.enabledTeamIds must be an array".into());
+                .push("projectSettings.agents.disabledTeamIds must be an array".into());
             return;
         };
-        for team_id in enabled_team_ids.iter().filter_map(Value::as_str) {
-            if assigned_team_ids
-                .as_ref()
-                .is_some_and(|assigned| !assigned.contains(team_id))
-            {
-                diagnostics.errors.push(format!(
-                    "projectSettings.agents.enabledTeamIds contains unassigned team `{team_id}`"
-                ));
+        for team_id in disabled_team_ids.iter().filter_map(Value::as_str) {
+            if team_id.trim().is_empty() {
+                diagnostics.errors.push(
+                    "projectSettings.agents.disabledTeamIds contains an empty team id".into(),
+                );
             }
         }
     }
+
 }

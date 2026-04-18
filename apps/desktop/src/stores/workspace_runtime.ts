@@ -308,7 +308,8 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     return await saveProjectRuntimePatch(projectId, {
       projectSettings: {
         tools: {
-          enabledSourceKeys: cloneJson(settings.enabledSourceKeys),
+          enabledSourceKeys: null,
+          disabledSourceKeys: cloneJson(settings.disabledSourceKeys),
           overrides: nextOverrides,
         },
       },
@@ -323,8 +324,10 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     return await saveProjectRuntimePatch(projectId, {
       projectSettings: {
         agents: {
-          enabledAgentIds: cloneJson(settings.enabledAgentIds),
-          enabledTeamIds: cloneJson(settings.enabledTeamIds),
+          enabledAgentIds: null,
+          enabledTeamIds: null,
+          disabledAgentIds: cloneJson(settings.disabledAgentIds),
+          disabledTeamIds: cloneJson(settings.disabledTeamIds),
         },
       },
     }, workspaceConnectionId)

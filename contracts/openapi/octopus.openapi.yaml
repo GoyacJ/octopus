@@ -6138,6 +6138,8 @@ components:
           $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
+        leaderAgentId:
+          type: string
         linkedWorkspaceAssets:
           $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
         memberUserIds:
@@ -8323,17 +8325,17 @@ components:
     ProjectAgentAssignments:
       additionalProperties: false
       properties:
-        agentIds:
+        excludedAgentIds:
           items:
             type: string
           type: array
-        teamIds:
+        excludedTeamIds:
           items:
             type: string
           type: array
       required:
-        - agentIds
-        - teamIds
+        - excludedAgentIds
+        - excludedTeamIds
       type: object
     ProjectAgentLinkInput:
       additionalProperties: false
@@ -8816,6 +8818,8 @@ components:
           type: string
         id:
           type: string
+        leaderAgentId:
+          type: string
         linkedWorkspaceAssets:
           $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
         memberUserIds:
@@ -8907,12 +8911,12 @@ components:
     ProjectToolAssignments:
       additionalProperties: false
       properties:
-        sourceKeys:
+        excludedSourceKeys:
           items:
             type: string
           type: array
       required:
-        - sourceKeys
+        - excludedSourceKeys
       type: object
     ProjectWorkspaceAssignments:
       additionalProperties: false
@@ -12086,6 +12090,8 @@ components:
         assignments:
           $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
+          type: string
+        leaderAgentId:
           type: string
         linkedWorkspaceAssets:
           $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"

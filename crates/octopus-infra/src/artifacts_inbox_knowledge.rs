@@ -488,17 +488,18 @@ default_project_id = "proj-redesign"
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
+                leader_agent_id: None,
                 assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                     models: Some(octopus_core::ProjectModelAssignments {
                         configured_model_ids: vec!["anthropic-primary".into()],
                         default_configured_model_id: "anthropic-primary".into(),
                     }),
                     tools: Some(octopus_core::ProjectToolAssignments {
-                        source_keys: vec!["builtin:bash".into()],
+                        excluded_source_keys: vec!["builtin:bash".into()],
                     }),
                     agents: Some(octopus_core::ProjectAgentAssignments {
-                        agent_ids: vec!["agent-architect".into()],
-                        team_ids: vec!["team-studio".into()],
+                        excluded_agent_ids: vec!["agent-architect".into()],
+                        excluded_team_ids: vec!["team-studio".into()],
                     }),
                 }),
             }))
@@ -525,17 +526,18 @@ default_project_id = "proj-redesign"
                     member_user_ids: None,
                     permission_overrides: None,
                     linked_workspace_assets: None,
+                    leader_agent_id: None,
                     assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                         models: Some(octopus_core::ProjectModelAssignments {
                             configured_model_ids: vec!["anthropic-alt".into()],
                             default_configured_model_id: "anthropic-alt".into(),
                         }),
                         tools: Some(octopus_core::ProjectToolAssignments {
-                            source_keys: vec!["builtin:bash".into(), "mcp:ops".into()],
+                            excluded_source_keys: vec!["builtin:bash".into(), "mcp:ops".into()],
                         }),
                         agents: Some(octopus_core::ProjectAgentAssignments {
-                            agent_ids: vec!["agent-architect".into()],
-                            team_ids: vec![],
+                            excluded_agent_ids: vec!["agent-architect".into()],
+                            excluded_team_ids: vec![],
                         }),
                     }),
                 },
@@ -563,7 +565,7 @@ default_project_id = "proj-redesign"
                 .assignments
                 .as_ref()
                 .and_then(|assignments| assignments.tools.as_ref())
-                .map(|tools| tools.source_keys.clone()),
+                .map(|tools| tools.excluded_source_keys.clone()),
             Some(vec!["builtin:bash".to_string(), "mcp:ops".to_string()])
         );
     }

@@ -1887,6 +1887,23 @@ fn resumable_subrun_status(status: &str) -> bool {
     )
 }
 
+fn execution_configured_model_id(
+    adapter: &RuntimeAdapter,
+    session_policy: &session_policy::CompiledSessionPolicy,
+    configured_model_id: Option<String>,
+) -> Result<String, AppError> {
+    if let Some(configured_model_id) = configured_model_id
+        .or_else(|| session_policy.selected_configured_model_id.clone())
+        .filter(|configured_model_id| !configured_model_id.trim().is_empty())
+    {
+        return Ok(configured_model_id);
+    }
+
+    adapter
+        .resolve_execution_target_from_session_policy(session_policy)
+        .map(|(_, configured_model_id, _)| configured_model_id)
+}
+
 fn primary_run_is_blocking_team_subruns(detail: &RuntimeSessionDetail) -> bool {
     detail
         .run
@@ -1925,13 +1942,8 @@ async fn execute_team_subrun(
     let session_policy =
         adapter.load_session_policy_snapshot(&state.session_policy_snapshot_ref)?;
     let actor_manifest = adapter.load_actor_manifest_snapshot(&state.manifest_snapshot_ref)?;
-    let configured_model_id = state
-        .run
-        .configured_model_id
-        .clone()
-        .or_else(|| session_policy.selected_configured_model_id.clone())
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::runtime("configured model is unavailable for subrun execution"))?;
+    let configured_model_id =
+        execution_configured_model_id(adapter, &session_policy, state.run.configured_model_id.clone())?;
     let (resolved_target, configured_model) = adapter
         .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
     let capability_state_ref = state
@@ -3594,10 +3606,8 @@ fn load_pending_checkpoint(
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
-    let configured_model_id = configured_model_id
-        .or_else(|| session_policy.selected_configured_model_id.clone())
-        .filter(|configured_model_id| !configured_model_id.is_empty())
-        .ok_or_else(|| AppError::runtime("configured model is unavailable for approval resume"))?;
+    let configured_model_id =
+        execution_configured_model_id(adapter, &session_policy, configured_model_id)?;
     let (resolved_target, configured_model) = adapter
         .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
     if approval.status != "pending" {
@@ -3697,10 +3707,8 @@ fn load_pending_auth_checkpoint(
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
-    let configured_model_id = configured_model_id
-        .or_else(|| session_policy.selected_configured_model_id.clone())
-        .filter(|configured_model_id| !configured_model_id.is_empty())
-        .ok_or_else(|| AppError::runtime("configured model is unavailable for auth resume"))?;
+    let configured_model_id =
+        execution_configured_model_id(adapter, &session_policy, configured_model_id)?;
     let (resolved_target, configured_model) = adapter
         .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
     if challenge.status != "pending" {

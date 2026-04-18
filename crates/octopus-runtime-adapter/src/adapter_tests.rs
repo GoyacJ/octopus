@@ -928,10 +928,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
             "project".to_string()
         ]
     );
-    assert_eq!(
-        detail.summary.selected_actor_ref,
-        agent_actor_ref
-    );
+    assert_eq!(detail.summary.selected_actor_ref, agent_actor_ref);
     assert_eq!(
         detail.summary.manifest_revision,
         octopus_core::ASSET_MANIFEST_REVISION_V2
@@ -1070,6 +1067,93 @@ async fn runtime_config_validation_accepts_backfilled_upstream_fields_across_sco
     assert!(user.valid);
     assert!(user.errors.is_empty());
     assert!(user.warnings.is_empty());
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn project_settings_validation_accepts_disabled_runtime_arrays() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let validation = adapter
+        .validate_project_config(
+            "proj-sync",
+            "user-sync",
+            RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: json!({
+                    "projectSettings": {
+                        "tools": {
+                            "disabledSourceKeys": ["builtin:bash"],
+                            "overrides": {
+                                "builtin:bash": {
+                                    "permissionMode": "readonly"
+                                }
+                            }
+                        },
+                        "agents": {
+                            "disabledAgentIds": ["agent-architect"],
+                            "disabledTeamIds": ["team-studio"]
+                        }
+                    }
+                }),
+            },
+        )
+        .await
+        .expect("project validation");
+
+    assert!(validation.valid);
+    assert!(validation.errors.is_empty());
+    assert!(validation.warnings.is_empty());
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn project_settings_validation_ignores_legacy_enabled_runtime_arrays() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let validation = adapter
+        .validate_project_config(
+            "proj-sync",
+            "user-sync",
+            RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: json!({
+                    "projectSettings": {
+                        "tools": {
+                            "enabledSourceKeys": []
+                        },
+                        "agents": {
+                            "enabledAgentIds": [],
+                            "enabledTeamIds": []
+                        }
+                    }
+                }),
+            },
+        )
+        .await
+        .expect("project validation");
+
+    assert!(validation.valid);
+    assert!(validation.errors.is_empty());
+    assert!(validation.warnings.is_empty());
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -2409,8 +2493,11 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
             .and_then(|row| row.8.clone())
             .expect("handoff envelope path"),
     );
-    fs::write(&corrupted_handoff_envelope_path, b"{invalid-handoff-envelope")
-        .expect("corrupt handoff envelope json");
+    fs::write(
+        &corrupted_handoff_envelope_path,
+        b"{invalid-handoff-envelope",
+    )
+    .expect("corrupt handoff envelope json");
     let reloaded_from_corrupt_handoff_envelope = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),

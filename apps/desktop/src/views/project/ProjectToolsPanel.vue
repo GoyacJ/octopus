@@ -2,7 +2,9 @@
 import type { CapabilityAssetManifest } from '@octopus/schema'
 import { UiBadge, UiButton, UiEmptyState, UiRecordCard, UiSelect, UiStatusCallout } from '@octopus/ui'
 
-import type { ToolPermissionSelection, ToolSection } from './useProjectSettings'
+import type { ToolPermissionSelection } from '@/stores/project_setup'
+
+import type { ToolSection } from './useProjectSettings'
 
 const props = defineProps<{
   toolSections: ToolSection[]
