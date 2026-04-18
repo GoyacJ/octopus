@@ -24,6 +24,7 @@
   "pages": {
     "home": {
       "title": "Your Private AI Digital Employee Team",
+      "highlight": "ready to deliver real work",
       "subtitle": "Unite the power of AI while protecting data sovereignty. Deploy exclusive digital employee teams and knowledge brains in your localization environment or private cloud.",
       "cta": {
         "primary": "Get Started",
@@ -67,6 +68,23 @@
       "heroTitle": "Turn agents into",
       "heroHighlight": "deliverable digital employees",
       "body": "Octopus brings models, tools, memory, permissions, and governance into one desktop workbench so agents move beyond demos and become assignable, collaborative, auditable digital employees for real enterprise work.",
+      "governance": {
+        "title": "Trustworthy, Controllable, Auditable",
+        "items": [
+          {
+            "title": "Execution boundaries stay explicit",
+            "desc": "From tool calls to task execution, every action is constrained by clear operating limits so digital employees can act without overreaching."
+          },
+          {
+            "title": "Operational context stays replayable",
+            "desc": "Every collaboration chain, invocation record, and output artifact can be inspected, traced, and reviewed after the fact."
+          },
+          {
+            "title": "Governance policy lands in the system",
+            "desc": "Roles, permissions, and audit requirements are enforced at the platform layer instead of remaining presentation-only concepts."
+          }
+        ]
+      },
       "features": {
         "mcp": {
           "title": "Unified Tool Protocol",
@@ -96,7 +114,24 @@
     },
     "scenarios": {
       "title": "Wide Range of Scenarios",
-      "body": "Covering individual, team, and enterprise lifecycles, empowering every business stage."
+      "body": "Covering individual, team, and enterprise lifecycles, empowering every business stage.",
+      "segments": [
+        {
+          "title": "Individual: your always-on digital assistant",
+          "desc": "Stay supported on the desktop for daily research, coding, writing, and document work while keeping an assistant that remembers your habits and working context.",
+          "features": ["Fast response", "Local knowledge management", "Multimodal interaction"]
+        },
+        {
+          "title": "Team: a shared pool of digital employees",
+          "desc": "Dispatch specialized agents for planning, project follow-up, copywriting, or code review so AI teammates can work alongside human contributors in parallel.",
+          "features": ["Automatic task routing", "Multi-agent collaboration", "Shared team knowledge"]
+        },
+        {
+          "title": "Enterprise: secure and governable by design",
+          "desc": "Deploy private, localization-friendly AI infrastructure for large organizations with strong permission controls, auditability, and data protection boundaries.",
+          "features": ["Localization-ready stack", "Fine-grained permissions", "Compliance audit logs"]
+        }
+      ]
     },
     "about": {
       "title": "About Octopus",

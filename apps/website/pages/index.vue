@@ -22,7 +22,6 @@ interface HomeFeature {
   key: string
   icon: Component
   cols: number
-  rows: number
   variant: FeatureVariant
 }
 
@@ -30,43 +29,37 @@ const features: HomeFeature[] = [
   {
     key: 'private',
     icon: ShieldCheck,
-    cols: 6,
-    rows: 2,
-    variant: 'glass'
+    cols: 7,
+    variant: 'soft'
   },
   {
     key: 'localization',
     icon: Cpu,
-    cols: 6,
-    rows: 1,
+    cols: 5,
     variant: 'soft'
   },
   {
     key: 'team',
     icon: Users,
-    cols: 3,
-    rows: 1,
+    cols: 4,
     variant: 'outline'
   },
   {
     key: 'pet',
     icon: Heart,
-    cols: 3,
-    rows: 1,
+    cols: 4,
     variant: 'soft'
   },
   {
     key: 'knowledge',
     icon: Brain,
-    cols: 6,
-    rows: 1,
+    cols: 4,
     variant: 'default'
   },
   {
     key: 'security',
     icon: Lock,
-    cols: 6,
-    rows: 1,
+    cols: 12,
     variant: 'outline'
   }
 ]
@@ -120,27 +113,21 @@ const features: HomeFeature[] = [
 
         <UiBentoGrid>
           <UiBentoItem
-            v-for="(feature, index) in features"
+            v-for="feature in features"
             :key="feature.key"
             :cols="feature.cols"
-            :rows="feature.rows"
             :variant="feature.variant"
             v-reveal
             class="card-shine"
           >
-            <div class="p-10 h-full flex flex-col group">
-              <div class="mb-auto">
-                <div class="w-14 h-14 rounded-2xl bg-[var(--website-accent)]/10 flex items-center justify-center text-[var(--website-accent)] mb-8 transition-all duration-500 group-hover:bg-[var(--website-accent)] group-hover:text-white group-hover:rotate-[10deg]">
-                  <component :is="feature.icon" class="w-7 h-7" />
-                </div>
-                <h3 class="text-2xl font-bold mb-4 tracking-tight">{{ t(`pages.home.features.${feature.key}.title`) }}</h3>
-                <p class="text-[var(--website-text-muted)] leading-relaxed text-base md:text-lg opacity-80 group-hover:opacity-100">
-                  {{ t(`pages.home.features.${feature.key}.desc`) }}
-                </p>
+            <div class="flex h-full flex-col p-8 md:p-10 group">
+              <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--website-accent)]/10 text-[var(--website-accent)] transition-all duration-500 group-hover:bg-[var(--website-accent)] group-hover:text-white group-hover:rotate-[10deg]">
+                <component :is="feature.icon" class="w-7 h-7" />
               </div>
-              <div class="mt-10 flex items-center text-[var(--website-accent)] text-sm font-bold tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
-                DISCOVER MORE <ArrowRight class="ml-2 w-4 h-4" />
-              </div>
+              <h3 class="mb-4 text-2xl font-bold tracking-tight">{{ t(`pages.home.features.${feature.key}.title`) }}</h3>
+              <p class="text-base leading-relaxed text-[var(--website-text-muted)] md:text-lg">
+                {{ t(`pages.home.features.${feature.key}.desc`) }}
+              </p>
             </div>
           </UiBentoItem>
         </UiBentoGrid>
@@ -148,9 +135,9 @@ const features: HomeFeature[] = [
     </section>
 
     <!-- Final CTA -->
-    <section class="section-padding">
+    <section class="section-padding pt-0">
       <div class="container-custom">
-        <UiCard variant="glass" class="bg-[var(--website-accent)] text-white text-center py-20 overflow-hidden relative">
+        <div class="relative overflow-hidden rounded-[calc(var(--radius-xl)+8px)] bg-[var(--website-accent)] px-6 py-16 text-center text-white shadow-[0_24px_70px_-28px_rgba(249,115,22,0.55)] md:px-10 md:py-20">
           <!-- Background Pattern -->
           <div class="absolute inset-0 opacity-10 pointer-events-none">
             <div class="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:24px_24px]"></div>
@@ -165,7 +152,7 @@ const features: HomeFeature[] = [
               {{ t('pages.home.consulting.button') }}
             </UiButton>
           </div>
-        </UiCard>
+        </div>
       </div>
     </section>
   </div>

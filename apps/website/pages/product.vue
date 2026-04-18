@@ -8,7 +8,12 @@ import {
   ShieldAlert
 } from 'lucide-vue-next'
 
-const { t } = useI18n()
+interface GovernanceItem {
+  title: unknown
+  desc: unknown
+}
+
+const { t, tm, rt } = useI18n()
 
 useHead({
   title: t('pages.product.title')
@@ -22,6 +27,13 @@ const capabilities = [
   { key: 'desktop', icon: Monitor, img: '/screenshots/dashboard.png' },
   { key: 'enterprise', icon: ShieldAlert, img: '/screenshots/rbac.png' }
 ]
+
+const governanceItems = computed(() =>
+  (tm('pages.product.governance.items') as GovernanceItem[]).map((item) => ({
+    title: rt(item.title as Parameters<typeof rt>[0]),
+    desc: rt(item.desc as Parameters<typeof rt>[0]),
+  })),
+)
 </script>
 
 <template>
@@ -52,7 +64,7 @@ const capabilities = [
       <div class="container-custom relative z-10">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           <div 
-            v-for="(cap, index) in capabilities" 
+            v-for="cap in capabilities" 
             :key="cap.key"
             class="group"
             v-reveal
@@ -60,7 +72,11 @@ const capabilities = [
             <UiCard padding="none" hover class="h-full flex flex-col overflow-hidden card-shine border-[var(--website-border-strong)]">
               <!-- Visual Preview -->
               <div class="aspect-video bg-[var(--website-surface-soft)] overflow-hidden relative border-b border-[var(--website-border)]">
-                <img :src="cap.img" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" :alt="cap.key" />
+                <img
+                  :src="cap.img"
+                  class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  :alt="t(`pages.product.features.${cap.key}.title`)"
+                />
                 <div class="absolute inset-0 bg-gradient-to-t from-[var(--website-surface)]/60 to-transparent"></div>
               </div>
               
@@ -83,26 +99,34 @@ const capabilities = [
     <!-- Advanced Governance Section -->
     <section class="section-padding bg-[var(--website-surface-soft)]/50">
       <div class="container-custom">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <div>
-            <h2 class="text-3xl font-bold mb-8 tracking-tight">{{ t('pages.product.governance.title') }}</h2>
+        <div class="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
+          <div class="max-w-xl">
+            <h2 class="mb-6 text-3xl font-bold tracking-tight md:text-4xl">{{ t('pages.product.governance.title') }}</h2>
             <div class="space-y-8">
-              <div v-for="i in (t('pages.product.governance.items') as any)" :key="i.title" class="flex gap-4" v-reveal>
-                <div class="mt-1 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 shrink-0">
+              <div
+                v-for="item in governanceItems"
+                :key="item.title"
+                class="flex gap-4 rounded-[var(--radius-l)] border border-[var(--website-border)] bg-[var(--website-surface)]/70 px-5 py-5"
+                v-reveal
+              >
+                <div class="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--website-accent)]/12 text-[var(--website-accent)]">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
                 <div>
-                  <h4 class="font-bold mb-1">{{ i.title }}</h4>
-                  <p class="text-sm text-[var(--website-text-muted)] leading-relaxed">{{ i.desc }}</p>
+                  <h4 class="mb-1 text-base font-bold md:text-lg">{{ item.title }}</h4>
+                  <p class="text-sm leading-relaxed text-[var(--website-text-muted)] md:text-base">{{ item.desc }}</p>
                 </div>
               </div>
             </div>
           </div>
           <div class="relative" v-reveal>
-            <UiCard variant="glass" padding="none" class="shadow-2xl rotate-1 group transition-transform hover:rotate-0 border-[var(--website-border-strong)]">
+            <UiCard
+              variant="default"
+              padding="none"
+              class="overflow-visible border-[var(--website-border-strong)] bg-[var(--website-surface)] shadow-[0_28px_70px_-36px_rgba(0,0,0,0.28)]"
+            >
               <img src="/screenshots/rbac.png" alt="Octopus RBAC" class="rounded-[var(--radius-l)]" />
-              <!-- Badge Decoration -->
-              <div class="absolute -bottom-6 -left-6 glass px-6 py-4 rounded-2xl border border-[var(--website-border-strong)] shadow-xl">
+              <div class="absolute -bottom-5 left-6 rounded-2xl border border-[var(--website-border-strong)] bg-[var(--website-surface)] px-5 py-3 shadow-lg">
                 <div class="flex items-center gap-3">
                   <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
                   <span class="text-sm font-bold tracking-tight">Governance Ready</span>
