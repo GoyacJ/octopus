@@ -45,7 +45,7 @@ onBeforeUnmount(() => {
         class="min-w-0 flex-1 overflow-y-auto bg-[color-mix(in_srgb,var(--background)_92%,var(--sidebar)_8%)]"
         data-testid="workbench-main"
       >
-        <div data-testid="workbench-main-canvas" class="flex min-h-full min-w-0 flex-col">
+        <div data-testid="workbench-main-canvas" class="flex h-full min-w-0 flex-col">
           <slot />
         </div>
       </main>

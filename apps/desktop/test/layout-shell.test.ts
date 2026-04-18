@@ -119,7 +119,7 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
-  it('renders the workbench main area as an integrated shell canvas instead of a raw page wrapper', async () => {
+  it('keeps the workbench main canvas on a fixed-height shell so pages can own their internal scroll areas', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
 
@@ -137,7 +137,8 @@ describe('Workbench shell layout', () => {
     expect(main?.className).toContain('bg-[color-mix(in_srgb,var(--background)_92%,var(--sidebar)_8%)]')
 
     expect(canvas).not.toBeNull()
-    expect(canvas?.className).toContain('min-h-full')
+    expect(canvas?.className).toContain('h-full')
+    expect(canvas?.className).not.toContain('min-h-full')
     expect(canvas?.className).toContain('min-w-0')
 
     mounted.destroy()
