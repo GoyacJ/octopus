@@ -687,6 +687,17 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).toContain('apiKey?: string')
   })
 
+  it('keeps dedicated runtime generation schemas and route in the generated transport contract', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).toContain('export interface RunRuntimeGenerationInput')
+    expect(generated).toContain('export interface RuntimeGenerationResult')
+    expect(generated).toContain('"/api/v1/runtime/generations"')
+  })
+
   it('resolves generated runtime session and approval paths with path params, query params, and idempotency headers', async () => {
     fetchSpy
       .mockResolvedValueOnce({

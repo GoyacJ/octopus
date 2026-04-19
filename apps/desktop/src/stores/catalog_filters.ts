@@ -187,7 +187,7 @@ export function createCatalogFilters(context: CatalogFilterContext) {
   const defaultSurfaceCount = computed(() => defaultSelectionRows.value.length)
   const credentialIssueCount = computed(() => credentialSummaries.value.filter(item => item.hasIssues).length)
   const configuredModelOptions = computed<CatalogConfiguredModelOption[]>(() => configuredModelRows.value
-    .filter(model => model.enabled)
+    .filter(model => model.enabled && model.supportsConversationExecution)
     .map(model => ({
       value: model.configuredModelId,
       label: model.name,
@@ -197,7 +197,7 @@ export function createCatalogFilters(context: CatalogFilterContext) {
       modelLabel: model.modelLabel,
     })))
   const workspaceConfiguredModelOptions = computed<CatalogConfiguredModelOption[]>(() => workspaceConfiguredModelRows.value
-    .filter(model => model.enabled)
+    .filter(model => model.enabled && model.supportsConversationExecution)
     .map(model => ({
       value: model.configuredModelId,
       label: model.name,

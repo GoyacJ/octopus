@@ -11,8 +11,8 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use getrandom::getrandom;
-use octopus_core::AppError;
 use octopus_core::timestamp_now;
+use octopus_core::AppError;
 use octopus_infra::WorkspacePaths;
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -149,8 +149,9 @@ impl SqliteEncryptedRuntimeSecretStore {
 
     fn random_bytes<const N: usize>() -> Result<[u8; N], AppError> {
         let mut bytes = [0_u8; N];
-        getrandom(&mut bytes)
-            .map_err(|error| AppError::runtime(format!("failed to generate runtime secret bytes: {error}")))?;
+        getrandom(&mut bytes).map_err(|error| {
+            AppError::runtime(format!("failed to generate runtime secret bytes: {error}"))
+        })?;
         Ok(bytes)
     }
 
@@ -158,13 +159,18 @@ impl SqliteEncryptedRuntimeSecretStore {
         Connection::open(&self.db_path).map_err(|error| AppError::database(error.to_string()))
     }
 
-    fn encrypt(&self, value: &str) -> Result<(Vec<u8>, [u8; RUNTIME_SECRET_NONCE_BYTES]), AppError> {
+    fn encrypt(
+        &self,
+        value: &str,
+    ) -> Result<(Vec<u8>, [u8; RUNTIME_SECRET_NONCE_BYTES]), AppError> {
         let nonce = Self::random_bytes::<RUNTIME_SECRET_NONCE_BYTES>()?;
         let cipher = XChaCha20Poly1305::new_from_slice(&self.master_key)
             .map_err(|_| AppError::runtime("runtime secret master key is invalid"))?;
         let ciphertext = cipher
             .encrypt(XNonce::from_slice(&nonce), value.as_bytes())
-            .map_err(|error| AppError::runtime(format!("failed to encrypt runtime secret: {error}")))?;
+            .map_err(|error| {
+                AppError::runtime(format!("failed to encrypt runtime secret: {error}"))
+            })?;
         Ok((ciphertext, nonce))
     }
 
@@ -187,10 +193,15 @@ impl SqliteEncryptedRuntimeSecretStore {
             .map_err(|_| AppError::runtime("runtime secret master key is invalid"))?;
         let plaintext = cipher
             .decrypt(XNonce::from_slice(nonce), ciphertext)
-            .map_err(|error| AppError::runtime(format!("failed to decrypt runtime secret: {error}")))?;
+            .map_err(|error| {
+                AppError::runtime(format!("failed to decrypt runtime secret: {error}"))
+            })?;
 
-        String::from_utf8(plaintext)
-            .map_err(|error| AppError::runtime(format!("runtime secret payload is not valid UTF-8: {error}")))
+        String::from_utf8(plaintext).map_err(|error| {
+            AppError::runtime(format!(
+                "runtime secret payload is not valid UTF-8: {error}"
+            ))
+        })
     }
 }
 
@@ -272,7 +283,8 @@ mod tests {
     use super::*;
 
     fn test_root() -> PathBuf {
-        let root = std::env::temp_dir().join(format!("octopus-runtime-secret-store-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("octopus-runtime-secret-store-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("test root");
         root
     }
@@ -281,8 +293,11 @@ mod tests {
     fn sqlite_secret_store_round_trips_encrypted_values() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        let store = SqliteEncryptedRuntimeSecretStore::new(octopus_core::DEFAULT_WORKSPACE_ID, &infra.paths)
-            .expect("sqlite secret store");
+        let store = SqliteEncryptedRuntimeSecretStore::new(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            &infra.paths,
+        )
+        .expect("sqlite secret store");
         let reference = "secret-ref:workspace:model:anthropic-inline";
         let secret = "sk-ant-sqlite-secret";
 
@@ -309,8 +324,8 @@ mod tests {
         assert_ne!(ciphertext, secret.as_bytes());
         assert_eq!(nonce.len(), 24);
 
-        let master_key = fs::read(&infra.paths.runtime_secret_master_key_path)
-            .expect("master key file");
+        let master_key =
+            fs::read(&infra.paths.runtime_secret_master_key_path).expect("master key file");
         assert_eq!(master_key.len(), 32);
 
         let _ = fs::remove_dir_all(root);
@@ -320,8 +335,11 @@ mod tests {
     fn sqlite_secret_store_returns_none_for_missing_reference() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        let store = SqliteEncryptedRuntimeSecretStore::new(octopus_core::DEFAULT_WORKSPACE_ID, &infra.paths)
-            .expect("sqlite secret store");
+        let store = SqliteEncryptedRuntimeSecretStore::new(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            &infra.paths,
+        )
+        .expect("sqlite secret store");
 
         assert_eq!(
             store
@@ -337,10 +355,14 @@ mod tests {
     fn sqlite_secret_store_rejects_invalid_master_key_files() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        fs::write(&infra.paths.runtime_secret_master_key_path, b"short").expect("invalid master key");
+        fs::write(&infra.paths.runtime_secret_master_key_path, b"short")
+            .expect("invalid master key");
 
-        let error = SqliteEncryptedRuntimeSecretStore::new(octopus_core::DEFAULT_WORKSPACE_ID, &infra.paths)
-            .expect_err("invalid key should fail");
+        let error = SqliteEncryptedRuntimeSecretStore::new(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            &infra.paths,
+        )
+        .expect_err("invalid key should fail");
 
         assert!(error.to_string().contains("must be 32 bytes"));
 

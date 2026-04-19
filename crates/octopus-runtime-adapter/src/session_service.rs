@@ -68,6 +68,7 @@ impl RuntimeSessionService for RuntimeAdapter {
                 owner_permission_ceiling,
             )
             .await?;
+        self.validate_session_creation_execution(&session_policy)?;
         self.persist_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref, &manifest)?;
         self.persist_session_policy_snapshot(
             &session_policy.session_policy_snapshot_ref,

@@ -1,4 +1,6 @@
-use octopus_core::{CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestAuthMode};
+use octopus_core::{
+    CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestAuthMode, RuntimeExecutionProfile,
+};
 use octopus_runtime_adapter::{resolve_request_policy, ResolvedModelAuth, ResolvedModelAuthMode};
 
 fn test_target(
@@ -18,6 +20,7 @@ fn test_target(
         model_id: "runtime-model".into(),
         surface: "conversation".into(),
         protocol_family: protocol_family.into(),
+        execution_profile: RuntimeExecutionProfile::default(),
         credential_ref: Some("secret-ref:test".into()),
         credential_source: "configured_model_override".into(),
         request_policy: octopus_core::ResolvedRequestPolicyInput {

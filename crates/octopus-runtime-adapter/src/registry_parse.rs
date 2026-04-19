@@ -40,7 +40,7 @@ pub(super) fn parse_surface_descriptor(value: &Value) -> Result<SurfaceDescripto
             .map(|entries| parse_capabilities(entries))
             .transpose()?
             .unwrap_or_default(),
-        runtime_support: RuntimeExecutionSupport::default(),
+        execution_profile: RuntimeExecutionProfile::default(),
     })
 }
 
@@ -56,7 +56,7 @@ pub(super) fn parse_surface_binding(value: &Value) -> Result<ModelSurfaceBinding
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        runtime_support: RuntimeExecutionSupport::default(),
+        execution_profile: RuntimeExecutionProfile::default(),
     })
 }
 

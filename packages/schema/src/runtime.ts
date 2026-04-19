@@ -5,3 +5,7 @@ export * from './agent-runtime'
 export * from './capability-runtime'
 export * from './memory-runtime'
 export * from './runtime-policy'
+export type {
+  RunRuntimeGenerationInput,
+  RuntimeGenerationResult,
+} from './generated'

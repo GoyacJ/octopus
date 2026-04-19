@@ -2,7 +2,7 @@ use std::{fs, sync::Arc};
 
 use octopus_core::{
     CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput, RuntimeConfigPatch,
-    RuntimeConfiguredModelCredentialInput, DEFAULT_WORKSPACE_ID,
+    RuntimeConfiguredModelCredentialInput, RuntimeExecutionProfile, DEFAULT_WORKSPACE_ID,
 };
 use octopus_infra::build_infra_bundle;
 use octopus_platform::RuntimeConfigService;
@@ -35,6 +35,7 @@ fn target(reference: Option<&str>, credential_source: &str) -> ResolvedExecution
         model_id: "claude-sonnet-4-5".into(),
         surface: "conversation".into(),
         protocol_family: "anthropic_messages".into(),
+        execution_profile: RuntimeExecutionProfile::default(),
         credential_ref: reference.map(ToOwned::to_owned),
         credential_source: credential_source.into(),
         request_policy: ResolvedRequestPolicyInput {

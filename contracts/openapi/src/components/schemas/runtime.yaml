@@ -175,6 +175,8 @@ ResolvedExecutionTarget:
       type: string
     protocolFamily:
       type: string
+    executionProfile:
+      $ref: "#/components/schemas/RuntimeExecutionProfile"
     providerId:
       type: string
     requestPolicy:
@@ -191,6 +193,7 @@ ResolvedExecutionTarget:
     - modelId
     - surface
     - protocolFamily
+    - executionProfile
     - credentialSource
     - requestPolicy
     - capabilities
@@ -1388,6 +1391,39 @@ RuntimeConfiguredModelProbeResult:
     - errors
     - warnings
   type: object
+RunRuntimeGenerationInput:
+  additionalProperties: false
+  properties:
+    projectId:
+      type: string
+    configuredModelId:
+      type: string
+    content:
+      type: string
+    systemPrompt:
+      type: string
+  required:
+    - configuredModelId
+    - content
+  type: object
+RuntimeGenerationResult:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    configuredModelName:
+      type: string
+    content:
+      type: string
+    requestId:
+      type: string
+    consumedTokens:
+      type: integer
+  required:
+    - configuredModelId
+    - configuredModelName
+    - content
+  type: object
 RuntimeEffectiveConfig:
   additionalProperties: false
   properties:
@@ -1510,7 +1546,9 @@ RuntimeEventKind:
     - planner.started
     - planner.completed
     - model.started
-    - model.streaming
+    - model.delta
+    - model.tool_use
+    - model.usage
     - model.completed
     - model.failed
     - tool.requested

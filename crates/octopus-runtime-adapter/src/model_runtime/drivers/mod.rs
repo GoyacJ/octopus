@@ -6,15 +6,18 @@ mod openai_responses;
 use std::time::Duration;
 
 use api::{
-    AnthropicClient, AuthSource, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
+    AnthropicClient, AuthSource, InputContentBlock, InputMessage, MessageRequest,
     OpenAiCompatClient, OpenAiCompatConfig, OutputContentBlock, ToolChoice, ToolResultContentBlock,
 };
 use octopus_core::{
     AppError, ResolvedExecutionTarget, ResolvedRequestAuthMode, ResolvedRequestPolicy,
 };
-use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole};
+use runtime::{ContentBlock, ConversationMessage, MessageRole};
 
-use super::RuntimeConversationRequest;
+use super::{
+    stream_bridge::{runtime_conversation_execution_from_turn_events, ProviderStreamBridge},
+    RuntimeConversationExecution, RuntimeConversationRequest,
+};
 
 pub(crate) use anthropic_messages::AnthropicMessagesDriver;
 pub(crate) use gemini_native::GeminiNativeDriver;
@@ -27,35 +30,66 @@ pub(crate) enum ProviderProtocol {
     OpenAiChat,
 }
 
-pub(crate) async fn execute_message_protocol_conversation(
+pub(crate) async fn execute_message_protocol_streaming_conversation(
     target: &ResolvedExecutionTarget,
     request_policy: &ResolvedRequestPolicy,
     request: &RuntimeConversationRequest,
     protocol: ProviderProtocol,
-) -> Result<Vec<AssistantEvent>, AppError> {
-    let request = conversation_message_request(target, request);
-    let response = match protocol {
-        ProviderProtocol::Anthropic => AnthropicClient::from_auth(auth_source_from_request_policy(
-            request_policy,
-            &target.protocol_family,
-        )?)
-        .with_base_url(request_policy.base_url.clone())
-        .send_message(&request)
-        .await
-        .map_err(|error| AppError::runtime(error.to_string()))?,
+) -> Result<RuntimeConversationExecution, AppError> {
+    let request = conversation_message_request(target, request).with_streaming();
+    let mut bridge = ProviderStreamBridge::default();
+    let mut turn_events = Vec::new();
+
+    match protocol {
+        ProviderProtocol::Anthropic => {
+            let mut stream = AnthropicClient::from_auth(auth_source_from_request_policy(
+                request_policy,
+                &target.protocol_family,
+            )?)
+            .with_base_url(request_policy.base_url.clone())
+            .stream_message(&request)
+            .await
+            .map_err(|error| AppError::runtime(error.to_string()))?;
+            if let Some(event) = bridge.request_metadata(stream.request_id().map(ToOwned::to_owned))
+            {
+                turn_events.push(event);
+            }
+            while let Some(event) = stream
+                .next_event()
+                .await
+                .map_err(|error| AppError::runtime(error.to_string()))?
+            {
+                turn_events.extend(bridge.ingest(event)?);
+            }
+        }
         ProviderProtocol::OpenAiChat => {
             let config = compat_config_for_provider(&target.provider_id);
-            OpenAiCompatClient::new(
+            let mut stream = OpenAiCompatClient::new(
                 bearer_token_from_request_policy(request_policy, &target.protocol_family)?,
                 config,
             )
             .with_base_url(request_policy.base_url.clone())
-            .send_message(&request)
+            .stream_message(&request)
             .await
-            .map_err(|error| AppError::runtime(error.to_string()))?
+            .map_err(|error| AppError::runtime(error.to_string()))?;
+            if let Some(event) = bridge.request_metadata(stream.request_id().map(ToOwned::to_owned))
+            {
+                turn_events.push(event);
+            }
+            while let Some(event) = stream
+                .next_event()
+                .await
+                .map_err(|error| AppError::runtime(error.to_string()))?
+            {
+                turn_events.extend(bridge.ingest(event)?);
+            }
         }
-    };
-    Ok(response_to_events(response))
+    }
+
+    Ok(runtime_conversation_execution_from_turn_events(
+        turn_events,
+        Vec::new(),
+    ))
 }
 
 pub(crate) fn auth_source_from_request_policy(
@@ -296,72 +330,4 @@ fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
             })
         })
         .collect()
-}
-
-fn response_to_events(response: MessageResponse) -> Vec<AssistantEvent> {
-    let mut events = Vec::new();
-    for block in response.content {
-        match block {
-            OutputContentBlock::Text { text } => {
-                if !text.is_empty() {
-                    events.push(AssistantEvent::TextDelta(text));
-                }
-            }
-            OutputContentBlock::ToolUse { id, name, input } => {
-                events.push(AssistantEvent::ToolUse {
-                    id,
-                    name,
-                    input: input.to_string(),
-                });
-            }
-            OutputContentBlock::Thinking { .. } | OutputContentBlock::RedactedThinking { .. } => {}
-        }
-    }
-    events.push(AssistantEvent::Usage(response.usage.token_usage()));
-    events.push(AssistantEvent::MessageStop);
-    events
-}
-
-#[cfg(test)]
-mod tests {
-    use super::message_request;
-    use octopus_core::{CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput};
-
-    fn target(protocol_family: &str, max_output_tokens: Option<u32>) -> ResolvedExecutionTarget {
-        ResolvedExecutionTarget {
-            configured_model_id: "configured".into(),
-            configured_model_name: "Configured".into(),
-            provider_id: "openai".into(),
-            registry_model_id: "gpt-5".into(),
-            model_id: "gpt-5".into(),
-            surface: "conversation".into(),
-            protocol_family: protocol_family.into(),
-            credential_ref: Some("env:OPENAI_API_KEY".into()),
-            credential_source: "provider_inherited".into(),
-            request_policy: ResolvedRequestPolicyInput {
-                auth_strategy: "bearer".into(),
-                base_url_policy: "allow_override".into(),
-                default_base_url: "https://api.openai.com/v1".into(),
-                provider_base_url: None,
-                configured_base_url: None,
-            },
-            base_url: Some("https://api.openai.com/v1".into()),
-            max_output_tokens,
-            capabilities: Vec::<CapabilityDescriptor>::new(),
-        }
-    }
-
-    #[test]
-    fn message_request_prefers_target_max_output_tokens() {
-        let request = message_request(&target("openai_chat", Some(4096)), "hello", Some("system"));
-
-        assert_eq!(request.max_tokens, 4096);
-    }
-
-    #[test]
-    fn message_request_falls_back_to_default_when_override_missing() {
-        let request = message_request(&target("anthropic_messages", None), "hello", None);
-
-        assert_eq!(request.max_tokens, 2048);
-    }
 }

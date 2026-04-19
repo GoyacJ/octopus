@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae
+// Source hash: 7741464a637d33bf2e7806d3b51435c452c5baca4cd62eadf94de31887ede941
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "7741464a637d33bf2e7806d3b51435c452c5baca4cd62eadf94de31887ede941"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -361,6 +361,10 @@ export interface BindPetConversationInput {
   sessionId?: string
 }
 
+export type BudgetAccountingMode = "provider_reported" | "estimated" | "non_billable"
+
+export type BudgetReservationStrategy = "none" | "fixed"
+
 export interface CancelRuntimeSubrunInput {
   note?: string
 }
@@ -486,8 +490,17 @@ export interface ClientAppRecord {
   status: string
 }
 
+export interface ConfiguredModelBudgetPolicy {
+  accountingMode?: BudgetAccountingMode
+  reservationStrategy?: BudgetReservationStrategy
+  totalBudgetTokens?: number
+  trafficClasses?: string[]
+  warningThresholdPercentages?: number[]
+}
+
 export interface ConfiguredModelRecord {
   baseUrl?: string
+  budgetPolicy?: ConfiguredModelBudgetPolicy
   configured: boolean
   configuredModelId: string
   credentialRef?: string
@@ -497,12 +510,7 @@ export interface ConfiguredModelRecord {
   providerId: string
   source: string
   status: string
-  tokenQuota?: ConfiguredModelTokenQuota
   tokenUsage: ConfiguredModelTokenUsage
-}
-
-export interface ConfiguredModelTokenQuota {
-  totalTokens?: number
 }
 
 export interface ConfiguredModelTokenUsage {
@@ -1213,8 +1221,8 @@ export interface ModelRegistryRecord {
 
 export interface ModelSurfaceBinding {
   enabled: boolean
+  executionProfile: RuntimeExecutionProfile
   protocolFamily: string
-  runtimeSupport: RuntimeExecutionSupport
   surface: string
 }
 
@@ -1677,6 +1685,7 @@ export interface ResolvedExecutionTarget {
   configuredModelName: string
   credentialRef?: string
   credentialSource: string
+  executionProfile: RuntimeExecutionProfile
   modelId: string
   protocolFamily: string
   providerId: string
@@ -1761,6 +1770,13 @@ export interface RoleUpsertRequest {
   name: string
   permissionCodes: string[]
   status: string
+}
+
+export interface RunRuntimeGenerationInput {
+  configuredModelId: string
+  content: string
+  projectId?: string
+  systemPrompt?: string
 }
 
 export type RunStatus = "idle" | "draft" | "planned" | "running" | "waiting_input" | "waiting_approval" | "blocked" | "paused" | "completed" | "failed" | "terminated"
@@ -2001,13 +2017,22 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.delta" | "model.tool_use" | "model.usage" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
-export interface RuntimeExecutionSupport {
-  conversation: boolean
-  prompt: boolean
-  streaming: boolean
+export type RuntimeExecutionClass = "unsupported" | "single_shot_generation" | "agent_conversation"
+
+export interface RuntimeExecutionProfile {
+  executionClass: RuntimeExecutionClass
   toolLoop: boolean
+  upstreamStreaming: boolean
+}
+
+export interface RuntimeGenerationResult {
+  configuredModelId: string
+  configuredModelName: string
+  consumedTokens?: number
+  content: string
+  requestId?: string
 }
 
 export interface RuntimeHandoffSummary {
@@ -2512,8 +2537,8 @@ export interface SurfaceDescriptor {
   baseUrlPolicy: string
   capabilities: CapabilityDescriptor[]
   enabled: boolean
+  executionProfile: RuntimeExecutionProfile
   protocolFamily: string
-  runtimeSupport: RuntimeExecutionSupport
   surface: string
   transport: string[]
 }
@@ -3534,6 +3559,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/config/validate": {
     post: { operationId: "validateRuntimeConfig"; response: RuntimeConfigValidationResult; error: ApiErrorEnvelope }
+  }
+  "/api/v1/runtime/generations": {
+    post: { operationId: "runRuntimeGeneration"; response: RuntimeGenerationResult; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/sessions": {
     get: { operationId: "listRuntimeSessions"; response: RuntimeSessionSummary[]; error: ApiErrorEnvelope }

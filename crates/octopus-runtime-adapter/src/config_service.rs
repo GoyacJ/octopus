@@ -262,7 +262,7 @@ impl RuntimeAdapter {
 
         let effective_config = self.load_effective_config_json(documents)?;
         let registry = self.effective_registry_from_json(&effective_config)?;
-        let resolved_target = match registry.resolve_target(configured_model_id, None) {
+        let resolved_target = match registry.resolve_target(configured_model_id, None, None) {
             Ok(target) => target,
             Err(error) => {
                 return Ok(RuntimeConfiguredModelProbeResult {
@@ -295,7 +295,19 @@ impl RuntimeAdapter {
             }
         };
 
-        if let Err(error) = self.ensure_configured_model_quota_available(&configured_model) {
+        let mut probe_target = resolved_target.clone();
+        if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
+            probe_target.credential_ref = Some(api_key.to_string());
+            probe_target.credential_source = CREDENTIAL_SOURCE_PROBE_OVERRIDE.to_string();
+        }
+
+        let reservation_id = format!("probe-{}", Uuid::new_v4());
+        if let Err(error) = self.reserve_configured_model_budget(
+            &reservation_id,
+            &configured_model,
+            crate::model_budget::BUDGET_TRAFFIC_CLASS_PROBE,
+            timestamp_now(),
+        ) {
             return Ok(RuntimeConfiguredModelProbeResult {
                 valid: true,
                 reachable: false,
@@ -308,18 +320,13 @@ impl RuntimeAdapter {
             });
         }
 
-        let mut probe_target = resolved_target.clone();
-        if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
-            probe_target.credential_ref = Some(api_key.to_string());
-            probe_target.credential_source = CREDENTIAL_SOURCE_PROBE_OVERRIDE.to_string();
-        }
-
         let response = match self
             .execute_resolved_prompt(&probe_target, "Reply with exactly OK.", None)
             .await
         {
             Ok(response) => response,
             Err(error) => {
+                self.release_configured_model_budget_reservation(&reservation_id, timestamp_now())?;
                 return Ok(RuntimeConfiguredModelProbeResult {
                     valid: true,
                     reachable: false,
@@ -336,6 +343,7 @@ impl RuntimeAdapter {
         let consumed_tokens = match self.resolve_consumed_tokens(&configured_model, &response) {
             Ok(consumed_tokens) => consumed_tokens,
             Err(error) => {
+                self.release_configured_model_budget_reservation(&reservation_id, timestamp_now())?;
                 return Ok(RuntimeConfiguredModelProbeResult {
                     valid: true,
                     reachable: false,
@@ -372,13 +380,12 @@ impl RuntimeAdapter {
                 created_at: now,
             })
             .await?;
-        if let Some(consumed_tokens) = consumed_tokens {
-            self.increment_configured_model_usage(
-                &resolved_target.configured_model_id,
-                consumed_tokens,
-                now,
-            )?;
-        }
+        self.settle_configured_model_budget_reservation(
+            &reservation_id,
+            &resolved_target.configured_model_id,
+            consumed_tokens.unwrap_or(0),
+            now,
+        )?;
 
         Ok(RuntimeConfiguredModelProbeResult {
             valid: true,

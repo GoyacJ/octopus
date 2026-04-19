@@ -4,73 +4,63 @@ use async_trait::async_trait;
 use octopus_core::{
     AppError, CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestAuth,
     ResolvedRequestAuthMode, ResolvedRequestPolicy, ResolvedRequestPolicyInput,
+    RuntimeExecutionClass, RuntimeExecutionProfile,
 };
 use octopus_runtime_adapter::{
-    LiveRuntimeModelDriver, ModelDriverRegistry, ModelExecutionResult, ProtocolDriver,
-    ProtocolDriverCapability, RuntimeConversationRequest, RuntimeModelDriver,
+    GenerationModelDriver, GenerationModelDriverCapability, LiveRuntimeModelDriver,
+    ModelDriverRegistry, ModelExecutionResult, RuntimeConversationRequest, RuntimeModelDriver,
 };
-use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, TokenUsage};
+use runtime::{ContentBlock, ConversationMessage, MessageRole};
 
 #[test]
-fn responses_driver_refuses_tool_loop_but_supports_simple_completion() {
+fn responses_driver_is_generation_only() {
     let registry = ModelDriverRegistry::installed();
-    let capability = registry
-        .driver_for("openai_responses")
-        .expect("responses driver")
-        .capability();
-
-    assert!(!capability.tool_loop);
-    assert!(capability.simple_completion);
-    assert!(!capability.conversation_execution);
+    assert!(registry.generation_driver_for("openai_responses").is_ok());
+    assert!(registry
+        .conversation_driver_for("openai_responses")
+        .is_err());
+    assert_eq!(
+        registry.execution_profile_for("openai_responses"),
+        RuntimeExecutionProfile {
+            execution_class: RuntimeExecutionClass::SingleShotGeneration,
+            tool_loop: false,
+            upstream_streaming: false,
+        }
+    );
 }
 
 #[tokio::test]
-async fn simple_completion_projects_prompt_result_into_conversation_execution() {
-    let registry = ModelDriverRegistry::new(vec![Arc::new(ScriptedSimpleCompletionDriver)]);
+async fn generation_only_driver_cannot_execute_conversation_execution() {
+    let registry = ModelDriverRegistry::new(vec![], vec![Arc::new(ScriptedGenerationDriver)]);
     let runtime_driver = LiveRuntimeModelDriver::with_registry(registry);
 
-    let execution = runtime_driver
+    let error = runtime_driver
         .execute_conversation_execution(
             &target("scripted_simple_completion"),
             &request_policy(),
             &conversation_request(),
         )
         .await
-        .expect("simple completion execution");
+        .expect_err("generation-only driver should reject conversation execution");
 
-    assert_eq!(
-        execution.events,
-        vec![
-            AssistantEvent::TextDelta("scripted prompt result".into()),
-            AssistantEvent::Usage(TokenUsage {
-                input_tokens: 0,
-                output_tokens: 9,
-                cache_creation_input_tokens: 0,
-                cache_read_input_tokens: 0,
-            }),
-            AssistantEvent::MessageStop,
-        ]
+    assert!(
+        error
+            .to_string()
+            .contains("runtime execution does not support protocol family `scripted_simple_completion` for conversation turns")
     );
 }
 
 #[derive(Debug)]
-struct ScriptedSimpleCompletionDriver;
+struct ScriptedGenerationDriver;
 
 #[async_trait]
-impl ProtocolDriver for ScriptedSimpleCompletionDriver {
+impl GenerationModelDriver for ScriptedGenerationDriver {
     fn protocol_family(&self) -> &'static str {
         "scripted_simple_completion"
     }
 
-    fn capability(&self) -> ProtocolDriverCapability {
-        ProtocolDriverCapability {
-            prompt: true,
-            conversation: true,
-            tool_loop: false,
-            streaming: false,
-            conversation_execution: false,
-            simple_completion: true,
-        }
+    fn capability(&self) -> GenerationModelDriverCapability {
+        GenerationModelDriverCapability { prompt: true }
     }
 
     async fn execute_prompt(
@@ -101,6 +91,7 @@ fn target(protocol_family: &str) -> ResolvedExecutionTarget {
         model_id: "test-model".into(),
         surface: "conversation".into(),
         protocol_family: protocol_family.into(),
+        execution_profile: RuntimeExecutionProfile::default(),
         credential_ref: Some("env:TEST_API_KEY".into()),
         credential_source: "provider_inherited".into(),
         request_policy: ResolvedRequestPolicyInput {

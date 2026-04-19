@@ -1551,11 +1551,10 @@ export function createWorkspaceFixtureState(
               { capabilityId: 'streaming', label: 'Streaming' },
               { capabilityId: 'tool_calling', label: 'Tool Calling' },
             ],
-            runtimeSupport: {
-              prompt: true,
-              conversation: true,
+            executionProfile: {
+              executionClass: 'agent_conversation',
               toolLoop: true,
-              streaming: false,
+              upstreamStreaming: false,
             },
           },
         ],
@@ -1578,11 +1577,10 @@ export function createWorkspaceFixtureState(
               { capabilityId: 'streaming', label: 'Streaming' },
               { capabilityId: 'tool_calling', label: 'Tool Calling' },
             ],
-            runtimeSupport: {
-              prompt: true,
-              conversation: true,
+            executionProfile: {
+              executionClass: 'agent_conversation',
               toolLoop: true,
-              streaming: false,
+              upstreamStreaming: false,
             },
           },
         ],
@@ -1606,11 +1604,10 @@ export function createWorkspaceFixtureState(
             surface: 'conversation',
             protocolFamily: 'openai_chat',
             enabled: true,
-            runtimeSupport: {
-              prompt: true,
-              conversation: true,
+            executionProfile: {
+              executionClass: 'agent_conversation',
               toolLoop: true,
-              streaming: false,
+              upstreamStreaming: false,
             },
           },
         ],
@@ -1636,11 +1633,10 @@ export function createWorkspaceFixtureState(
             surface: 'conversation',
             protocolFamily: 'anthropic_messages',
             enabled: true,
-            runtimeSupport: {
-              prompt: true,
-              conversation: true,
+            executionProfile: {
+              executionClass: 'agent_conversation',
               toolLoop: true,
-              streaming: false,
+              upstreamStreaming: false,
             },
           },
         ],

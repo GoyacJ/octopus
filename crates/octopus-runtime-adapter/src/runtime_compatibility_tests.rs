@@ -1,6 +1,24 @@
 use super::adapter_test_support::*;
 use super::*;
 
+fn write_workspace_config_with_generation_model(path: &std::path::Path) {
+    write_json(
+        path,
+        json!({
+            "configuredModels": {
+                "generation-only-model": {
+                    "configuredModelId": "generation-only-model",
+                    "name": "Generation Only Model",
+                    "providerId": "google",
+                    "modelId": "gemini-2.5-flash",
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+}
+
 #[tokio::test]
 async fn startup_leaves_unsupported_runtime_projection_rows_intact() {
     let root = test_root();
@@ -146,6 +164,94 @@ async fn startup_leaves_unsupported_runtime_projection_rows_intact() {
 }
 
 #[tokio::test]
+async fn create_session_rejects_single_shot_generation_model_selection() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
+    write_workspace_config_with_generation_model(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let error = adapter
+        .create_session(
+            session_input(
+                "conv-prompt-only-session",
+                "",
+                "Prompt Only Session",
+                &agent_actor_ref,
+                Some("generation-only-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect_err("single-shot generation model should be rejected for runtime sessions");
+    assert!(error
+        .to_string()
+        .contains("does not expose a runtime-supported surface"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn resolve_submit_execution_rejects_single_shot_generation_model_selection() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
+    write_workspace_config_with_generation_model(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let snapshot = adapter
+        .current_config_snapshot(None, Some("user-owner"))
+        .expect("config snapshot");
+    adapter
+        .persist_config_snapshot(&snapshot)
+        .expect("persist config snapshot");
+    let manifest = adapter
+        .compile_actor_manifest(&agent_actor_ref)
+        .expect("actor manifest");
+    let session_policy = adapter
+        .compile_session_policy(
+            "rt-prompt-only-session",
+            &manifest,
+            &snapshot,
+            Some("generation-only-model"),
+            "readonly",
+            "user-owner",
+            None,
+            None,
+        )
+        .await
+        .expect("session policy");
+
+    let error = adapter
+        .resolve_submit_execution(&session_policy, &turn_input("This should fail", None))
+        .expect_err("single-shot generation model should be rejected on submit");
+    assert!(error
+        .to_string()
+        .contains("does not expose a runtime-supported surface"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn quota_enabled_models_require_provider_token_usage_metadata() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -183,18 +289,96 @@ async fn quota_enabled_models_require_provider_token_usage_metadata() {
         .expect_err("missing token usage should fail");
     assert!(error
         .to_string()
-        .contains("requires provider token usage for quota enforcement"));
+        .contains("requires provider token usage for budget enforcement"));
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
-    let usage_row: Option<i64> = connection
-            .query_row(
-                "SELECT used_tokens FROM configured_model_usage_projections WHERE configured_model_id = ?1",
-                ["quota-model"],
-                |row| row.get(0),
-            )
-            .optional()
-            .expect("usage row");
-    assert_eq!(usage_row, None);
+    let projection_row: Option<(i64, i64)> = connection
+        .query_row(
+            "SELECT settled_tokens, active_reserved_tokens
+             FROM configured_model_budget_projections
+             WHERE configured_model_id = ?1",
+            ["quota-model"],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .expect("projection row");
+    assert_eq!(projection_row, Some((0, 0)));
+    let reservation_status: String = connection
+        .query_row(
+            "SELECT status
+             FROM configured_model_budget_reservations
+             WHERE configured_model_id = ?1
+             ORDER BY created_at DESC
+             LIMIT 1",
+            ["quota-model"],
+            |row| row.get(0),
+        )
+        .expect("reservation status");
+    assert_eq!(reservation_status, "released");
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn unsupported_budget_accounting_modes_fail_before_runtime_execution_starts() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let agent_actor_ref = builtin_agent_actor_ref(&infra).await;
+    write_json(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        json!({
+            "configuredModels": {
+                "quota-model": {
+                    "configuredModelId": "quota-model",
+                    "name": "Quota Model",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
+                    "budgetPolicy": {
+                        "totalBudgetTokens": 64,
+                        "accountingMode": "estimated"
+                    },
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+
+    let driver = Arc::new(InspectingPromptRuntimeModelDriver::default());
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        driver.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-unsupported-accounting-mode",
+                "",
+                "Unsupported Accounting Mode",
+                &agent_actor_ref,
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+    let error = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("This should fail early", None),
+        )
+        .await
+        .expect_err("unsupported accounting mode should fail before execution");
+    assert!(error
+        .to_string()
+        .contains("budgetPolicy.accountingMode `estimated` is not supported"));
+    assert_eq!(driver.last_request_policy(), None);
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

@@ -1517,7 +1517,7 @@
     "header": {
       "eyebrow": "Models",
       "title": "Workspace Model Center",
-      "subtitle": "Manage explicitly created workspace model instances and configure a name, ApiKey, and base URL for each one."
+      "subtitle": "Manage explicitly created workspace model instances and configure a name, ApiKey, base URL, and budget policy for each one."
     },
     "filters": {
       "searchPlaceholder": "Search name, provider, model, family, track, or capability…",
@@ -1528,7 +1528,11 @@
     "list": {
       "hasDiagnostics": "Has diagnostics",
       "usedTokens": "Used tokens: {count}",
-      "tokenQuota": "Token quota: {count}"
+      "budgetTotal": "Budget total: {count}",
+      "executionClass": "Execution class: {value}",
+      "upstreamStreaming": "Upstream streaming: {value}",
+      "toolLoop": "Tool loop: {value}",
+      "budgetAccountingMode": "Accounting: {value}"
     },
     "table": {
       "columns": {
@@ -1552,11 +1556,23 @@
       "credentialRefPlaceholder": "Enter a new ApiKey; leave empty to keep the current one",
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "https://provider.example.test/v1",
-      "totalTokens": "Token quota",
-      "totalTokensPlaceholder": "Leave empty for unlimited",
+      "budgetTotal": "Budget total",
+      "budgetTotalPlaceholder": "Leave empty for unlimited",
+      "budgetAccountingMode": "Accounting mode",
+      "budgetTrafficClasses": "Traffic classes",
+      "budgetTrafficClassesPlaceholder": "For example: interactive_turn, probe",
+      "budgetWarningThresholds": "Warning thresholds (%)",
+      "budgetWarningThresholdsPlaceholder": "For example: 60, 85, 95",
+      "budgetReservationStrategy": "Reservation strategy",
       "usedTokens": "Used tokens",
       "remainingTokens": "Remaining tokens",
-      "quotaStatus": "Quota status",
+      "budgetStatus": "Budget status",
+      "executionClass": "Execution class",
+      "agentSessionEligibility": "Agent session runtime",
+      "upstreamStreaming": "Upstream streaming",
+      "toolLoop": "Tool loop",
+      "enabledSurfaces": "Enabled surfaces",
+      "agentSurfaces": "Agent-conversation surfaces",
       "capabilities": "Capabilities",
       "noCapabilities": "This model does not declare capabilities.",
       "surfaces": "Surfaces",
@@ -1568,10 +1584,10 @@
         "overviewDescription": "Maintain the base identity and source information for this workspace model instance.",
         "authentication": "Authentication",
         "authenticationDescription": "Distinguish whether credentials come from a model override, provider inheritance, or are missing, and show secure-storage health.",
-        "routing": "Routing",
-        "routingDescription": "Inspect and adjust executable runtime surfaces and base URL routing.",
-        "quota": "Quota",
-        "quotaDescription": "Maintain the workspace token quota and current usage projection.",
+        "executionProfile": "Execution profile",
+        "executionProfileDescription": "Inspect the real runtime class, session eligibility, upstream streaming truth, tool-loop truth, and enabled surfaces for this model instance.",
+        "budgetPolicy": "Budget policy",
+        "budgetPolicyDescription": "Maintain total budget, accounting mode, traffic classes, warning thresholds, and reservation strategy for this model instance.",
         "validation": "Validation",
         "validationDescription": "Run a real request validation and keep the latest result instead of relying on transient toasts only.",
         "capabilitiesDescription": "List the capabilities declared by this model for runtime selection and orchestration."
@@ -1590,13 +1606,19 @@
         "model": "Model",
         "credentialRef": "ApiKey",
         "baseUrl": "Base URL",
-        "totalTokens": "Token quota",
+        "budgetTotal": "Budget total",
+        "budgetAccountingMode": "Accounting mode",
+        "budgetTrafficClasses": "Traffic classes",
+        "budgetWarningThresholds": "Warning thresholds (%)",
+        "budgetReservationStrategy": "Reservation strategy",
         "enabled": "Enable this model instance"
       },
       "placeholders": {
         "customProviderName": "For example: Internal Gateway",
         "modelId": "Enter a model identifier, e.g. llama3.1:8b",
-        "totalTokens": "For example: 1000000"
+        "budgetTotal": "For example: 1000000",
+        "budgetTrafficClasses": "For example: interactive_turn, probe",
+        "budgetWarningThresholds": "For example: 60, 85, 95"
       },
       "errors": {
         "required": "Name, provider, and model are required.",
@@ -1715,10 +1737,34 @@
         "errorBody": "\"{name}\" was not deleted: {message}"
       }
     },
-    "quota": {
+    "budget": {
       "unlimited": "Unlimited",
-      "available": "Available",
-      "exhausted": "Exhausted"
+      "available": "Budget available",
+      "exhausted": "Budget exhausted",
+      "accountingModes": {
+        "unset": "Unset",
+        "provider_reported": "Provider reported",
+        "estimated": "Estimated",
+        "non_billable": "Non-billable"
+      },
+      "reservationStrategies": {
+        "unset": "Unset",
+        "none": "No reservation",
+        "fixed": "Fixed reservation"
+      }
+    },
+    "execution": {
+      "supported": "Supported",
+      "notSupported": "Not supported",
+      "generationOnlyBadge": "Not session-runnable",
+      "profileReadyTitle": "Agent-conversation runtime",
+      "profileReadyDescription": "This model is eligible for agent sessions because it exposes the native conversation runtime with upstream streaming and tool-loop support.",
+      "profileGenerationTitle": "Generation-only runtime",
+      "profileGenerationDescription": "This model is limited to the dedicated single-shot generation path and should not be treated as a normal agent-session runtime option.",
+      "profileUnsupportedTitle": "Unsupported runtime",
+      "profileUnsupportedDescription": "This model does not currently expose an executable runtime surface.",
+      "noEnabledSurfaces": "No enabled surfaces are configured.",
+      "noAgentSurfaces": "No agent-conversation surfaces are enabled."
     },
     "empty": {
       "title": "No models created yet",
@@ -2465,6 +2511,11 @@
       "cache": "Cache",
       "music": "Music",
       "embeddings": "Embeddings"
+    },
+    "modelExecutionClass": {
+      "agent_conversation": "Agent conversation",
+      "single_shot_generation": "Single-shot generation",
+      "unsupported": "Unsupported"
     },
     "modelCapability": {
       "streaming": "Streaming",

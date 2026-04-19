@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use octopus_core::{AppError, ResolvedExecutionTarget, ResolvedRequestPolicy};
 
 use super::{
-    auth_source_from_request_policy, execute_message_protocol_conversation, flatten_output_content,
-    message_request, ProviderProtocol,
+    auth_source_from_request_policy, execute_message_protocol_streaming_conversation,
+    flatten_output_content, message_request, ProviderProtocol,
 };
-use crate::model_runtime::driver::{
-    ModelExecutionResult, ProtocolDriver, ProtocolDriverCapability, RuntimeConversationExecution,
+use crate::model_runtime::{
+    ConversationModelDriver, ConversationModelDriverCapability, GenerationModelDriver,
+    GenerationModelDriverCapability, ModelExecutionResult, RuntimeConversationExecution,
     RuntimeConversationRequest,
 };
 
@@ -15,20 +16,13 @@ use crate::model_runtime::driver::{
 pub(crate) struct AnthropicMessagesDriver;
 
 #[async_trait]
-impl ProtocolDriver for AnthropicMessagesDriver {
+impl GenerationModelDriver for AnthropicMessagesDriver {
     fn protocol_family(&self) -> &'static str {
         "anthropic_messages"
     }
 
-    fn capability(&self) -> ProtocolDriverCapability {
-        ProtocolDriverCapability {
-            prompt: true,
-            conversation: true,
-            tool_loop: true,
-            streaming: false,
-            conversation_execution: true,
-            simple_completion: false,
-        }
+    fn capability(&self) -> GenerationModelDriverCapability {
+        GenerationModelDriverCapability { prompt: true }
     }
 
     async fn execute_prompt(
@@ -56,23 +50,34 @@ impl ProtocolDriver for AnthropicMessagesDriver {
             deliverables: Vec::new(),
         })
     }
+}
 
-    async fn execute_conversation_execution(
+#[async_trait]
+impl ConversationModelDriver for AnthropicMessagesDriver {
+    fn protocol_family(&self) -> &'static str {
+        "anthropic_messages"
+    }
+
+    fn capability(&self) -> ConversationModelDriverCapability {
+        ConversationModelDriverCapability {
+            tool_loop: true,
+            upstream_streaming: true,
+        }
+    }
+
+    async fn execute_conversation(
         &self,
         _http: &reqwest::Client,
         target: &ResolvedExecutionTarget,
         request_policy: &ResolvedRequestPolicy,
         request: &RuntimeConversationRequest,
     ) -> Result<RuntimeConversationExecution, AppError> {
-        Ok(RuntimeConversationExecution {
-            events: execute_message_protocol_conversation(
-                target,
-                request_policy,
-                request,
-                ProviderProtocol::Anthropic,
-            )
-            .await?,
-            deliverables: Vec::new(),
-        })
+        execute_message_protocol_streaming_conversation(
+            target,
+            request_policy,
+            request,
+            ProviderProtocol::Anthropic,
+        )
+        .await
     }
 }

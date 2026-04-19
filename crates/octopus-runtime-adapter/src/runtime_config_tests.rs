@@ -312,6 +312,10 @@ async fn session_policy_clamps_requested_permission_mode_to_owner_ceiling() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     grant_owner_permissions(&infra, "user-owner");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
@@ -471,7 +475,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
 }
 
 #[tokio::test]
-async fn runtime_config_validation_rejects_non_positive_token_quota() {
+async fn runtime_config_validation_rejects_non_positive_budget_policy_total() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     let adapter = RuntimeAdapter::new_with_executor(
@@ -492,8 +496,8 @@ async fn runtime_config_validation_rejects_non_positive_token_quota() {
                         "name": "Quota Model",
                         "providerId": "anthropic",
                         "modelId": "claude-sonnet-4-5",
-                        "tokenQuota": {
-                            "totalTokens": 0
+                        "budgetPolicy": {
+                            "totalBudgetTokens": 0
                         },
                         "enabled": true,
                         "source": "workspace"
@@ -509,7 +513,51 @@ async fn runtime_config_validation_rejects_non_positive_token_quota() {
     assert!(validation
         .errors
         .iter()
-        .any(|error| error.contains("tokenQuota.totalTokens")));
+        .any(|error| error.contains("budgetPolicy.totalBudgetTokens")));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn runtime_config_validation_rejects_unsupported_budget_accounting_modes() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelDriver),
+    );
+
+    let validation = adapter
+        .validate_config(RuntimeConfigPatch {
+            scope: "workspace".into(),
+            patch: json!({
+                "configuredModels": {
+                    "quota-model": {
+                        "configuredModelId": "quota-model",
+                        "name": "Quota Model",
+                        "providerId": "anthropic",
+                        "modelId": "claude-sonnet-4-5",
+                        "budgetPolicy": {
+                            "totalBudgetTokens": 64,
+                            "accountingMode": "estimated"
+                        },
+                        "enabled": true,
+                        "source": "workspace"
+                    }
+                }
+            }),
+            configured_model_credentials: Vec::new(),
+        })
+        .await
+        .expect("validation result");
+
+    assert!(!validation.valid);
+    assert!(validation.errors.iter().any(|error| {
+        error.contains("budgetPolicy.accountingMode") && error.contains("provider_reported")
+    }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

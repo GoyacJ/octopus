@@ -3,9 +3,11 @@ use std::{
     sync::Arc,
 };
 
+use api::ToolDefinition;
 use octopus_core::{
     CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestAuth, ResolvedRequestAuthMode,
-    ResolvedRequestPolicy, ResolvedRequestPolicyInput, RuntimeExecutionSupport,
+    ResolvedRequestPolicy, ResolvedRequestPolicyInput, RuntimeExecutionClass,
+    RuntimeExecutionProfile,
 };
 use octopus_runtime_adapter::{ModelDriverRegistry, RuntimeConversationRequest};
 use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole};
@@ -17,9 +19,11 @@ use tokio::{
 
 #[test]
 fn driver_registry_rejects_unknown_protocol_family() {
-    let registry = ModelDriverRegistry::new(vec![]);
-    let result = registry.driver_for("unknown_protocol");
-    assert!(result.is_err());
+    let registry = ModelDriverRegistry::new(vec![], vec![]);
+    assert!(registry
+        .conversation_driver_for("unknown_protocol")
+        .is_err());
+    assert!(registry.generation_driver_for("unknown_protocol").is_err());
 }
 
 #[tokio::test]
@@ -29,29 +33,41 @@ async fn anthropic_messages_driver_executes_conversation_and_normalizes_events()
         state.clone(),
         vec![http_response(
             "200 OK",
-            "application/json",
+            "text/event-stream",
             concat!(
-                "{",
-                "\"id\":\"msg_anthropic\",",
-                "\"type\":\"message\",",
-                "\"role\":\"assistant\",",
-                "\"content\":[{\"type\":\"text\",\"text\":\"Hello from Anthropic\"}],",
-                "\"model\":\"claude-sonnet-4-5\",",
-                "\"stop_reason\":\"end_turn\",",
-                "\"stop_sequence\":null,",
-                "\"usage\":{\"input_tokens\":12,\"output_tokens\":8}",
-                "}"
+                "event: message_start\n",
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_anthropic\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-4-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0},\"request_id\":null}}\n\n",
+                "event: content_block_start\n",
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello \"}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"from Anthropic\"}}\n\n",
+                "event: content_block_stop\n",
+                "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+                "event: message_delta\n",
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":12,\"output_tokens\":8}}\n\n",
+                "event: message_stop\n",
+                "data: {\"type\":\"message_stop\"}\n\n"
             ),
         )],
     )
     .await;
 
     let registry = ModelDriverRegistry::installed();
+    assert_eq!(
+        registry.execution_profile_for("anthropic_messages"),
+        RuntimeExecutionProfile {
+            execution_class: RuntimeExecutionClass::AgentConversation,
+            tool_loop: true,
+            upstream_streaming: true,
+        }
+    );
     let driver = registry
-        .driver_for("anthropic_messages")
+        .conversation_driver_for("anthropic_messages")
         .expect("anthropic driver");
     let execution = driver
-        .execute_conversation_execution(
+        .execute_conversation(
             &reqwest::Client::new(),
             &target("anthropic", "anthropic_messages"),
             &request_policy(
@@ -70,7 +86,8 @@ async fn anthropic_messages_driver_executes_conversation_and_normalizes_events()
     assert_eq!(
         execution.events,
         vec![
-            AssistantEvent::TextDelta("Hello from Anthropic".into()),
+            AssistantEvent::TextDelta("Hello ".into()),
+            AssistantEvent::TextDelta("from Anthropic".into()),
             AssistantEvent::Usage(runtime::TokenUsage {
                 input_tokens: 12,
                 output_tokens: 8,
@@ -90,10 +107,11 @@ async fn anthropic_messages_driver_executes_conversation_and_normalizes_events()
         request.headers.get("x-api-key").map(String::as_str),
         Some("anthropic-test-key")
     );
+    assert!(request.body.contains("\"stream\":true"));
 }
 
 #[tokio::test]
-async fn openai_chat_driver_executes_prompt_and_exposes_runtime_support() {
+async fn openai_chat_driver_executes_prompt_and_exposes_execution_profile() {
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let server = spawn_server(
         state.clone(),
@@ -120,15 +138,14 @@ async fn openai_chat_driver_executes_prompt_and_exposes_runtime_support() {
 
     let registry = ModelDriverRegistry::installed();
     let driver = registry
-        .driver_for("openai_chat")
+        .generation_driver_for("openai_chat")
         .expect("openai chat driver");
     assert_eq!(
-        driver.runtime_support(),
-        RuntimeExecutionSupport {
-            prompt: true,
-            conversation: true,
+        registry.execution_profile_for("openai_chat"),
+        RuntimeExecutionProfile {
+            execution_class: RuntimeExecutionClass::AgentConversation,
             tool_loop: true,
-            streaming: false,
+            upstream_streaming: true,
         }
     );
 
@@ -165,6 +182,71 @@ async fn openai_chat_driver_executes_prompt_and_exposes_runtime_support() {
 }
 
 #[tokio::test]
+async fn openai_chat_driver_streams_tool_calls_during_conversation_execution() {
+    let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
+    let server = spawn_server(
+        state.clone(),
+        vec![http_response(
+            "200 OK",
+            "text/event-stream",
+            concat!(
+                "data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Let me check. \"}}]}\n\n",
+                "data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_weather\",\"function\":{\"name\":\"weather\",\"arguments\":\"{\\\"city\\\":\\\"Par\"}}]}}]}\n\n",
+                "data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"is\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":7,\"total_tokens\":12}}\n\n",
+                "data: [DONE]\n\n"
+            ),
+        )],
+    )
+    .await;
+
+    let registry = ModelDriverRegistry::installed();
+    let driver = registry
+        .conversation_driver_for("openai_chat")
+        .expect("openai chat conversation driver");
+    let execution = driver
+        .execute_conversation(
+            &reqwest::Client::new(),
+            &target("openai", "openai_chat"),
+            &request_policy(
+                server.base_url(),
+                ResolvedRequestAuth {
+                    mode: ResolvedRequestAuthMode::BearerToken,
+                    name: None,
+                    value: Some("openai-test-key".into()),
+                },
+            ),
+            &conversation_request_with_tools(),
+        )
+        .await
+        .expect("openai chat conversation execution");
+
+    assert_eq!(
+        execution.events,
+        vec![
+            AssistantEvent::TextDelta("Let me check. ".into()),
+            AssistantEvent::ToolUse {
+                id: "call_weather".into(),
+                name: "weather".into(),
+                input: "{\"city\":\"Paris\"}".into(),
+            },
+            AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 7,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            AssistantEvent::MessageStop,
+        ]
+    );
+
+    let captured = state.lock().await;
+    let request = captured.first().expect("captured request");
+    assert_eq!(request.method, "POST");
+    assert_eq!(request.path, "/chat/completions");
+    assert!(request.body.contains("\"stream\":true"));
+}
+
+#[tokio::test]
 async fn openai_responses_driver_executes_prompt() {
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let server = spawn_server(
@@ -184,7 +266,7 @@ async fn openai_responses_driver_executes_prompt() {
 
     let registry = ModelDriverRegistry::installed();
     let driver = registry
-        .driver_for("openai_responses")
+        .generation_driver_for("openai_responses")
         .expect("openai responses driver");
 
     let result = driver
@@ -239,7 +321,7 @@ async fn gemini_native_driver_executes_prompt_with_query_param_auth() {
 
     let registry = ModelDriverRegistry::installed();
     let driver = registry
-        .driver_for("gemini_native")
+        .generation_driver_for("gemini_native")
         .expect("gemini native driver");
 
     let result = driver
@@ -284,8 +366,16 @@ fn target(provider_id: &str, protocol_family: &str) -> ResolvedExecutionTarget {
             "gemini_native" => "gemini-2.5-pro".into(),
             _ => "gpt-5.4".into(),
         },
-        surface: "conversation".into(),
+        surface: match protocol_family {
+            "openai_responses" => "responses".into(),
+            _ => "conversation".into(),
+        },
         protocol_family: protocol_family.into(),
+        execution_profile: RuntimeExecutionProfile {
+            execution_class: RuntimeExecutionClass::SingleShotGeneration,
+            tool_loop: matches!(protocol_family, "anthropic_messages" | "openai_chat"),
+            upstream_streaming: false,
+        },
         credential_ref: Some("secret://runtime/test".into()),
         credential_source: "provider_inherited".into(),
         request_policy: ResolvedRequestPolicyInput {
@@ -325,6 +415,23 @@ fn conversation_request() -> RuntimeConversationRequest {
             usage: None,
         }],
         tools: Vec::new(),
+    }
+}
+
+fn conversation_request_with_tools() -> RuntimeConversationRequest {
+    RuntimeConversationRequest {
+        tools: vec![ToolDefinition {
+            name: "weather".into(),
+            description: Some("Get the weather".into()),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "city": { "type": "string" }
+                },
+                "required": ["city"]
+            }),
+        }],
+        ..conversation_request()
     }
 }
 

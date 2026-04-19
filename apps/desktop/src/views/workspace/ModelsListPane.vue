@@ -33,14 +33,43 @@ function credentialHealthLabel(row: CatalogConfiguredModelRow) {
     : props.t('models.security.states.missing')
 }
 
-function quotaLabel(row: CatalogConfiguredModelRow) {
+function budgetStatusLabel(row: CatalogConfiguredModelRow) {
   if (!row.totalTokens) {
-    return props.t('models.quota.unlimited')
+    return props.t('models.budget.unlimited')
   }
 
-  return row.quotaExhausted
-    ? props.t('models.quota.exhausted')
-    : props.t('models.quota.available')
+  return row.budgetExhausted
+    ? props.t('models.budget.exhausted')
+    : props.t('models.budget.available')
+}
+
+function executionClassLabel(row: CatalogConfiguredModelRow) {
+  return enumLabel('modelExecutionClass', row.executionClass)
+}
+
+function executionClassTone(row: CatalogConfiguredModelRow) {
+  switch (row.executionClass) {
+    case 'agent_conversation':
+      return 'success' as const
+    case 'single_shot_generation':
+      return 'warning' as const
+    default:
+      return 'error' as const
+  }
+}
+
+function supportLabel(value: boolean) {
+  return value
+    ? props.t('models.execution.supported')
+    : props.t('models.execution.notSupported')
+}
+
+function budgetAccountingModeLabel(row: CatalogConfiguredModelRow) {
+  if (!row.budgetAccountingMode) {
+    return props.t('models.budget.accountingModes.unset')
+  }
+
+  return props.t(`models.budget.accountingModes.${row.budgetAccountingMode}`)
 }
 </script>
 
@@ -70,6 +99,15 @@ function quotaLabel(row: CatalogConfiguredModelRow) {
               :label="row.enabled ? t('models.states.enabled') : t('models.states.disabled')"
               :tone="row.enabled ? 'success' : 'warning'"
             />
+            <UiBadge
+              :label="executionClassLabel(row)"
+              :tone="executionClassTone(row)"
+            />
+            <UiBadge
+              v-if="!row.supportsConversationExecution"
+              :label="t('models.execution.generationOnlyBadge')"
+              tone="warning"
+            />
             <UiBadge v-if="row.hasDiagnostics" :label="t('models.list.hasDiagnostics')" tone="warning" />
           </template>
 
@@ -85,10 +123,18 @@ function quotaLabel(row: CatalogConfiguredModelRow) {
           </template>
 
           <template #meta>
-            <div class="flex flex-wrap items-center gap-3 text-xs text-text-tertiary">
-              <span>{{ t('models.list.usedTokens', { count: row.usedTokens.toLocaleString() }) }}</span>
-              <span>{{ t('models.list.tokenQuota', { count: row.totalTokens?.toLocaleString() ?? t('models.quota.unlimited') }) }}</span>
-              <span>{{ quotaLabel(row) }}</span>
+            <div class="space-y-1 text-xs text-text-tertiary">
+              <div class="flex flex-wrap items-center gap-3">
+                <span>{{ t('models.list.executionClass', { value: executionClassLabel(row) }) }}</span>
+                <span>{{ t('models.list.upstreamStreaming', { value: supportLabel(row.upstreamStreaming) }) }}</span>
+                <span>{{ t('models.list.toolLoop', { value: supportLabel(row.toolLoop) }) }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <span>{{ t('models.list.usedTokens', { count: row.usedTokens.toLocaleString() }) }}</span>
+                <span>{{ t('models.list.budgetTotal', { count: row.totalTokens?.toLocaleString() ?? t('models.budget.unlimited') }) }}</span>
+                <span>{{ t('models.list.budgetAccountingMode', { value: budgetAccountingModeLabel(row) }) }}</span>
+                <span>{{ budgetStatusLabel(row) }}</span>
+              </div>
             </div>
           </template>
         </UiRecordCard>

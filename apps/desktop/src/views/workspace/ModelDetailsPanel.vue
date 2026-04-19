@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type {
   ConfiguredModelRecord,
   ModelRegistryRecord,
@@ -8,8 +9,9 @@ import { Trash2 } from 'lucide-vue-next'
 
 import { enumLabel } from '@/i18n/copy'
 import type { CatalogConfiguredModelRow } from '@/stores/catalog'
-import { hasRuntimeExecutionSupport } from './models-runtime-helpers'
-import { UiBadge, UiButton, UiCheckbox, UiEmptyState, UiField, UiInput, UiStatusCallout, UiSurface } from '@octopus/ui'
+import { summarizeModelExecution } from '@/stores/catalog_normalizers'
+import type { CatalogFilterOption } from '@/stores/catalog'
+import { UiBadge, UiButton, UiCheckbox, UiEmptyState, UiField, UiInput, UiSelect, UiStatusCallout, UiSurface } from '@octopus/ui'
 
 const props = defineProps<{
   selectedRow: CatalogConfiguredModelRow | null
@@ -39,6 +41,12 @@ const props = defineProps<{
   runtimeConfigSaving: boolean
   validationErrors: string[]
   validationWarnings: string[]
+  selectedBudgetAccountingMode: string
+  selectedBudgetTrafficClasses: string
+  selectedBudgetWarningThresholds: string
+  selectedBudgetReservationStrategy: string
+  budgetAccountingModeOptions: CatalogFilterOption[]
+  budgetReservationStrategyOptions: CatalogFilterOption[]
   t: (key: string, params?: Record<string, unknown>) => string
 }>()
 
@@ -49,7 +57,11 @@ const emit = defineEmits<{
   'update:custom-provider-label': [value: string]
   'update:api-key': [value: string]
   'update:base-url': [value: string]
-  'update:total-tokens': [value: string]
+  'update:budget-total': [value: string]
+  'update:budget-accounting-mode': [value: string]
+  'update:budget-traffic-classes': [value: string]
+  'update:budget-warning-thresholds': [value: string]
+  'update:budget-reservation-strategy': [value: string]
   'update:enabled': [value: boolean]
   clearCredentialOverride: []
   validate: []
@@ -106,6 +118,62 @@ function validationDescription() {
     ?? props.validationWarnings[0]
     ?? props.selectedProbeResult?.warnings?.[0]
     ?? props.t('models.validation.idleDescription')
+}
+
+const executionSummary = computed(() => summarizeModelExecution(props.selectedModel))
+
+function executionClassLabel() {
+  return enumLabel('modelExecutionClass', executionSummary.value.executionClass)
+}
+
+function executionClassTone() {
+  switch (executionSummary.value.executionClass) {
+    case 'agent_conversation':
+      return 'success' as const
+    case 'single_shot_generation':
+      return 'warning' as const
+    default:
+      return 'error' as const
+  }
+}
+
+function capabilityStateLabel(value: boolean) {
+  return value
+    ? props.t('models.execution.supported')
+    : props.t('models.execution.notSupported')
+}
+
+function runtimeProfileTone() {
+  switch (executionSummary.value.executionClass) {
+    case 'agent_conversation':
+      return 'success' as const
+    case 'single_shot_generation':
+      return 'warning' as const
+    default:
+      return 'error' as const
+  }
+}
+
+function runtimeProfileTitle() {
+  switch (executionSummary.value.executionClass) {
+    case 'agent_conversation':
+      return props.t('models.execution.profileReadyTitle')
+    case 'single_shot_generation':
+      return props.t('models.execution.profileGenerationTitle')
+    default:
+      return props.t('models.execution.profileUnsupportedTitle')
+  }
+}
+
+function runtimeProfileDescription() {
+  switch (executionSummary.value.executionClass) {
+    case 'agent_conversation':
+      return props.t('models.execution.profileReadyDescription')
+    case 'single_shot_generation':
+      return props.t('models.execution.profileGenerationDescription')
+    default:
+      return props.t('models.execution.profileUnsupportedDescription')
+  }
 }
 </script>
 
@@ -221,10 +289,16 @@ function validationDescription() {
       <UiSurface
         variant="subtle"
         padding="sm"
-        :title="t('models.detail.sections.routing')"
-        :subtitle="t('models.detail.sections.routingDescription')"
+        :title="t('models.detail.sections.executionProfile')"
+        :subtitle="t('models.detail.sections.executionProfileDescription')"
       >
         <div class="space-y-4">
+          <UiStatusCallout
+            :tone="runtimeProfileTone()"
+            :title="runtimeProfileTitle()"
+            :description="runtimeProfileDescription()"
+          />
+
           <div class="grid gap-3 md:grid-cols-2">
             <UiField :label="t('models.detail.baseUrl')">
               <UiInput
@@ -235,19 +309,69 @@ function validationDescription() {
               />
             </UiField>
 
-            <UiField :label="t('models.detail.surfaces')">
+            <UiField :label="t('models.detail.executionClass')">
+              <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
+                <UiBadge :label="executionClassLabel()" :tone="executionClassTone()" />
+              </div>
+            </UiField>
+
+            <UiField :label="t('models.detail.agentSessionEligibility')">
+              <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
+                <UiBadge
+                  :label="capabilityStateLabel(executionSummary.supportsConversationExecution)"
+                  :tone="executionSummary.supportsConversationExecution ? 'success' : 'warning'"
+                />
+              </div>
+            </UiField>
+
+            <UiField :label="t('models.detail.upstreamStreaming')">
+              <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
+                <UiBadge
+                  :label="capabilityStateLabel(executionSummary.upstreamStreaming)"
+                  :tone="executionSummary.upstreamStreaming ? 'success' : 'warning'"
+                />
+              </div>
+            </UiField>
+
+            <UiField :label="t('models.detail.toolLoop')">
+              <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
+                <UiBadge
+                  :label="capabilityStateLabel(executionSummary.toolLoop)"
+                  :tone="executionSummary.toolLoop ? 'success' : 'warning'"
+                />
+              </div>
+            </UiField>
+
+            <UiField :label="t('models.detail.enabledSurfaces')">
               <div class="flex min-h-9 flex-wrap items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
                 <UiBadge
-                  v-for="binding in selectedModel.surfaceBindings.filter(item => item.enabled && hasRuntimeExecutionSupport(item.runtimeSupport))"
-                  :key="binding.surface"
-                  :label="enumLabel('modelSurface', binding.surface)"
+                  v-for="surface in executionSummary.enabledSurfaces"
+                  :key="surface"
+                  :label="enumLabel('modelSurface', surface)"
                   subtle
                 />
                 <span
-                  v-if="!selectedModel.surfaceBindings.some(item => item.enabled && hasRuntimeExecutionSupport(item.runtimeSupport))"
+                  v-if="!executionSummary.enabledSurfaces.length"
                   class="text-sm text-text-secondary"
                 >
-                  {{ t('models.detail.noSurfaces') }}
+                  {{ t('models.execution.noEnabledSurfaces') }}
+                </span>
+              </div>
+            </UiField>
+
+            <UiField :label="t('models.detail.agentSurfaces')">
+              <div class="flex min-h-9 flex-wrap items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
+                <UiBadge
+                  v-for="surface in executionSummary.conversationSurfaces"
+                  :key="surface"
+                  :label="enumLabel('modelSurface', surface)"
+                  subtle
+                />
+                <span
+                  v-if="!executionSummary.conversationSurfaces.length"
+                  class="text-sm text-text-secondary"
+                >
+                  {{ t('models.execution.noAgentSurfaces') }}
                 </span>
               </div>
             </UiField>
@@ -258,18 +382,54 @@ function validationDescription() {
       <UiSurface
         variant="subtle"
         padding="sm"
-        :title="t('models.detail.sections.quota')"
-        :subtitle="t('models.detail.sections.quotaDescription')"
+        :title="t('models.detail.sections.budgetPolicy')"
+        :subtitle="t('models.detail.sections.budgetPolicyDescription')"
       >
         <div class="space-y-4">
           <div class="grid gap-3 md:grid-cols-2">
-            <UiField :label="t('models.detail.totalTokens')">
+            <UiField :label="t('models.detail.budgetTotal')">
               <UiInput
-                :model-value="selectedConfiguredModel.tokenQuota?.totalTokens ? String(selectedConfiguredModel.tokenQuota.totalTokens) : ''"
+                :model-value="selectedConfiguredModel.budgetPolicy?.totalBudgetTokens ? String(selectedConfiguredModel.budgetPolicy.totalBudgetTokens) : ''"
                 data-testid="models-detail-total-tokens"
                 type="number"
-                :placeholder="t('models.detail.totalTokensPlaceholder')"
-                @update:model-value="emit('update:total-tokens', String($event))"
+                :placeholder="t('models.detail.budgetTotalPlaceholder')"
+                @update:model-value="emit('update:budget-total', String($event))"
+              />
+            </UiField>
+
+            <UiField :label="t('models.detail.budgetAccountingMode')">
+              <UiSelect
+                :model-value="selectedBudgetAccountingMode"
+                data-testid="models-detail-budget-accounting-mode"
+                :options="budgetAccountingModeOptions"
+                @update:model-value="emit('update:budget-accounting-mode', String($event))"
+              />
+            </UiField>
+
+            <UiField :label="t('models.detail.budgetTrafficClasses')">
+              <UiInput
+                :model-value="selectedBudgetTrafficClasses"
+                data-testid="models-detail-budget-traffic-classes"
+                :placeholder="t('models.detail.budgetTrafficClassesPlaceholder')"
+                @update:model-value="emit('update:budget-traffic-classes', String($event))"
+              />
+            </UiField>
+
+            <UiField :label="t('models.detail.budgetReservationStrategy')">
+              <UiSelect
+                :model-value="selectedBudgetReservationStrategy"
+                data-testid="models-detail-budget-reservation-strategy"
+                :options="budgetReservationStrategyOptions"
+                @update:model-value="emit('update:budget-reservation-strategy', String($event))"
+              />
+            </UiField>
+
+            <UiField :label="t('models.detail.budgetWarningThresholds')">
+              <UiInput
+                :model-value="selectedBudgetWarningThresholds"
+                data-testid="models-detail-budget-warning-thresholds"
+                :placeholder="t('models.detail.budgetWarningThresholdsPlaceholder')"
+                @update:model-value="emit('update:budget-warning-thresholds', String($event))"
               />
             </UiField>
 
@@ -281,16 +441,16 @@ function validationDescription() {
 
             <UiField :label="t('models.detail.remainingTokens')">
               <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2 text-sm text-text-primary">
-                {{ selectedRow.remainingTokens?.toLocaleString() ?? t('models.quota.unlimited') }}
+                {{ selectedRow.remainingTokens?.toLocaleString() ?? t('models.budget.unlimited') }}
               </div>
             </UiField>
 
-            <UiField :label="t('models.detail.quotaStatus')">
+            <UiField :label="t('models.detail.budgetStatus')">
               <div class="rounded-[var(--radius-m)] border border-border bg-surface-muted px-3 py-2">
                 <UiBadge
                   :label="selectedRow.totalTokens
-                    ? (selectedRow.quotaExhausted ? t('models.quota.exhausted') : t('models.quota.available'))
-                    : t('models.quota.unlimited')"
+                    ? (selectedRow.budgetExhausted ? t('models.budget.exhausted') : t('models.budget.available'))
+                    : t('models.budget.unlimited')"
                   subtle
                 />
               </div>

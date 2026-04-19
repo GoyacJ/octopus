@@ -89,6 +89,43 @@ Examples:
 - project source: `displayPath = "config/runtime/projects/proj-1.json"`, `sourceKey = "project:proj-1"`
 - user source: `displayPath = "config/runtime/users/user-1.json"`, `sourceKey = "user:user-1"`
 
+## Model Runtime Contract
+
+Model runtime truth is split between catalog execution metadata and configured-model budget governance:
+
+- `ModelRegistryRecord.surfaceBindings[].executionProfile`
+- `ProviderRegistryRecord.surfaces[].executionProfile`
+- `ConfiguredModelRecord.budgetPolicy`
+- `ConfiguredModelRecord.tokenUsage`
+
+`RuntimeExecutionProfile` is the canonical transport shape for model executability:
+
+- `executionClass`: `unsupported | single_shot_generation | agent_conversation`
+- `upstreamStreaming`: whether the upstream provider driver really streams turn output
+- `toolLoop`: whether the runtime can complete the native tool loop on that execution path
+
+Contract rules:
+
+- agent session routes may only resolve configured models whose selected surface has `executionClass = agent_conversation`
+- agent session routes must treat `upstreamStreaming = true` and `toolLoop = true` as required runtime truth, not as optional UI hints
+- generation surfaces may use `single_shot_generation` and must not be presented as normal conversation-runtime choices
+- legacy execution-support booleans are not part of the public contract anymore
+
+`ConfiguredModelBudgetPolicy` is the canonical runtime budget contract:
+
+- `totalBudgetTokens`
+- `accountingMode`
+- `trafficClasses`
+- `warningThresholdPercentages`
+- `reservationStrategy`
+
+Budget policy rules:
+
+- runtime budget enforcement reserves before execution and settles after provider usage is known
+- validation probes are budget traffic too and should be classified through `trafficClasses`, even when they are non-billable
+- unsupported accounting modes must be rejected during validation or configuration save, not after a model call completes
+- legacy budget-limit fields are not part of the public contract anymore
+
 ## Snapshot Persistence
 
 Runtime session startup still records a config snapshot, but snapshot metadata is path-free:
@@ -96,6 +133,14 @@ Runtime session startup still records a config snapshot, but snapshot metadata i
 - keep `effective_config_hash`
 - keep `started_from_scope_set`
 - store `sourceRefs` in effective precedence order, such as `["user:user-1", "workspace", "project:proj-1"]`
+
+When a session starts, the snapshot also freezes the configured-model choice and the effective runtime contract that will govern that run:
+
+- the selected configured model identity
+- the resolved execution class and surface binding
+- the effective budget policy used for reservation/settlement
+
+Running sessions are therefore bound to the execution profile and budget policy captured at start; later config edits affect new sessions rather than silently mutating an active run.
 
 SQLite projections, debug exports, and session snapshots must not persist absolute runtime config file paths.
 

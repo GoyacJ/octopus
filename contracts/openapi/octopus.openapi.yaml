@@ -2925,6 +2925,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/runtime/generations:
+    post:
+      operationId: runRuntimeGeneration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunRuntimeGenerationInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeGenerationResult"
+          description: Runtime generation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/sessions:
     get:
       operationId: listRuntimeSessions
@@ -5557,6 +5579,17 @@ components:
         - petId
         - conversationId
       type: object
+    BudgetAccountingMode:
+      enum:
+        - provider_reported
+        - estimated
+        - non_billable
+      type: string
+    BudgetReservationStrategy:
+      enum:
+        - none
+        - fixed
+      type: string
     CancelRuntimeSubrunInput:
       additionalProperties: false
       properties:
@@ -5924,11 +5957,31 @@ components:
         - sessionPolicy
         - defaultScopes
       type: object
+    ConfiguredModelBudgetPolicy:
+      additionalProperties: false
+      properties:
+        accountingMode:
+          $ref: "#/components/schemas/BudgetAccountingMode"
+        reservationStrategy:
+          $ref: "#/components/schemas/BudgetReservationStrategy"
+        totalBudgetTokens:
+          type: integer
+        trafficClasses:
+          items:
+            type: string
+          type: array
+        warningThresholdPercentages:
+          items:
+            type: integer
+          type: array
+      type: object
     ConfiguredModelRecord:
       additionalProperties: false
       properties:
         baseUrl:
           type: string
+        budgetPolicy:
+          $ref: "#/components/schemas/ConfiguredModelBudgetPolicy"
         configured:
           type: boolean
         configuredModelId:
@@ -5947,8 +6000,6 @@ components:
           type: string
         status:
           type: string
-        tokenQuota:
-          $ref: "#/components/schemas/ConfiguredModelTokenQuota"
         tokenUsage:
           $ref: "#/components/schemas/ConfiguredModelTokenUsage"
       required:
@@ -5961,12 +6012,6 @@ components:
         - source
         - status
         - configured
-      type: object
-    ConfiguredModelTokenQuota:
-      additionalProperties: false
-      properties:
-        totalTokens:
-          type: integer
       type: object
     ConfiguredModelTokenUsage:
       additionalProperties: false
@@ -7929,17 +7974,17 @@ components:
       properties:
         enabled:
           type: boolean
+        executionProfile:
+          $ref: "#/components/schemas/RuntimeExecutionProfile"
         protocolFamily:
           type: string
-        runtimeSupport:
-          $ref: "#/components/schemas/RuntimeExecutionSupport"
         surface:
           type: string
       required:
         - surface
         - protocolFamily
         - enabled
-        - runtimeSupport
+        - executionProfile
       type: object
     NotificationFilter:
       additionalProperties: false
@@ -9218,6 +9263,8 @@ components:
           type: string
         credentialSource:
           type: string
+        executionProfile:
+          $ref: "#/components/schemas/RuntimeExecutionProfile"
         modelId:
           type: string
         protocolFamily:
@@ -9238,6 +9285,7 @@ components:
         - modelId
         - surface
         - protocolFamily
+        - executionProfile
         - credentialSource
         - requestPolicy
         - capabilities
@@ -9441,6 +9489,21 @@ components:
         - description
         - status
         - permissionCodes
+      type: object
+    RunRuntimeGenerationInput:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        content:
+          type: string
+        projectId:
+          type: string
+        systemPrompt:
+          type: string
+      required:
+        - configuredModelId
+        - content
       type: object
     RunStatus:
       enum:
@@ -10137,7 +10200,9 @@ components:
         - planner.started
         - planner.completed
         - model.started
-        - model.streaming
+        - model.delta
+        - model.tool_use
+        - model.usage
         - model.completed
         - model.failed
         - tool.requested
@@ -10188,22 +10253,43 @@ components:
         - runtime.session.updated
         - runtime.error
       type: string
-    RuntimeExecutionSupport:
+    RuntimeExecutionClass:
+      enum:
+        - unsupported
+        - single_shot_generation
+        - agent_conversation
+      type: string
+    RuntimeExecutionProfile:
       additionalProperties: false
       properties:
-        conversation:
-          type: boolean
-        prompt:
-          type: boolean
-        streaming:
-          type: boolean
+        executionClass:
+          $ref: "#/components/schemas/RuntimeExecutionClass"
         toolLoop:
           type: boolean
+        upstreamStreaming:
+          type: boolean
       required:
-        - prompt
-        - conversation
+        - executionClass
         - toolLoop
-        - streaming
+        - upstreamStreaming
+      type: object
+    RuntimeGenerationResult:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        configuredModelName:
+          type: string
+        consumedTokens:
+          type: integer
+        content:
+          type: string
+        requestId:
+          type: string
+      required:
+        - configuredModelId
+        - configuredModelName
+        - content
       type: object
     RuntimeHandoffSummary:
       additionalProperties: false
@@ -11521,10 +11607,10 @@ components:
           type: array
         enabled:
           type: boolean
+        executionProfile:
+          $ref: "#/components/schemas/RuntimeExecutionProfile"
         protocolFamily:
           type: string
-        runtimeSupport:
-          $ref: "#/components/schemas/RuntimeExecutionSupport"
         surface:
           type: string
         transport:
@@ -11540,7 +11626,7 @@ components:
         - baseUrlPolicy
         - enabled
         - capabilities
-        - runtimeSupport
+        - executionProfile
       type: object
     SystemAuthStatus:
       additionalProperties: false

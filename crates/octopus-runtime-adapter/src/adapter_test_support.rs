@@ -92,8 +92,8 @@ pub(crate) fn write_workspace_config(path: &Path, total_tokens: Option<u64>) {
             "providerId": "anthropic",
             "modelId": "claude-sonnet-4-5",
             "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
-            "tokenQuota": {
-                "totalTokens": total_tokens
+            "budgetPolicy": {
+                "totalBudgetTokens": total_tokens
             },
             "enabled": true,
             "source": "workspace"
@@ -132,8 +132,8 @@ pub(crate) fn write_workspace_config_with_http_mcp(
             "providerId": "anthropic",
             "modelId": "claude-sonnet-4-5",
             "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
-            "tokenQuota": {
-                "totalTokens": total_tokens
+            "budgetPolicy": {
+                "totalBudgetTokens": total_tokens
             },
             "enabled": true,
             "source": "workspace"
@@ -179,8 +179,8 @@ pub(crate) fn write_workspace_config_with_plugins(
             "providerId": "anthropic",
             "modelId": "claude-sonnet-4-5",
             "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
-            "tokenQuota": {
-                "totalTokens": total_tokens
+            "budgetPolicy": {
+                "totalBudgetTokens": total_tokens
             },
             "enabled": true,
             "source": "workspace"
@@ -339,6 +339,32 @@ impl RuntimeModelDriver for FixedTokenRuntimeModelDriver {
             deliverables: Vec::new(),
         })
     }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request_policy: &octopus_core::ResolvedRequestPolicy,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
+        let input = last_user_text(request).unwrap_or_default();
+        let response = self
+            .execute_prompt(target, request_policy, input, None)
+            .await?;
+        let mut events = vec![runtime::AssistantEvent::TextDelta(response.content)];
+        if let Some(total_tokens) = response.total_tokens {
+            events.push(runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 0,
+                output_tokens: total_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }));
+        }
+        events.push(runtime::AssistantEvent::MessageStop);
+        Ok(RuntimeConversationExecution {
+            events,
+            deliverables: response.deliverables,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -429,6 +455,32 @@ impl RuntimeModelDriver for InspectingPromptRuntimeModelDriver {
             request_id: Some("inspect-request".into()),
             total_tokens: Some(4),
             deliverables: Vec::new(),
+        })
+    }
+
+    async fn execute_conversation_execution(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request_policy: &octopus_core::ResolvedRequestPolicy,
+        request: &RuntimeConversationRequest,
+    ) -> Result<RuntimeConversationExecution, AppError> {
+        let input = last_user_text(request).unwrap_or_default();
+        let response = self
+            .execute_prompt(target, request_policy, input, None)
+            .await?;
+        let mut events = vec![runtime::AssistantEvent::TextDelta(response.content)];
+        if let Some(total_tokens) = response.total_tokens {
+            events.push(runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 0,
+                output_tokens: total_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }));
+        }
+        events.push(runtime::AssistantEvent::MessageStop);
+        Ok(RuntimeConversationExecution {
+            events,
+            deliverables: response.deliverables,
         })
     }
 }

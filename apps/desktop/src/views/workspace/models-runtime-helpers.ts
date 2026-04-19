@@ -1,9 +1,11 @@
 import type {
+  ConfiguredModelBudgetPolicy,
   ConfiguredModelRecord,
   JsonValue,
   ModelRegistryRecord,
   ProviderRegistryRecord,
-  RuntimeExecutionSupport,
+  RuntimeExecutionClass,
+  RuntimeExecutionProfile,
   SurfaceDescriptor,
 } from '@octopus/schema'
 
@@ -33,30 +35,49 @@ export function toMetadata(value: unknown): Record<string, unknown> {
   return isObjectRecord(value) ? cloneJson(value) as Record<string, unknown> : {}
 }
 
-function toRuntimeExecutionSupport(value: unknown): RuntimeExecutionSupport {
+function toExecutionProfile(value: unknown): RuntimeExecutionProfile {
   if (!isObjectRecord(value)) {
     return {
-      prompt: false,
-      conversation: false,
+      executionClass: 'unsupported',
       toolLoop: false,
-      streaming: false,
+      upstreamStreaming: false,
     }
   }
   return {
-    prompt: Boolean(value.prompt),
-    conversation: Boolean(value.conversation),
+    executionClass: (typeof value.executionClass === 'string'
+      ? value.executionClass
+      : 'unsupported') as RuntimeExecutionClass,
     toolLoop: Boolean(value.toolLoop),
-    streaming: Boolean(value.streaming),
+    upstreamStreaming: Boolean(value.upstreamStreaming),
   }
 }
 
-export function hasRuntimeExecutionSupport(runtimeSupport?: Partial<RuntimeExecutionSupport> | null) {
-  return Boolean(
-    runtimeSupport?.prompt
-    || runtimeSupport?.conversation
-    || runtimeSupport?.toolLoop
-    || runtimeSupport?.streaming,
-  )
+export function supportsConversationExecution(executionProfile?: Partial<RuntimeExecutionProfile> | null) {
+  return executionProfile?.executionClass === 'agent_conversation'
+}
+
+function toBudgetPolicy(value: unknown): ConfiguredModelBudgetPolicy | undefined {
+  if (!isObjectRecord(value)) {
+    return undefined
+  }
+
+  return {
+    accountingMode: typeof value.accountingMode === 'string'
+      ? value.accountingMode as ConfiguredModelBudgetPolicy['accountingMode']
+      : undefined,
+    trafficClasses: Array.isArray(value.trafficClasses)
+      ? value.trafficClasses.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+    totalBudgetTokens: typeof value.totalBudgetTokens === 'number' && value.totalBudgetTokens > 0
+      ? value.totalBudgetTokens
+      : undefined,
+    reservationStrategy: typeof value.reservationStrategy === 'string'
+      ? value.reservationStrategy as ConfiguredModelBudgetPolicy['reservationStrategy']
+      : undefined,
+    warningThresholdPercentages: Array.isArray(value.warningThresholdPercentages)
+      ? value.warningThresholdPercentages.filter((entry): entry is number => typeof entry === 'number')
+      : undefined,
+  }
 }
 
 export function toConfiguredModelMap(value: unknown): Record<string, ConfiguredModelRecord> {
@@ -80,9 +101,7 @@ export function toConfiguredModelMap(value: unknown): Record<string, ConfiguredM
       modelId,
       credentialRef: typeof entry.credentialRef === 'string' ? entry.credentialRef : undefined,
       baseUrl: typeof entry.baseUrl === 'string' ? entry.baseUrl : undefined,
-      tokenQuota: isObjectRecord(entry.tokenQuota) && typeof entry.tokenQuota.totalTokens === 'number' && entry.tokenQuota.totalTokens > 0
-        ? { totalTokens: entry.tokenQuota.totalTokens }
-        : undefined,
+      budgetPolicy: toBudgetPolicy(entry.budgetPolicy),
       tokenUsage: {
         usedTokens: 0,
         remainingTokens: undefined,
@@ -122,7 +141,7 @@ export function toSurfaceDescriptors(value: unknown): SurfaceDescriptor[] {
             }))
             .filter(capability => capability.capabilityId)
         : [],
-      runtimeSupport: toRuntimeExecutionSupport(entry.runtimeSupport),
+      executionProfile: toExecutionProfile(entry.executionProfile),
     }))
 }
 
@@ -176,7 +195,7 @@ export function toModelRegistryMap(value: unknown): Record<string, ModelRegistry
                 surface: typeof binding.surface === 'string' ? binding.surface : 'conversation',
                 protocolFamily: typeof binding.protocolFamily === 'string' ? binding.protocolFamily : 'openai_chat',
                 enabled: typeof binding.enabled === 'boolean' ? binding.enabled : true,
-                runtimeSupport: toRuntimeExecutionSupport(binding.runtimeSupport),
+                executionProfile: toExecutionProfile(binding.executionProfile),
               }]
             })
         : [],
@@ -255,10 +274,8 @@ export function toPersistedConfiguredModelMap(
     if (configuredModel.baseUrl) {
       persisted.baseUrl = configuredModel.baseUrl
     }
-    if (configuredModel.tokenQuota?.totalTokens) {
-      persisted.tokenQuota = {
-        totalTokens: configuredModel.tokenQuota.totalTokens,
-      }
+    if (configuredModel.budgetPolicy) {
+      persisted.budgetPolicy = cloneJson(configuredModel.budgetPolicy) as JsonValue
     }
     next[configuredModelId] = persisted
   }
@@ -344,11 +361,10 @@ export function buildManagedProviderOverride(
         baseUrlPolicy: 'allow_override',
         enabled: true,
         capabilities: [],
-        runtimeSupport: {
-          prompt: false,
-          conversation: false,
+        executionProfile: {
+          executionClass: 'unsupported',
           toolLoop: false,
-          streaming: false,
+          upstreamStreaming: false,
         },
       },
     ],
@@ -379,11 +395,10 @@ export function buildManagedModelOverride(
         surface: 'conversation',
         protocolFamily: 'openai_chat',
         enabled: true,
-        runtimeSupport: {
-          prompt: false,
-          conversation: false,
+        executionProfile: {
+          executionClass: 'unsupported',
           toolLoop: false,
-          streaming: false,
+          upstreamStreaming: false,
         },
       },
     ],
@@ -393,7 +408,7 @@ export function buildManagedModelOverride(
 }
 
 export function updateProviderBaseUrl(provider: ProviderRegistryRecord, baseUrl: string): ProviderRegistryRecord {
-  const surfaces = provider.surfaces.length
+  const surfaces: SurfaceDescriptor[] = provider.surfaces.length
     ? provider.surfaces.map((surface, index) => (index === 0 ? { ...surface, baseUrl } : surface))
     : [{
         surface: 'conversation',
@@ -404,11 +419,10 @@ export function updateProviderBaseUrl(provider: ProviderRegistryRecord, baseUrl:
         baseUrlPolicy: 'allow_override',
         enabled: true,
         capabilities: [],
-        runtimeSupport: {
-          prompt: false,
-          conversation: false,
+        executionProfile: {
+          executionClass: 'unsupported',
           toolLoop: false,
-          streaming: false,
+          upstreamStreaming: false,
         },
       }]
   return {

@@ -3,28 +3,21 @@ use octopus_core::{AppError, ResolvedExecutionTarget, ResolvedRequestPolicy};
 use serde_json::{json, Value};
 
 use super::{apply_request_policy, target_max_output_tokens};
-use crate::model_runtime::driver::{
-    ModelExecutionResult, ProtocolDriver, ProtocolDriverCapability,
+use crate::model_runtime::{
+    GenerationModelDriver, GenerationModelDriverCapability, ModelExecutionResult,
 };
 
 #[derive(Debug)]
 pub(crate) struct OpenAiResponsesDriver;
 
 #[async_trait]
-impl ProtocolDriver for OpenAiResponsesDriver {
+impl GenerationModelDriver for OpenAiResponsesDriver {
     fn protocol_family(&self) -> &'static str {
         "openai_responses"
     }
 
-    fn capability(&self) -> ProtocolDriverCapability {
-        ProtocolDriverCapability {
-            prompt: true,
-            conversation: true,
-            tool_loop: false,
-            streaming: false,
-            conversation_execution: false,
-            simple_completion: true,
-        }
+    fn capability(&self) -> GenerationModelDriverCapability {
+        GenerationModelDriverCapability { prompt: true }
     }
 
     async fn execute_prompt(
@@ -141,7 +134,10 @@ fn extract_responses_output_text(body: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::build_openai_responses_request_body;
-    use octopus_core::{CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput};
+    use octopus_core::{
+        CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput,
+        RuntimeExecutionClass, RuntimeExecutionProfile,
+    };
 
     fn target(max_output_tokens: Option<u32>) -> ResolvedExecutionTarget {
         ResolvedExecutionTarget {
@@ -150,8 +146,13 @@ mod tests {
             provider_id: "openai".into(),
             registry_model_id: "gpt-5".into(),
             model_id: "gpt-5".into(),
-            surface: "conversation".into(),
+            surface: "responses".into(),
             protocol_family: "openai_responses".into(),
+            execution_profile: RuntimeExecutionProfile {
+                execution_class: RuntimeExecutionClass::SingleShotGeneration,
+                tool_loop: false,
+                upstream_streaming: false,
+            },
             credential_ref: Some("env:OPENAI_API_KEY".into()),
             credential_source: "provider_inherited".into(),
             request_policy: ResolvedRequestPolicyInput {

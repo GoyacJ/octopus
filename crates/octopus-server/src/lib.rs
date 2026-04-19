@@ -52,18 +52,19 @@ use octopus_core::{
     ProtectedResourceMetadataUpsertRequest, ProviderCredentialRecord,
     RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput, ResourceActionGrant,
     ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord, RoleBindingUpsertRequest,
-    RoleUpsertRequest, RuntimeConfigPatch, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
-    TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
-    UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
-    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserGroupRecord,
-    UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
-    UserRecordSummary, WorkspaceActivityRecord, WorkspaceDirectoryBrowserResponse,
-    WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
-    WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
-    WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
-    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
+    RoleUpsertRequest, RunRuntimeGenerationInput, RuntimeConfigPatch,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, SavePetPresenceInput, SessionRecord,
+    ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord, ToolRecord,
+    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
+    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
+    UpsertWorkspaceMcpServerInput, UserGroupRecord, UserGroupUpsertRequest,
+    UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest, UserRecordSummary,
+    WorkspaceActivityRecord, WorkspaceDirectoryBrowserResponse, WorkspaceMcpServerDocument,
+    WorkspaceMetricRecord, WorkspaceOverviewSnapshot, WorkspaceResourceChildrenRecord,
+    WorkspaceResourceContentDocument, WorkspaceResourceImportInput, WorkspaceResourceRecord,
+    WorkspaceSkillDocument, WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument,
+    WorkspaceSummary,
 };
 use octopus_platform::PlatformServices;
 use reqwest::Client;
@@ -674,6 +675,28 @@ fn normalize_runtime_submit_input(input: &mut SubmitRuntimeTurnInput) -> Result<
         .collect();
     input.memory_intent = input
         .memory_intent
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    Ok(())
+}
+
+fn normalize_runtime_generation_input(
+    input: &mut RunRuntimeGenerationInput,
+) -> Result<(), ApiError> {
+    input.project_id = input
+        .project_id
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    input.content = input.content.trim().to_string();
+    if input.content.is_empty() {
+        return Err(ApiError::from(AppError::invalid_input(
+            "generation content must not be empty",
+        )));
+    }
+    input.system_prompt = input
+        .system_prompt
         .take()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());

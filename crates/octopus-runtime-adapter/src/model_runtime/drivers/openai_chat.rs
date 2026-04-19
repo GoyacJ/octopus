@@ -4,11 +4,12 @@ use octopus_core::{AppError, ResolvedExecutionTarget, ResolvedRequestPolicy};
 
 use super::{
     bearer_token_from_request_policy, compat_config_for_provider,
-    execute_message_protocol_conversation, flatten_output_content, message_request,
+    execute_message_protocol_streaming_conversation, flatten_output_content, message_request,
     ProviderProtocol,
 };
-use crate::model_runtime::driver::{
-    ModelExecutionResult, ProtocolDriver, ProtocolDriverCapability, RuntimeConversationExecution,
+use crate::model_runtime::{
+    ConversationModelDriver, ConversationModelDriverCapability, GenerationModelDriver,
+    GenerationModelDriverCapability, ModelExecutionResult, RuntimeConversationExecution,
     RuntimeConversationRequest,
 };
 
@@ -16,20 +17,13 @@ use crate::model_runtime::driver::{
 pub(crate) struct OpenAiChatDriver;
 
 #[async_trait]
-impl ProtocolDriver for OpenAiChatDriver {
+impl GenerationModelDriver for OpenAiChatDriver {
     fn protocol_family(&self) -> &'static str {
         "openai_chat"
     }
 
-    fn capability(&self) -> ProtocolDriverCapability {
-        ProtocolDriverCapability {
-            prompt: true,
-            conversation: true,
-            tool_loop: true,
-            streaming: false,
-            conversation_execution: true,
-            simple_completion: false,
-        }
+    fn capability(&self) -> GenerationModelDriverCapability {
+        GenerationModelDriverCapability { prompt: true }
     }
 
     async fn execute_prompt(
@@ -58,23 +52,34 @@ impl ProtocolDriver for OpenAiChatDriver {
             deliverables: Vec::new(),
         })
     }
+}
 
-    async fn execute_conversation_execution(
+#[async_trait]
+impl ConversationModelDriver for OpenAiChatDriver {
+    fn protocol_family(&self) -> &'static str {
+        "openai_chat"
+    }
+
+    fn capability(&self) -> ConversationModelDriverCapability {
+        ConversationModelDriverCapability {
+            tool_loop: true,
+            upstream_streaming: true,
+        }
+    }
+
+    async fn execute_conversation(
         &self,
         _http: &reqwest::Client,
         target: &ResolvedExecutionTarget,
         request_policy: &ResolvedRequestPolicy,
         request: &RuntimeConversationRequest,
     ) -> Result<RuntimeConversationExecution, AppError> {
-        Ok(RuntimeConversationExecution {
-            events: execute_message_protocol_conversation(
-                target,
-                request_policy,
-                request,
-                ProviderProtocol::OpenAiChat,
-            )
-            .await?,
-            deliverables: Vec::new(),
-        })
+        execute_message_protocol_streaming_conversation(
+            target,
+            request_policy,
+            request,
+            ProviderProtocol::OpenAiChat,
+        )
+        .await
     }
 }

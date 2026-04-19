@@ -144,11 +144,22 @@ export interface CapabilityDescriptor {
   label: string
 }
 
-export interface RuntimeExecutionSupport {
-  prompt: boolean
-  conversation: boolean
+export type RuntimeExecutionClass =
+  | 'unsupported'
+  | 'single_shot_generation'
+  | 'agent_conversation'
+
+export type BudgetAccountingMode =
+  | 'provider_reported'
+  | 'estimated'
+  | 'non_billable'
+
+export type BudgetReservationStrategy = 'none' | 'fixed'
+
+export interface RuntimeExecutionProfile {
+  executionClass: RuntimeExecutionClass
   toolLoop: boolean
-  streaming: boolean
+  upstreamStreaming: boolean
 }
 
 export interface SurfaceDescriptor {
@@ -160,7 +171,7 @@ export interface SurfaceDescriptor {
   baseUrlPolicy: BaseUrlPolicy | string
   enabled: boolean
   capabilities: CapabilityDescriptor[]
-  runtimeSupport: RuntimeExecutionSupport
+  executionProfile: RuntimeExecutionProfile
 }
 
 export interface ProviderRegistryRecord {
@@ -175,7 +186,7 @@ export interface ModelSurfaceBinding {
   surface: ModelSurfaceId | string
   protocolFamily: ProtocolFamily | string
   enabled: boolean
-  runtimeSupport: RuntimeExecutionSupport
+  executionProfile: RuntimeExecutionProfile
 }
 
 export interface ModelRegistryRecord {
@@ -213,8 +224,12 @@ export interface DefaultSelection {
   surface: ModelSurfaceId | string
 }
 
-export interface ConfiguredModelTokenQuota {
-  totalTokens?: number
+export interface ConfiguredModelBudgetPolicy {
+  accountingMode?: BudgetAccountingMode
+  trafficClasses?: string[]
+  totalBudgetTokens?: number
+  reservationStrategy?: BudgetReservationStrategy
+  warningThresholdPercentages?: number[]
 }
 
 export interface ConfiguredModelTokenUsage {
@@ -230,7 +245,7 @@ export interface ConfiguredModelRecord {
   modelId: string
   credentialRef?: string
   baseUrl?: string
-  tokenQuota?: ConfiguredModelTokenQuota
+  budgetPolicy?: ConfiguredModelBudgetPolicy
   tokenUsage: ConfiguredModelTokenUsage
   enabled: boolean
   source: string
