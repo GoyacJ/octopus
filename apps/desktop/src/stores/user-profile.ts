@@ -4,7 +4,6 @@ import { defineStore } from 'pinia'
 import type {
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
-  AccessUserRecord,
   RuntimeConfigValidationResult,
   RuntimeEffectiveConfig,
   UpdateCurrentUserProfileRequest,
@@ -86,18 +85,7 @@ function parseRuntimeDraftDocument(value: string): Record<string, unknown> {
   }
 }
 
-function toUserSummary(user: AccessUserRecord, previous?: UserRecordSummary | null): UserRecordSummary {
-  return {
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    avatar: previous?.avatar,
-    status: user.status as UserRecordSummary['status'],
-    passwordState: user.passwordState as UserRecordSummary['passwordState'],
-  }
-}
-
-function buildProfileAlerts(user: AccessUserRecord): UserProfileAlert[] {
+function buildProfileAlerts(user: Pick<UserRecordSummary, 'passwordState'>): UserProfileAlert[] {
   if (user.passwordState === 'reset-required') {
     return [{
       id: 'password-reset-required',
@@ -155,7 +143,11 @@ export const useUserProfileStore = defineStore('user-profile', () => {
       ...profilesByConnection.value,
       [connectionId]: {
         ...(profilesByConnection.value[connectionId] ?? emptyProfileState()),
+        workspaceId: useShellStore().workspaceConnections
+          .find(connection => connection.workspaceConnectionId === connectionId)
+          ?.workspaceId ?? '',
         currentUser: current,
+        alerts: buildProfileAlerts(current),
       },
     }
   }
@@ -166,31 +158,23 @@ export const useUserProfileStore = defineStore('user-profile', () => {
       return null
     }
 
-    const { connectionId } = resolvedClient
-    const accessControlStore = useWorkspaceAccessControlStore()
-    if (connectionId !== activeConnectionId.value || !accessControlStore.currentUser || options.force) {
-      await accessControlStore.ensureAuthorizationContext(connectionId, options)
-    }
-
+    const { client, connectionId } = resolvedClient
+    const shellStore = useShellStore()
+    const currentSessionUserId = shellStore.workspaceSessionsState[connectionId]?.session.userId ?? ''
     const cachedUser = profilesByConnection.value[connectionId]?.currentUser ?? null
-    if (!options.force && cachedUser && accessControlStore.currentUser?.id === cachedUser.id) {
+    if (!options.force && cachedUser && currentSessionUserId && cachedUser.id === currentSessionUserId) {
       return cachedUser
     }
 
-    const current = accessControlStore.currentUser
-    if (!current) {
-      return null
-    }
-
-    const workspaceId = useShellStore().workspaceConnections
+    const current = await client.profile.getCurrentUserProfile()
+    const workspaceId = shellStore.workspaceConnections
       .find(connection => connection.workspaceConnectionId === connectionId)
       ?.workspaceId ?? ''
-    const previous = profilesByConnection.value[connectionId]?.currentUser ?? null
     profilesByConnection.value = {
       ...profilesByConnection.value,
       [connectionId]: {
         workspaceId,
-        currentUser: toUserSummary(current, previous),
+        currentUser: current,
         alerts: buildProfileAlerts(current),
       },
     }

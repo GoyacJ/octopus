@@ -8,12 +8,16 @@ import type {
 import type { WorkspaceToolPermissionMode } from '@octopus/schema'
 
 type ProjectToolSettingsCompat = ProjectToolSettings & {
-  __legacyEnabledSourceKeys?: string[]
+  __hasDisabledSourceKeys?: boolean
 }
 
 type ProjectAgentSettingsCompat = ProjectAgentSettings & {
-  __legacyEnabledAgentIds?: string[]
-  __legacyEnabledTeamIds?: string[]
+  __hasDisabledAgentIds?: boolean
+  __hasDisabledTeamIds?: boolean
+}
+
+type ProjectModelSettingsCompat = ProjectModelSettings & {
+  __hasDisabledConfiguredModelIds?: boolean
 }
 
 function uniqueStrings(values: string[]) {
@@ -44,6 +48,8 @@ export function parseProjectModelSettings(value: unknown): ProjectModelSettings 
     return undefined
   }
 
+  const hasDisabledConfiguredModelIds = Object.prototype.hasOwnProperty.call(value, 'disabledConfiguredModelIds')
+  const disabledConfiguredModelIds = parseStringArray(value.disabledConfiguredModelIds)
   const allowedConfiguredModelIds = Array.isArray(value.allowedConfiguredModelIds)
     ? value.allowedConfiguredModelIds.filter((item): item is string => typeof item === 'string')
     : Array.isArray(value.selectedConfiguredModelIds)
@@ -56,15 +62,26 @@ export function parseProjectModelSettings(value: unknown): ProjectModelSettings 
     ? Math.trunc(value.totalTokens)
     : undefined
 
-  if (!allowedConfiguredModelIds.length && !defaultConfiguredModelId && totalTokens === undefined) {
+  if (
+    !allowedConfiguredModelIds.length
+    && !defaultConfiguredModelId
+    && totalTokens === undefined
+    && !hasDisabledConfiguredModelIds
+  ) {
     return undefined
   }
 
-  return {
+  const settings: ProjectModelSettingsCompat = {
+    disabledConfiguredModelIds,
     allowedConfiguredModelIds,
     defaultConfiguredModelId,
     totalTokens,
   }
+  if (hasDisabledConfiguredModelIds) {
+    settings.__hasDisabledConfiguredModelIds = true
+  }
+
+  return settings
 }
 
 export function parseProjectToolSettings(value: unknown): ProjectToolSettings | undefined {
@@ -72,8 +89,8 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
     return undefined
   }
 
+  const hasDisabledSourceKeys = Object.prototype.hasOwnProperty.call(value, 'disabledSourceKeys')
   const disabledSourceKeys = parseStringArray(value.disabledSourceKeys)
-  const legacyEnabledSourceKeys = parseStringArray(value.enabledSourceKeys)
   const overrides = isObjectRecord(value.overrides)
     ? Object.fromEntries(
         Object.entries(value.overrides)
@@ -86,7 +103,11 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
       )
     : {}
 
-  if (!disabledSourceKeys.length && !legacyEnabledSourceKeys.length && !Object.keys(overrides).length) {
+  if (
+    !disabledSourceKeys.length
+    && !Object.keys(overrides).length
+    && !hasDisabledSourceKeys
+  ) {
     return undefined
   }
 
@@ -94,8 +115,8 @@ export function parseProjectToolSettings(value: unknown): ProjectToolSettings | 
     disabledSourceKeys,
     overrides,
   }
-  if (!disabledSourceKeys.length && legacyEnabledSourceKeys.length) {
-    settings.__legacyEnabledSourceKeys = legacyEnabledSourceKeys
+  if (hasDisabledSourceKeys) {
+    settings.__hasDisabledSourceKeys = true
   }
   return settings
 }
@@ -105,16 +126,16 @@ export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings 
     return undefined
   }
 
+  const hasDisabledAgentIds = Object.prototype.hasOwnProperty.call(value, 'disabledAgentIds')
+  const hasDisabledTeamIds = Object.prototype.hasOwnProperty.call(value, 'disabledTeamIds')
   const disabledAgentIds = parseStringArray(value.disabledAgentIds)
   const disabledTeamIds = parseStringArray(value.disabledTeamIds)
-  const legacyEnabledAgentIds = parseStringArray(value.enabledAgentIds)
-  const legacyEnabledTeamIds = parseStringArray(value.enabledTeamIds)
 
   if (
     !disabledAgentIds.length
     && !disabledTeamIds.length
-    && !legacyEnabledAgentIds.length
-    && !legacyEnabledTeamIds.length
+    && !hasDisabledAgentIds
+    && !hasDisabledTeamIds
   ) {
     return undefined
   }
@@ -123,11 +144,11 @@ export function parseProjectAgentSettings(value: unknown): ProjectAgentSettings 
     disabledAgentIds,
     disabledTeamIds,
   }
-  if (!disabledAgentIds.length && legacyEnabledAgentIds.length) {
-    settings.__legacyEnabledAgentIds = legacyEnabledAgentIds
+  if (hasDisabledAgentIds) {
+    settings.__hasDisabledAgentIds = true
   }
-  if (!disabledTeamIds.length && legacyEnabledTeamIds.length) {
-    settings.__legacyEnabledTeamIds = legacyEnabledTeamIds
+  if (hasDisabledTeamIds) {
+    settings.__hasDisabledTeamIds = true
   }
   return settings
 }
@@ -163,6 +184,7 @@ export function resolveProjectModelSettings(
   return {
     allowedConfiguredModelIds,
     defaultConfiguredModelId,
+    disabledConfiguredModelIds: saved?.disabledConfiguredModelIds,
     totalTokens: saved?.totalTokens,
   }
 }
@@ -176,12 +198,12 @@ export function resolveProjectAgentSettings(
   const normalizedGrantedTeamIds = uniqueStrings(grantedTeamIds)
   const saved = projectSettings.agents as ProjectAgentSettingsCompat | undefined
 
-  const disabledAgentIds = saved?.__legacyEnabledAgentIds?.length
-    ? normalizedGrantedAgentIds.filter(agentId => !saved.__legacyEnabledAgentIds?.includes(agentId))
-    : (saved?.disabledAgentIds ?? []).filter(agentId => normalizedGrantedAgentIds.includes(agentId))
-  const disabledTeamIds = saved?.__legacyEnabledTeamIds?.length
-    ? normalizedGrantedTeamIds.filter(teamId => !saved.__legacyEnabledTeamIds?.includes(teamId))
-    : (saved?.disabledTeamIds ?? []).filter(teamId => normalizedGrantedTeamIds.includes(teamId))
+  const disabledAgentIds = saved?.__hasDisabledAgentIds
+    ? (saved.disabledAgentIds ?? []).filter(agentId => normalizedGrantedAgentIds.includes(agentId))
+    : []
+  const disabledTeamIds = saved?.__hasDisabledTeamIds
+    ? (saved.disabledTeamIds ?? []).filter(teamId => normalizedGrantedTeamIds.includes(teamId))
+    : []
 
   return {
     disabledAgentIds,
@@ -195,9 +217,9 @@ export function resolveProjectToolSettings(
 ): ProjectToolSettings {
   const normalizedGrantedSourceKeys = uniqueStrings(grantedSourceKeys)
   const saved = projectSettings.tools as ProjectToolSettingsCompat | undefined
-  const disabledSourceKeys = saved?.__legacyEnabledSourceKeys?.length
-    ? normalizedGrantedSourceKeys.filter(sourceKey => !saved.__legacyEnabledSourceKeys?.includes(sourceKey))
-    : (saved?.disabledSourceKeys ?? []).filter(sourceKey => normalizedGrantedSourceKeys.includes(sourceKey))
+  const disabledSourceKeys = saved?.__hasDisabledSourceKeys
+    ? (saved.disabledSourceKeys ?? []).filter(sourceKey => normalizedGrantedSourceKeys.includes(sourceKey))
+    : []
 
   return {
     disabledSourceKeys,
@@ -205,4 +227,41 @@ export function resolveProjectToolSettings(
       Object.entries(saved?.overrides ?? {}).filter(([sourceKey]) => normalizedGrantedSourceKeys.includes(sourceKey)),
     ),
   }
+}
+
+export function resolveProjectGrantedModelIds(
+  projectSettings: ProjectSettingsConfig,
+  workspaceConfiguredModelIds: string[],
+) {
+  const normalizedWorkspaceConfiguredModelIds = uniqueStrings(workspaceConfiguredModelIds)
+  const disabledConfiguredModelIds = new Set(projectSettings.models?.disabledConfiguredModelIds ?? [])
+
+  return normalizedWorkspaceConfiguredModelIds.filter(modelId => !disabledConfiguredModelIds.has(modelId))
+}
+
+export function resolveProjectGrantedToolSourceKeys(
+  projectSettings: ProjectSettingsConfig,
+  workspaceSourceKeys: string[],
+) {
+  const normalizedWorkspaceSourceKeys = uniqueStrings(workspaceSourceKeys)
+  const disabledSourceKeys = new Set(projectSettings.tools?.disabledSourceKeys ?? [])
+  return normalizedWorkspaceSourceKeys.filter(sourceKey => !disabledSourceKeys.has(sourceKey))
+}
+
+export function resolveProjectGrantedAgentIds(
+  projectSettings: ProjectSettingsConfig,
+  workspaceAgentIds: string[],
+) {
+  const normalizedWorkspaceAgentIds = uniqueStrings(workspaceAgentIds)
+  const disabledAgentIds = new Set(projectSettings.agents?.disabledAgentIds ?? [])
+  return normalizedWorkspaceAgentIds.filter(agentId => !disabledAgentIds.has(agentId))
+}
+
+export function resolveProjectGrantedTeamIds(
+  projectSettings: ProjectSettingsConfig,
+  workspaceTeamIds: string[],
+) {
+  const normalizedWorkspaceTeamIds = uniqueStrings(workspaceTeamIds)
+  const disabledTeamIds = new Set(projectSettings.agents?.disabledTeamIds ?? [])
+  return normalizedWorkspaceTeamIds.filter(teamId => !disabledTeamIds.has(teamId))
 }

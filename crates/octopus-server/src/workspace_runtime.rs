@@ -3,19 +3,20 @@ use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
     ConversationRecord, CostLedgerEntry, CreateDeliverableVersionInput,
-    CreateProjectPromotionRequestInput, CreateRuntimeSessionInput, CreateTaskInterventionRequest,
-    CreateTaskRequest, DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary,
-    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ForkDeliverableInput,
-    KnowledgeEntryRecord, LaunchTaskRequest, PetDashboardSummary, ProjectDashboardBreakdownItem,
+    CreateProjectDeletionRequestInput, CreateProjectPromotionRequestInput,
+    CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest, DeliverableDetail,
+    DeliverableVersionContent, DeliverableVersionSummary, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ForkDeliverableInput, KnowledgeEntryRecord,
+    LaunchTaskRequest, PetDashboardSummary, ProjectDashboardBreakdownItem,
     ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSnapshot,
     ProjectDashboardSummary, ProjectDashboardTrendPoint, ProjectDashboardUserStat,
-    ProjectPromotionRequest, ProjectTaskInterventionRecord, ProjectTaskRecord,
-    ProjectTaskRunRecord, ProjectTokenUsageRecord, PromoteDeliverableInput,
+    ProjectDeletionRequest, ProjectPromotionRequest, ProjectTaskInterventionRecord,
+    ProjectTaskRecord, ProjectTaskRunRecord, ProjectTokenUsageRecord, PromoteDeliverableInput,
     ProtectedResourceDescriptor, RerunTaskRequest, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
-    RuntimeRunSnapshot, TaskAnalyticsSummary, TaskContextBundle, TaskDetail,
-    TaskInterventionRecord, TaskRunSummary, TaskStateTransitionSummary, TaskSummary,
-    UpdateTaskRequest,
+    ResolveRuntimeMemoryProposalInput, ReviewProjectDeletionRequestInput,
+    ReviewProjectPromotionRequestInput, RuntimeMessage, RuntimeRunSnapshot, TaskAnalyticsSummary,
+    TaskContextBundle, TaskDetail, TaskInterventionRecord, TaskRunSummary,
+    TaskStateTransitionSummary, TaskSummary, UpdateTaskRequest, UpdateWorkspaceRequest,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -49,6 +50,16 @@ fn normalize_project_string_list(values: Vec<String>) -> Vec<String> {
         }
     }
     normalized
+}
+
+fn visible_inbox_items(
+    user_id: &str,
+    items: Vec<octopus_core::InboxItemRecord>,
+) -> Vec<octopus_core::InboxItemRecord> {
+    items
+        .into_iter()
+        .filter(|item| item.target_user_id == user_id)
+        .collect()
 }
 
 fn normalize_project_assignments(
@@ -789,6 +800,41 @@ async fn ensure_capability_session(
     .await
 }
 
+async fn ensure_project_delete_review_session(
+    state: &ServerState,
+    headers: &HeaderMap,
+    project_id: &str,
+) -> Result<SessionRecord, ApiError> {
+    let request_id = request_id(headers);
+    let session = authenticate_session_with_request_id(state, headers, &request_id).await?;
+    let decision = state
+        .services
+        .authorization
+        .authorize_request(
+            &session,
+            &capability_authorization_request(
+                &session.user_id,
+                "project.manage",
+                Some(project_id),
+                Some("project"),
+                Some(project_id),
+                None,
+                &[],
+                Some("internal"),
+                None,
+                None,
+            ),
+        )
+        .await?;
+    if !decision.allowed {
+        return Err(ApiError::new(
+            AppError::auth(decision.reason.unwrap_or_else(|| "access denied".into())),
+            request_id,
+        ));
+    }
+    Ok(session)
+}
+
 async fn tool_record_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
@@ -919,6 +965,23 @@ pub(crate) async fn workspace(
     Ok(Json(state.services.workspace.workspace_summary().await?))
 }
 
+pub(crate) async fn update_workspace_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateWorkspaceRequest>,
+) -> Result<Json<WorkspaceSummary>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let workspace = state.services.workspace.workspace_summary().await?;
+    if workspace.owner_user_id.as_deref() != Some(session.user_id.as_str()) {
+        return Err(ApiError::from(AppError::auth(
+            "workspace settings require the workspace owner",
+        )));
+    }
+    Ok(Json(
+        state.services.workspace.update_workspace(request).await?,
+    ))
+}
+
 pub(crate) async fn workspace_overview(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -1034,6 +1097,14 @@ pub(crate) fn validate_create_project_request(
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
         leader_agent_id,
+        manager_user_id: request
+            .manager_user_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        preset_code: request
+            .preset_code
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
         assignments: normalize_project_assignments(request.assignments),
     })
 }
@@ -1086,6 +1157,14 @@ pub(crate) fn validate_update_project_request(
         permission_overrides: request.permission_overrides,
         linked_workspace_assets: request.linked_workspace_assets,
         leader_agent_id,
+        manager_user_id: request
+            .manager_user_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        preset_code: request
+            .preset_code
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
         assignments: normalize_project_assignments(request.assignments),
     })
 }
@@ -1768,6 +1847,114 @@ pub(crate) async fn create_project_promotion_request(
             .create_project_promotion_request(&project_id, &session.user_id, input)
             .await?,
     ))
+}
+
+pub(crate) async fn list_project_deletion_requests(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<Json<Vec<ProjectDeletionRequest>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        Some(&project_id),
+        Some("project"),
+        Some(&project_id),
+    )
+    .await?;
+    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_project_deletion_requests(&project_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn create_project_deletion_request(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<CreateProjectDeletionRequestInput>,
+) -> Result<Json<ProjectDeletionRequest>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        Some(&project_id),
+        Some("project"),
+        Some(&project_id),
+    )
+    .await?;
+    ensure_project_owner(&state, &session, &project_id).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .create_project_deletion_request(&project_id, &session.user_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn approve_project_deletion_request(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, request_id)): Path<(String, String)>,
+    Json(input): Json<ReviewProjectDeletionRequestInput>,
+) -> Result<Json<ProjectDeletionRequest>, ApiError> {
+    let session = ensure_project_delete_review_session(&state, &headers, &project_id).await?;
+    let reviewed = state
+        .services
+        .workspace
+        .review_project_deletion_request(&request_id, &session.user_id, true, input)
+        .await?;
+    if reviewed.project_id != project_id {
+        return Err(ApiError::from(AppError::not_found(
+            "project deletion request not found",
+        )));
+    }
+    Ok(Json(reviewed))
+}
+
+pub(crate) async fn reject_project_deletion_request(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, request_id)): Path<(String, String)>,
+    Json(input): Json<ReviewProjectDeletionRequestInput>,
+) -> Result<Json<ProjectDeletionRequest>, ApiError> {
+    let session = ensure_project_delete_review_session(&state, &headers, &project_id).await?;
+    let reviewed = state
+        .services
+        .workspace
+        .review_project_deletion_request(&request_id, &session.user_id, false, input)
+        .await?;
+    if reviewed.project_id != project_id {
+        return Err(ApiError::from(AppError::not_found(
+            "project deletion request not found",
+        )));
+    }
+    Ok(Json(reviewed))
+}
+
+pub(crate) async fn delete_project(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        Some(&project_id),
+        Some("project"),
+        Some(&project_id),
+    )
+    .await?;
+    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    state.services.workspace.delete_project(&project_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub(crate) async fn project_dashboard(
@@ -3024,7 +3211,11 @@ pub(crate) async fn workspace_pet_dashboard(
         }
     }
 
-    let reminder_count = state.services.inbox.list_inbox().await?.len() as u64;
+    let reminder_count =
+        visible_inbox_items(&session.user_id, state.services.inbox.list_inbox().await?)
+            .into_iter()
+            .filter(|item| item.status == "pending")
+            .count() as u64;
     let has_home_binding = snapshot.binding.is_some();
     let has_home_session = snapshot
         .binding
@@ -4221,6 +4412,20 @@ pub(crate) async fn delete_tool(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub(crate) async fn current_user_profile_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<UserRecordSummary>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .current_user_profile(&session.user_id)
+            .await?,
+    ))
+}
+
 pub(crate) async fn update_current_user_profile_route(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -4255,8 +4460,13 @@ pub(crate) async fn inbox(
     State(state): State<ServerState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<octopus_core::InboxItemRecord>>, ApiError> {
-    ensure_capability_session(&state, &headers, "inbox.view", None, Some("inbox"), None).await?;
-    Ok(Json(state.services.inbox.list_inbox().await?))
+    let session =
+        ensure_capability_session(&state, &headers, "inbox.view", None, Some("inbox"), None)
+            .await?;
+    Ok(Json(visible_inbox_items(
+        &session.user_id,
+        state.services.inbox.list_inbox().await?,
+    )))
 }
 
 pub(crate) async fn workspace_deliverables(
@@ -5974,18 +6184,26 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Method, Request, StatusCode},
+    };
     use octopus_core::{
-        default_connection_stubs, default_host_state, default_preferences,
-        CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest,
-        DesktopBackendConnection, LaunchTaskRequest, ProjectPermissionOverrides,
-        RegisterBootstrapAdminRequest, RerunTaskRequest, SubmitRuntimeTurnInput, TaskContextBundle,
-        TaskContextRef, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+        default_connection_stubs, default_host_state, default_preferences, AccessUserUpsertRequest,
+        CreateProjectDeletionRequestInput, CreateProjectRequest, CreateRuntimeSessionInput,
+        CreateTaskInterventionRequest, CreateTaskRequest, DataPolicyUpsertRequest,
+        DesktopBackendConnection, LaunchTaskRequest, LoginRequest, ProjectDeletionRequest,
+        ProjectPermissionOverrides, RegisterBootstrapAdminRequest, RerunTaskRequest,
+        ReviewProjectDeletionRequestInput, RoleBindingUpsertRequest, RoleUpsertRequest,
+        SubmitRuntimeTurnInput, TaskContextBundle, TaskContextRef, UpdateWorkspaceRequest,
+        WorkspaceSummary, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
     };
     use octopus_infra::build_infra_bundle;
     use octopus_platform::PlatformServices;
     use octopus_runtime_adapter::{MockRuntimeModelDriver, RuntimeAdapter};
     use rusqlite::{params, Connection};
     use serde_json::{json, Value};
+    use tower::ServiceExt;
 
     const APPROVAL_AGENT_ID: &str = "agent-task-runtime-approval";
     const APPROVAL_AGENT_REF: &str = "agent:agent-task-runtime-approval";
@@ -6033,6 +6251,8 @@ mod tests {
             permission_overrides: Some(project.permission_overrides),
             linked_workspace_assets: Some(project.linked_workspace_assets),
             leader_agent_id: project.leader_agent_id,
+            manager_user_id: project.manager_user_id,
+            preset_code: project.preset_code,
             assignments: project.assignments,
         }
     }
@@ -6158,9 +6378,42 @@ mod tests {
                 confirm_password: "password123".into(),
                 avatar: avatar_payload(),
                 workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+                mapped_directory: None,
             })
             .await
             .expect("bootstrap admin")
+            .session
+    }
+
+    async fn create_user_session(
+        state: &ServerState,
+        username: &str,
+        display_name: &str,
+    ) -> SessionRecord {
+        state
+            .services
+            .access_control
+            .create_user(AccessUserUpsertRequest {
+                username: username.into(),
+                display_name: display_name.into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            })
+            .await
+            .expect("create user");
+        state
+            .services
+            .auth
+            .login(LoginRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: username.into(),
+                password: "password123".into(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+            })
+            .await
+            .expect("login user")
             .session
     }
 
@@ -6272,6 +6525,861 @@ mod tests {
             .expect("runtime config json"),
         )
         .expect("write runtime config");
+    }
+
+    #[tokio::test]
+    async fn workspace_summary_route_returns_persisted_mapped_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let mapped_root = temp.path().to_string_lossy().to_string();
+
+        let session = state
+            .services
+            .auth
+            .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                display_name: "Owner".into(),
+                password: "password123".into(),
+                confirm_password: "password123".into(),
+                avatar: avatar_payload(),
+                workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+                mapped_directory: Some(mapped_root.clone()),
+            })
+            .await
+            .expect("bootstrap admin")
+            .session;
+
+        let app = crate::routes::build_router(state.clone());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/workspace")
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("workspace summary response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("workspace summary body");
+        let workspace: WorkspaceSummary =
+            serde_json::from_slice(&body).expect("workspace summary json");
+        assert_eq!(
+            workspace.mapped_directory.as_deref(),
+            Some(mapped_root.as_str())
+        );
+        assert_eq!(
+            workspace.mapped_directory_default.as_deref(),
+            Some(mapped_root.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_summary_patch_route_updates_workspace_settings() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let current_root = temp.path().to_string_lossy().to_string();
+        let app = crate::routes::build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PATCH)
+                    .uri("/api/v1/workspace")
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&UpdateWorkspaceRequest {
+                            name: Some("Workspace Rebuilt".into()),
+                            avatar: None,
+                            remove_avatar: Some(true),
+                            mapped_directory: Some(current_root.clone()),
+                        })
+                        .expect("workspace update json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("workspace update response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("workspace update body");
+        let workspace: WorkspaceSummary =
+            serde_json::from_slice(&body).expect("workspace update json");
+        assert_eq!(workspace.name, "Workspace Rebuilt");
+        assert_eq!(
+            workspace.mapped_directory.as_deref(),
+            Some(current_root.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn personal_center_profile_route_returns_stored_avatar_summary() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let app = crate::routes::build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/workspace/personal-center/profile")
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("profile response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("profile body");
+        let profile: octopus_core::UserRecordSummary =
+            serde_json::from_slice(&body).expect("profile json");
+        assert_eq!(profile.id, session.user_id);
+        assert_eq!(
+            profile.avatar.as_deref(),
+            Some("data:image/png;base64,iVBORw0KGgo=")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_routes_create_and_list_archived_project_requests() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let headers = auth_headers(&session.token);
+        let app = crate::routes::build_router(state.clone());
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Delete Governed Project".into(),
+                description: "Deletion request route coverage.".into(),
+                resource_directory: "data/projects/delete-governed-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Retired project".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("create deletion request body");
+        let created: ProjectDeletionRequest =
+            serde_json::from_slice(&body).expect("project deletion request json");
+        assert_eq!(created.project_id, project.id);
+        assert_eq!(created.requested_by_user_id, session.user_id);
+        assert_eq!(created.status, "pending");
+        assert_eq!(created.reason.as_deref(), Some("Retired project"));
+        let inbox_items = state.services.inbox.list_inbox().await.expect("list inbox");
+        let inbox_item = inbox_items
+            .iter()
+            .find(|item| {
+                item.project_id.as_deref() == Some(project.id.as_str())
+                    && item.item_type == "project-deletion-request"
+                    && item.target_user_id == session.user_id
+            })
+            .expect("project deletion request inbox item");
+        assert_eq!(
+            inbox_item.route_to.as_deref(),
+            Some(format!(
+                "/workspaces/{}/projects/{}/settings",
+                DEFAULT_WORKSPACE_ID, project.id
+            )
+            .as_str())
+        );
+        assert_eq!(inbox_item.action_label.as_deref(), Some("Review approval"));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("list deletion requests response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("list deletion requests body");
+        let listed: Vec<ProjectDeletionRequest> =
+            serde_json::from_slice(&body).expect("project deletion request list json");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, created.id);
+        assert_eq!(listed[0].status, "pending");
+        assert_eq!(headers.get("x-workspace-id").is_some(), true);
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_approve_route_records_reviewer_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let app = crate::routes::build_router(state.clone());
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Approve Delete Project".into(),
+                description: "Deletion approval route coverage.".into(),
+                resource_directory: "data/projects/approve-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Sunset flow".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        let create_body = to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("create deletion request body");
+        let created: ProjectDeletionRequest =
+            serde_json::from_slice(&create_body).expect("project deletion request json");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/projects/{}/deletion-requests/{}/approve",
+                        project.id, created.id
+                    ))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ReviewProjectDeletionRequestInput {
+                            review_comment: Some("Approved for cleanup".into()),
+                        })
+                        .expect("approve deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("approve deletion request response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("approve deletion request body");
+        let approved: ProjectDeletionRequest =
+            serde_json::from_slice(&body).expect("approved deletion request json");
+        assert_eq!(approved.status, "approved");
+        assert_eq!(
+            approved.reviewed_by_user_id.as_deref(),
+            Some(session.user_id.as_str())
+        );
+        assert_eq!(
+            approved.review_comment.as_deref(),
+            Some("Approved for cleanup")
+        );
+        assert!(approved.reviewed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_reject_route_records_reviewer_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let app = crate::routes::build_router(state.clone());
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Reject Delete Project".into(),
+                description: "Deletion rejection route coverage.".into(),
+                resource_directory: "data/projects/reject-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Rejected path".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        let create_body = to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("create deletion request body");
+        let created: ProjectDeletionRequest =
+            serde_json::from_slice(&create_body).expect("project deletion request json");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/projects/{}/deletion-requests/{}/reject",
+                        project.id, created.id
+                    ))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ReviewProjectDeletionRequestInput {
+                            review_comment: Some("Need to retain project history".into()),
+                        })
+                        .expect("reject deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("reject deletion request response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("reject deletion request body");
+        let rejected: ProjectDeletionRequest =
+            serde_json::from_slice(&body).expect("rejected deletion request json");
+        assert_eq!(rejected.status, "rejected");
+        assert_eq!(
+            rejected.reviewed_by_user_id.as_deref(),
+            Some(session.user_id.as_str())
+        );
+        assert_eq!(
+            rejected.review_comment.as_deref(),
+            Some("Need to retain project history")
+        );
+        assert!(rejected.reviewed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_delete_route_requires_archived_approved_project() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let app = crate::routes::build_router(state.clone());
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Delete Project Route".into(),
+                description: "Deletion route guard coverage.".into(),
+                resource_directory: "data/projects/delete-project-route/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri(format!("/api/v1/projects/{}", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("delete active project response");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri(format!("/api/v1/projects/{}", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("delete archived project response");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Final cleanup".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        let create_body = to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("create deletion request body");
+        let created: ProjectDeletionRequest =
+            serde_json::from_slice(&create_body).expect("project deletion request json");
+
+        let approve_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/projects/{}/deletion-requests/{}/approve",
+                        project.id, created.id
+                    ))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ReviewProjectDeletionRequestInput {
+                            review_comment: Some("Ready to delete".into()),
+                        })
+                        .expect("approve deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("approve deletion request response");
+        assert_eq!(approve_response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri(format!("/api/v1/projects/{}", project.id))
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("delete approved project response");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        let projects = state
+            .services
+            .workspace
+            .list_projects()
+            .await
+            .expect("list projects");
+        assert!(!projects.iter().any(|record| record.id == project.id));
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_approve_route_allows_project_scoped_admin_reviewers() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let owner_session = bootstrap_owner(&state).await;
+        let approver_session = create_user_session(&state, "project-admin", "Project Admin").await;
+        let app = crate::routes::build_router(state.clone());
+
+        let project_admin_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.project-delete-reviewer".into(),
+                name: "Project Delete Reviewer".into(),
+                description: "Can approve project deletion for selected projects.".into(),
+                status: "active".into(),
+                permission_codes: vec!["project.manage".into()],
+            })
+            .await
+            .expect("create project admin role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: project_admin_role.id,
+                subject_type: "user".into(),
+                subject_id: approver_session.user_id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind project admin role");
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Scoped Admin Delete Project".into(),
+                description: "Deletion approval by scoped admin.".into(),
+                resource_directory: "data/projects/scoped-admin-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "project delete reviewer scope".into(),
+                subject_type: "user".into(),
+                subject_id: approver_session.user_id.clone(),
+                resource_type: "project".into(),
+                scope_type: "selected-projects".into(),
+                project_ids: vec![project.id.clone()],
+                tags: Vec::new(),
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create scoped data policy");
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", owner_session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Scoped admin should review".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        assert_eq!(create_response.status(), StatusCode::OK);
+        let create_body = to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("create deletion request body");
+        let created: ProjectDeletionRequest =
+            serde_json::from_slice(&create_body).expect("project deletion request json");
+
+        let approve_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/projects/{}/deletion-requests/{}/approve",
+                        project.id, created.id
+                    ))
+                    .header(
+                        "authorization",
+                        format!("Bearer {}", approver_session.token),
+                    )
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ReviewProjectDeletionRequestInput {
+                            review_comment: Some("Scoped admin approved".into()),
+                        })
+                        .expect("approve deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("approve deletion request response");
+
+        assert_eq!(approve_response.status(), StatusCode::OK);
+        let approve_body = to_bytes(approve_response.into_body(), usize::MAX)
+            .await
+            .expect("approve deletion request body");
+        let approved: ProjectDeletionRequest =
+            serde_json::from_slice(&approve_body).expect("approved deletion request json");
+        assert_eq!(
+            approved.reviewed_by_user_id.as_deref(),
+            Some(approver_session.user_id.as_str())
+        );
+        assert_eq!(approved.status, "approved");
+    }
+
+    #[tokio::test]
+    async fn inbox_route_returns_only_current_users_project_delete_items() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let owner_session = bootstrap_owner(&state).await;
+        let approver_session =
+            create_user_session(&state, "inbox-approver", "Inbox Approver").await;
+        let app = crate::routes::build_router(state.clone());
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Inbox Scoped Delete Project".into(),
+                description: "Targeted inbox route coverage.".into(),
+                resource_directory: "data/projects/inbox-scoped-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+        let inbox_reviewer_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.project-delete-inbox-reviewer".into(),
+                name: "Project Delete Inbox Reviewer".into(),
+                description: "Can review scoped project deletions and read inbox.".into(),
+                status: "active".into(),
+                permission_codes: vec!["project.manage".into(), "inbox.view".into()],
+            })
+            .await
+            .expect("create inbox reviewer role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: inbox_reviewer_role.id,
+                subject_type: "user".into(),
+                subject_id: approver_session.user_id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind inbox reviewer role");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "inbox reviewer scope".into(),
+                subject_type: "user".into(),
+                subject_id: approver_session.user_id.clone(),
+                resource_type: "project".into(),
+                scope_type: "selected-projects".into(),
+                project_ids: vec![project.id.clone()],
+                tags: Vec::new(),
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create inbox reviewer policy");
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", owner_session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Need targeted inbox".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        assert_eq!(create_response.status(), StatusCode::OK);
+
+        let owner_inbox_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/inbox")
+                    .header("authorization", format!("Bearer {}", owner_session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("owner inbox response");
+        assert_eq!(owner_inbox_response.status(), StatusCode::OK);
+        let owner_inbox_body = to_bytes(owner_inbox_response.into_body(), usize::MAX)
+            .await
+            .expect("owner inbox body");
+        let owner_items: Vec<octopus_core::InboxItemRecord> =
+            serde_json::from_slice(&owner_inbox_body).expect("owner inbox json");
+        assert_eq!(owner_items.len(), 1);
+        assert_eq!(owner_items[0].target_user_id, owner_session.user_id);
+
+        let approver_inbox_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/inbox")
+                    .header(
+                        "authorization",
+                        format!("Bearer {}", approver_session.token),
+                    )
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("approver inbox response");
+        assert_eq!(approver_inbox_response.status(), StatusCode::OK);
+        let approver_inbox_body = to_bytes(approver_inbox_response.into_body(), usize::MAX)
+            .await
+            .expect("approver inbox body");
+        let approver_items: Vec<octopus_core::InboxItemRecord> =
+            serde_json::from_slice(&approver_inbox_body).expect("approver inbox json");
+        assert_eq!(approver_items.len(), 1);
+        assert_eq!(approver_items[0].target_user_id, approver_session.user_id);
     }
 
     fn insert_approval_required_agent(root: &Path) {
@@ -6756,6 +7864,8 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: None,
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .expect("validated request");
@@ -6776,6 +7886,8 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: None,
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .is_err());
@@ -6793,6 +7905,8 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: None,
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .expect("validated update");
@@ -6815,6 +7929,8 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: None,
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .is_err());
@@ -6828,13 +7944,15 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: None,
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .is_err());
     }
 
     #[test]
-    fn validate_create_project_request_trims_leader_and_exclusions() {
+    fn validate_create_project_request_trims_manager_preset_and_leader() {
         let validated = validate_create_project_request(CreateProjectRequest {
             name: "  Leader Project  ".into(),
             description: "  Use live inheritance.  ".into(),
@@ -6844,87 +7962,16 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: Some("  agent-leader  ".into()),
-            assignments: Some(octopus_core::ProjectWorkspaceAssignments {
-                models: None,
-                tools: Some(octopus_core::ProjectToolAssignments {
-                    source_keys: vec![
-                        " builtin:bash ".into(),
-                        "".into(),
-                        "builtin:bash".into(),
-                        " mcp:browser ".into(),
-                    ],
-                    excluded_source_keys: vec![
-                        " builtin:files ".into(),
-                        "builtin:files".into(),
-                        " ".into(),
-                    ],
-                }),
-                agents: Some(octopus_core::ProjectAgentAssignments {
-                    agent_ids: vec![
-                        " agent-architect ".into(),
-                        "".into(),
-                        "agent-architect".into(),
-                    ],
-                    team_ids: vec![" team-studio ".into(), "team-studio".into(), " ".into()],
-                    excluded_agent_ids: vec![
-                        " agent-shadow ".into(),
-                        "agent-shadow".into(),
-                        " ".into(),
-                    ],
-                    excluded_team_ids: vec![
-                        " team-shadow ".into(),
-                        " ".into(),
-                        "team-shadow".into(),
-                    ],
-                }),
-            }),
+            manager_user_id: Some("  user-manager  ".into()),
+            preset_code: Some("  preset-ops  ".into()),
+            assignments: None,
         })
         .expect("validated request");
 
         assert_eq!(validated.leader_agent_id.as_deref(), Some("agent-leader"));
-        let assignments = validated.assignments.expect("assignments");
-        assert_eq!(
-            assignments
-                .tools
-                .as_ref()
-                .map(|tools| tools.source_keys.clone()),
-            Some(vec!["builtin:bash".into(), "mcp:browser".into()])
-        );
-        assert_eq!(
-            assignments
-                .tools
-                .as_ref()
-                .map(|tools| tools.excluded_source_keys.clone()),
-            Some(vec!["builtin:files".into()])
-        );
-        assert_eq!(
-            assignments
-                .agents
-                .as_ref()
-                .map(|agents| agents.agent_ids.clone()),
-            Some(vec!["agent-architect".into()])
-        );
-        assert_eq!(
-            assignments
-                .agents
-                .as_ref()
-                .map(|agents| agents.team_ids.clone()),
-            Some(vec!["team-studio".into()])
-        );
-        assert_eq!(
-            assignments
-                .agents
-                .as_ref()
-                .map(|agents| agents.excluded_agent_ids.clone()),
-            Some(vec!["agent-shadow".into()])
-        );
-        assert_eq!(
-            assignments
-                .agents
-                .as_ref()
-                .map(|agents| agents.excluded_team_ids.clone()),
-            Some(vec!["team-shadow".into()])
-        );
+        assert_eq!(validated.manager_user_id.as_deref(), Some("user-manager"));
+        assert_eq!(validated.preset_code.as_deref(), Some("preset-ops"));
+        assert!(validated.assignments.is_none());
 
         assert!(validate_create_project_request(CreateProjectRequest {
             name: "Project".into(),
@@ -6935,6 +7982,8 @@ mod tests {
             permission_overrides: None,
             linked_workspace_assets: None,
             leader_agent_id: Some("   ".into()),
+            manager_user_id: None,
+            preset_code: None,
             assignments: None,
         })
         .is_err());
@@ -8314,6 +9363,8 @@ mod tests {
                     }),
                     linked_workspace_assets: Some(project.linked_workspace_assets),
                     leader_agent_id: project.leader_agent_id,
+                    manager_user_id: project.manager_user_id,
+                    preset_code: project.preset_code,
                     assignments: project.assignments,
                 },
             )

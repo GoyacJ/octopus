@@ -1,5 +1,12 @@
 use super::*;
 
+const PROJECT_DELETION_REQUEST_INBOX_ITEM_TYPE: &str = "project-deletion-request";
+const PROJECT_DELETION_REQUEST_ACTION_LABEL: &str = "Review approval";
+use crate::project_tasks::{
+    load_project_task_interventions, load_project_task_runs, load_project_task_scheduler_claims,
+    load_project_tasks,
+};
+
 #[async_trait]
 impl WorkspaceService for InfraWorkspaceService {
     async fn system_bootstrap(&self) -> Result<SystemBootstrapStatus, AppError> {
@@ -31,6 +38,90 @@ impl WorkspaceService for InfraWorkspaceService {
 
     async fn workspace_summary(&self) -> Result<WorkspaceSummary, AppError> {
         self.state.workspace_snapshot()
+    }
+
+    async fn update_workspace(
+        &self,
+        request: UpdateWorkspaceRequest,
+    ) -> Result<WorkspaceSummary, AppError> {
+        let current_workspace = self.state.workspace_snapshot()?;
+        let next_name = match request.name {
+            Some(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return Err(AppError::invalid_input("workspace name is required"));
+                }
+                trimmed.to_string()
+            }
+            None => current_workspace.name.clone(),
+        };
+
+        let next_avatar = if let Some(avatar) = request.avatar.as_ref() {
+            let (avatar_path, avatar_content_type, _, _) =
+                self.persist_workspace_avatar("workspace", avatar)?;
+            (
+                stored_avatar_data_url(
+                    &self.state.paths,
+                    Some(avatar_path.as_str()),
+                    Some(avatar_content_type.as_str()),
+                ),
+                Some(avatar_path),
+                Some(avatar_content_type),
+            )
+        } else if request.remove_avatar.unwrap_or(false) {
+            (None, None, None)
+        } else {
+            (
+                current_workspace.avatar.clone(),
+                self.state
+                    .workspace_avatar_path
+                    .lock()
+                    .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+                    .clone(),
+                self.state
+                    .workspace_avatar_content_type
+                    .lock()
+                    .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+                    .clone(),
+            )
+        };
+        let next_mapped_directory = normalize_mapped_directory_input(
+            &self.state.paths,
+            request.mapped_directory.as_deref(),
+        )?
+        .or(current_workspace.mapped_directory.clone());
+
+        {
+            let mut workspace = self
+                .state
+                .workspace
+                .lock()
+                .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
+            workspace.name = next_name;
+            workspace.avatar = next_avatar.0.clone();
+            workspace.mapped_directory = next_mapped_directory;
+            workspace.mapped_directory_default =
+                Some(workspace_root_display_path(&self.state.paths));
+        }
+        {
+            let mut avatar_path = self
+                .state
+                .workspace_avatar_path
+                .lock()
+                .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?;
+            *avatar_path = next_avatar.1.clone();
+        }
+        {
+            let mut avatar_content_type = self
+                .state
+                .workspace_avatar_content_type
+                .lock()
+                .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?;
+            *avatar_content_type = next_avatar.2.clone();
+        }
+
+        self.state.save_workspace_config()?;
+        Ok(self.state.workspace_snapshot()?)
     }
 
     async fn list_projects(&self) -> Result<Vec<ProjectRecord>, AppError> {
@@ -73,6 +164,14 @@ impl WorkspaceService for InfraWorkspaceService {
             description: Self::normalize_project_description(&request.description),
             resource_directory,
             leader_agent_id: request.leader_agent_id.clone(),
+            manager_user_id: request
+                .manager_user_id
+                .clone()
+                .filter(|value| !value.trim().is_empty()),
+            preset_code: request
+                .preset_code
+                .clone()
+                .filter(|value| !value.trim().is_empty()),
             owner_user_id: owner_user_id.clone(),
             member_user_ids: normalized_project_member_user_ids(
                 &owner_user_id,
@@ -126,6 +225,11 @@ impl WorkspaceService for InfraWorkspaceService {
                 .leader_agent_id
                 .clone()
                 .or(existing.leader_agent_id.clone()),
+            manager_user_id: request
+                .manager_user_id
+                .clone()
+                .or(existing.manager_user_id.clone()),
+            preset_code: request.preset_code.clone().or(existing.preset_code.clone()),
             owner_user_id: request
                 .owner_user_id
                 .clone()
@@ -181,10 +285,8 @@ impl WorkspaceService for InfraWorkspaceService {
                     .ok_or_else(|| {
                         AppError::invalid_input("cannot archive the last active project")
                     })?;
-                bootstrap::save_workspace_config_file(
-                    &self.state.paths.workspace_config,
-                    &workspace,
-                )?;
+                drop(workspace);
+                self.state.save_workspace_config()?;
             }
         }
 
@@ -215,6 +317,21 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("project promotion requests mutex poisoned"))?
             .clone())
+    }
+
+    async fn list_project_deletion_requests(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectDeletionRequest>, AppError> {
+        Ok(self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?
+            .iter()
+            .filter(|record| record.project_id == project_id)
+            .cloned()
+            .collect())
     }
 
     async fn create_project_promotion_request(
@@ -261,6 +378,59 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("project promotion requests mutex poisoned"))?
             .insert(0, record.clone());
+        Ok(record)
+    }
+
+    async fn create_project_deletion_request(
+        &self,
+        project_id: &str,
+        requested_by_user_id: &str,
+        input: CreateProjectDeletionRequestInput,
+    ) -> Result<ProjectDeletionRequest, AppError> {
+        let project = self.project_record(project_id)?;
+        if project.status != "archived" {
+            return Err(AppError::conflict(
+                "project must be archived before a deletion request can be created",
+            ));
+        }
+        if self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?
+            .iter()
+            .any(|record| record.project_id == project_id && record.status == "pending")
+        {
+            return Err(AppError::conflict(
+                "project deletion request is already pending",
+            ));
+        }
+
+        let now = timestamp_now();
+        let record = ProjectDeletionRequest {
+            id: format!("project-delete-{}", Uuid::new_v4()),
+            workspace_id: project.workspace_id,
+            project_id: project.id,
+            requested_by_user_id: requested_by_user_id.into(),
+            status: "pending".into(),
+            reason: input
+                .reason
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            reviewed_by_user_id: None,
+            review_comment: None,
+            created_at: now,
+            updated_at: now,
+            reviewed_at: None,
+        };
+        let inbox_items = self.build_project_deletion_request_inbox_items(&record)?;
+        self.persist_project_deletion_request(&record, false)?;
+        self.state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?
+            .insert(0, record.clone());
+        self.push_inbox_items(inbox_items)?;
         Ok(record)
     }
 
@@ -324,6 +494,175 @@ impl WorkspaceService for InfraWorkspaceService {
             .map_err(|_| AppError::runtime("project promotion requests mutex poisoned"))?;
         Self::replace_or_push(&mut requests, updated.clone(), |item| item.id == request_id);
         Ok(updated)
+    }
+
+    async fn review_project_deletion_request(
+        &self,
+        request_id: &str,
+        reviewed_by_user_id: &str,
+        approved: bool,
+        input: ReviewProjectDeletionRequestInput,
+    ) -> Result<ProjectDeletionRequest, AppError> {
+        let existing = self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?
+            .iter()
+            .find(|record| record.id == request_id)
+            .cloned()
+            .ok_or_else(|| AppError::not_found("project deletion request not found"))?;
+        if existing.status != "pending" {
+            return Err(AppError::conflict(
+                "project deletion request has already been reviewed",
+            ));
+        }
+
+        let updated = ProjectDeletionRequest {
+            status: if approved {
+                "approved".into()
+            } else {
+                "rejected".into()
+            },
+            reviewed_by_user_id: Some(reviewed_by_user_id.into()),
+            review_comment: input
+                .review_comment
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            reviewed_at: Some(timestamp_now()),
+            updated_at: timestamp_now(),
+            ..existing
+        };
+        self.persist_project_deletion_request(&updated, true)?;
+        let mut requests = self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?;
+        Self::replace_or_push(&mut requests, updated.clone(), |item| item.id == request_id);
+        self.resolve_project_deletion_request_inbox_items(
+            request_id,
+            reviewed_by_user_id,
+            approved,
+        )?;
+        Ok(updated)
+    }
+
+    async fn delete_project(&self, project_id: &str) -> Result<(), AppError> {
+        let project = self.project_record(project_id)?;
+        if project.status != "archived" {
+            return Err(AppError::conflict(
+                "project must be archived before deletion",
+            ));
+        }
+        let has_approved_request = self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))?
+            .iter()
+            .any(|record| record.project_id == project_id && record.status == "approved");
+        if !has_approved_request {
+            return Err(AppError::conflict(
+                "project deletion requires an approved deletion request",
+            ));
+        }
+
+        let project_resources = self
+            .state
+            .resources
+            .lock()
+            .map_err(|_| AppError::runtime("resources mutex poisoned"))?
+            .iter()
+            .filter(|record| record.project_id.as_deref() == Some(project_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut cleanup_paths = std::collections::BTreeSet::new();
+        for path in Self::query_project_cleanup_paths(&self.state.open_db()?, project_id)? {
+            cleanup_paths.insert(path);
+        }
+
+        let mut connection = self.state.open_db()?;
+        let tx = connection
+            .transaction()
+            .map_err(|error| AppError::database(error.to_string()))?;
+        for sql in [
+            "DELETE FROM runtime_memory_proposals WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_approval_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_background_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_workflow_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_handoff_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_mailbox_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_subrun_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_run_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1)",
+            "DELETE FROM runtime_session_projections WHERE project_id = ?1",
+            "DELETE FROM runtime_memory_records WHERE project_id = ?1",
+            "DELETE FROM artifact_versions WHERE project_id = ?1",
+            "DELETE FROM artifact_records WHERE project_id = ?1",
+            "DELETE FROM project_task_interventions WHERE project_id = ?1",
+            "DELETE FROM project_task_runs WHERE project_id = ?1",
+            "DELETE FROM project_task_scheduler_claims WHERE project_id = ?1",
+            "DELETE FROM project_tasks WHERE project_id = ?1",
+            "DELETE FROM resources WHERE project_id = ?1",
+            "DELETE FROM knowledge_records WHERE project_id = ?1",
+            "DELETE FROM bundle_asset_descriptors WHERE project_id = ?1",
+            "DELETE FROM agents WHERE project_id = ?1",
+            "DELETE FROM teams WHERE project_id = ?1",
+            "DELETE FROM project_agent_links WHERE project_id = ?1",
+            "DELETE FROM project_team_links WHERE project_id = ?1",
+            "DELETE FROM project_promotion_requests WHERE project_id = ?1",
+            "DELETE FROM project_deletion_requests WHERE project_id = ?1",
+            "DELETE FROM protected_resources WHERE project_id = ?1",
+            "DELETE FROM pet_presence WHERE project_id = ?1",
+            "DELETE FROM pet_conversation_bindings WHERE project_id = ?1",
+            "DELETE FROM trace_events WHERE project_id = ?1",
+            "DELETE FROM audit_records WHERE project_id = ?1",
+            "DELETE FROM cost_entries WHERE project_id = ?1",
+            "DELETE FROM project_token_usage_projections WHERE project_id = ?1",
+            "DELETE FROM projects WHERE id = ?1",
+        ] {
+            tx.execute(sql, params![project_id])
+                .map_err(|error| AppError::database(error.to_string()))?;
+        }
+        tx.commit()
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        self.refresh_project_scoped_caches(&connection)?;
+
+        let should_save_workspace = {
+            let mut workspace = self
+                .state
+                .workspace
+                .lock()
+                .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
+            if workspace.default_project_id == project_id {
+                let projects = self
+                    .state
+                    .projects
+                    .lock()
+                    .map_err(|_| AppError::runtime("projects mutex poisoned"))?;
+                workspace.default_project_id = Self::next_active_project_id(&projects, project_id)
+                    .ok_or_else(|| AppError::conflict("cannot delete the last active project"))?;
+                true
+            } else {
+                false
+            }
+        };
+        if should_save_workspace {
+            self.state.save_workspace_config()?;
+        }
+
+        for record in &project_resources {
+            self.delete_managed_resource_storage(record)?;
+        }
+        for path in cleanup_paths {
+            self.delete_stored_path_if_exists(&path)?;
+        }
+        let project_directory = self.resolve_storage_path(&project.resource_directory);
+        if project_directory.exists() {
+            fs::remove_dir_all(project_directory)?;
+        }
+        Ok(())
     }
 
     async fn list_workspace_resources(&self) -> Result<Vec<WorkspaceResourceRecord>, AppError> {
@@ -1737,6 +2076,19 @@ impl WorkspaceService for InfraWorkspaceService {
         Ok(())
     }
 
+    async fn current_user_profile(&self, user_id: &str) -> Result<UserRecordSummary, AppError> {
+        let users = self
+            .state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("users mutex poisoned"))?;
+        let user = users
+            .iter()
+            .find(|item| item.record.id == user_id)
+            .ok_or_else(|| AppError::not_found("workspace user"))?;
+        Ok(to_user_summary(&self.state.paths, user))
+    }
+
     async fn update_current_user_profile(
         &self,
         user_id: &str,
@@ -2143,6 +2495,89 @@ impl InfraWorkspaceService {
             .ok_or_else(|| AppError::not_found("project not found"))
     }
 
+    fn build_project_deletion_request_inbox_items(
+        &self,
+        request: &ProjectDeletionRequest,
+    ) -> Result<Vec<InboxItemRecord>, AppError> {
+        let project = self.project_record(&request.project_id)?;
+        let approver_user_ids = resolve_project_deletion_approver_user_ids(
+            &self.state.open_db()?,
+            &request.project_id,
+        )?;
+        if approver_user_ids.is_empty() {
+            return Err(AppError::conflict(
+                "project deletion request requires at least one eligible approver",
+            ));
+        }
+
+        let description = request
+            .reason
+            .as_deref()
+            .map(|reason| format!("Archived project deletion requested: {reason}"))
+            .unwrap_or_else(|| "Archived project deletion requested.".into());
+        let project_settings_route = format!(
+            "/workspaces/{}/projects/{}/settings",
+            request.workspace_id, request.project_id
+        );
+
+        Ok(approver_user_ids
+            .into_iter()
+            .map(|user_id| InboxItemRecord {
+                id: format!("project-deletion-request-{}-{user_id}", request.id),
+                workspace_id: request.workspace_id.clone(),
+                project_id: Some(request.project_id.clone()),
+                target_user_id: user_id,
+                item_type: PROJECT_DELETION_REQUEST_INBOX_ITEM_TYPE.into(),
+                title: format!("Review deletion for {}", project.name),
+                description: description.clone(),
+                status: "pending".into(),
+                priority: "high".into(),
+                actionable: true,
+                route_to: Some(project_settings_route.clone()),
+                action_label: Some(PROJECT_DELETION_REQUEST_ACTION_LABEL.into()),
+                created_at: request.created_at,
+            })
+            .collect())
+    }
+
+    fn push_inbox_items(&self, items: Vec<InboxItemRecord>) -> Result<(), AppError> {
+        self.state
+            .inbox
+            .lock()
+            .map_err(|_| AppError::runtime("inbox mutex poisoned"))?
+            .extend(items);
+        Ok(())
+    }
+
+    fn resolve_project_deletion_request_inbox_items(
+        &self,
+        request_id: &str,
+        reviewed_by_user_id: &str,
+        approved: bool,
+    ) -> Result<(), AppError> {
+        let item_prefix = format!("project-deletion-request-{request_id}-");
+        let reviewed_status = if approved { "approved" } else { "rejected" };
+        let mut inbox = self
+            .state
+            .inbox
+            .lock()
+            .map_err(|_| AppError::runtime("inbox mutex poisoned"))?;
+
+        for item in inbox.iter_mut().filter(|item| {
+            item.item_type == PROJECT_DELETION_REQUEST_INBOX_ITEM_TYPE
+                && item.id.starts_with(&item_prefix)
+        }) {
+            item.actionable = false;
+            if item.target_user_id == reviewed_by_user_id {
+                item.status = reviewed_status.into();
+            } else if item.status == "pending" {
+                item.status = "closed".into();
+            }
+        }
+
+        Ok(())
+    }
+
     fn resource_record(&self, resource_id: &str) -> Result<WorkspaceResourceRecord, AppError> {
         self.state
             .resources
@@ -2212,14 +2647,20 @@ impl InfraWorkspaceService {
             "INSERT"
         };
         let sql = format!(
-            "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
+            "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, leader_agent_id, manager_user_id, preset_code, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
         );
         let assignments_json = record
             .assignments
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let linked_workspace_assets_json =
+            if record.linked_workspace_assets == empty_project_linked_workspace_assets() {
+                None
+            } else {
+                Some(serde_json::to_string(&record.linked_workspace_assets)?)
+            };
 
         self.state
             .open_db()?
@@ -2233,11 +2674,13 @@ impl InfraWorkspaceService {
                     record.description,
                     record.resource_directory,
                     record.leader_agent_id,
+                    record.manager_user_id,
+                    record.preset_code,
                     assignments_json,
                     record.owner_user_id,
                     serde_json::to_string(&record.member_user_ids)?,
                     serde_json::to_string(&record.permission_overrides)?,
-                    serde_json::to_string(&record.linked_workspace_assets)?,
+                    linked_workspace_assets_json,
                 ],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
@@ -2273,6 +2716,43 @@ impl InfraWorkspaceService {
                     record.submitted_by_owner_user_id,
                     record.required_workspace_capability,
                     record.status,
+                    record.reviewed_by_user_id,
+                    record.review_comment,
+                    record.created_at as i64,
+                    record.updated_at as i64,
+                    record.reviewed_at.map(|value| value as i64),
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(())
+    }
+
+    fn persist_project_deletion_request(
+        &self,
+        record: &ProjectDeletionRequest,
+        replace: bool,
+    ) -> Result<(), AppError> {
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
+        let sql = format!(
+            "{verb} INTO project_deletion_requests (id, workspace_id, project_id, requested_by_user_id, status, reason, reviewed_by_user_id, review_comment, created_at, updated_at, reviewed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+        );
+
+        self.state
+            .open_db()?
+            .execute(
+                &sql,
+                params![
+                    record.id,
+                    record.workspace_id,
+                    record.project_id,
+                    record.requested_by_user_id,
+                    record.status,
+                    record.reason,
                     record.reviewed_by_user_id,
                     record.review_comment,
                     record.created_at as i64,
@@ -2344,6 +2824,173 @@ impl InfraWorkspaceService {
         } else {
             self.state.paths.root.join(path)
         }
+    }
+
+    fn delete_stored_path_if_exists(&self, stored_path: &str) -> Result<(), AppError> {
+        let absolute_path = self.resolve_storage_path(stored_path);
+        if !absolute_path.exists() {
+            return Ok(());
+        }
+        if absolute_path.is_dir() {
+            fs::remove_dir_all(absolute_path)?;
+        } else {
+            fs::remove_file(absolute_path)?;
+        }
+        Ok(())
+    }
+
+    fn query_project_cleanup_paths(
+        connection: &Connection,
+        project_id: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let mut stmt = connection
+            .prepare(
+                "SELECT path FROM (
+                   SELECT storage_path AS path FROM artifact_records WHERE project_id = ?1 AND storage_path IS NOT NULL
+                   UNION
+                   SELECT storage_path AS path FROM artifact_versions WHERE project_id = ?1 AND storage_path IS NOT NULL
+                   UNION
+                   SELECT storage_path AS path FROM bundle_asset_descriptors WHERE project_id = ?1 AND storage_path IS NOT NULL
+                   UNION
+                   SELECT avatar_path AS path FROM agents WHERE project_id = ?1 AND avatar_path IS NOT NULL
+                   UNION
+                   SELECT avatar_path AS path FROM teams WHERE project_id = ?1 AND avatar_path IS NOT NULL
+                   UNION
+                   SELECT body_storage_path AS path FROM runtime_mailbox_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1) AND body_storage_path IS NOT NULL
+                   UNION
+                   SELECT envelope_storage_path AS path FROM runtime_handoff_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1) AND envelope_storage_path IS NOT NULL
+                   UNION
+                   SELECT detail_storage_path AS path FROM runtime_workflow_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1) AND detail_storage_path IS NOT NULL
+                   UNION
+                   SELECT state_storage_path AS path FROM runtime_background_projections WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1) AND state_storage_path IS NOT NULL
+                   UNION
+                   SELECT storage_path AS path FROM runtime_memory_records WHERE project_id = ?1 AND storage_path IS NOT NULL
+                   UNION
+                   SELECT artifact_storage_path AS path FROM runtime_memory_proposals WHERE session_id IN (SELECT id FROM runtime_session_projections WHERE project_id = ?1) AND artifact_storage_path IS NOT NULL
+                 ) ORDER BY path ASC",
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let rows = stmt
+            .query_map(params![project_id], |row| row.get::<_, String>(0))
+            .map_err(|error| AppError::database(error.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AppError::database(error.to_string()))
+    }
+
+    fn refresh_project_scoped_caches(&self, connection: &Connection) -> Result<(), AppError> {
+        *self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))? =
+            load_projects(connection)?;
+        *self
+            .state
+            .project_promotion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project promotion requests mutex poisoned"))? =
+            load_project_promotion_requests(connection)?;
+        *self
+            .state
+            .project_deletion_requests
+            .lock()
+            .map_err(|_| AppError::runtime("project deletion requests mutex poisoned"))? =
+            load_project_deletion_requests(connection)?;
+        *self
+            .state
+            .resources
+            .lock()
+            .map_err(|_| AppError::runtime("resources mutex poisoned"))? =
+            load_resources(connection)?;
+        *self
+            .state
+            .knowledge_records
+            .lock()
+            .map_err(|_| AppError::runtime("knowledge records mutex poisoned"))? =
+            load_knowledge_records(connection)?;
+        *self
+            .state
+            .project_tasks
+            .lock()
+            .map_err(|_| AppError::runtime("project tasks mutex poisoned"))? =
+            load_project_tasks(connection)?;
+        *self
+            .state
+            .project_task_runs
+            .lock()
+            .map_err(|_| AppError::runtime("project task runs mutex poisoned"))? =
+            load_project_task_runs(connection)?;
+        *self
+            .state
+            .project_task_interventions
+            .lock()
+            .map_err(|_| AppError::runtime("project task interventions mutex poisoned"))? =
+            load_project_task_interventions(connection)?;
+        *self
+            .state
+            .project_task_scheduler_claims
+            .lock()
+            .map_err(|_| AppError::runtime("project task scheduler claims mutex poisoned"))? =
+            load_project_task_scheduler_claims(connection)?;
+        *self
+            .state
+            .artifacts
+            .lock()
+            .map_err(|_| AppError::runtime("artifacts mutex poisoned"))? =
+            load_artifact_records(connection)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = load_agents(connection)?;
+        *self
+            .state
+            .project_agent_links
+            .lock()
+            .map_err(|_| AppError::runtime("project agent links mutex poisoned"))? =
+            load_project_agent_links(connection)?;
+        *self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = load_teams(connection)?;
+        *self
+            .state
+            .project_team_links
+            .lock()
+            .map_err(|_| AppError::runtime("project team links mutex poisoned"))? =
+            load_project_team_links(connection)?;
+        *self
+            .state
+            .trace_events
+            .lock()
+            .map_err(|_| AppError::runtime("trace events mutex poisoned"))? =
+            load_trace_events(connection)?;
+        *self
+            .state
+            .audit_records
+            .lock()
+            .map_err(|_| AppError::runtime("audit records mutex poisoned"))? =
+            load_audit_records(connection)?;
+        *self
+            .state
+            .cost_entries
+            .lock()
+            .map_err(|_| AppError::runtime("cost entries mutex poisoned"))? =
+            load_cost_entries(connection)?;
+        *self
+            .state
+            .pet_presences
+            .lock()
+            .map_err(|_| AppError::runtime("pet presences mutex poisoned"))? =
+            load_pet_presences(connection)?;
+        *self
+            .state
+            .pet_bindings
+            .lock()
+            .map_err(|_| AppError::runtime("pet bindings mutex poisoned"))? =
+            load_pet_bindings(connection)?;
+        Ok(())
     }
 
     fn resource_content_type(name: &str, location: Option<&str>) -> Option<String> {
@@ -2897,9 +3544,9 @@ mod tests {
     use super::*;
     use octopus_core::{
         AccessUserUpsertRequest, ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy,
-        DefaultModelStrategy, DelegationPolicy, LoginRequest, MailboxPolicy, MemoryPolicy,
-        OutputContract, PermissionEnvelope, ProjectAgentAssignments, ProjectToolAssignments,
-        ProjectWorkspaceAssignments, RegisterBootstrapAdminRequest, SharedCapabilityPolicy,
+        CreateProjectDeletionRequestInput, DefaultModelStrategy, DelegationPolicy, LoginRequest,
+        MailboxPolicy, MemoryPolicy, OutputContract, PermissionEnvelope,
+        RegisterBootstrapAdminRequest, ReviewProjectDeletionRequestInput, SharedCapabilityPolicy,
         SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
     };
     use octopus_platform::{AccessControlService, AuthService};
@@ -2948,6 +3595,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin")
@@ -3471,6 +4119,8 @@ mod tests {
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3487,94 +4137,35 @@ mod tests {
     }
 
     #[test]
-    fn create_project_persists_leader_and_live_inheritance_fields() {
+    fn create_project_persists_manager_and_preset_fields_without_legacy_grant_snapshots() {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
 
         let created = runtime
             .block_on(bundle.workspace.create_project(CreateProjectRequest {
-                name: "Leader Project".into(),
-                description: "Leader persistence coverage.".into(),
-                resource_directory: "data/projects/leader-project/resources".into(),
+                name: "Governed Project".into(),
+                description: "Project metadata persistence coverage.".into(),
+                resource_directory: "data/projects/governed-project/resources".into(),
                 owner_user_id: None,
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: Some("agent-leader".into()),
-                assignments: Some(ProjectWorkspaceAssignments {
-                    models: None,
-                    tools: Some(ProjectToolAssignments {
-                        source_keys: vec![],
-                        excluded_source_keys: vec!["builtin:bash".into(), "skill:ops".into()],
-                    }),
-                    agents: Some(ProjectAgentAssignments {
-                        agent_ids: vec![],
-                        team_ids: vec![],
-                        excluded_agent_ids: vec!["agent-shadow".into()],
-                        excluded_team_ids: vec!["team-review".into()],
-                    }),
-                }),
+                manager_user_id: Some("user-manager".into()),
+                preset_code: Some("preset-governed".into()),
+                assignments: None,
             }))
             .expect("created project");
 
         assert_eq!(created.leader_agent_id.as_deref(), Some("agent-leader"));
+        assert_eq!(created.manager_user_id.as_deref(), Some("user-manager"));
+        assert_eq!(created.preset_code.as_deref(), Some("preset-governed"));
         assert_eq!(
-            created
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.tools.as_ref())
-                .map(|tools| tools.excluded_source_keys.clone()),
-            Some(vec!["builtin:bash".to_string(), "skill:ops".to_string()])
+            created.linked_workspace_assets,
+            empty_project_linked_workspace_assets()
         );
-        assert_eq!(
-            created
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.agents.as_ref())
-                .map(|agents| agents.excluded_team_ids.clone()),
-            Some(vec!["team-review".to_string()])
-        );
-
-        let updated = runtime
-            .block_on(bundle.workspace.update_project(
-                &created.id,
-                UpdateProjectRequest {
-                    name: "Leader Project".into(),
-                    description: "Leader persistence updated.".into(),
-                    status: "active".into(),
-                    resource_directory: created.resource_directory.clone(),
-                    owner_user_id: None,
-                    member_user_ids: None,
-                    permission_overrides: None,
-                    linked_workspace_assets: None,
-                    leader_agent_id: Some("agent-strategist".into()),
-                    assignments: Some(ProjectWorkspaceAssignments {
-                        models: None,
-                        tools: Some(ProjectToolAssignments {
-                            source_keys: vec![],
-                            excluded_source_keys: vec!["mcp:browser".into()],
-                        }),
-                        agents: Some(ProjectAgentAssignments {
-                            agent_ids: vec![],
-                            team_ids: vec![],
-                            excluded_agent_ids: vec!["agent-shadow".into(), "agent-scout".into()],
-                            excluded_team_ids: vec![],
-                        }),
-                    }),
-                },
-            ))
-            .expect("updated project");
-
-        assert_eq!(updated.leader_agent_id.as_deref(), Some("agent-strategist"));
-        assert_eq!(
-            updated
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.agents.as_ref())
-                .map(|agents| agents.excluded_agent_ids.clone()),
-            Some(vec!["agent-shadow".to_string(), "agent-scout".to_string()])
-        );
+        assert!(created.assignments.is_none());
 
         let listed = runtime
             .block_on(bundle.workspace.list_projects())
@@ -3584,57 +4175,35 @@ mod tests {
             .find(|project| project.id == created.id)
             .expect("persisted project");
 
+        assert_eq!(persisted.leader_agent_id.as_deref(), Some("agent-leader"));
+        assert_eq!(persisted.manager_user_id.as_deref(), Some("user-manager"));
+        assert_eq!(persisted.preset_code.as_deref(), Some("preset-governed"));
         assert_eq!(
-            persisted.leader_agent_id.as_deref(),
-            Some("agent-strategist")
+            persisted.linked_workspace_assets,
+            empty_project_linked_workspace_assets()
         );
-        assert_eq!(
-            persisted
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.tools.as_ref())
-                .map(|tools| tools.excluded_source_keys.clone()),
-            Some(vec!["mcp:browser".to_string()])
-        );
-        assert_eq!(
-            persisted
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.agents.as_ref())
-                .map(|agents| agents.excluded_agent_ids.clone()),
-            Some(vec!["agent-shadow".to_string(), "agent-scout".to_string()])
-        );
+        assert!(persisted.assignments.is_none());
     }
 
     #[test]
-    fn update_project_rewrites_leader_and_live_inheritance_fields() {
+    fn update_project_rewrites_manager_and_preset_fields_without_legacy_grant_snapshots() {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
 
         let created = runtime
             .block_on(bundle.workspace.create_project(CreateProjectRequest {
-                name: "Rewrite Leader Project".into(),
-                description: "Rewrite leader persistence coverage.".into(),
-                resource_directory: "data/projects/rewrite-leader-project/resources".into(),
+                name: "Rewrite Governed Project".into(),
+                description: "Rewrite project metadata persistence coverage.".into(),
+                resource_directory: "data/projects/rewrite-governed-project/resources".into(),
                 owner_user_id: None,
                 member_user_ids: None,
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: Some("agent-alpha".into()),
-                assignments: Some(ProjectWorkspaceAssignments {
-                    models: None,
-                    tools: Some(ProjectToolAssignments {
-                        source_keys: vec![],
-                        excluded_source_keys: vec!["builtin:bash".into()],
-                    }),
-                    agents: Some(ProjectAgentAssignments {
-                        agent_ids: vec![],
-                        team_ids: vec![],
-                        excluded_agent_ids: vec!["agent-shadow".into()],
-                        excluded_team_ids: vec!["team-review".into()],
-                    }),
-                }),
+                manager_user_id: Some("user-manager-alpha".into()),
+                preset_code: Some("preset-alpha".into()),
+                assignments: None,
             }))
             .expect("created project");
 
@@ -3642,8 +4211,8 @@ mod tests {
             .block_on(bundle.workspace.update_project(
                 &created.id,
                 UpdateProjectRequest {
-                    name: "Rewrite Leader Project".into(),
-                    description: "Rewrite leader persistence updated.".into(),
+                    name: "Rewrite Governed Project".into(),
+                    description: "Rewrite project metadata persistence updated.".into(),
                     status: "active".into(),
                     resource_directory: created.resource_directory.clone(),
                     owner_user_id: None,
@@ -3651,40 +4220,24 @@ mod tests {
                     permission_overrides: None,
                     linked_workspace_assets: None,
                     leader_agent_id: Some("agent-beta".into()),
-                    assignments: Some(ProjectWorkspaceAssignments {
-                        models: None,
-                        tools: Some(ProjectToolAssignments {
-                            source_keys: vec![],
-                            excluded_source_keys: vec!["mcp:browser".into()],
-                        }),
-                        agents: Some(ProjectAgentAssignments {
-                            agent_ids: vec![],
-                            team_ids: vec![],
-                            excluded_agent_ids: vec!["agent-scout".into()],
-                            excluded_team_ids: vec![],
-                        }),
-                    }),
+                    manager_user_id: Some("user-manager-beta".into()),
+                    preset_code: Some("preset-beta".into()),
+                    assignments: None,
                 },
             ))
             .expect("updated project");
 
         assert_eq!(updated.leader_agent_id.as_deref(), Some("agent-beta"));
         assert_eq!(
-            updated
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.tools.as_ref())
-                .map(|tools| tools.excluded_source_keys.clone()),
-            Some(vec!["mcp:browser".to_string()])
+            updated.manager_user_id.as_deref(),
+            Some("user-manager-beta")
         );
+        assert_eq!(updated.preset_code.as_deref(), Some("preset-beta"));
         assert_eq!(
-            updated
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.agents.as_ref())
-                .map(|agents| agents.excluded_agent_ids.clone()),
-            Some(vec!["agent-scout".to_string()])
+            updated.linked_workspace_assets,
+            empty_project_linked_workspace_assets()
         );
+        assert!(updated.assignments.is_none());
 
         let persisted = runtime
             .block_on(bundle.workspace.list_projects())
@@ -3694,32 +4247,286 @@ mod tests {
             .expect("persisted project");
         assert_eq!(persisted.leader_agent_id.as_deref(), Some("agent-beta"));
         assert_eq!(
-            persisted
-                .assignments
-                .as_ref()
-                .and_then(|assignments| assignments.agents.as_ref())
-                .map(|agents| agents.excluded_team_ids.clone()),
-            Some(Vec::new())
+            persisted.manager_user_id.as_deref(),
+            Some("user-manager-beta")
         );
+        assert_eq!(persisted.preset_code.as_deref(), Some("preset-beta"));
+        assert_eq!(
+            persisted.linked_workspace_assets,
+            empty_project_linked_workspace_assets()
+        );
+        assert!(persisted.assignments.is_none());
 
         let connection = bundle.workspace.state.open_db().expect("open db");
-        let (project_count, stored_leader_agent_id, assignments_json): (
+        let (
+            project_count,
+            stored_leader_agent_id,
+            stored_manager_user_id,
+            stored_preset_code,
+            assignments_json,
+            linked_workspace_assets_json,
+        ): (
             i64,
+            Option<String>,
+            Option<String>,
+            Option<String>,
             Option<String>,
             Option<String>,
         ) = connection
             .query_row(
-                "SELECT COUNT(*), leader_agent_id, assignments_json FROM projects WHERE id = ?1 GROUP BY leader_agent_id, assignments_json",
+                "SELECT COUNT(*), leader_agent_id, manager_user_id, preset_code, assignments_json, linked_workspace_assets_json
+                 FROM projects
+                 WHERE id = ?1
+                 GROUP BY leader_agent_id, manager_user_id, preset_code, assignments_json, linked_workspace_assets_json",
                 params![created.id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
             )
             .expect("load persisted project row");
         assert_eq!(project_count, 1);
         assert_eq!(stored_leader_agent_id.as_deref(), Some("agent-beta"));
-        let assignments_json = assignments_json.expect("assignments json");
-        assert!(assignments_json.contains("\"excludedSourceKeys\":[\"mcp:browser\"]"));
-        assert!(assignments_json.contains("\"excludedAgentIds\":[\"agent-scout\"]"));
-        assert!(assignments_json.contains("\"excludedTeamIds\":[]"));
+        assert_eq!(stored_manager_user_id.as_deref(), Some("user-manager-beta"));
+        assert_eq!(stored_preset_code.as_deref(), Some("preset-beta"));
+        assert!(assignments_json.is_none());
+        assert!(linked_workspace_assets_json.is_none());
+    }
+
+    #[test]
+    fn project_deletion_requests_round_trip_and_gate_delete_until_approved() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let owner_session = bootstrap_admin_session(&bundle);
+
+        let created = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Delete Gate Project".into(),
+                description: "Project deletion request coverage.".into(),
+                resource_directory: "data/projects/delete-gate-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            }))
+            .expect("created project");
+
+        let error = runtime
+            .block_on(bundle.workspace.delete_project(&created.id))
+            .expect_err("active project delete should fail");
+        assert!(error.to_string().contains("archived"));
+
+        let archived = runtime
+            .block_on(bundle.workspace.update_project(
+                &created.id,
+                UpdateProjectRequest {
+                    name: created.name.clone(),
+                    description: created.description.clone(),
+                    status: "archived".into(),
+                    resource_directory: created.resource_directory.clone(),
+                    owner_user_id: Some(created.owner_user_id.clone()),
+                    member_user_ids: Some(created.member_user_ids.clone()),
+                    permission_overrides: Some(created.permission_overrides.clone()),
+                    linked_workspace_assets: Some(created.linked_workspace_assets.clone()),
+                    leader_agent_id: created.leader_agent_id.clone(),
+                    manager_user_id: created.manager_user_id.clone(),
+                    preset_code: created.preset_code.clone(),
+                    assignments: created.assignments.clone(),
+                },
+            ))
+            .expect("archived project");
+        assert_eq!(archived.status, "archived");
+
+        let error = runtime
+            .block_on(bundle.workspace.delete_project(&created.id))
+            .expect_err("archived project without request should fail");
+        assert!(error.to_string().contains("approved"));
+
+        let pending = runtime
+            .block_on(bundle.workspace.create_project_deletion_request(
+                &created.id,
+                &owner_session.user_id,
+                CreateProjectDeletionRequestInput {
+                    reason: Some("Archive complete".into()),
+                },
+            ))
+            .expect("created deletion request");
+        assert_eq!(pending.status, "pending");
+        assert_eq!(pending.reason.as_deref(), Some("Archive complete"));
+
+        let listed = runtime
+            .block_on(bundle.workspace.list_project_deletion_requests(&created.id))
+            .expect("listed deletion requests");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, pending.id);
+
+        let error = runtime
+            .block_on(bundle.workspace.delete_project(&created.id))
+            .expect_err("pending request should not unlock delete");
+        assert!(error.to_string().contains("approved"));
+
+        let approved = runtime
+            .block_on(bundle.workspace.review_project_deletion_request(
+                &pending.id,
+                &owner_session.user_id,
+                true,
+                ReviewProjectDeletionRequestInput {
+                    review_comment: Some("Approved for deletion".into()),
+                },
+            ))
+            .expect("approved deletion request");
+        assert_eq!(approved.status, "approved");
+        assert_eq!(
+            approved.reviewed_by_user_id.as_deref(),
+            Some(owner_session.user_id.as_str())
+        );
+        assert_eq!(
+            approved.review_comment.as_deref(),
+            Some("Approved for deletion")
+        );
+        assert!(approved.reviewed_at.is_some());
+
+        runtime
+            .block_on(bundle.workspace.delete_project(&created.id))
+            .expect("deleted project");
+
+        let projects = runtime
+            .block_on(bundle.workspace.list_projects())
+            .expect("listed projects");
+        assert!(!projects.iter().any(|project| project.id == created.id));
+
+        let connection = bundle.workspace.state.open_db().expect("open db");
+        let remaining_requests: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM project_deletion_requests WHERE project_id = ?1",
+                params![created.id],
+                |row| row.get(0),
+            )
+            .expect("count project deletion requests");
+        assert_eq!(remaining_requests, 0);
+    }
+
+    #[test]
+    fn project_delete_removes_managed_resource_storage_and_project_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let owner_session = bootstrap_admin_session(&bundle);
+
+        let created = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Delete Storage Project".into(),
+                description: "Project delete cleanup coverage.".into(),
+                resource_directory: "data/projects/delete-storage-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            }))
+            .expect("created project");
+
+        let imported = runtime
+            .block_on(bundle.workspace.import_project_resource(
+                &created.id,
+                "user-owner",
+                octopus_core::WorkspaceResourceImportInput {
+                    name: "cleanup-folder".into(),
+                    root_dir_name: Some("cleanup-folder".into()),
+                    scope: "project".into(),
+                    visibility: "private".into(),
+                    tags: Some(vec!["cleanup".into()]),
+                    files: vec![
+                        encoded_file("notes/todo.md", "text/markdown", "# Cleanup"),
+                        encoded_file("payload.json", "application/json", "{\"ok\":true}"),
+                    ],
+                },
+            ))
+            .expect("imported project resource");
+
+        let project_root = bundle.paths.root.join(&created.resource_directory);
+        let storage_path = imported.storage_path.clone().expect("storage path");
+        let absolute_storage_path = bundle.paths.root.join(&storage_path);
+        assert!(project_root.exists());
+        assert!(absolute_storage_path.exists());
+
+        runtime
+            .block_on(bundle.workspace.update_project(
+                &created.id,
+                UpdateProjectRequest {
+                    name: created.name.clone(),
+                    description: created.description.clone(),
+                    status: "archived".into(),
+                    resource_directory: created.resource_directory.clone(),
+                    owner_user_id: Some(created.owner_user_id.clone()),
+                    member_user_ids: Some(created.member_user_ids.clone()),
+                    permission_overrides: Some(created.permission_overrides.clone()),
+                    linked_workspace_assets: Some(created.linked_workspace_assets.clone()),
+                    leader_agent_id: created.leader_agent_id.clone(),
+                    manager_user_id: created.manager_user_id.clone(),
+                    preset_code: created.preset_code.clone(),
+                    assignments: created.assignments.clone(),
+                },
+            ))
+            .expect("archived project");
+        let deletion_request = runtime
+            .block_on(bundle.workspace.create_project_deletion_request(
+                &created.id,
+                &owner_session.user_id,
+                CreateProjectDeletionRequestInput {
+                    reason: Some("Cleanup all files".into()),
+                },
+            ))
+            .expect("created deletion request");
+        runtime
+            .block_on(bundle.workspace.review_project_deletion_request(
+                &deletion_request.id,
+                &owner_session.user_id,
+                true,
+                ReviewProjectDeletionRequestInput {
+                    review_comment: Some("Approved cleanup".into()),
+                },
+            ))
+            .expect("approved deletion request");
+
+        runtime
+            .block_on(bundle.workspace.delete_project(&created.id))
+            .expect("deleted project");
+
+        assert!(!project_root.exists());
+        assert!(!absolute_storage_path.exists());
+
+        let connection = bundle.workspace.state.open_db().expect("open db");
+        let remaining_resources: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM resources WHERE project_id = ?1",
+                params![created.id],
+                |row| row.get(0),
+            )
+            .expect("count project resources");
+        let remaining_projects: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                params![created.id],
+                |row| row.get(0),
+            )
+            .expect("count projects");
+        assert_eq!(remaining_resources, 0);
+        assert_eq!(remaining_projects, 0);
     }
 
     #[test]
@@ -3738,6 +4545,8 @@ mod tests {
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3862,6 +4671,8 @@ mod tests {
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -4006,6 +4817,8 @@ mod tests {
                 permission_overrides: None,
                 linked_workspace_assets: None,
                 leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
                 assignments: None,
             }))
             .expect("created project");

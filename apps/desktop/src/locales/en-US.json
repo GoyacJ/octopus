@@ -26,6 +26,8 @@
     "selectAll": "Select all",
     "clearAll": "Clear all",
     "done": "Done",
+    "approved": "Approved",
+    "rejected": "Rejected",
     "pending": "Pending",
     "reset": "Reset",
     "edit": "Edit",
@@ -175,18 +177,22 @@
       "displayName": "Display name",
       "avatar": "Avatar",
       "avatarHint": "PNG, JPEG, and WEBP are supported. Avatar is required.",
+      "mappedDirectory": "Workspace directory",
+      "mappedDirectoryHint": "Choose the real local workspace root during first-run setup. Future data and artifacts will be stored there.",
       "password": "Password",
       "confirmPassword": "Confirm password"
     },
     "actions": {
       "login": "Sign in",
       "register": "Register and continue",
-      "pickAvatar": "Choose avatar"
+      "pickAvatar": "Choose avatar",
+      "pickMappedDirectory": "Choose directory"
     },
     "validation": {
       "usernameRequired": "Enter a username.",
       "displayNameRequired": "Enter a display name.",
       "avatarRequired": "Choose an avatar image.",
+      "mappedDirectoryRequired": "Choose a workspace directory.",
       "passwordRequired": "Enter a password.",
       "passwordMinLength": "Password must be at least 8 characters.",
       "passwordMismatch": "Passwords do not match."
@@ -664,8 +670,13 @@
     "loading": "Loading project settings dependencies…",
     "basics": {
       "title": "Project Basics",
-      "description": "Edit the active project's name and description and keep shell surfaces in sync.",
-      "saveError": "Failed to save project basics."
+      "description": "Edit the active project's metadata here so the registry can stay lightweight and read-only for existing projects.",
+      "presetHint": "Presets seed the baseline project posture. Existing custom preset codes stay visible for compatibility.",
+      "customPresetLabel": "Custom preset ({code})",
+      "saveError": "Failed to save project basics.",
+      "validation": {
+        "required": "Enter a project name and resource directory."
+      }
     },
     "models": {
       "title": "Model Settings",
@@ -729,6 +740,63 @@
       "emptyTitle": "No workspace users are available",
       "emptyDescription": "Create users in Permission Center first, then assign them to this project."
     },
+    "notifications": {
+      "basicsSaved": {
+        "title": "Project basics saved",
+        "body": "The project basics for \"{projectName}\" were updated.",
+        "actionLabel": "Open project settings"
+      },
+      "leaderSaved": {
+        "title": "Project leader updated",
+        "body": "The runtime leader for \"{projectName}\" was updated.",
+        "actionLabel": "Open project settings"
+      },
+      "grantScopeSaved": {
+        "title": "Project grants updated",
+        "body": "The workspace grant scope for \"{projectName}\" was saved.",
+        "actionLabel": "Open project settings"
+      },
+      "runtimeSaved": {
+        "title": "Project enablement updated",
+        "body": "The project-level enablement rules for \"{projectName}\" were saved.",
+        "actionLabel": "Open project settings"
+      },
+      "membersSaved": {
+        "title": "Project members updated",
+        "body": "The member list for \"{projectName}\" was saved.",
+        "actionLabel": "Open project settings"
+      },
+      "archived": {
+        "title": "Project archived",
+        "body": "\"{projectName}\" is now archived.",
+        "actionLabel": "Open project settings"
+      },
+      "restored": {
+        "title": "Project restored",
+        "body": "\"{projectName}\" was restored to active status.",
+        "actionLabel": "Open project settings"
+      },
+      "deletionRequested": {
+        "title": "Deletion request submitted",
+        "body": "A deletion request for \"{projectName}\" is now waiting for review.",
+        "actionLabel": "Review deletion request"
+      },
+      "deletionApproved": {
+        "title": "Deletion request approved",
+        "body": "\"{projectName}\" is ready for final deletion.",
+        "actionLabel": "Review deletion request"
+      },
+      "deletionRejected": {
+        "title": "Deletion request rejected",
+        "body": "The deletion request for \"{projectName}\" was rejected.",
+        "actionLabel": "Open project settings"
+      },
+      "deleted": {
+        "title": "Project deleted",
+        "body": "\"{projectName}\" was permanently deleted.",
+        "actionLabel": "Back to projects"
+      }
+    },
     "summary": {
       "title": "Project Summary",
       "description": "Track completion progress and the next recommended setup step.",
@@ -754,10 +822,12 @@
     },
     "labels": {
       "workspaceGrant": "Workspace grant",
+      "workspaceBaseline": "Workspace baseline",
       "inherited": "Inherited",
       "projectOwned": "Project-owned",
       "projectEnablement": "Project enablement",
       "projectOverride": "Project override",
+      "projectRules": "Project rules",
       "members": "Members & access"
     },
     "search": {
@@ -769,8 +839,26 @@
     "sections": {
       "overview": {
         "title": "Configuration Overview",
-        "description": "This section mirrors the project registry. Name, description, and resource directory only change in Projects.",
-        "editHint": "To edit the project name, description, resource directory, or archive state, go back to Projects."
+        "description": "Project Settings now owns editable metadata, while the workspace registry only summarizes the project and links back here for deeper changes.",
+        "editHint": "Leader: {leader}. Lifecycle and deletion approval now live on this page."
+      },
+      "capabilities": {
+        "title": "Capability Configuration",
+        "description": "Review workspace-granted scope, project-owned assets, and project-level disabled state for each capability class from one section.",
+        "modelsTitle": "Models",
+        "toolsTitle": "Tools",
+        "agentsTitle": "Agents",
+        "teamsTitle": "Teams",
+        "modelsValue": "Workspace granted {workspaceGranted}, project enabled {enabled}, project disabled {disabled}, default {defaultModel}",
+        "toolsValue": "Workspace granted {workspaceGranted}, project-owned {projectOwned}, project enabled {enabled}, project disabled {disabled}, {overrides} overrides",
+        "actorsValue": "Workspace granted {workspaceGranted}, project-owned {projectOwned}, project enabled {enabled}, project disabled {disabled}"
+      },
+      "lifecycle": {
+        "title": "Lifecycle & Deletion",
+        "description": "Archive, restore, and deletion approval all run from project settings so registry pages stay read-only.",
+        "reviewCallout": "This project was opened from a deletion review deep-link. Review the request status and approve or reject it here.",
+        "archiveError": "Failed to archive the project.",
+        "restoreError": "Failed to restore the project."
       },
       "grants": {
         "title": "Available To This Project",
@@ -806,6 +894,18 @@
       }
     },
     "dialogs": {
+      "models": {
+        "title": "Edit model capabilities",
+        "description": "Manage the workspace baseline and project rules for models from one dialog."
+      },
+      "tools": {
+        "title": "Edit tool capabilities",
+        "description": "Manage the workspace baseline and project rules for tools from one dialog."
+      },
+      "actors": {
+        "title": "Edit actor capabilities",
+        "description": "Manage the workspace baseline and project rules for agents and teams from one dialog."
+      },
       "grantModels": {
         "title": "Edit model grants",
         "description": "Choose which workspace models this project can see at all.",
@@ -2158,6 +2258,7 @@
       "edit": "Edit project",
       "archive": "Archive project",
       "restore": "Restore project",
+      "requestDelete": "Request deletion",
       "pickResourceDirectory": "Choose directory",
       "openSettings": "Open project settings"
     },
@@ -2248,6 +2349,28 @@
     "leader": {
       "hint": "Optional. Choose an active workspace agent now, or update it later from Project Settings.",
       "none": "Not set"
+    },
+    "manager": {
+      "title": "Project manager",
+      "description": "Assign the human owner for this project registry entry. Full project metadata still lives in Project Settings.",
+      "label": "Manager",
+      "none": "Not assigned",
+      "saveError": "Failed to save the project manager."
+    },
+    "deletionRequest": {
+      "title": "Deletion request",
+      "description": "Archived projects must pass a deletion approval request before final cleanup can run.",
+      "none": "No request",
+      "createError": "Failed to create the project deletion request.",
+      "reviewError": "Failed to review the project deletion request.",
+      "deleteError": "Failed to delete the project."
+    },
+    "notifications": {
+      "created": {
+        "title": "Project created",
+        "body": "\"{projectName}\" was created and is ready for advanced setup.",
+        "actionLabel": "Open project settings"
+      }
     }
   },
   "teams": {
@@ -3756,6 +3879,50 @@
     "empty": {
       "title": "No available business entries",
       "description": "No console menus are currently available for this account."
+    }
+  },
+  "workspaceSettings": {
+    "header": {
+      "eyebrow": "Workspace Settings",
+      "title": "Workspace Settings",
+      "description": "Manage the canonical workspace profile, avatar, and mapped directory used by the desktop shell."
+    },
+    "general": {
+      "title": "Workspace Identity",
+      "subtitle": "Keep the shared workspace profile and storage root aligned with the canonical workspace contract."
+    },
+    "avatar": {
+      "label": "Workspace Avatar",
+      "currentLabel": "Current avatar",
+      "actions": {
+        "pick": "Choose avatar"
+      }
+    },
+    "fields": {
+      "name": "Workspace Name",
+      "nameHint": "This name is reused across the shell, console surfaces, and project governance views.",
+      "mappedDirectory": "Mapped Directory",
+      "mappedDirectoryHint": "The mapped directory is the canonical local root for workspace data and artifacts.",
+      "mappedDirectoryReadonlyHint": "Remote workspaces currently expose the mapped directory as a read-only value.",
+      "pickMappedDirectory": "Choose directory",
+      "mappedDirectoryDefault": "Default Directory"
+    },
+    "placeholders": {
+      "name": "Enter a workspace name",
+      "mappedDirectory": "Choose a workspace directory"
+    },
+    "feedback": {
+      "savedTitle": "Workspace settings saved",
+      "saved": "Workspace settings have been updated.",
+      "errorTitle": "Workspace settings unavailable",
+      "saveError": "Workspace settings could not be saved."
+    },
+    "notifications": {
+      "saved": {
+        "title": "Workspace settings updated",
+        "body": "The canonical workspace profile for \"{workspaceName}\" was saved.",
+        "actionLabel": "Open workspace settings"
+      }
     }
   }
 }

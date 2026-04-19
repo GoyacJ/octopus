@@ -273,9 +273,11 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     settings: ProjectModelSettings,
     workspaceConnectionId?: string,
   ) {
+    const existing = getProjectSettings(projectId, workspaceConnectionId).models
     return await saveProjectRuntimePatch(projectId, {
       projectSettings: {
         models: {
+          disabledConfiguredModelIds: [...(settings.disabledConfiguredModelIds ?? existing?.disabledConfiguredModelIds ?? [])],
           allowedConfiguredModelIds: [...settings.allowedConfiguredModelIds],
           defaultConfiguredModelId: settings.defaultConfiguredModelId,
           totalTokens: settings.totalTokens ?? null,
@@ -289,8 +291,7 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
     settings: ProjectToolSettings,
     workspaceConnectionId?: string,
   ) {
-    const existing = getProjectSettings(projectId, workspaceConnectionId).tools
-    const existingOverrides = existing?.overrides ?? {}
+    const existingOverrides = getProjectSettings(projectId, workspaceConnectionId).tools?.overrides ?? {}
     const nextOverrides: Record<string, JsonValue> = {}
 
     for (const [sourceKey, entry] of Object.entries(settings.overrides)) {

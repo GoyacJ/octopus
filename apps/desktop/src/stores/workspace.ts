@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import type {
   ProjectDashboardSnapshot,
+  ProjectDeletionRequest,
   ProjectRecord,
   RuntimeConfigValidationResult,
   RuntimeEffectiveConfig,
@@ -26,6 +27,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const summaries = ref<WorkspaceScoped<WorkspaceOverviewSnapshot['workspace']>>({})
   const overviews = ref<WorkspaceScoped<WorkspaceOverviewSnapshot>>({})
   const projectsByConnection = ref<WorkspaceScoped<ProjectRecord[]>>({})
+  const projectDeletionRequestsByKey = ref<Record<string, ProjectDeletionRequest[]>>({})
   const dashboards = ref<Record<string, ProjectDashboardSnapshot>>({})
   const projectRuntimeConfigs = ref<Record<string, RuntimeEffectiveConfig>>({})
   const projectRuntimeDrafts = ref<Record<string, string>>({})
@@ -98,6 +100,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     summaries,
     overviews,
     projectsByConnection,
+    projectDeletionRequestsByKey,
     dashboards,
     projectRuntimeConfigs,
     projectRuntimeDrafts,
@@ -146,7 +149,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     bootstrap: workspaceActions.bootstrap,
     ensureWorkspaceBootstrap: workspaceActions.ensureWorkspaceBootstrap,
     createProject: workspaceActions.createProject,
+    updateWorkspace: workspaceActions.updateWorkspace,
     updateProject: workspaceActions.updateProject,
+    getProjectDeletionRequests: workspaceActions.getProjectDeletionRequests,
+    loadProjectDeletionRequests: workspaceActions.loadProjectDeletionRequests,
+    createProjectDeletionRequest: workspaceActions.createProjectDeletionRequest,
+    approveProjectDeletionRequest: workspaceActions.approveProjectDeletionRequest,
+    rejectProjectDeletionRequest: workspaceActions.rejectProjectDeletionRequest,
+    deleteProject: workspaceActions.deleteProject,
     archiveProject: workspaceActions.archiveProject,
     restoreProject: workspaceActions.restoreProject,
     loadProjectDashboard: workspaceActions.loadProjectDashboard,

@@ -96,6 +96,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     routeName: 'workspace-console',
     routeNames: [
       'workspace-console',
+      'workspace-console-settings',
       'workspace-console-projects',
       'workspace-console-knowledge',
       'workspace-console-resources',
@@ -222,6 +223,18 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.accessControl',
     icon: 'access-control',
     order: 100,
+  },
+  {
+    id: 'menu-workspace-console-settings',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-settings',
+    routeNames: ['workspace-console-settings'],
+    defaultLabel: '设置',
+    labelKey: 'sidebar.navigation.settings',
+    icon: 'settings',
+    order: 105,
   },
   {
     id: 'menu-workspace-console-projects',

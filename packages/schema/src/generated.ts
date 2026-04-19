@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae
+// Source hash: 56b837f8a597f6d12360c1ca4755b168e602edc03abc645fcafa7faf57a5e3c6
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "91c5078d83a284745bcff833443792fa4efb2651234586cc95a7b3aae86ec6ae"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "56b837f8a597f6d12360c1ca4755b168e602edc03abc645fcafa7faf57a5e3c6"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -576,20 +576,24 @@ export interface CreateNotificationInput {
   toastDurationMs?: number
 }
 
+export interface CreateProjectDeletionRequestInput {
+  reason?: string
+}
+
 export interface CreateProjectPromotionRequestInput {
   assetId: string
   assetType: ProjectAssetType
 }
 
 export interface CreateProjectRequest {
-  assignments?: ProjectWorkspaceAssignments
   description: string
   leaderAgentId?: string
-  linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
+  managerUserId?: string
   memberUserIds?: string[]
   name: string
   ownerUserId?: string
   permissionOverrides?: ProjectPermissionOverrides
+  presetCode?: string
   resourceDirectory: string
 }
 
@@ -1056,6 +1060,7 @@ export interface InboxItemRecord {
   projectId?: string
   routeTo?: string
   status: string
+  targetUserId: string
   title: string
   workspaceId: string
 }
@@ -1518,6 +1523,22 @@ export interface ProjectDefaultPermissions {
 
 export type ProjectDefaultPermissionValue = "allow" | "deny"
 
+export interface ProjectDeletionRequest {
+  createdAt: number
+  id: string
+  projectId: string
+  reason?: string
+  requestedByUserId: string
+  reviewComment?: string
+  reviewedAt?: number
+  reviewedByUserId?: string
+  status: ProjectDeletionRequestStatus
+  updatedAt: number
+  workspaceId: string
+}
+
+export type ProjectDeletionRequestStatus = "pending" | "approved" | "rejected"
+
 export interface ProjectLinkedWorkspaceAssets {
   agentIds: string[]
   knowledgeIds: string[]
@@ -1560,15 +1581,15 @@ export interface ProjectPromotionRequest {
 export type ProjectPromotionRequestStatus = "pending" | "approved" | "rejected"
 
 export interface ProjectRecord {
-  assignments?: ProjectWorkspaceAssignments
   description: string
   id: string
   leaderAgentId?: string
-  linkedWorkspaceAssets: ProjectLinkedWorkspaceAssets
+  managerUserId?: string
   memberUserIds: string[]
   name: string
   ownerUserId: string
   permissionOverrides: ProjectPermissionOverrides
+  presetCode?: string
   resourceDirectory: string
   status: "active" | "archived"
   workspaceId: string
@@ -1660,6 +1681,7 @@ export interface RegisterBootstrapAdminRequest {
   clientAppId: string
   confirmPassword: string
   displayName: string
+  mappedDirectory?: string
   password: string
   username: string
   workspaceId?: string
@@ -1732,6 +1754,10 @@ export interface ResourcePolicyUpsertRequest {
 }
 
 export type ResourcePreviewKind = "text" | "code" | "markdown" | "image" | "pdf" | "audio" | "video" | "folder" | "binary" | "url"
+
+export interface ReviewProjectDeletionRequestInput {
+  reviewComment?: string
+}
 
 export interface ReviewProjectPromotionRequestInput {
   approved: boolean
@@ -2764,14 +2790,14 @@ export interface UpdateCurrentUserProfileRequest {
 }
 
 export interface UpdateProjectRequest {
-  assignments?: ProjectWorkspaceAssignments
   description: string
   leaderAgentId?: string
-  linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
+  managerUserId?: string
   memberUserIds?: string[]
   name: string
   ownerUserId?: string
   permissionOverrides?: ProjectPermissionOverrides
+  presetCode?: string
   resourceDirectory: string
   status: "active" | "archived"
 }
@@ -2783,6 +2809,13 @@ export interface UpdateTaskRequest {
   goal?: string
   scheduleSpec?: string | null
   title?: string
+}
+
+export interface UpdateWorkspaceRequest {
+  avatar?: AvatarUploadPayload
+  mappedDirectory?: string
+  name?: string
+  removeAvatar?: boolean
 }
 
 export interface UpdateWorkspaceResourceInput {
@@ -3179,12 +3212,15 @@ export interface WorkspaceSkillTreeNode {
 }
 
 export interface WorkspaceSummary {
+  avatar?: string
   bootstrapStatus: "setup_required" | "ready"
   defaultProjectId: string
   deployment: "local" | "remote"
   host: string
   id: string
   listenAddress: string
+  mappedDirectory?: string
+  mappedDirectoryDefault?: string
   name: string
   ownerUserId?: string
   projectDefaultPermissions: ProjectDefaultPermissions
@@ -3415,6 +3451,7 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}": {
     patch: { operationId: "updateProject"; response: ProjectRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteProject"; response: void; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/agent-links": {
     get: { operationId: "listProjectAgentLinks"; response: ProjectAgentLinkRecord[]; error: ApiErrorEnvelope }
@@ -3437,6 +3474,16 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/dashboard": {
     get: { operationId: "getProjectDashboard"; response: ProjectDashboardSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/deletion-requests": {
+    get: { operationId: "listProjectDeletionRequests"; response: ProjectDeletionRequest[]; error: ApiErrorEnvelope }
+    post: { operationId: "createProjectDeletionRequest"; response: ProjectDeletionRequest; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/deletion-requests/{requestId}/approve": {
+    post: { operationId: "approveProjectDeletionRequest"; response: ProjectDeletionRequest; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/deletion-requests/{requestId}/reject": {
+    post: { operationId: "rejectProjectDeletionRequest"; response: ProjectDeletionRequest; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/deliverables": {
     get: { operationId: "listProjectDeliverables"; response: DeliverableSummary[]; error: ApiErrorEnvelope }
@@ -3581,6 +3628,7 @@ export interface OctopusApiPaths {
   }
   "/api/v1/workspace": {
     get: { operationId: "getWorkspaceSummary"; response: WorkspaceSummary; error: ApiErrorEnvelope }
+    patch: { operationId: "updateWorkspace"; response: WorkspaceSummary; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/agents": {
     get: { operationId: "listWorkspaceAgents"; response: AgentRecord[]; error: ApiErrorEnvelope }
@@ -3670,6 +3718,7 @@ export interface OctopusApiPaths {
     get: { operationId: "getWorkspaceOverview"; response: WorkspaceOverviewSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/personal-center/profile": {
+    get: { operationId: "getCurrentUserProfile"; response: UserRecordSummary; error: ApiErrorEnvelope }
     patch: { operationId: "updateCurrentUserProfile"; response: UserRecordSummary; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/personal-center/profile/password": {

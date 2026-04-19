@@ -90,6 +90,8 @@ RegisterBootstrapAdminRequest:
       type: string
     avatar:
       $ref: "#/components/schemas/AvatarUploadPayload"
+    mappedDirectory:
+      type: string
     workspaceId:
       type: string
   required:
@@ -196,6 +198,8 @@ WorkspaceCapabilitySet:
 WorkspaceSummary:
   additionalProperties: false
   properties:
+    avatar:
+      type: string
     bootstrapStatus:
       enum:
         - setup_required
@@ -213,6 +217,10 @@ WorkspaceSummary:
     id:
       type: string
     listenAddress:
+      type: string
+    mappedDirectory:
+      type: string
+    mappedDirectoryDefault:
       type: string
     name:
       type: string

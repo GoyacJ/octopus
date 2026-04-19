@@ -24,6 +24,7 @@ import type {
   DeliverableVersionSummary,
   ForkDeliverableInput,
   CreateProjectRequest,
+  CreateProjectDeletionRequestInput,
   CreateProjectPromotionRequestInput,
   CreateRuntimeSessionInput,
   CreateTaskInterventionRequest,
@@ -71,12 +72,14 @@ import type {
   ProjectAgentLinkInput,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
+  ProjectDeletionRequest,
   ProjectPromotionRequest,
   ProjectRecord,
   ProjectTeamLinkInput,
   ProjectTeamLinkRecord,
   RegisterBootstrapAdminRequest,
   ReviewProjectPromotionRequestInput,
+  ReviewProjectDeletionRequestInput,
   ResolveRuntimeApprovalInput,
   ResolveRuntimeAuthChallengeInput,
   ResolveRuntimeMemoryProposalInput,
@@ -111,6 +114,7 @@ import type {
   UpdateCurrentUserProfileRequest,
   UpdateTaskRequest,
   UpdateProjectRequest,
+  UpdateWorkspaceRequest,
   UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
   UpdateWorkspaceSkillInput,
@@ -171,6 +175,7 @@ export interface WorkspaceClient {
   }
   workspace: {
     get: () => Promise<WorkspaceOverviewSnapshot['workspace']>
+    update: (input: UpdateWorkspaceRequest) => Promise<WorkspaceOverviewSnapshot['workspace']>
     getOverview: () => Promise<WorkspaceOverviewSnapshot>
     listPromotionRequests: () => Promise<ProjectPromotionRequest[]>
     reviewPromotionRequest: (
@@ -183,6 +188,22 @@ export interface WorkspaceClient {
     create: (input: CreateProjectRequest) => Promise<ProjectRecord>
     update: (projectId: string, input: UpdateProjectRequest) => Promise<ProjectRecord>
     getDashboard: (projectId: string) => Promise<ProjectDashboardSnapshot>
+    listDeletionRequests: (projectId: string) => Promise<ProjectDeletionRequest[]>
+    createDeletionRequest: (
+      projectId: string,
+      input: CreateProjectDeletionRequestInput,
+    ) => Promise<ProjectDeletionRequest>
+    approveDeletionRequest: (
+      projectId: string,
+      requestId: string,
+      input: ReviewProjectDeletionRequestInput,
+    ) => Promise<ProjectDeletionRequest>
+    rejectDeletionRequest: (
+      projectId: string,
+      requestId: string,
+      input: ReviewProjectDeletionRequestInput,
+    ) => Promise<ProjectDeletionRequest>
+    delete: (projectId: string) => Promise<void>
     listDeliverables: (projectId: string) => Promise<DeliverableSummary[]>
     listPromotionRequests: (projectId: string) => Promise<ProjectPromotionRequest[]>
     createPromotionRequest: (
@@ -329,6 +350,7 @@ export interface WorkspaceClient {
     deleteTool: (toolId: string) => Promise<void>
   }
   profile: {
+    getCurrentUserProfile: () => Promise<UserRecordSummary>
     updateCurrentUserProfile: (input: UpdateCurrentUserProfileRequest) => Promise<UserRecordSummary>
     changeCurrentUserPassword: (input: ChangeCurrentUserPasswordRequest) => Promise<ChangeCurrentUserPasswordResponse>
   }

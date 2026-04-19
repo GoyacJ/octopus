@@ -14,6 +14,27 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+  patch:
+    operationId: updateWorkspace
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSummary"
+        description: Updated workspace summary payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/knowledge:
   get:
     operationId: listWorkspaceKnowledge
@@ -519,6 +540,21 @@
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
 /api/v1/workspace/personal-center/profile:
+  get:
+    operationId: getCurrentUserProfile
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRecordSummary"
+        description: Current personal profile payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
   patch:
     operationId: updateCurrentUserProfile
     requestBody:

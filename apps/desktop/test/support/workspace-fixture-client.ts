@@ -3,6 +3,7 @@ import type {
   AccessMemberSummary,
   AccessUserPresetUpdateRequest,
   ConversationRecord,
+  CreateProjectDeletionRequestInput,
   CreateDeliverableVersionInput,
   AuditRecord,
   BindPetConversationInput,
@@ -31,6 +32,7 @@ import type {
   LaunchTaskRequest,
   PetConversationBinding,
   ProjectAgentLinkRecord,
+  ProjectDeletionRequest,
   ProjectPromotionRequest,
   ProjectResourceKind,
   ProjectTeamLinkRecord,
@@ -56,6 +58,7 @@ import type {
   UpdateCurrentUserProfileRequest,
   UpdateTaskRequest,
   UpdateProjectRequest,
+  UpdateWorkspaceRequest,
   UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
   UpdateWorkspaceSkillInput,
@@ -77,6 +80,7 @@ import type {
   WorkspaceDirectoryUploadEntry,
   ProtectedResourceMetadataUpsertRequest,
   ReviewProjectPromotionRequestInput,
+  ReviewProjectDeletionRequestInput,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
@@ -1757,6 +1761,7 @@ export function createWorkspaceClientFixture(
       contentType: string
       dataBase64: string
     }
+    mappedDirectory?: string
   }) => {
     const ownerId = 'user-owner'
     const ownerAvatar = `data:${request.avatar.contentType};base64,${request.avatar.dataBase64}`
@@ -1773,6 +1778,12 @@ export function createWorkspaceClientFixture(
       ...workspaceState.workspace,
       bootstrapStatus: 'ready',
       ownerUserId: ownerId,
+      ...(request.mappedDirectory
+        ? {
+            mappedDirectory: request.mappedDirectory.trim(),
+            mappedDirectoryDefault: workspaceState.workspace.mappedDirectoryDefault ?? request.mappedDirectory.trim(),
+          }
+        : {}),
     }
     workspaceState.systemBootstrap = {
       ...workspaceState.systemBootstrap,
@@ -2351,6 +2362,7 @@ export function createWorkspaceClientFixture(
         const user = workspaceState.users.find(record => record.username === request.username)
           ?? workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId)
           ?? workspaceState.users[0]
+        workspaceState.currentUserId = user?.id ?? 'user-owner'
 
         return {
           session: buildEnterpriseSession(user?.id ?? 'user-owner'),
@@ -2381,6 +2393,23 @@ export function createWorkspaceClientFixture(
     },
     workspace: {
       async get() {
+        return clone(workspaceState.workspace)
+      },
+      async update(input: UpdateWorkspaceRequest) {
+        workspaceState.workspace = {
+          ...workspaceState.workspace,
+          ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+          ...(input.avatar !== undefined
+            ? { avatar: `data:${input.avatar.contentType};base64,${input.avatar.dataBase64}` }
+            : {}),
+          ...(input.mappedDirectory !== undefined
+            ? {
+                mappedDirectory: input.mappedDirectory.trim(),
+                mappedDirectoryDefault: workspaceState.workspace.mappedDirectoryDefault ?? input.mappedDirectory.trim(),
+              }
+            : {}),
+        }
+        syncWorkspaceProjectState(workspaceState)
         return clone(workspaceState.workspace)
       },
       async getOverview() {
@@ -2527,6 +2556,165 @@ export function createWorkspaceClientFixture(
       },
       async getDashboard(projectId) {
         return clone(workspaceState.dashboards[projectId])
+      },
+      async listDeletionRequests(projectId) {
+        findProjectRecord(projectId)
+        return clone(
+          workspaceState.projectDeletionRequests
+            .filter(record => record.projectId === projectId)
+            .sort((left, right) => right.updatedAt - left.updatedAt),
+        )
+      },
+      async createDeletionRequest(projectId, input: CreateProjectDeletionRequestInput) {
+        const project = ensureProjectOwner(projectId)
+        if (project.status !== 'archived') {
+          throw new WorkspaceApiError({
+            message: 'project must be archived before a deletion request can be created',
+            status: 409,
+            requestId: 'req-project-delete-request-archived',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        if (workspaceState.projectDeletionRequests.some(record => record.projectId === projectId && record.status === 'pending')) {
+          throw new WorkspaceApiError({
+            message: 'project deletion request is already pending',
+            status: 409,
+            requestId: 'req-project-delete-request-pending',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        const now = Date.now()
+        const record: ProjectDeletionRequest = {
+          id: `project-delete-${projectId}-${now}`,
+          workspaceId: workspaceState.workspace.id,
+          projectId,
+          requestedByUserId: getCurrentUserId(),
+          status: 'pending',
+          reason: input.reason?.trim() || undefined,
+          reviewComment: undefined,
+          reviewedByUserId: undefined,
+          reviewedAt: undefined,
+          createdAt: now,
+          updatedAt: now,
+        }
+        workspaceState.projectDeletionRequests = [record, ...workspaceState.projectDeletionRequests]
+        return clone(record)
+      },
+      async approveDeletionRequest(projectId, requestId, input: ReviewProjectDeletionRequestInput) {
+        findProjectRecord(projectId)
+        const existing = workspaceState.projectDeletionRequests.find(record => record.id === requestId && record.projectId === projectId)
+        if (!existing) {
+          throw new WorkspaceApiError({
+            message: 'project deletion request not found',
+            status: 404,
+            requestId: 'req-project-delete-request-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        if (existing.status !== 'pending') {
+          throw new WorkspaceApiError({
+            message: 'project deletion request has already been reviewed',
+            status: 409,
+            requestId: 'req-project-delete-request-reviewed',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        const updated: ProjectDeletionRequest = {
+          ...existing,
+          status: 'approved',
+          reviewComment: input.reviewComment?.trim() || undefined,
+          reviewedByUserId: getCurrentUserId(),
+          reviewedAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        workspaceState.projectDeletionRequests = workspaceState.projectDeletionRequests
+          .map(record => record.id === requestId ? updated : record)
+        return clone(updated)
+      },
+      async rejectDeletionRequest(projectId, requestId, input: ReviewProjectDeletionRequestInput) {
+        findProjectRecord(projectId)
+        const existing = workspaceState.projectDeletionRequests.find(record => record.id === requestId && record.projectId === projectId)
+        if (!existing) {
+          throw new WorkspaceApiError({
+            message: 'project deletion request not found',
+            status: 404,
+            requestId: 'req-project-delete-request-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        if (existing.status !== 'pending') {
+          throw new WorkspaceApiError({
+            message: 'project deletion request has already been reviewed',
+            status: 409,
+            requestId: 'req-project-delete-request-reviewed',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        const updated: ProjectDeletionRequest = {
+          ...existing,
+          status: 'rejected',
+          reviewComment: input.reviewComment?.trim() || undefined,
+          reviewedByUserId: getCurrentUserId(),
+          reviewedAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        workspaceState.projectDeletionRequests = workspaceState.projectDeletionRequests
+          .map(record => record.id === requestId ? updated : record)
+        return clone(updated)
+      },
+      async delete(projectId) {
+        const project = ensureProjectOwner(projectId)
+        if (project.status !== 'archived') {
+          throw new WorkspaceApiError({
+            message: 'project must be archived before deletion',
+            status: 409,
+            requestId: 'req-project-delete-archived',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        const hasApprovedRequest = workspaceState.projectDeletionRequests
+          .some(record => record.projectId === projectId && record.status === 'approved')
+        if (!hasApprovedRequest) {
+          throw new WorkspaceApiError({
+            message: 'project deletion requires an approved deletion request',
+            status: 409,
+            requestId: 'req-project-delete-approved-request',
+            retryable: false,
+            code: 'CONFLICT',
+          })
+        }
+
+        workspaceState.projects = workspaceState.projects.filter(record => record.id !== projectId)
+        delete workspaceState.dashboards[projectId]
+        delete workspaceState.projectResources[projectId]
+        delete workspaceState.projectKnowledge[projectId]
+        delete workspaceState.projectAgentLinks[projectId]
+        delete workspaceState.projectTeamLinks[projectId]
+        workspaceState.projectPromotionRequests = workspaceState.projectPromotionRequests
+          .filter(record => record.projectId !== projectId)
+        workspaceState.projectDeletionRequests = workspaceState.projectDeletionRequests
+          .filter(record => record.projectId !== projectId)
+
+        if (workspaceState.workspace.defaultProjectId === projectId) {
+          workspaceState.workspace = {
+            ...workspaceState.workspace,
+            defaultProjectId: workspaceState.projects.find(record => record.status === 'active')?.id ?? '',
+          }
+        }
+
+        syncWorkspaceProjectState(workspaceState)
       },
       async listDeliverables(projectId) {
         findProjectRecord(projectId)
@@ -3605,6 +3793,25 @@ export function createWorkspaceClientFixture(
       },
     },
     profile: {
+      async getCurrentUserProfile() {
+        const currentSession = activeSessionToken
+          ? fixtureSessions.find(record => record.token === activeSessionToken)
+          : findFixtureSession(getCurrentUserId())
+        const currentUserId = currentSession?.userId ?? getCurrentUserId()
+        const currentUser = workspaceState.users.find(user => user.id === currentUserId)
+        if (!currentUser) {
+          throw new WorkspaceApiError({
+            message: 'Current user not found.',
+            status: 404,
+            requestId: 'req-user-profile-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        workspaceState.currentUserId = currentUserId
+        return clone(currentUser)
+      },
       async updateCurrentUserProfile(input: UpdateCurrentUserProfileRequest) {
         const currentUserId = workspaceState.currentUserId
         const currentUser = workspaceState.users.find(user => user.id === currentUserId)

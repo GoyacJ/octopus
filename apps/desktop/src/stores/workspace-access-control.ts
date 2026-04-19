@@ -156,6 +156,10 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   const currentRoleBindings = computed(() =>
     roleBindings.value.filter(binding => binding.subjectType === 'user' && binding.subjectId === currentUser.value?.id),
   )
+  const currentEffectivePermissionCodes = computed(() => authorization.value?.effectivePermissionCodes ?? [])
+  const currentEffectiveRoleCodes = computed(() => authorization.value?.effectiveRoles.map(role => role.code) ?? [])
+  const currentPermissionCodeSet = computed(() => new Set(currentEffectivePermissionCodes.value))
+  const currentRoleCodeSet = computed(() => new Set(currentEffectiveRoleCodes.value))
   const currentRoleNames = computed(() =>
     authorization.value?.effectiveRoles.map(role => getAccessRoleName(role)) ?? [],
   )
@@ -309,6 +313,14 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
 
   function hasExperience(connectionId: string) {
     return Boolean(experiencesByConnection.value[connectionId])
+  }
+
+  function hasAnyCurrentPermission(candidates: string[]) {
+    return candidates.some(code => currentPermissionCodeSet.value.has(code))
+  }
+
+  function hasAnyCurrentRoleCode(candidates: string[]) {
+    return candidates.some(code => currentRoleCodeSet.value.has(code))
   }
 
   function hasMembersData(connectionId: string) {
@@ -1112,6 +1124,8 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     currentUser,
     currentOrgAssignments,
     currentRoleBindings,
+    currentEffectivePermissionCodes,
+    currentEffectiveRoleCodes,
     currentRoleNames,
     currentEffectiveFeatureCodes,
     currentEffectiveMenuIds,
@@ -1132,6 +1146,8 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     availableConsoleMenus,
     firstAccessibleConsoleRouteName,
     firstAccessibleAccessControlRouteName,
+    hasAnyCurrentPermission,
+    hasAnyCurrentRoleCode,
     ensureAuthorizationContext,
     loadExperience,
     loadMembersData,

@@ -9,8 +9,11 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
+import { useInboxStore } from '@/stores/inbox'
+import { useNotificationStore } from '@/stores/notifications'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
+import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -86,36 +89,121 @@ describe('Project settings view', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders document sections instead of tabs and keeps runtime inputs inside dialogs', async () => {
+  it('renders document sections and keeps project capability inputs inside unified capability dialogs', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
     expect(mounted.container.querySelector('[data-testid="project-settings-overview-section"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-settings-grants-section"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-settings-runtime-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-capabilities-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-grants-section"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-runtime-section"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="project-settings-members-section"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-basics"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-settings-name-input"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-name-input"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-resource-directory-path"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="project-runtime-total-tokens-input"]')).toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-models"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-models-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
+
+    expect(document.body.querySelector('[data-testid="project-runtime-total-tokens-input"]')).toBeNull()
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-project"]')?.click()
+    await nextTick()
 
     expect(document.body.querySelector('[data-testid="project-runtime-total-tokens-input"]')).not.toBeNull()
 
     mounted.destroy()
   })
 
-  it('keeps grant dialogs inside the shared scrollable dialog shell', async () => {
+  it('saves project metadata from project settings instead of the workspace registry', async () => {
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('data/projects/proj-redesign-v2/resources')
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+    const updateProjectSpy = vi.spyOn(workspaceStore, 'updateProject')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-name-input"]')
+
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-name-input"]')
+    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="project-settings-description-input"]')
+    const resourceDirectoryInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-resource-directory-path"]')
+    const managerSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="project-settings-manager-select"]')
+    const presetSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="project-settings-preset-select"]')
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-save-button"]')
+
+    expect(nameInput).not.toBeNull()
+    expect(descriptionInput).not.toBeNull()
+    expect(resourceDirectoryInput).not.toBeNull()
+    expect(managerSelect).not.toBeNull()
+    expect(presetSelect).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+
+    nameInput!.value = 'Desktop Redesign v2'
+    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Refined ownership and runtime boundaries.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-resource-directory-pick"]')?.click()
+    await waitFor(() =>
+      mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-resource-directory-path"]')?.value
+        === 'data/projects/proj-redesign-v2/resources',
+    )
+    managerSelect!.value = 'user-operator'
+    managerSelect!.dispatchEvent(new Event('change', { bubbles: true }))
+    presetSelect!.value = 'documentation'
+    presetSelect!.dispatchEvent(new Event('change', { bubbles: true }))
+
+    saveButton?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      return project?.name === 'Desktop Redesign v2'
+        && project?.description === 'Refined ownership and runtime boundaries.'
+        && project?.resourceDirectory === 'data/projects/proj-redesign-v2/resources'
+        && project?.managerUserId === 'user-operator'
+        && project?.presetCode === 'documentation'
+    })
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-redesign/settings'
+        && notification.body?.includes('Desktop Redesign v2'),
+      ),
+    )
+
+    expect(updateProjectSpy).toHaveBeenCalledWith(
+      'proj-redesign',
+      expect.objectContaining({
+        name: 'Desktop Redesign v2',
+        description: 'Refined ownership and runtime boundaries.',
+        resourceDirectory: 'data/projects/proj-redesign-v2/resources',
+        managerUserId: 'user-operator',
+        presetCode: 'documentation',
+      }),
+    )
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === '/workspaces/ws-local/projects/proj-redesign/settings'
+      && notification.actionLabel
+      && notification.body?.includes('Desktop Redesign v2'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('keeps unified capability dialogs inside the shared scrollable dialog shell', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
 
-    const dialogContent = document.body.querySelector<HTMLElement>('[data-testid="project-settings-grants-models-dialog"]')
+    const dialogContent = document.body.querySelector<HTMLElement>('[data-testid="project-settings-models-dialog"]')
     const dialogBody = document.body.querySelector<HTMLElement>('[data-testid="ui-dialog-body"]')
 
     expect(dialogContent).not.toBeNull()
@@ -126,12 +214,13 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
-  it('supports select all and clear all actions across grant dialogs', async () => {
+  it('supports select all and clear all actions across workspace capability baselines', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
     const catalogStore = useCatalogStore()
     const agentStore = useAgentStore()
     const teamStore = useTeamStore()
+    const updateProjectSpy = vi.spyOn(workspaceStore, 'updateProject')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
@@ -146,8 +235,8 @@ describe('Project settings view', () => {
     const workspaceAgentCount = agentStore.workspaceAgents.filter(agent => agent.status === 'active').length
     const workspaceTeamCount = teamStore.workspaceTeams.filter(team => team.status === 'active').length
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-models"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
 
     const selectAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-select-all"]')
     const clearAllModelsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-clear-all"]')
@@ -171,12 +260,12 @@ describe('Project settings view', () => {
     expect(modelCheckboxes.every(input => !input.checked)).toBe(true)
 
     document.body.querySelector<HTMLButtonElement>('[data-testid="ui-dialog-close"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-models-dialog"]') === null)
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') === null)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-tools-dialog"]') !== null)
 
-    expect(document.body.querySelector('[data-testid="project-settings-grants-tools-tabs"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="project-settings-tools-scope-tabs"]')).not.toBeNull()
     const grantToolSearch = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grants-tools-search"]')
     const selectAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-select-all"]')
     const clearAllToolsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')
@@ -207,31 +296,41 @@ describe('Project settings view', () => {
     expect(builtinToolCheckboxes).toHaveLength(workspaceBuiltinToolSourceKeys.length)
     expect(builtinToolCheckboxes.every(input => input.checked)).toBe(true)
 
+    const updateProjectCallsBeforeSelectAllTools = updateProjectSpy.mock.calls.length
     saveGrantToolsButton?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-tools-dialog"]') === null)
+    expect(updateProjectSpy.mock.calls).toHaveLength(updateProjectCallsBeforeSelectAllTools)
 
-    await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      const excluded = project?.assignments?.tools?.excludedSourceKeys ?? []
-      return workspaceBuiltinToolSourceKeys.every(sourceKey => !excluded.includes(sourceKey))
-    })
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-tools-dialog"]') !== null)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-tools"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-tools-dialog"]') !== null)
+    const reopenedGrantToolsDialog = document.body.querySelector<HTMLElement>('[data-testid="project-settings-tools-dialog"]')
+    const reopenedToolCheckboxes = Array.from(
+      reopenedGrantToolsDialog?.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-tool-option-"] input[type="checkbox"]') ?? [],
+    )
+    expect(reopenedToolCheckboxes.every(input => input.checked)).toBe(true)
 
     document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-clear-all"]')?.click()
     await nextTick()
+    const updateProjectCallsBeforeClearAllTools = updateProjectSpy.mock.calls.length
     document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-tools-save-button"]')?.click()
 
-    await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      const excluded = project?.assignments?.tools?.excludedSourceKeys ?? []
-      return workspaceBuiltinToolSourceKeys.every(sourceKey => excluded.includes(sourceKey))
-    })
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-tools-dialog"]') === null)
+    expect(updateProjectSpy.mock.calls).toHaveLength(updateProjectCallsBeforeClearAllTools)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-tools"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-tools-dialog"]') !== null)
 
-    expect(document.body.querySelector('[data-testid="project-settings-grants-actors-tabs"]')).not.toBeNull()
+    const clearedGrantToolsDialog = document.body.querySelector<HTMLElement>('[data-testid="project-settings-tools-dialog"]')
+    const clearedToolCheckboxes = Array.from(
+      clearedGrantToolsDialog?.querySelectorAll<HTMLInputElement>('[data-testid^="project-grant-tool-option-"] input[type="checkbox"]') ?? [],
+    )
+    expect(clearedToolCheckboxes.every(input => !input.checked)).toBe(true)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-agents"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-actors-dialog"]') !== null)
+
+    expect(document.body.querySelector('[data-testid="project-settings-actors-scope-tabs"]')).not.toBeNull()
     const grantActorSearch = document.body.querySelector<HTMLInputElement>('[data-testid="project-settings-grants-actors-search"]')
     const selectAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-select-all"]')
     const clearAllAgentsButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-agents-clear-all"]')
@@ -309,29 +408,38 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
-  it('shows grant and runtime summaries separately on the document page', async () => {
+  it('shows capability inheritance and project-disabled summaries in a single capability section', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    const grantsSection = mounted.container.querySelector('[data-testid="project-settings-grants-section"]')
-    const runtimeSection = mounted.container.querySelector('[data-testid="project-settings-runtime-section"]')
+    const capabilitySection = mounted.container.querySelector('[data-testid="project-settings-capabilities-section"]')
+    const modelsCard = mounted.container.querySelector('[data-testid="project-settings-capability-models-card"]')
+    const toolsCard = mounted.container.querySelector('[data-testid="project-settings-capability-tools-card"]')
+    const agentsCard = mounted.container.querySelector('[data-testid="project-settings-capability-agents-card"]')
+    const teamsCard = mounted.container.querySelector('[data-testid="project-settings-capability-teams-card"]')
 
-    expect(grantsSection?.textContent).toContain('已授予 2 个，默认 Claude Primary')
-    expect(runtimeSection?.textContent).toContain('已授予 2 个，启用 1 个，默认 Claude Primary')
-    expect(runtimeSection?.textContent).toContain('已启用 1 个工具')
+    expect(capabilitySection).not.toBeNull()
+    expect(modelsCard?.textContent).toContain('工作区已授予 2 个')
+    expect(modelsCard?.textContent).toContain('项目已启用 1 个')
+    expect(modelsCard?.textContent).toContain('项目已禁用 1 个')
+    expect(modelsCard?.textContent).toContain('默认 Claude Primary')
+    expect(toolsCard?.textContent).toContain('项目自有')
+    expect(agentsCard?.textContent).toContain('项目已禁用')
+    expect(teamsCard?.textContent).toContain('项目已禁用')
 
     mounted.destroy()
   })
 
-  it('saves project grants and runtime actor refinement through separate flows', async () => {
+  it('persists actor workspace baselines and project refinements through delta-only settings saves', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
+    const updateProjectSpy = vi.spyOn(workspaceStore, 'updateProject')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-grants-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-grants-actors-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-agents"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-actors-dialog"]') !== null)
 
     const grantBuiltinAgent = document.body.querySelector<HTMLInputElement>('[data-testid="project-grant-agent-option-agent-template-finance"] input[type="checkbox"]')
     const grantSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-actors-save-button"]')
@@ -350,28 +458,45 @@ describe('Project settings view', () => {
 
     grantBuiltinTeam?.click()
     await nextTick()
+    const updateProjectCallsBeforeGrantSave = updateProjectSpy.mock.calls.length
     grantSaveButton?.click()
 
     await waitFor(() => {
-      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-      const assignments = project?.assignments?.agents
-      return Boolean(
-        assignments
-        && assignments.excludedAgentIds.length === 0
-        && assignments.excludedTeamIds.length === 0,
-      )
+      mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-agents"]')?.click()
+      return document.body
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-agent-option-agent-template-finance"] input[type="checkbox"]')
+        ?.checked === true
     })
+    expect(updateProjectSpy.mock.calls).toHaveLength(updateProjectCallsBeforeGrantSave)
 
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.agentIds).toEqual([])
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.agents?.teamIds).toEqual([])
+    const reopenedGrantActorsDialog = document.body.querySelector<HTMLElement>('[data-testid="project-settings-actors-dialog"]')
+    expect(
+      reopenedGrantActorsDialog
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-agent-option-agent-template-finance"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+    reopenedGrantActorsDialog
+      ?.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-teams"]')
+      ?.click()
+    await nextTick()
+    expect(
+      reopenedGrantActorsDialog
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-team-option-team-template-finance"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).toEqual([
       'agent-coder',
       'agent-redesign',
     ])
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledTeamIds).toEqual(['team-redesign'])
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-actors"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-actors-dialog"]') !== null)
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-dialog-close"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-actors-dialog"]') === null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-agents"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-actors-dialog"]') !== null)
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-project"]')?.click()
+    await nextTick()
 
     const runtimeBuiltinAgent = document.body.querySelector<HTMLInputElement>('[data-testid="project-runtime-agent-option-agent-template-finance"] input[type="checkbox"]')
     const runtimeSaveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-actors-save-button"]')
@@ -400,11 +525,6 @@ describe('Project settings view', () => {
       )
     })
 
-    const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
-    expect(project?.assignments?.agents?.agentIds).toEqual([])
-    expect(project?.assignments?.agents?.teamIds).toEqual([])
-    expect(project?.assignments?.agents?.excludedAgentIds).toEqual([])
-    expect(project?.assignments?.agents?.excludedTeamIds).toEqual([])
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.disabledAgentIds).toEqual([
       'agent-coder',
       'agent-redesign',
@@ -458,14 +578,256 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
-  it('saves runtime model quota from the runtime dialog only', async () => {
+  it('archives and restores the project from the settings lifecycle section', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-lifecycle-section"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-archive-button"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-restore-button"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-archive-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'archived',
+    )
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-redesign/settings'
+        && notification.body?.includes('Desktop Redesign'),
+      ),
+    )
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-restore-button"]')).not.toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-restore-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'active',
+    )
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-archive-button"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-restore-button"]')).toBeNull()
+    expect(notificationStore.notificationsState.filter(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === '/workspaces/ws-local/projects/proj-redesign/settings'
+      && notification.body?.includes('Desktop Redesign'),
+    )).toHaveLength(2)
+
+    mounted.destroy()
+  })
+
+  it('creates deletion requests from the settings lifecycle section once the project is archived', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings')
+    const inboxStore = useInboxStore()
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+    const inboxBootstrapSpy = vi.spyOn(inboxStore, 'bootstrap')
+    const createDeletionRequestSpy = vi.spyOn(workspaceStore, 'createProjectDeletionRequest')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-request-delete-button"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-request-delete-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.getProjectDeletionRequests('proj-governance').some(request => request.status === 'pending'),
+    )
+    await waitFor(() =>
+      inboxBootstrapSpy.mock.calls.some(call => call[0] === undefined && call[1] === true),
+    )
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request'
+        && notification.body?.includes('Workspace Governance'),
+      ),
+    )
+
+    expect(createDeletionRequestSpy).toHaveBeenCalledWith('proj-governance', {})
+    expect(mounted.container.querySelector('[data-testid="project-settings-request-delete-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-delete-request-status"]')).not.toBeNull()
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request'
+      && notification.actionLabel
+      && notification.body?.includes('Workspace Governance'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('supports deletion review deep-links and final delete directly from project settings', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+        state.projectDeletionRequests = [{
+          id: 'delete-req-pending',
+          workspaceId: state.workspace.id,
+          projectId: governance.id,
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: undefined,
+          status: 'pending',
+          reviewComment: undefined,
+          createdAt: 1,
+          updatedAt: 1,
+          reviewedAt: undefined,
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request')
+    const inboxStore = useInboxStore()
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+    const inboxBootstrapSpy = vi.spyOn(inboxStore, 'bootstrap')
+    const deleteProjectSpy = vi.spyOn(workspaceStore, 'deleteProject')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-lifecycle-review-callout"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-delete-request-approve-button"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-delete-request-approve-button"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="project-settings-delete-project-button"]') !== null)
+    await waitFor(() =>
+      inboxBootstrapSpy.mock.calls.some(call => call[0] === undefined && call[1] === true),
+    )
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request'
+        && notification.body?.includes('Workspace Governance'),
+      ),
+    )
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-delete-project-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.projects.every(project => project.id !== 'proj-governance'),
+    )
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console-projects')
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/console/projects'
+        && notification.body?.includes('Workspace Governance'),
+      ),
+    )
+
+    expect(deleteProjectSpy).toHaveBeenCalledWith('proj-governance')
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === '/workspaces/ws-local/console/projects'
+      && notification.actionLabel
+      && notification.body?.includes('Workspace Governance'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('supports rejecting deletion requests from the project settings review state', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+        state.projectDeletionRequests = [{
+          id: 'delete-req-pending',
+          workspaceId: state.workspace.id,
+          projectId: governance.id,
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: undefined,
+          status: 'pending',
+          reviewComment: undefined,
+          createdAt: 1,
+          updatedAt: 1,
+          reviewedAt: undefined,
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request')
+    const inboxStore = useInboxStore()
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+    const inboxBootstrapSpy = vi.spyOn(inboxStore, 'bootstrap')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-delete-request-reject-button"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-delete-request-reject-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.getProjectDeletionRequests('proj-governance')[0]?.status === 'rejected',
+    )
+    await waitFor(() =>
+      inboxBootstrapSpy.mock.calls.some(call => call[0] === undefined && call[1] === true),
+    )
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings'
+        && notification.body?.includes('Workspace Governance'),
+      ),
+    )
+
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings'
+      && notification.actionLabel
+      && notification.body?.includes('Workspace Governance'),
+    )).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('saves project model quota from the unified capability dialog only', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-open-runtime-models"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="project-settings-runtime-models-dialog"]') !== null)
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
+    document.body.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-project"]')?.click()
+    await nextTick()
 
     const quotaInput = document.body.querySelector<HTMLInputElement>('[data-testid="project-runtime-total-tokens-input"]')
     const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-runtime-models-save-button"]')
@@ -479,11 +841,49 @@ describe('Project settings view', () => {
 
     await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 500000)
 
-    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments?.models?.configuredModelIds).toEqual([
-      'anthropic-primary',
-      'anthropic-alt',
-    ])
+    expect(workspaceStore.projects.find(item => item.id === 'proj-redesign')?.assignments).toBeUndefined()
     expect(workspaceStore.getProjectSettings('proj-redesign').models?.allowedConfiguredModelIds).toEqual(['anthropic-primary'])
+
+    mounted.destroy()
+  })
+
+  it('saves workspace model baseline selection without routing through project metadata updates', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+    const updateProjectSpy = vi.spyOn(workspaceStore, 'updateProject')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
+
+    const secondaryModel = document.body.querySelector<HTMLInputElement>('[data-testid="project-grant-model-option-anthropic-alt"] input[type="checkbox"]')
+    const saveButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-settings-grants-models-save-button"]')
+
+    expect(secondaryModel).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+
+    secondaryModel?.click()
+    await nextTick()
+
+    const updateProjectCallsBeforeSave = updateProjectSpy.mock.calls.length
+    saveButton?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') === null)
+    expect(updateProjectSpy.mock.calls).toHaveLength(updateProjectCallsBeforeSave)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-edit-models"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="project-settings-models-dialog"]') !== null)
+    const reopenedGrantModelsDialog = document.body.querySelector<HTMLElement>('[data-testid="project-settings-models-dialog"]')
+    expect(
+      reopenedGrantModelsDialog
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-model-option-anthropic-primary"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+    expect(
+      reopenedGrantModelsDialog
+        .querySelector<HTMLInputElement>('[data-testid="project-grant-model-option-anthropic-alt"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(false)
 
     mounted.destroy()
   })

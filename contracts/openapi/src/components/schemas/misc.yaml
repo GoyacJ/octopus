@@ -90,6 +90,8 @@ InboxItemRecord:
       type: string
     status:
       type: string
+    targetUserId:
+      type: string
     title:
       type: string
     workspaceId:
@@ -103,6 +105,7 @@ InboxItemRecord:
     - status
     - priority
     - actionable
+    - targetUserId
     - createdAt
   type: object
 KnowledgeEntryRecord:

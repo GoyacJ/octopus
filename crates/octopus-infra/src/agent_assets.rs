@@ -3565,6 +3565,8 @@ mod tests {
                     description TEXT NOT NULL,
                     resource_directory TEXT NOT NULL,
                     leader_agent_id TEXT,
+                    manager_user_id TEXT,
+                    preset_code TEXT,
                     assignments_json TEXT,
                     owner_user_id TEXT,
                     member_user_ids_json TEXT,
@@ -3872,6 +3874,7 @@ mod tests {
                     confirm_password: "password123".into(),
                     avatar: avatar_payload(),
                     workspace_id: Some("ws-local".into()),
+                    mapped_directory: None,
                 },
             ))
             .expect("bootstrap owner");

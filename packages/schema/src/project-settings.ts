@@ -1,6 +1,8 @@
 import type { WorkspaceToolPermissionMode } from './shared'
 
 export interface ProjectModelSettings {
+  // Forward-compatible delta field for the governance rebuild.
+  disabledConfiguredModelIds?: string[]
   allowedConfiguredModelIds: string[]
   defaultConfiguredModelId: string
   totalTokens?: number

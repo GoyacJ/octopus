@@ -6,6 +6,7 @@ import {
   createWorkspaceRequestToken,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
+import { useShellStore } from './shell'
 
 export const useInboxStore = defineStore('inbox', {
   state: () => ({
@@ -14,6 +15,7 @@ export const useInboxStore = defineStore('inbox', {
     errorState: '',
     bootstrapped: false,
     activeConnectionId: '',
+    activeUserId: '',
     requestToken: 0,
   }),
   getters: {
@@ -37,6 +39,7 @@ export const useInboxStore = defineStore('inbox', {
       this.errorState = ''
       this.bootstrapped = false
       this.activeConnectionId = ''
+      this.activeUserId = ''
       this.requestToken = 0
     },
     async bootstrap(workspaceConnectionId?: string, force = false) {
@@ -47,13 +50,26 @@ export const useInboxStore = defineStore('inbox', {
       }
 
       const { client, connectionId } = resolvedClient
-      if (!force && this.bootstrapped && this.activeConnectionId === connectionId) {
+      const shell = useShellStore()
+      const currentUserId = shell.workspaceSessionsState[connectionId]?.session.userId ?? ''
+      if (!currentUserId) {
+        this.reset()
+        return
+      }
+
+      if (
+        !force
+        && this.bootstrapped
+        && this.activeConnectionId === connectionId
+        && this.activeUserId === currentUserId
+      ) {
         return
       }
 
       const token = createWorkspaceRequestToken(this.requestToken)
       this.requestToken = token
       this.activeConnectionId = connectionId
+      this.activeUserId = currentUserId
       this.loadingState = true
       this.errorState = ''
 
@@ -62,7 +78,7 @@ export const useInboxStore = defineStore('inbox', {
         if (this.requestToken !== token || this.activeConnectionId !== connectionId) {
           return
         }
-        this.itemsState = records
+        this.itemsState = records.filter(item => item.targetUserId === currentUserId)
         this.bootstrapped = true
       } catch (cause) {
         if (this.requestToken !== token || this.activeConnectionId !== connectionId) {

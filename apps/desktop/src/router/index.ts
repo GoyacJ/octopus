@@ -24,16 +24,16 @@ import WorkspaceConsoleView from '@/views/workspace/WorkspaceConsoleView.vue'
 import WorkspaceKnowledgeView from '@/views/workspace/WorkspaceKnowledgeView.vue'
 import WorkspaceOverviewView from '@/views/workspace/WorkspaceOverviewView.vue'
 import WorkspaceResourcesView from '@/views/workspace/WorkspaceResourcesView.vue'
+import WorkspaceSettingsView from '@/views/workspace/WorkspaceSettingsView.vue'
 import AccessGovernanceView from '@/views/workspace/access-control/AccessGovernanceView.vue'
 import AccessMembersView from '@/views/workspace/access-control/AccessMembersView.vue'
 import AccessPermissionsView from '@/views/workspace/access-control/AccessPermissionsView.vue'
 import PersonalCenterPetView from '@/views/workspace/personal-center/PersonalCenterPetView.vue'
 import PersonalCenterProfileView from '@/views/workspace/personal-center/PersonalCenterProfileView.vue'
 import {
+  canAccessProjectSettings,
   isProjectMember,
   isProjectModuleAllowed,
-  isProjectOwner,
-  isProjectOwnerOnlyRoute,
   projectModuleForRouteName,
   resolveProjectActorUserId,
 } from '@/composables/project-governance'
@@ -135,7 +135,7 @@ function resolveConsoleFallback(workspaceId: string) {
   }
 
   return {
-    name: 'workspace-console-projects',
+    name: 'workspace-console-settings',
     params: { workspaceId },
   } as const
 }
@@ -247,6 +247,11 @@ function createRoutes(): RouteRecordRaw[] {
           : resolveWorkspaceId(),
       ),
       children: [
+        {
+          path: 'settings',
+          name: 'workspace-console-settings',
+          component: WorkspaceSettingsView,
+        },
         {
           path: 'projects',
           name: 'workspace-console-projects',
@@ -521,13 +526,26 @@ function installRouterGuards(router: Router) {
           workspaceAccessControlStore.currentUser?.id,
           shell.activeWorkspaceSession?.session.userId,
         )
+        const canAccessSettings = routeName === 'project-settings'
+          && canAccessProjectSettings(
+            project,
+            actorUserId,
+            workspaceAccessControlStore.currentEffectivePermissionCodes,
+            workspaceAccessControlStore.currentEffectiveRoleCodes,
+          )
 
-        if (!project || !isProjectMember(project, actorUserId)) {
+        if (!project) {
           return resolveWorkspaceOverviewTarget(workspaceId)
         }
 
-        if (isProjectOwnerOnlyRoute(routeName ?? null) && !isProjectOwner(project, actorUserId)) {
-          return resolveProjectDashboardTarget(workspaceId, projectId)
+        if (routeName === 'project-settings') {
+          if (!canAccessSettings) {
+            return isProjectMember(project, actorUserId)
+              ? resolveProjectDashboardTarget(workspaceId, projectId)
+              : resolveWorkspaceOverviewTarget(workspaceId)
+          }
+        } else if (!isProjectMember(project, actorUserId)) {
+          return resolveWorkspaceOverviewTarget(workspaceId)
         }
 
         const module = projectModuleForRouteName(routeName)

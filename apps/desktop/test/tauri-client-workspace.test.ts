@@ -9,6 +9,7 @@ import type {
   ApiErrorEnvelope,
   ArtifactVersionReference,
   BindPetConversationInput,
+  CreateProjectDeletionRequestInput,
   CreateProjectRequest,
   CreateDeliverableVersionInput,
   DeliverableDetail,
@@ -18,8 +19,10 @@ import type {
   ForkDeliverableInput,
   PromoteDeliverableInput,
   RegisterBootstrapAdminRequest,
+  ReviewProjectDeletionRequestInput,
   SavePetPresenceInput,
   UpdateProjectRequest,
+  UpdateWorkspaceRequest,
 } from '@octopus/schema'
 
 import {
@@ -112,7 +115,7 @@ describe('workspace client transport', () => {
     expect(indexSchema).toContain("export * from './task'")
   })
 
-  it('exposes project leader and live-inheritance assignment fields through the canonical schema surfaces', () => {
+  it('exposes workspace governance and project ownership transport fields through the canonical schema surfaces', () => {
     const repoRoot = resolve(import.meta.dirname, '../../..')
     const generatedSchemaPath = resolve(repoRoot, 'packages/schema/src/generated.ts')
     const workspaceSchemaPath = resolve(repoRoot, 'packages/schema/src/workspace.ts')
@@ -121,11 +124,16 @@ describe('workspace client transport', () => {
     const workspaceSchema = readFileSync(workspaceSchemaPath, 'utf8')
 
     expect(generatedSchema).toContain('leaderAgentId?: string')
-    expect(generatedSchema).toContain('excludedSourceKeys: string[]')
-    expect(generatedSchema).toContain('excludedAgentIds: string[]')
-    expect(generatedSchema).toContain('excludedTeamIds: string[]')
+    expect(generatedSchema).toContain('managerUserId?: string')
+    expect(generatedSchema).toContain('presetCode?: string')
+    expect(generatedSchema).toContain('mappedDirectory?: string')
+    expect(generatedSchema).toContain('mappedDirectoryDefault?: string')
+    expect(generatedSchema).toContain('targetUserId: string')
+    expect(generatedSchema).toContain('export interface ProjectDeletionRequest')
     expect(workspaceSchema).toContain('ProjectAgentAssignments as OpenApiProjectAgentAssignments')
     expect(workspaceSchema).toContain('ProjectToolAssignments as OpenApiProjectToolAssignments')
+    expect(workspaceSchema).toContain('ProjectDeletionRequest as OpenApiProjectDeletionRequest')
+    expect(workspaceSchema).toContain('UpdateWorkspaceRequest as OpenApiUpdateWorkspaceRequest')
   })
 
   it('requires a workspace session token before workspace-plane calls can be made', async () => {
@@ -153,12 +161,15 @@ describe('workspace client transport', () => {
       json: async () => ({
         id: 'ws-local',
         name: 'Local Workspace',
+        avatar: 'data:image/png;base64,d29ya3NwYWNl',
         slug: 'local-workspace',
         deployment: 'local',
         bootstrapStatus: 'ready',
         host: '127.0.0.1',
         listenAddress: 'http://127.0.0.1:43127',
         defaultProjectId: 'proj-redesign',
+        mappedDirectory: '/Users/goya/Octopus',
+        mappedDirectoryDefault: '/Users/goya/Octopus',
       }),
     })
 
@@ -1225,6 +1236,7 @@ describe('workspace client transport', () => {
           id: 'inbox-1',
           workspaceId: 'ws-local',
           projectId: 'proj-redesign',
+          targetUserId: 'user-approver',
           itemType: 'approval',
           title: 'Need approval',
           description: 'Runtime needs approval.',
@@ -1272,6 +1284,7 @@ describe('workspace client transport', () => {
         workspace: {
           id: 'ws-local',
           name: 'Local Workspace',
+          avatar: 'data:image/png;base64,d29ya3NwYWNl',
           slug: 'local-workspace',
           deployment: 'local',
           bootstrapStatus: 'ready',
@@ -1279,6 +1292,8 @@ describe('workspace client transport', () => {
           host: '127.0.0.1',
           listenAddress: 'http://127.0.0.1:43127',
           defaultProjectId: 'proj-redesign',
+          mappedDirectory: '/Users/goya/Octopus',
+          mappedDirectoryDefault: '/Users/goya/Octopus',
         },
       }),
     })
@@ -1297,6 +1312,7 @@ describe('workspace client transport', () => {
       password: 'owner-owner',
       confirmPassword: 'owner-owner',
       workspaceId: 'ws-local',
+      mappedDirectory: '/Users/goya/Octopus',
       avatar: {
         fileName: 'owner-avatar.png',
         contentType: 'image/png',
@@ -1474,18 +1490,8 @@ describe('workspace client transport', () => {
       description: 'Created from the workspace surface.',
       resourceDirectory: 'data/projects/proj-new/resources',
       leaderAgentId: 'agent-leader',
-      assignments: {
-        tools: {
-          sourceKeys: [],
-          excludedSourceKeys: ['builtin:bash', 'skill:ops'],
-        },
-        agents: {
-          agentIds: [],
-          teamIds: [],
-          excludedAgentIds: ['agent-shadow'],
-          excludedTeamIds: ['team-review'],
-        },
-      },
+      managerUserId: 'user-manager',
+      presetCode: 'delivery',
     }
 
     await workspaceClient.projects.create(input)
@@ -1502,18 +1508,8 @@ describe('workspace client transport', () => {
       description: 'Created from the workspace surface.',
       resourceDirectory: 'data/projects/proj-new/resources',
       leaderAgentId: 'agent-leader',
-      assignments: {
-        tools: {
-          sourceKeys: [],
-          excludedSourceKeys: ['builtin:bash', 'skill:ops'],
-        },
-        agents: {
-          agentIds: [],
-          teamIds: [],
-          excludedAgentIds: ['agent-shadow'],
-          excludedTeamIds: ['team-review'],
-        },
-      },
+      managerUserId: 'user-manager',
+      presetCode: 'delivery',
     })
   })
 
@@ -1545,18 +1541,8 @@ describe('workspace client transport', () => {
       status: 'archived',
       resourceDirectory: 'data/projects/proj-redesign/resources',
       leaderAgentId: 'agent-strategist',
-      assignments: {
-        tools: {
-          sourceKeys: [],
-          excludedSourceKeys: ['mcp:browser'],
-        },
-        agents: {
-          agentIds: [],
-          teamIds: [],
-          excludedAgentIds: ['agent-shadow', 'agent-scout'],
-          excludedTeamIds: [],
-        },
-      },
+      managerUserId: 'user-manager',
+      presetCode: 'operations',
     }
 
     await workspaceClient.projects.update('proj-redesign', input)
@@ -1574,19 +1560,157 @@ describe('workspace client transport', () => {
       status: 'archived',
       resourceDirectory: 'data/projects/proj-redesign/resources',
       leaderAgentId: 'agent-strategist',
-      assignments: {
-        tools: {
-          sourceKeys: [],
-          excludedSourceKeys: ['mcp:browser'],
-        },
-        agents: {
-          agentIds: [],
-          teamIds: [],
-          excludedAgentIds: ['agent-shadow', 'agent-scout'],
-          excludedTeamIds: [],
-        },
-      },
+      managerUserId: 'user-manager',
+      presetCode: 'operations',
     })
+  })
+
+  it('uses authenticated workspace update endpoint for workspace settings management', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'ws-local',
+        name: 'Workspace HQ',
+        avatar: 'data:image/png;base64,d29ya3NwYWNl',
+        slug: 'workspace-hq',
+        deployment: 'local',
+        bootstrapStatus: 'ready',
+        host: '127.0.0.1',
+        listenAddress: 'http://127.0.0.1:43127',
+        defaultProjectId: 'proj-redesign',
+        mappedDirectory: '/Users/goya/Workspace',
+        mappedDirectoryDefault: '/Users/goya/Workspace',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const input: UpdateWorkspaceRequest = {
+      name: 'Workspace HQ',
+      mappedDirectory: '/Users/goya/Workspace',
+    }
+
+    await workspaceClient.workspace.update(input)
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+    expect(JSON.parse(String(firstRequest().body))).toMatchObject({
+      name: 'Workspace HQ',
+      mappedDirectory: '/Users/goya/Workspace',
+    })
+  })
+
+  it('uses project deletion request endpoints for governance review actions', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([{
+          id: 'delete-req-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          requestedByUserId: 'user-owner',
+          status: 'pending',
+          createdAt: 1,
+          updatedAt: 1,
+        }]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'delete-req-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          requestedByUserId: 'user-owner',
+          status: 'pending',
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'delete-req-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: 'user-admin',
+          status: 'approved',
+          createdAt: 1,
+          updatedAt: 2,
+          reviewedAt: 2,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'delete-req-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: 'user-admin',
+          status: 'rejected',
+          createdAt: 1,
+          updatedAt: 3,
+          reviewedAt: 3,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const createInput: CreateProjectDeletionRequestInput = {
+      reason: 'Retire this project',
+    }
+    const reviewInput: ReviewProjectDeletionRequestInput = {
+      reviewComment: 'Approved for deletion',
+    }
+
+    await workspaceClient.projects.listDeletionRequests('proj-redesign')
+    await workspaceClient.projects.createDeletionRequest('proj-redesign', createInput)
+    await workspaceClient.projects.approveDeletionRequest('proj-redesign', 'delete-req-1', reviewInput)
+    await workspaceClient.projects.rejectDeletionRequest('proj-redesign', 'delete-req-1', reviewInput)
+    await workspaceClient.projects.delete('proj-redesign')
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:43127/api/v1/projects/proj-redesign/deletion-requests')
+    expect((fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined)?.method).toBe('GET')
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe('http://127.0.0.1:43127/api/v1/projects/proj-redesign/deletion-requests')
+    expect((fetchSpy.mock.calls[1]?.[1] as RequestInit | undefined)?.method).toBe('POST')
+    expect(JSON.parse(String((fetchSpy.mock.calls[1]?.[1] as RequestInit | undefined)?.body))).toMatchObject(createInput)
+    expect(fetchSpy.mock.calls[2]?.[0]).toBe('http://127.0.0.1:43127/api/v1/projects/proj-redesign/deletion-requests/delete-req-1/approve')
+    expect((fetchSpy.mock.calls[2]?.[1] as RequestInit | undefined)?.method).toBe('POST')
+    expect(JSON.parse(String((fetchSpy.mock.calls[2]?.[1] as RequestInit | undefined)?.body))).toMatchObject(reviewInput)
+    expect(fetchSpy.mock.calls[3]?.[0]).toBe('http://127.0.0.1:43127/api/v1/projects/proj-redesign/deletion-requests/delete-req-1/reject')
+    expect((fetchSpy.mock.calls[3]?.[1] as RequestInit | undefined)?.method).toBe('POST')
+    expect(fetchSpy.mock.calls[4]?.[0]).toBe('http://127.0.0.1:43127/api/v1/projects/proj-redesign')
+    expect((fetchSpy.mock.calls[4]?.[1] as RequestInit | undefined)?.method).toBe('DELETE')
   })
 
   it('fetches the formal capability management projection through the workspace catalog adapter', async () => {
@@ -1661,6 +1785,40 @@ describe('workspace client transport', () => {
       'http://127.0.0.1:43127/api/v1/workspace/personal-center/profile',
       expect.objectContaining({
         method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
+  it('loads the current user profile through the workspace personal center profile endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'user-owner',
+        username: 'owner',
+        displayName: 'Workspace Owner',
+        avatar: 'data:image/png;base64,b3duZXI=',
+        status: 'active',
+        passwordState: 'set',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.profile.getCurrentUserProfile()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/personal-center/profile',
+      expect.objectContaining({
+        method: 'GET',
         headers: expect.any(Headers),
       }),
     )

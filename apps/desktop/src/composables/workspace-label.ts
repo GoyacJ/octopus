@@ -7,9 +7,16 @@ export function resolveWorkspaceLabel(
   activeWorkspaceName: string | null | undefined,
   t: Translate,
 ): string {
+  const normalizedName = activeWorkspaceName?.trim()
+  const normalizedConnectionLabel = connection?.label?.trim()
+
+  if (normalizedName && normalizedName !== normalizedConnectionLabel) {
+    return normalizedName
+  }
+
   if (connection?.transportSecurity === 'loopback') {
     return t('topbar.localWorkspace')
   }
 
-  return connection?.label ?? activeWorkspaceName ?? t('common.workspace')
+  return connection?.label ?? normalizedName ?? t('common.workspace')
 }

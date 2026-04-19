@@ -9,7 +9,6 @@ import {
   UiDialog,
   UiEmptyState,
   UiField,
-  UiInfoCard,
   UiInput,
   UiInspectorPanel,
   UiPageHeader,
@@ -21,25 +20,41 @@ import {
 
 import { createWorkspaceConsoleSurfaceTarget } from '@/i18n/navigation'
 
+import ProjectBasicsPanel from './ProjectBasicsPanel.vue'
+import ProjectCapabilitiesPanel from './ProjectCapabilitiesPanel.vue'
+import ProjectLifecyclePanel from './ProjectLifecyclePanel.vue'
 import { useProjectSettings } from './useProjectSettings'
 
 const {
   t,
   workspaceStore,
   project,
+  basicsForm,
+  basicsError,
+  savingBasics,
   leaderDraft,
   leaderOptions,
   currentLeaderLabel,
+  managerOptions,
+  presetOptions,
   toolTabs,
+  capabilityScopeTabs,
   actorTabs,
+  modelDialogScope,
+  toolDialogScope,
+  actorDialogScope,
   grantToolTab,
   runtimeToolTab,
   grantActorTab,
   runtimeActorTab,
+  activeToolTab,
+  activeActorTab,
   grantToolSearchQuery,
   runtimeToolSearchQuery,
   grantActorSearchQuery,
   runtimeActorSearchQuery,
+  activeToolSearchQuery,
+  activeActorSearchQuery,
   dialogOpen,
   dialogErrors,
   saving,
@@ -56,6 +71,9 @@ const {
   filteredGrantTeams,
   filteredRuntimeAgents,
   filteredRuntimeTeams,
+  activeToolEntries,
+  activeActorEntries,
+  activeTeamEntries,
   workspaceActiveAgents,
   workspaceActiveTeams,
   grantedAgents,
@@ -65,10 +83,17 @@ const {
   grantedProjectOwnedTools,
   workspaceUsers,
   toolPermissionOptions,
-  grantSummary,
-  runtimeSummary,
+  capabilityCards,
   memberSummary,
   accessSummary,
+  deletionRequestsReady,
+  latestDeletionRequest,
+  canReviewDeletion,
+  lifecycleReviewCallout,
+  lifecycleError,
+  creatingDeletionRequest,
+  reviewingDeletionRequest,
+  deletingProject,
   completionItems,
   completionProgress,
   projectUsedTokens,
@@ -93,18 +118,16 @@ const {
   setRuntimeAgentEnabled,
   setRuntimeTeamEnabled,
   openLeaderDialog,
-  openGrantModelsDialog,
-  openGrantToolsDialog,
-  openGrantActorsDialog,
+  resetBasics,
+  openModelsDialog,
+  openToolsDialog,
+  openActorsDialog,
   selectAllGrantModels,
   clearGrantModels,
   selectAllGrantTools,
   clearGrantTools,
   selectAllGrantActors,
   clearGrantActors,
-  openRuntimeModelsDialog,
-  openRuntimeToolsDialog,
-  openRuntimeActorsDialog,
   selectAllRuntimeTools,
   clearAllRuntimeTools,
   selectAllRuntimeActors,
@@ -113,6 +136,13 @@ const {
   resolveRuntimeToolSelection,
   runtimeToolPermissionSummaryLabel,
   updateRuntimeToolPermission,
+  deletionRequestStatusLabel,
+  archiveProject,
+  restoreProject,
+  createDeletionRequest,
+  reviewDeletionRequest,
+  deleteProject,
+  saveBasics,
   saveLeader,
   saveGrantModels,
   saveGrantTools,
@@ -120,6 +150,9 @@ const {
   saveRuntimeModels,
   saveRuntimeTools,
   saveRuntimeActors,
+  saveModelsDialog,
+  saveToolsDialog,
+  saveActorsDialog,
   saveMembers,
 } = useProjectSettings()
 
@@ -166,31 +199,28 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
         <div class="space-y-4">
           <section
             data-testid="project-settings-overview-section"
-            class="rounded-[var(--radius-xl)] border border-border bg-surface px-5 py-5"
+            class="space-y-4"
           >
-            <div class="space-y-1">
-              <div class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
-                {{ t('projectSettings.sections.overview.title') }}
-              </div>
-              <div class="text-sm leading-6 text-text-secondary">
-                {{ t('projectSettings.sections.overview.description') }}
-              </div>
-            </div>
+            <ProjectBasicsPanel
+              :basics-form="basicsForm"
+              :manager-options="managerOptions"
+              :preset-options="presetOptions"
+              :status-label="statusLabel"
+              :badge-tone="badgeTone(project.status)"
+              :basics-error="basicsError"
+              :saving-basics="savingBasics"
+              @reset="resetBasics"
+              @save="saveBasics"
+            />
 
-            <div class="mt-4 grid gap-3 md:grid-cols-2">
-              <UiInfoCard :label="t('projects.fields.name')" :title="project.name" />
-              <UiInfoCard :label="t('projects.fields.resourceDirectory')" :title="project.resourceDirectory" />
-              <UiInfoCard :label="t('projects.fields.description')" :title="project.description || t('common.na')" />
-              <UiInfoCard :label="t('projectSettings.summary.status')" :title="statusLabel" />
-              <UiInfoCard
-                :label="t('projects.fields.leader')"
-                :title="currentLeaderLabel"
-              />
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary">
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-xl)] border border-border bg-surface px-5 py-5">
               <div class="max-w-[40rem]">
-                {{ t('projectSettings.sections.overview.editHint') }}
+                <div class="text-sm font-semibold text-text-primary">
+                  {{ t('projects.fields.leader') }}
+                </div>
+                <div class="mt-1 text-sm leading-6 text-text-secondary">
+                  {{ t('projectSettings.sections.overview.editHint', { leader: currentLeaderLabel }) }}
+                </div>
               </div>
               <UiButton
                 variant="ghost"
@@ -203,150 +233,40 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
           </section>
 
           <section
-            data-testid="project-settings-grants-section"
-            class="rounded-[var(--radius-xl)] border border-border bg-surface px-5 py-5"
+            data-testid="project-settings-capabilities-section"
+            class="space-y-4"
           >
-            <div class="space-y-1">
-              <div class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
-                {{ t('projectSettings.sections.grants.title') }}
-              </div>
-              <div class="text-sm leading-6 text-text-secondary">
-                {{ t('projectSettings.sections.grants.description') }}
-              </div>
-            </div>
-
-            <div class="mt-4 space-y-3">
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-grants-models"
-                :class="summaryRowButtonClass"
-                @click="openGrantModelsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.grants.modelsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.workspaceGrant') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ grantSummary.models }}
-                </div>
-              </UiButton>
-
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-grants-tools"
-                :class="summaryRowButtonClass"
-                @click="openGrantToolsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.grants.toolsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.workspaceGrant') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ grantSummary.tools }}
-                </div>
-              </UiButton>
-
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-grants-actors"
-                :class="summaryRowButtonClass"
-                @click="openGrantActorsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.grants.actorsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.workspaceGrant') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ grantSummary.actors }}
-                </div>
-              </UiButton>
-            </div>
+            <ProjectCapabilitiesPanel
+              :capability-cards="capabilityCards"
+              @edit-models="openModelsDialog()"
+              @edit-tools="openToolsDialog()"
+              @edit-agents="openActorsDialog('agents')"
+              @edit-teams="openActorsDialog('teams')"
+            />
           </section>
 
-          <section
-            data-testid="project-settings-runtime-section"
-            class="rounded-[var(--radius-xl)] border border-border bg-surface px-5 py-5"
-          >
-            <div class="space-y-1">
-              <div class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
-                {{ t('projectSettings.sections.runtime.title') }}
-              </div>
-              <div class="text-sm leading-6 text-text-secondary">
-                {{ t('projectSettings.sections.runtime.description') }}
-              </div>
-            </div>
-
-            <div class="mt-4 space-y-3">
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-runtime-models"
-                :class="summaryRowButtonClass"
-                @click="openRuntimeModelsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.runtime.modelsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.projectEnablement') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ runtimeSummary.models }}
-                </div>
-              </UiButton>
-
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-runtime-tools"
-                :class="summaryRowButtonClass"
-                @click="openRuntimeToolsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.runtime.toolsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.projectOverride') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ runtimeSummary.tools }}
-                </div>
-              </UiButton>
-
-              <UiButton
-                variant="outline"
-                data-testid="project-settings-open-runtime-actors"
-                :class="summaryRowButtonClass"
-                @click="openRuntimeActorsDialog"
-              >
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ t('projectSettings.sections.runtime.actorsTitle') }}
-                  </div>
-                  <div class="text-xs text-text-tertiary">
-                    {{ t('projectSettings.labels.projectEnablement') }}
-                  </div>
-                </div>
-                <div class="max-w-[28rem] text-sm leading-6 text-text-secondary">
-                  {{ runtimeSummary.actors }}
-                </div>
-              </UiButton>
-            </div>
-          </section>
+          <ProjectLifecyclePanel
+            :title="t('projectSettings.sections.lifecycle.title')"
+            :description="t('projectSettings.sections.lifecycle.description')"
+            :review-callout="lifecycleReviewCallout"
+            :status-label="statusLabel"
+            :badge-tone="badgeTone(project.status)"
+            :project-status="project.status"
+            :deletion-request-status-label="deletionRequestStatusLabel(latestDeletionRequest?.status)"
+            :latest-deletion-request="latestDeletionRequest"
+            :deletion-requests-ready="deletionRequestsReady"
+            :can-review-deletion="canReviewDeletion"
+            :creating-deletion-request="creatingDeletionRequest"
+            :reviewing-deletion-request="reviewingDeletionRequest"
+            :deleting-project="deletingProject"
+            :lifecycle-error="lifecycleError"
+            @archive="archiveProject"
+            @restore="restoreProject"
+            @request-delete="createDeletionRequest"
+            @approve-delete-request="reviewDeletionRequest(true)"
+            @reject-delete-request="reviewDeletionRequest(false)"
+            @delete-project="deleteProject"
+          />
 
           <section
             data-testid="project-settings-members-section"
@@ -483,433 +403,186 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
       </UiDialog>
 
       <UiDialog
-        v-model:open="dialogOpen.grantModels"
-        :title="t('projectSettings.dialogs.grantModels.title')"
-        :description="t('projectSettings.dialogs.grantModels.description')"
-        content-test-id="project-settings-grants-models-dialog"
-      >
-        <div class="space-y-4">
-          <UiField
-            :label="t('projectSettings.sections.grants.modelsTitle')"
-            :hint="t('projectSettings.dialogs.grantModels.hint')"
-          >
-            <div v-if="workspaceConfiguredModels.length" class="space-y-3">
-              <div class="flex items-center justify-end gap-2">
-                <UiButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-grants-models-select-all"
-                  @click="selectAllGrantModels"
-                >
-                  {{ t('common.selectAll') }}
-                </UiButton>
-                <UiButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid="project-settings-grants-models-clear-all"
-                  @click="clearGrantModels"
-                >
-                  {{ t('common.clearAll') }}
-                </UiButton>
-              </div>
-              <label
-                v-for="modelOption in workspaceConfiguredModels"
-                :key="modelOption.value"
-                :data-testid="`project-grant-model-option-${modelOption.value}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ modelOption.label }}
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ modelOption.providerLabel }} · {{ modelOption.modelLabel }}
-                  </div>
-                </div>
-                <UiCheckbox
-                  v-model="grantForm.assignedConfiguredModelIds"
-                  :value="modelOption.value"
-                  :aria-label="modelOption.label"
-                />
-              </label>
-            </div>
-            <UiEmptyState
-              v-else
-              :title="t('projectSettings.models.emptyTitle')"
-              :description="t('projectSettings.models.emptyDescription')"
-            />
-          </UiField>
-
-          <UiField
-            :label="t('projects.fields.defaultModel')"
-            :hint="t('projectSettings.dialogs.grantModels.defaultHint')"
-          >
-            <UiSelect
-              v-model="grantForm.defaultConfiguredModelId"
-              data-testid="project-grant-default-model-select"
-              :disabled="!grantForm.assignedConfiguredModelIds.length"
-              :options="workspaceConfiguredModels
-                .filter(option => grantForm.assignedConfiguredModelIds.includes(option.value))
-                .map(option => ({
-                  value: option.value,
-                  label: `${option.label} · ${option.providerLabel}`,
-                }))"
-            />
-          </UiField>
-
-          <UiStatusCallout
-            v-if="dialogErrors.grantModels"
-            tone="error"
-            :description="dialogErrors.grantModels"
-          />
-        </div>
-
-        <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.grantModels = false">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton
-            data-testid="project-settings-grants-models-save-button"
-            :disabled="saving.grantModels"
-            @click="saveGrantModels"
-          >
-            {{ t('common.save') }}
-          </UiButton>
-        </template>
-      </UiDialog>
-
-      <UiDialog
-        v-model:open="dialogOpen.grantTools"
-        :title="t('projectSettings.dialogs.grantTools.title')"
-        :description="t('projectSettings.dialogs.grantTools.description')"
-        content-test-id="project-settings-grants-tools-dialog"
-      >
-        <div class="space-y-4">
-          <UiEmptyState
-            v-if="!workspaceToolEntries.length"
-            :title="t('projectSettings.tools.emptyTitle')"
-            :description="t('projectSettings.tools.emptyDescription')"
-          />
-
-          <div v-else class="space-y-3">
-            <UiTabs
-              v-model="grantToolTab"
-              :tabs="toolTabs"
-              data-testid="project-settings-grants-tools-tabs"
-            />
-
-            <div class="flex flex-wrap items-center gap-3">
-              <div class="min-w-[16rem] flex-1">
-                <UiInput
-                  v-model="grantToolSearchQuery"
-                  data-testid="project-settings-grants-tools-search"
-                  :placeholder="t('projectSettings.search.tools')"
-                />
-              </div>
-              <UiButton
-                type="button"
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-grants-tools-select-all"
-                @click="selectAllGrantTools"
-              >
-                {{ t('common.selectAll') }}
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="ghost"
-                size="sm"
-                data-testid="project-settings-grants-tools-clear-all"
-                @click="clearGrantTools"
-              >
-                {{ t('common.clearAll') }}
-              </UiButton>
-            </div>
-
-            <div class="space-y-3">
-              <div
-                v-for="entry in filteredGrantToolEntries"
-                :key="entry.sourceKey"
-                :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary">
-                    <span>{{ entry.name }}</span>
-                    <UiBadge :label="toolOriginBadge(entry)" subtle />
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ entry.description || entry.sourceKey }}
-                  </div>
-                </div>
-                <UiCheckbox
-                  :model-value="isGrantToolEnabled(entry.sourceKey)"
-                  :aria-label="entry.name"
-                  @update:model-value="setGrantToolEnabled(entry.sourceKey, Boolean($event))"
-                />
-              </div>
-
-              <UiEmptyState
-                v-if="!filteredGrantToolEntries.length"
-                :title="t('projectSettings.search.emptyTitle')"
-                :description="t('projectSettings.search.emptyDescription')"
-              />
-
-              <div
-                v-if="grantedProjectOwnedTools.length"
-                class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary"
-              >
-                <div class="font-semibold text-text-primary">
-                  {{ t('projectSettings.labels.projectOwned') }}
-                </div>
-                <div class="mt-1">
-                  {{ t('projectSettings.tools.projectOwnedHint') }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <UiStatusCallout
-            v-if="dialogErrors.grantTools"
-            tone="error"
-            :description="dialogErrors.grantTools"
-          />
-        </div>
-
-        <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.grantTools = false">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton
-            data-testid="project-settings-grants-tools-save-button"
-            :disabled="saving.grantTools"
-            @click="saveGrantTools"
-          >
-            {{ t('common.save') }}
-          </UiButton>
-        </template>
-      </UiDialog>
-
-      <UiDialog
-        v-model:open="dialogOpen.grantActors"
-        :title="t('projectSettings.dialogs.grantActors.title')"
-        :description="t('projectSettings.dialogs.grantActors.description')"
-        content-test-id="project-settings-grants-actors-dialog"
+        v-model:open="dialogOpen.models"
+        :title="t('projectSettings.dialogs.models.title')"
+        :description="t('projectSettings.dialogs.models.description')"
+        content-test-id="project-settings-models-dialog"
       >
         <div class="space-y-4">
           <UiTabs
-            v-model="grantActorTab"
-            :tabs="actorTabs"
-            data-testid="project-settings-grants-actors-tabs"
+            v-model="modelDialogScope"
+            :tabs="capabilityScopeTabs"
+            data-testid="project-settings-models-scope-tabs"
           />
 
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="min-w-[16rem] flex-1">
-              <UiInput
-                v-model="grantActorSearchQuery"
-                data-testid="project-settings-grants-actors-search"
-                :placeholder="t('projectSettings.search.actors')"
-              />
-            </div>
-            <UiButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              :data-testid="grantActorTab === 'agents' ? 'project-settings-grants-agents-select-all' : 'project-settings-grants-teams-select-all'"
-              @click="selectAllGrantActors"
+          <template v-if="modelDialogScope === 'workspace'">
+            <UiField
+              :label="t('projectSettings.sections.grants.modelsTitle')"
+              :hint="t('projectSettings.dialogs.grantModels.hint')"
             >
-              {{ t('common.selectAll') }}
-            </UiButton>
-            <UiButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              :data-testid="grantActorTab === 'agents' ? 'project-settings-grants-agents-clear-all' : 'project-settings-grants-teams-clear-all'"
-              @click="clearGrantActors"
-            >
-              {{ t('common.clearAll') }}
-            </UiButton>
-          </div>
-
-          <section v-if="grantActorTab === 'agents'" class="space-y-3">
-            <div
-              v-for="agent in filteredGrantAgents"
-              :key="agent.id"
-              :data-testid="`project-grant-agent-option-${agent.id}`"
-              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-            >
-              <div class="min-w-0 space-y-1">
-                <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary">
-                  <span>{{ agent.name }}</span>
-                  <UiBadge :label="actorOriginBadge(agent)" subtle />
-                  <UiBadge v-if="isLeaderAgent(agent.id)" :label="t('projects.fields.leader')" tone="info" />
+              <div v-if="workspaceConfiguredModels.length" class="space-y-3">
+                <div class="flex items-center justify-end gap-2">
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-models-select-all"
+                    @click="selectAllGrantModels"
+                  >
+                    {{ t('common.selectAll') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid="project-settings-grants-models-clear-all"
+                    @click="clearGrantModels"
+                  >
+                    {{ t('common.clearAll') }}
+                  </UiButton>
                 </div>
-                <div class="text-xs text-text-secondary">
-                  {{ agent.description || t('common.na') }}
-                </div>
+                <label
+                  v-for="modelOption in workspaceConfiguredModels"
+                  :key="modelOption.value"
+                  :data-testid="`project-grant-model-option-${modelOption.value}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
+                    <div class="text-sm font-semibold text-text-primary">
+                      {{ modelOption.label }}
+                    </div>
+                    <div class="text-xs text-text-secondary">
+                      {{ modelOption.providerLabel }} · {{ modelOption.modelLabel }}
+                    </div>
+                  </div>
+                  <UiCheckbox
+                    v-model="grantForm.assignedConfiguredModelIds"
+                    :value="modelOption.value"
+                    :aria-label="modelOption.label"
+                  />
+                </label>
               </div>
-              <UiCheckbox
-                :model-value="isGrantAgentEnabled(agent.id)"
-                :aria-label="agent.name"
-                @update:model-value="setGrantAgentEnabled(agent.id, Boolean($event))"
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.models.emptyTitle')"
+                :description="t('projectSettings.models.emptyDescription')"
               />
-            </div>
+            </UiField>
 
-            <UiEmptyState
-              v-if="!filteredGrantAgents.length"
-              :title="t('projectSettings.search.emptyTitle')"
-              :description="t('projectSettings.search.emptyDescription')"
-            />
-          </section>
-
-          <section v-else class="space-y-3">
-            <div
-              v-for="team in filteredGrantTeams"
-              :key="team.id"
-              :data-testid="`project-grant-team-option-${team.id}`"
-              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            <UiField
+              :label="t('projects.fields.defaultModel')"
+              :hint="t('projectSettings.dialogs.grantModels.defaultHint')"
             >
-              <div class="min-w-0 space-y-1">
-                <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary">
-                  <span>{{ team.name }}</span>
-                  <UiBadge :label="actorOriginBadge(team)" subtle />
-                </div>
-                <div class="text-xs text-text-secondary">
-                  {{ team.description || t('common.na') }}
-                </div>
-              </div>
-              <UiCheckbox
-                :model-value="isGrantTeamEnabled(team.id)"
-                :aria-label="team.name"
-                @update:model-value="setGrantTeamEnabled(team.id, Boolean($event))"
+              <UiSelect
+                v-model="grantForm.defaultConfiguredModelId"
+                data-testid="project-grant-default-model-select"
+                :disabled="!grantForm.assignedConfiguredModelIds.length"
+                :options="workspaceConfiguredModels
+                  .filter(option => grantForm.assignedConfiguredModelIds.includes(option.value))
+                  .map(option => ({
+                    value: option.value,
+                    label: `${option.label} · ${option.providerLabel}`,
+                  }))"
               />
-            </div>
+            </UiField>
 
-            <UiEmptyState
-              v-if="!filteredGrantTeams.length"
-              :title="t('projectSettings.search.emptyTitle')"
-              :description="t('projectSettings.search.emptyDescription')"
+            <UiStatusCallout
+              v-if="dialogErrors.grantModels"
+              tone="error"
+              :description="dialogErrors.grantModels"
             />
-          </section>
+          </template>
 
-          <UiStatusCallout
-            v-if="dialogErrors.grantActors"
-            tone="error"
-            :description="dialogErrors.grantActors"
-          />
-        </div>
+          <template v-else>
+            <UiField
+              :label="t('projectSettings.models.allowedLabel')"
+              :hint="t('projectSettings.dialogs.runtimeModels.hint')"
+            >
+              <div v-if="grantedConfiguredModels.length" class="space-y-3">
+                <label
+                  v-for="modelOption in grantedConfiguredModels"
+                  :key="modelOption.value"
+                  :data-testid="`project-runtime-model-option-${modelOption.value}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="min-w-0 space-y-1">
+                    <div class="text-sm font-semibold text-text-primary">
+                      {{ modelOption.label }}
+                    </div>
+                    <div class="text-xs text-text-secondary">
+                      {{ modelOption.providerLabel }} · {{ modelOption.modelLabel }}
+                    </div>
+                  </div>
+                  <UiCheckbox
+                    v-model="runtimeForm.allowedConfiguredModelIds"
+                    :value="modelOption.value"
+                    :aria-label="modelOption.label"
+                  />
+                </label>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('projectSettings.models.emptyTitle')"
+                :description="t('projectSettings.models.emptyDescription')"
+              />
+            </UiField>
 
-        <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.grantActors = false">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton
-            data-testid="project-settings-grants-actors-save-button"
-            :disabled="saving.grantActors"
-            @click="saveGrantActors"
-          >
-            {{ t('common.save') }}
-          </UiButton>
-        </template>
-      </UiDialog>
+            <UiField
+              :label="t('projectSettings.models.defaultLabel')"
+              :hint="t('projectSettings.models.defaultHint')"
+            >
+              <UiSelect
+                v-model="runtimeForm.defaultConfiguredModelId"
+                data-testid="project-runtime-default-model-select"
+                :disabled="!runtimeForm.allowedConfiguredModelIds.length"
+                :options="grantedConfiguredModels
+                  .filter(option => runtimeForm.allowedConfiguredModelIds.includes(option.value))
+                  .map(option => ({
+                    value: option.value,
+                    label: `${option.label} · ${option.providerLabel}`,
+                  }))"
+              />
+            </UiField>
 
-      <UiDialog
-        v-model:open="dialogOpen.runtimeModels"
-        :title="t('projectSettings.dialogs.runtimeModels.title')"
-        :description="t('projectSettings.dialogs.runtimeModels.description')"
-        content-test-id="project-settings-runtime-models-dialog"
-      >
-        <div class="space-y-4">
-          <UiField
-            :label="t('projectSettings.models.allowedLabel')"
-            :hint="t('projectSettings.dialogs.runtimeModels.hint')"
-          >
-            <div v-if="grantedConfiguredModels.length" class="space-y-3">
-              <label
-                v-for="modelOption in grantedConfiguredModels"
-                :key="modelOption.value"
-                :data-testid="`project-runtime-model-option-${modelOption.value}`"
-                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            <div class="grid gap-4 md:grid-cols-2">
+              <UiField
+                :label="t('projectSettings.models.totalTokensLabel')"
+                :hint="t('projectSettings.models.totalTokensHint')"
               >
-                <div class="min-w-0 space-y-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ modelOption.label }}
-                  </div>
-                  <div class="text-xs text-text-secondary">
-                    {{ modelOption.providerLabel }} · {{ modelOption.modelLabel }}
-                  </div>
-                </div>
-                <UiCheckbox
-                  v-model="runtimeForm.allowedConfiguredModelIds"
-                  :value="modelOption.value"
-                  :aria-label="modelOption.label"
+                <UiInput
+                  v-model="runtimeForm.totalTokens"
+                  data-testid="project-runtime-total-tokens-input"
+                  type="number"
+                  :placeholder="t('projectSettings.models.totalTokensPlaceholder')"
                 />
-              </label>
+              </UiField>
+
+              <UiField
+                :label="t('projectSettings.models.usedTokensLabel')"
+                :hint="t('projectSettings.models.usedTokensHint')"
+              >
+                <div class="flex min-h-8 items-center rounded-[var(--radius-s)] border border-border bg-surface-muted px-3 text-sm text-text-primary">
+                  {{ projectUsedTokens.toLocaleString() }}
+                </div>
+              </UiField>
             </div>
-            <UiEmptyState
-              v-else
-              :title="t('projectSettings.models.emptyTitle')"
-              :description="t('projectSettings.models.emptyDescription')"
+
+            <UiStatusCallout
+              v-if="dialogErrors.runtimeModels"
+              tone="error"
+              :description="dialogErrors.runtimeModels"
             />
-          </UiField>
-
-          <UiField
-            :label="t('projectSettings.models.defaultLabel')"
-            :hint="t('projectSettings.models.defaultHint')"
-          >
-            <UiSelect
-              v-model="runtimeForm.defaultConfiguredModelId"
-              data-testid="project-runtime-default-model-select"
-              :disabled="!runtimeForm.allowedConfiguredModelIds.length"
-              :options="grantedConfiguredModels
-                .filter(option => runtimeForm.allowedConfiguredModelIds.includes(option.value))
-                .map(option => ({
-                  value: option.value,
-                  label: `${option.label} · ${option.providerLabel}`,
-                }))"
-            />
-          </UiField>
-
-          <div class="grid gap-4 md:grid-cols-2">
-            <UiField
-              :label="t('projectSettings.models.totalTokensLabel')"
-              :hint="t('projectSettings.models.totalTokensHint')"
-            >
-              <UiInput
-                v-model="runtimeForm.totalTokens"
-                data-testid="project-runtime-total-tokens-input"
-                type="number"
-                :placeholder="t('projectSettings.models.totalTokensPlaceholder')"
-              />
-            </UiField>
-
-            <UiField
-              :label="t('projectSettings.models.usedTokensLabel')"
-              :hint="t('projectSettings.models.usedTokensHint')"
-            >
-              <div class="flex min-h-8 items-center rounded-[var(--radius-s)] border border-border bg-surface-muted px-3 text-sm text-text-primary">
-                {{ projectUsedTokens.toLocaleString() }}
-              </div>
-            </UiField>
-          </div>
-
-          <UiStatusCallout
-            v-if="dialogErrors.runtimeModels"
-            tone="error"
-            :description="dialogErrors.runtimeModels"
-          />
+          </template>
         </div>
 
         <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.runtimeModels = false">
+          <UiButton variant="ghost" @click="dialogOpen.models = false">
             {{ t('common.cancel') }}
           </UiButton>
           <UiButton
-            data-testid="project-settings-runtime-models-save-button"
-            :disabled="saving.runtimeModels"
-            @click="saveRuntimeModels"
+            :data-testid="modelDialogScope === 'workspace' ? 'project-settings-grants-models-save-button' : 'project-settings-runtime-models-save-button'"
+            :disabled="modelDialogScope === 'workspace' ? saving.grantModels : saving.runtimeModels"
+            @click="saveModelsDialog"
           >
             {{ t('common.save') }}
           </UiButton>
@@ -917,30 +590,36 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
       </UiDialog>
 
       <UiDialog
-        v-model:open="dialogOpen.runtimeTools"
-        :title="t('projectSettings.dialogs.runtimeTools.title')"
-        :description="t('projectSettings.dialogs.runtimeTools.description')"
-        content-test-id="project-settings-runtime-tools-dialog"
+        v-model:open="dialogOpen.tools"
+        :title="t('projectSettings.dialogs.tools.title')"
+        :description="t('projectSettings.dialogs.tools.description')"
+        content-test-id="project-settings-tools-dialog"
       >
         <div class="space-y-4">
+          <UiTabs
+            v-model="toolDialogScope"
+            :tabs="capabilityScopeTabs"
+            data-testid="project-settings-tools-scope-tabs"
+          />
+
           <UiEmptyState
-            v-if="!grantedToolEntries.length"
+            v-if="toolDialogScope === 'workspace' ? !workspaceToolEntries.length : !grantedToolEntries.length"
             :title="t('projectSettings.tools.emptyTitle')"
             :description="t('projectSettings.tools.emptyDescription')"
           />
 
           <div v-else class="space-y-3">
             <UiTabs
-              v-model="runtimeToolTab"
+              v-model="activeToolTab"
               :tabs="toolTabs"
-              data-testid="project-settings-runtime-tools-tabs"
+              :data-testid="toolDialogScope === 'workspace' ? 'project-settings-grants-tools-tabs' : 'project-settings-tools-scope-tabs-inner'"
             />
 
             <div class="flex flex-wrap items-center gap-3">
               <div class="min-w-[16rem] flex-1">
                 <UiInput
-                  v-model="runtimeToolSearchQuery"
-                  data-testid="project-settings-runtime-tools-search"
+                  v-model="activeToolSearchQuery"
+                  :data-testid="toolDialogScope === 'workspace' ? 'project-settings-grants-tools-search' : 'project-settings-runtime-tools-search'"
                   :placeholder="t('projectSettings.search.tools')"
                 />
               </div>
@@ -948,8 +627,8 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
                 type="button"
                 variant="ghost"
                 size="sm"
-                data-testid="project-settings-runtime-tools-select-all"
-                @click="selectAllRuntimeTools"
+                :data-testid="toolDialogScope === 'workspace' ? 'project-settings-grants-tools-select-all' : 'project-settings-runtime-tools-select-all'"
+                @click="toolDialogScope === 'workspace' ? selectAllGrantTools() : selectAllRuntimeTools()"
               >
                 {{ t('common.selectAll') }}
               </UiButton>
@@ -957,21 +636,21 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
                 type="button"
                 variant="ghost"
                 size="sm"
-                data-testid="project-settings-runtime-tools-clear-all"
-                @click="clearAllRuntimeTools"
+                :data-testid="toolDialogScope === 'workspace' ? 'project-settings-grants-tools-clear-all' : 'project-settings-runtime-tools-clear-all'"
+                @click="toolDialogScope === 'workspace' ? clearGrantTools() : clearAllRuntimeTools()"
               >
                 {{ t('common.clearAll') }}
               </UiButton>
             </div>
 
             <div class="space-y-3">
-              <div
-                v-for="entry in filteredRuntimeToolEntries"
-                :key="entry.sourceKey"
-                :data-testid="`project-runtime-tool-option-${entry.sourceKey}`"
-                class="space-y-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
-              >
-                <div class="flex items-start justify-between gap-4">
+              <template v-if="toolDialogScope === 'workspace'">
+                <div
+                  v-for="entry in activeToolEntries"
+                  :key="entry.sourceKey"
+                  :data-testid="`project-grant-tool-option-${entry.sourceKey}`"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
                   <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary">
                       <span>{{ entry.name }}</span>
@@ -982,26 +661,64 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
                     </div>
                   </div>
                   <UiCheckbox
-                    :model-value="isRuntimeToolEnabled(entry.sourceKey)"
+                    :model-value="isGrantToolEnabled(entry.sourceKey)"
                     :aria-label="entry.name"
-                    @update:model-value="setRuntimeToolEnabled(entry.sourceKey, Boolean($event))"
+                    @update:model-value="setGrantToolEnabled(entry.sourceKey, Boolean($event))"
                   />
                 </div>
 
-                <div class="grid gap-2 md:grid-cols-[minmax(0,16rem)_1fr] md:items-center">
-                  <UiSelect
-                    :model-value="resolveRuntimeToolSelection(entry.sourceKey)"
-                    :options="toolPermissionOptions"
-                    @update:model-value="updateRuntimeToolPermission(entry.sourceKey, $event)"
-                  />
-                  <div class="text-xs text-text-tertiary">
-                    {{ runtimeToolPermissionSummaryLabel(entry) }}
+                <div
+                  v-if="grantedProjectOwnedTools.length"
+                  class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary"
+                >
+                  <div class="font-semibold text-text-primary">
+                    {{ t('projectSettings.labels.projectOwned') }}
+                  </div>
+                  <div class="mt-1">
+                    {{ t('projectSettings.tools.projectOwnedHint') }}
                   </div>
                 </div>
-              </div>
+              </template>
+
+              <template v-else>
+                <div
+                  v-for="entry in activeToolEntries"
+                  :key="entry.sourceKey"
+                  :data-testid="`project-runtime-tool-option-${entry.sourceKey}`"
+                  class="space-y-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+                >
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0 space-y-1">
+                      <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary">
+                        <span>{{ entry.name }}</span>
+                        <UiBadge :label="toolOriginBadge(entry)" subtle />
+                      </div>
+                      <div class="text-xs text-text-secondary">
+                        {{ entry.description || entry.sourceKey }}
+                      </div>
+                    </div>
+                    <UiCheckbox
+                      :model-value="isRuntimeToolEnabled(entry.sourceKey)"
+                      :aria-label="entry.name"
+                      @update:model-value="setRuntimeToolEnabled(entry.sourceKey, Boolean($event))"
+                    />
+                  </div>
+
+                  <div class="grid gap-2 md:grid-cols-[minmax(0,16rem)_1fr] md:items-center">
+                    <UiSelect
+                      :model-value="resolveRuntimeToolSelection(entry.sourceKey)"
+                      :options="toolPermissionOptions"
+                      @update:model-value="updateRuntimeToolPermission(entry.sourceKey, $event)"
+                    />
+                    <div class="text-xs text-text-tertiary">
+                      {{ runtimeToolPermissionSummaryLabel(entry) }}
+                    </div>
+                  </div>
+                </div>
+              </template>
 
               <UiEmptyState
-                v-if="!filteredRuntimeToolEntries.length"
+                v-if="!activeToolEntries.length"
                 :title="t('projectSettings.search.emptyTitle')"
                 :description="t('projectSettings.search.emptyDescription')"
               />
@@ -1009,20 +726,20 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
           </div>
 
           <UiStatusCallout
-            v-if="dialogErrors.runtimeTools"
+            v-if="toolDialogScope === 'workspace' ? dialogErrors.grantTools : dialogErrors.runtimeTools"
             tone="error"
-            :description="dialogErrors.runtimeTools"
+            :description="toolDialogScope === 'workspace' ? dialogErrors.grantTools : dialogErrors.runtimeTools"
           />
         </div>
 
         <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.runtimeTools = false">
+          <UiButton variant="ghost" @click="dialogOpen.tools = false">
             {{ t('common.cancel') }}
           </UiButton>
           <UiButton
-            data-testid="project-settings-runtime-tools-save-button"
-            :disabled="saving.runtimeTools"
-            @click="saveRuntimeTools"
+            :data-testid="toolDialogScope === 'workspace' ? 'project-settings-grants-tools-save-button' : 'project-settings-runtime-tools-save-button'"
+            :disabled="toolDialogScope === 'workspace' ? saving.grantTools : saving.runtimeTools"
+            @click="saveToolsDialog"
           >
             {{ t('common.save') }}
           </UiButton>
@@ -1030,14 +747,20 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
       </UiDialog>
 
       <UiDialog
-        v-model:open="dialogOpen.runtimeActors"
-        :title="t('projectSettings.dialogs.runtimeActors.title')"
-        :description="t('projectSettings.dialogs.runtimeActors.description')"
-        content-test-id="project-settings-runtime-actors-dialog"
+        v-model:open="dialogOpen.actors"
+        :title="t('projectSettings.dialogs.actors.title')"
+        :description="t('projectSettings.dialogs.actors.description')"
+        content-test-id="project-settings-actors-dialog"
       >
         <div class="space-y-4">
+          <UiTabs
+            v-model="actorDialogScope"
+            :tabs="capabilityScopeTabs"
+            data-testid="project-settings-actors-scope-tabs"
+          />
+
           <div
-            v-if="projectOwnedAgents.length || projectOwnedTeams.length"
+            v-if="actorDialogScope === 'project' && (projectOwnedAgents.length || projectOwnedTeams.length)"
             class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-text-secondary"
           >
             <div class="font-semibold text-text-primary">
@@ -1049,16 +772,16 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
           </div>
 
           <UiTabs
-            v-model="runtimeActorTab"
+            v-model="activeActorTab"
             :tabs="actorTabs"
-            data-testid="project-settings-runtime-actors-tabs"
+            data-testid="project-settings-actors-actor-tabs"
           />
 
           <div class="flex flex-wrap items-center gap-3">
             <div class="min-w-[16rem] flex-1">
               <UiInput
-                v-model="runtimeActorSearchQuery"
-                data-testid="project-settings-runtime-actors-search"
+                v-model="activeActorSearchQuery"
+                :data-testid="actorDialogScope === 'workspace' ? 'project-settings-grants-actors-search' : 'project-settings-runtime-actors-search'"
                 :placeholder="t('projectSettings.search.actors')"
               />
             </div>
@@ -1066,8 +789,10 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
               type="button"
               variant="ghost"
               size="sm"
-              :data-testid="runtimeActorTab === 'agents' ? 'project-settings-runtime-agents-select-all' : 'project-settings-runtime-teams-select-all'"
-              @click="selectAllRuntimeActors"
+              :data-testid="actorDialogScope === 'workspace'
+                ? (activeActorTab === 'agents' ? 'project-settings-grants-agents-select-all' : 'project-settings-grants-teams-select-all')
+                : (activeActorTab === 'agents' ? 'project-settings-runtime-agents-select-all' : 'project-settings-runtime-teams-select-all')"
+              @click="actorDialogScope === 'workspace' ? selectAllGrantActors() : selectAllRuntimeActors()"
             >
               {{ t('common.selectAll') }}
             </UiButton>
@@ -1075,18 +800,20 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
               type="button"
               variant="ghost"
               size="sm"
-              :data-testid="runtimeActorTab === 'agents' ? 'project-settings-runtime-agents-clear-all' : 'project-settings-runtime-teams-clear-all'"
-              @click="clearAllRuntimeActors"
+              :data-testid="actorDialogScope === 'workspace'
+                ? (activeActorTab === 'agents' ? 'project-settings-grants-agents-clear-all' : 'project-settings-grants-teams-clear-all')
+                : (activeActorTab === 'agents' ? 'project-settings-runtime-agents-clear-all' : 'project-settings-runtime-teams-clear-all')"
+              @click="actorDialogScope === 'workspace' ? clearGrantActors() : clearAllRuntimeActors()"
             >
               {{ t('common.clearAll') }}
             </UiButton>
           </div>
 
-          <section v-if="runtimeActorTab === 'agents'" class="space-y-3">
+          <section v-if="activeActorTab === 'agents'" class="space-y-3">
             <div
-              v-for="agent in filteredRuntimeAgents"
+              v-for="agent in activeActorEntries"
               :key="agent.id"
-              :data-testid="`project-runtime-agent-option-${agent.id}`"
+              :data-testid="`${actorDialogScope === 'workspace' ? 'project-grant-agent-option' : 'project-runtime-agent-option'}-${agent.id}`"
               class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
@@ -1100,14 +827,16 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
                 </div>
               </div>
               <UiCheckbox
-                :model-value="isRuntimeAgentEnabled(agent.id)"
+                :model-value="actorDialogScope === 'workspace' ? isGrantAgentEnabled(agent.id) : isRuntimeAgentEnabled(agent.id)"
                 :aria-label="agent.name"
-                @update:model-value="setRuntimeAgentEnabled(agent.id, Boolean($event))"
+                @update:model-value="actorDialogScope === 'workspace'
+                  ? setGrantAgentEnabled(agent.id, Boolean($event))
+                  : setRuntimeAgentEnabled(agent.id, Boolean($event))"
               />
             </div>
 
             <UiEmptyState
-              v-if="!filteredRuntimeAgents.length"
+              v-if="!activeActorEntries.length"
               :title="t('projectSettings.search.emptyTitle')"
               :description="t('projectSettings.search.emptyDescription')"
             />
@@ -1115,9 +844,9 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
 
           <section v-else class="space-y-3">
             <div
-              v-for="team in filteredRuntimeTeams"
+              v-for="team in activeTeamEntries"
               :key="team.id"
-              :data-testid="`project-runtime-team-option-${team.id}`"
+              :data-testid="`${actorDialogScope === 'workspace' ? 'project-grant-team-option' : 'project-runtime-team-option'}-${team.id}`"
               class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
@@ -1130,34 +859,36 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
                 </div>
               </div>
               <UiCheckbox
-                :model-value="isRuntimeTeamEnabled(team.id)"
+                :model-value="actorDialogScope === 'workspace' ? isGrantTeamEnabled(team.id) : isRuntimeTeamEnabled(team.id)"
                 :aria-label="team.name"
-                @update:model-value="setRuntimeTeamEnabled(team.id, Boolean($event))"
+                @update:model-value="actorDialogScope === 'workspace'
+                  ? setGrantTeamEnabled(team.id, Boolean($event))
+                  : setRuntimeTeamEnabled(team.id, Boolean($event))"
               />
             </div>
 
             <UiEmptyState
-              v-if="!filteredRuntimeTeams.length"
+              v-if="!activeTeamEntries.length"
               :title="t('projectSettings.search.emptyTitle')"
               :description="t('projectSettings.search.emptyDescription')"
             />
           </section>
 
           <UiStatusCallout
-            v-if="dialogErrors.runtimeActors"
+            v-if="actorDialogScope === 'workspace' ? dialogErrors.grantActors : dialogErrors.runtimeActors"
             tone="error"
-            :description="dialogErrors.runtimeActors"
+            :description="actorDialogScope === 'workspace' ? dialogErrors.grantActors : dialogErrors.runtimeActors"
           />
         </div>
 
         <template #footer>
-          <UiButton variant="ghost" @click="dialogOpen.runtimeActors = false">
+          <UiButton variant="ghost" @click="dialogOpen.actors = false">
             {{ t('common.cancel') }}
           </UiButton>
           <UiButton
-            data-testid="project-settings-runtime-actors-save-button"
-            :disabled="saving.runtimeActors"
-            @click="saveRuntimeActors"
+            :data-testid="actorDialogScope === 'workspace' ? 'project-settings-grants-actors-save-button' : 'project-settings-runtime-actors-save-button'"
+            :disabled="actorDialogScope === 'workspace' ? saving.grantActors : saving.runtimeActors"
+            @click="saveActorsDialog"
           >
             {{ t('common.save') }}
           </UiButton>

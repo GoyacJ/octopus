@@ -361,6 +361,7 @@ pub struct RegisterBootstrapAdminRequest {
     pub confirm_password: String,
     pub avatar: AvatarUploadPayload,
     pub workspace_id: Option<String>,
+    pub mapped_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -425,6 +426,7 @@ pub struct SessionRecord {
 pub struct WorkspaceSummary {
     pub id: String,
     pub name: String,
+    pub avatar: Option<String>,
     pub slug: String,
     pub deployment: String,
     pub bootstrap_status: String,
@@ -432,6 +434,8 @@ pub struct WorkspaceSummary {
     pub host: String,
     pub listen_address: String,
     pub default_project_id: String,
+    pub mapped_directory: Option<String>,
+    pub mapped_directory_default: Option<String>,
     pub project_default_permissions: ProjectDefaultPermissions,
 }
 
@@ -521,6 +525,8 @@ pub struct ProjectRecord {
     pub description: String,
     pub resource_directory: String,
     pub leader_agent_id: Option<String>,
+    pub manager_user_id: Option<String>,
+    pub preset_code: Option<String>,
     pub owner_user_id: String,
     pub member_user_ids: Vec<String>,
     pub permission_overrides: ProjectPermissionOverrides,
@@ -539,6 +545,8 @@ pub struct CreateProjectRequest {
     pub permission_overrides: Option<ProjectPermissionOverrides>,
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub leader_agent_id: Option<String>,
+    pub manager_user_id: Option<String>,
+    pub preset_code: Option<String>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -554,7 +562,22 @@ pub struct UpdateProjectRequest {
     pub permission_overrides: Option<ProjectPermissionOverrides>,
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub leader_agent_id: Option<String>,
+    pub manager_user_id: Option<String>,
+    pub preset_code: Option<String>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWorkspaceRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<AvatarUploadPayload>,
+    #[serde(default)]
+    pub remove_avatar: Option<bool>,
+    #[serde(default)]
+    pub mapped_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3412,6 +3435,7 @@ pub struct InboxItemRecord {
     pub id: String,
     pub workspace_id: String,
     pub project_id: Option<String>,
+    pub target_user_id: String,
     pub item_type: String,
     pub title: String,
     pub description: String,
@@ -3421,6 +3445,36 @@ pub struct InboxItemRecord {
     pub route_to: Option<String>,
     pub action_label: Option<String>,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDeletionRequest {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub requested_by_user_id: String,
+    pub status: String,
+    pub reason: Option<String>,
+    pub reviewed_by_user_id: Option<String>,
+    pub review_comment: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+    pub reviewed_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectDeletionRequestInput {
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewProjectDeletionRequestInput {
+    #[serde(default)]
+    pub review_comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

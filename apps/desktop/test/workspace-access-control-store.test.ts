@@ -255,6 +255,44 @@ describe('useWorkspaceAccessControlStore', () => {
     expect(store.recommendedAccessSection).toBe('members')
   })
 
+  it('exposes current permission and role helpers from the authorization snapshot', async () => {
+    const getCurrentAuthorization = vi.fn().mockResolvedValue({
+      ...authorization,
+      effectivePermissionCodes: [...authorization.effectivePermissionCodes, 'project.manage'],
+      effectiveRoles: [
+        ...authorization.effectiveRoles,
+        {
+          id: 'role-system-admin',
+          code: 'system.admin',
+          name: 'Admin',
+          description: 'Operate the workspace.',
+          source: 'system',
+          editable: false,
+          status: 'active',
+          permissionCodes: ['project.manage'],
+        },
+      ],
+      effectiveRoleIds: [...authorization.effectiveRoleIds, 'role-system-admin'],
+    } satisfies AuthorizationSnapshot)
+    const listMenuDefinitions = vi.fn().mockResolvedValue(menuDefinitions)
+
+    vi.spyOn(tauriClient, 'createWorkspaceClient').mockReturnValue({
+      accessControl: {
+        getCurrentAuthorization,
+        listMenuDefinitions,
+      },
+    } as unknown as ReturnType<typeof tauriClient.createWorkspaceClient>)
+
+    const store = useWorkspaceAccessControlStore()
+    await store.ensureAuthorizationContext(connection.workspaceConnectionId)
+
+    expect(store.currentEffectiveRoleCodes).toContain('system.admin')
+    expect(store.hasAnyCurrentPermission(['project.manage'])).toBe(true)
+    expect(store.hasAnyCurrentPermission(['project.delete'])).toBe(false)
+    expect(store.hasAnyCurrentRoleCode(['system.admin'])).toBe(true)
+    expect(store.hasAnyCurrentRoleCode(['custom.viewer'])).toBe(false)
+  })
+
   it('loads governance datasets only when the governance layer is requested', async () => {
     const getCurrentAuthorization = vi.fn().mockResolvedValue(authorization)
     const listMenuDefinitions = vi.fn().mockResolvedValue(menuDefinitions)

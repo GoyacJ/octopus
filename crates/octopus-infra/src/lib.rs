@@ -38,31 +38,32 @@ use octopus_core::{
     AppError, ArtifactRecord, AuditRecord, AuthorizationDecision, AvatarUploadPayload,
     BindPetConversationInput, CapabilityAssetDisablePatch, ChangeCurrentUserPasswordRequest,
     ChangeCurrentUserPasswordResponse, ClientAppRecord, CopyWorkspaceSkillToManagedInput,
-    CostLedgerEntry, CreateProjectPromotionRequestInput, CreateProjectRequest,
-    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
-    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
+    CostLedgerEntry, CreateProjectDeletionRequestInput, CreateProjectPromotionRequestInput,
+    CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
+    CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
     ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
     ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, InboxItemRecord,
     KnowledgeEntryRecord, KnowledgeRecord, LoginRequest, LoginResponse, ModelCatalogRecord,
     PetConversationBinding, PetMessage, PetPosition, PetPresenceState, PetProfile,
     PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDefaultPermissions,
-    ProjectLinkedWorkspaceAssets, ProjectPermissionOverrides, ProjectPromotionRequest,
-    ProjectRecord, ProjectTaskInterventionRecord, ProjectTaskRecord, ProjectTaskRunRecord,
-    ProjectTaskSchedulerClaimRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
-    ProjectWorkspaceAssignments, PromoteWorkspaceResourceInput, ProviderCredentialRecord,
-    RegisterBootstrapAdminRequest, RegisterBootstrapAdminResponse,
-    ReviewProjectPromotionRequestInput, SavePetPresenceInput, SessionRecord, SystemBootstrapStatus,
-    TeamRecord, ToolRecord, TraceEventRecord, UpdateCurrentUserProfileRequest,
-    UpdateProjectRequest, UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput,
-    UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
-    UserRecord, UserRecordSummary, WorkspaceDirectoryBrowserEntry,
-    WorkspaceDirectoryBrowserResponse, WorkspaceDirectoryUploadEntry, WorkspaceMcpServerDocument,
-    WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
-    WorkspaceResourceFolderUploadEntry, WorkspaceResourceImportInput, WorkspaceResourceRecord,
-    WorkspaceSkillDocument, WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument,
-    WorkspaceSkillTreeNode, WorkspaceSummary, WorkspaceToolManagementCapabilities,
-    ASSET_MANIFEST_REVISION_V2, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    ProjectDeletionRequest, ProjectLinkedWorkspaceAssets, ProjectPermissionOverrides,
+    ProjectPromotionRequest, ProjectRecord, ProjectTaskInterventionRecord, ProjectTaskRecord,
+    ProjectTaskRunRecord, ProjectTaskSchedulerClaimRecord, ProjectTeamLinkInput,
+    ProjectTeamLinkRecord, ProjectWorkspaceAssignments, PromoteWorkspaceResourceInput,
+    ProviderCredentialRecord, RegisterBootstrapAdminRequest, RegisterBootstrapAdminResponse,
+    ReviewProjectDeletionRequestInput, ReviewProjectPromotionRequestInput, SavePetPresenceInput,
+    SessionRecord, SystemBootstrapStatus, TeamRecord, ToolRecord, TraceEventRecord,
+    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceRequest,
+    UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
+    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserRecord,
+    UserRecordSummary, WorkspaceDirectoryBrowserEntry, WorkspaceDirectoryBrowserResponse,
+    WorkspaceDirectoryUploadEntry, WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord,
+    WorkspaceResourceContentDocument, WorkspaceResourceFolderUploadEntry,
+    WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
+    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSkillTreeNode,
+    WorkspaceSummary, WorkspaceToolManagementCapabilities, ASSET_MANIFEST_REVISION_V2,
+    DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
 };
 use octopus_platform::{
     AccessControlService, AppRegistryService, ArtifactService, AuthService, AuthorizationService,
@@ -112,6 +113,37 @@ pub(crate) fn canonical_agent_refs(values: &[String]) -> Vec<String> {
         .map(|value| canonical_agent_ref(value))
         .filter(|value| !value.is_empty())
         .collect()
+}
+
+pub(crate) fn workspace_root_display_path(paths: &WorkspacePaths) -> String {
+    paths.root.to_string_lossy().to_string()
+}
+
+pub(crate) fn stored_mapped_directory(
+    paths: &WorkspacePaths,
+    value: Option<&str>,
+) -> Option<String> {
+    let workspace_root = workspace_root_display_path(paths);
+    value
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty() && *entry == workspace_root)
+        .map(|_| workspace_root)
+}
+
+pub(crate) fn normalize_mapped_directory_input(
+    paths: &WorkspacePaths,
+    value: Option<&str>,
+) -> Result<Option<String>, AppError> {
+    let Some(mapped_directory) = value.map(str::trim).filter(|entry| !entry.is_empty()) else {
+        return Ok(None);
+    };
+    let workspace_root = workspace_root_display_path(paths);
+    if mapped_directory != workspace_root {
+        return Err(AppError::invalid_input(
+            "mapped directory must match the current workspace root",
+        ));
+    }
+    Ok(Some(workspace_root))
 }
 
 #[derive(Clone)]

@@ -22,19 +22,6 @@ import {
 import { useWorkspaceStore } from './workspace'
 import { resolveProjectGrantedAgents } from './project_setup'
 
-function withIntegrationSource(
-  record: AgentRecord,
-  link: ProjectAgentLinkRecord,
-): AgentRecord {
-  return {
-    ...record,
-    integrationSource: {
-      kind: 'workspace-link',
-      sourceId: link.agentId,
-    },
-  }
-}
-
 export const useAgentStore = defineStore('agent', () => {
   const agentsByConnection = ref<Record<string, AgentRecord[]>>({})
   const projectLinksByConnection = ref<Record<string, Record<string, ProjectAgentLinkRecord[]>>>({})
@@ -57,8 +44,8 @@ export const useAgentStore = defineStore('agent', () => {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
   )
-  const assignedProjectAgentIds = computed(() =>
-    currentProject.value?.assignments?.agents?.agentIds ?? [],
+  const currentProjectSettings = computed(() =>
+    workspaceStore.currentProjectId ? workspaceStore.getProjectSettings(workspaceStore.currentProjectId) : {},
   )
   const projectLinks = computed<Record<string, ProjectAgentLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
@@ -66,28 +53,12 @@ export const useAgentStore = defineStore('agent', () => {
   const currentProjectLinks = computed<ProjectAgentLinkRecord[]>(
     () => projectLinks.value[workspaceStore.currentProjectId ?? ''] ?? [],
   )
-  const integratedProjectAgents = computed(() => {
-    const linkMap = new Map(currentProjectLinks.value.map(link => [link.agentId, link]))
-    return workspaceOwnedAgents.value
-      .filter(record => assignedProjectAgentIds.value.includes(record.id) || linkMap.has(record.id))
-      .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
-        workspaceId: record.workspaceId,
-        projectId: workspaceStore.currentProjectId,
-        agentId: record.id,
-        linkedAt: 0,
-      }))
-  })
-  const assignedWorkspaceAgents = computed(() =>
-    workspaceOwnedAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
-  )
-  const assignedBuiltinAgents = computed(() =>
-    builtinTemplateAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
-  )
   const effectiveProjectAgents = computed(() => {
     return resolveProjectGrantedAgents(
       currentProject.value,
       workspaceAgents.value,
       projectOwnedAgents.value,
+      currentProjectSettings.value,
     )
   })
   const projectAgents = computed(() => effectiveProjectAgents.value)
@@ -298,7 +269,6 @@ export const useAgentStore = defineStore('agent', () => {
     workspaceOwnedAgents,
     builtinTemplateAgents,
     projectOwnedAgents,
-    integratedProjectAgents,
     effectiveProjectAgents,
     projectAgents,
     currentProjectLinks,

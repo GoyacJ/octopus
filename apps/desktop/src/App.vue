@@ -17,7 +17,6 @@ import {
   runtimeAppErrorState,
 } from '@/runtime/app-error-boundary'
 import { useAuthStore } from '@/stores/auth'
-import { useInboxStore } from '@/stores/inbox'
 import { useNotificationStore } from '@/stores/notifications'
 import { useAppUpdateStore } from '@/stores/app-update'
 import { usePetStore } from '@/stores/pet'
@@ -32,7 +31,6 @@ import {
 } from '@/tauri/shared'
 
 const auth = useAuthStore()
-const inbox = useInboxStore()
 const notifications = useNotificationStore()
 const appUpdate = useAppUpdateStore()
 const router = useRouter()
@@ -59,7 +57,6 @@ async function bootstrapShell() {
   await shell.bootstrap(shell.defaultWorkspaceId, shell.defaultProjectId)
   const bootstrapResults = await Promise.allSettled([
     notifications.bootstrap(),
-    inbox.bootstrap(),
   ])
   const notificationResult = bootstrapResults[0]
   if (notificationResult?.status === 'rejected') {
@@ -182,7 +179,6 @@ watch(
     }
     if (workspaceConnectionId) {
       await auth.bootstrapAuth(workspaceConnectionId)
-      await inbox.bootstrap(workspaceConnectionId, true)
     }
     runtime.syncWorkspaceScopeFromShell()
   },

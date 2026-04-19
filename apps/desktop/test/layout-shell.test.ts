@@ -385,6 +385,7 @@ describe('Workbench shell layout', () => {
 
     const mounted = mountApp()
     const shell = useShellStore()
+    const canonicalWorkspaceLabel = 'Local Workspace'
     const localWorkspaceLabel = String(i18n.global.t('topbar.localWorkspace'))
 
     await waitFor(() =>
@@ -398,13 +399,13 @@ describe('Workbench shell layout', () => {
     )
 
     await waitFor(() =>
-      (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes(localWorkspaceLabel) ?? false)
-      && (mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent?.includes(localWorkspaceLabel) ?? false),
+      (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes(canonicalWorkspaceLabel) ?? false)
+      && (mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent?.includes(canonicalWorkspaceLabel) ?? false),
     )
 
-    expect(mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent).toContain(localWorkspaceLabel)
+    expect(mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent).toContain(canonicalWorkspaceLabel)
     expect(mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent).not.toContain('Local Runtime')
-    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent).toContain(localWorkspaceLabel)
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent).toContain(canonicalWorkspaceLabel)
 
     mounted.destroy()
   })
@@ -419,7 +420,7 @@ describe('Workbench shell layout', () => {
     const mounted = mountApp()
     try {
       const shell = useShellStore()
-      const localWorkspaceLabel = String(i18n.global.t('topbar.localWorkspace'))
+      const canonicalWorkspaceLabel = 'Local Workspace'
 
       await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
 
@@ -438,7 +439,7 @@ describe('Workbench shell layout', () => {
       mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
       await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-menu-item-conn-local"]') !== null)
       await waitFor(() =>
-        (document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-item-conn-local"]')?.textContent?.includes(localWorkspaceLabel) ?? false)
+        (document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-item-conn-local"]')?.textContent?.includes(canonicalWorkspaceLabel) ?? false)
         && (document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-status-dot-conn-enterprise"]')?.className.includes('bg-status-error') ?? false),
       )
 
@@ -446,7 +447,7 @@ describe('Workbench shell layout', () => {
       const localDot = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-status-dot-conn-local"]')
       const enterpriseDot = document.body.querySelector<HTMLElement>('[data-testid="sidebar-workspace-status-dot-conn-enterprise"]')
 
-      expect(localItem?.textContent).toContain(localWorkspaceLabel)
+      expect(localItem?.textContent).toContain(canonicalWorkspaceLabel)
       expect(localItem?.textContent).not.toContain('Local Runtime')
       expect(localItem?.textContent).not.toContain(String(i18n.global.t('common.selected')))
       expect(localDot?.className).toContain('bg-status-success')
@@ -893,8 +894,8 @@ describe('Workbench shell layout', () => {
       .querySelector<HTMLAnchorElement>('[data-testid="sidebar-workspace-nav-workspace-console"]')
       ?.click()
 
-    await waitFor(() => router.currentRoute.value.name === 'workspace-console-projects')
-    expect(router.currentRoute.value.name).toBe('workspace-console-projects')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console-settings')
+    expect(router.currentRoute.value.name).toBe('workspace-console-settings')
 
     mounted.destroy()
   })
@@ -948,9 +949,10 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-strategy-launch"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Strategy Launch')
-    expect(
-      workspaceStore.projects.find(project => project.name === 'Strategy Launch')?.assignments?.models?.configuredModelIds,
-    ).toHaveLength(1)
+    const created = workspaceStore.projects.find(project => project.name === 'Strategy Launch')
+    expect(created?.assignments).toBeUndefined()
+    expect(created?.presetCode).toBe('documentation')
+    expect(workspaceStore.getProjectSettings(created?.id ?? '').models?.allowedConfiguredModelIds).toHaveLength(1)
 
     mounted.destroy()
   })
@@ -997,6 +999,80 @@ describe('Workbench shell layout', () => {
 
     await waitFor(() => router.currentRoute.value.name === 'project-settings')
     expect(router.currentRoute.value.name).toBe('project-settings')
+
+    mounted.destroy()
+  })
+
+  it('shows the project settings entry for governance reviewers who are not project members', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner']
+      },
+    })
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() =>
+      router.currentRoute.value.name === 'project-settings'
+      && mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]') !== null,
+    )
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('routes governance reviewers to project settings when they open a non-member project from the sidebar', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+
+        const redesign = state.projects.find(item => item.id === 'proj-redesign')
+        const governance = state.projects.find(item => item.id === 'proj-governance')
+        if (!redesign || !governance) {
+          throw new Error('Expected fixture projects')
+        }
+
+        ;(redesign as any).ownerUserId = 'user-owner'
+        ;(redesign as any).memberUserIds = ['user-owner']
+        ;(governance as any).memberUserIds = ['user-operator']
+      },
+    })
+
+    await router.push('/workspaces/ws-local/overview?project=proj-governance')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-summary-proj-redesign"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-summary-proj-redesign"]')?.click()
+
+    await waitFor(() =>
+      router.currentRoute.value.name === 'project-settings'
+      && String(router.currentRoute.value.params.projectId) === 'proj-redesign',
+    )
+
+    expect(router.currentRoute.value.name).toBe('project-settings')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
 
     mounted.destroy()
   })
