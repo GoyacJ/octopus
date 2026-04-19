@@ -16,7 +16,7 @@ pub use super::provider::CapabilityRuntime;
 use super::provider::{
     CapabilityConcurrencyPolicy, CapabilityExecutionKind, CapabilitySourceKind, CapabilitySpec,
 };
-use super::state::{CapabilityActivation, SessionCapabilityStore};
+use super::state::SessionCapabilityStore;
 
 type CapabilityExecutionHook = Arc<dyn Fn(CapabilityExecutionEvent) + Send + Sync>;
 type CapabilityMediationHook =
@@ -256,15 +256,25 @@ impl CapabilityExecutor {
         query: &str,
         output: &ToolSearchOutput,
         store: &SessionCapabilityStore,
-    ) {
+    ) -> Option<String> {
         if !query.trim().to_ascii_lowercase().starts_with("select:") {
-            return;
+            return None;
+        }
+        if output.matches().is_empty() {
+            return None;
         }
         store.mutate(|state| {
             for tool_name in output.matches() {
-                state.activate(CapabilityActivation::tool(tool_name.clone()));
+                state.discover_tool(tool_name.clone());
+                state.activate_discovered_tool(tool_name.clone());
+                state.expose_tool(tool_name.clone());
             }
         });
+        Some(format!(
+            "query `{}` selected tools: {}",
+            query.trim(),
+            output.matches().join(", ")
+        ))
     }
 
     pub fn apply_skill_execution_result(
@@ -334,6 +344,23 @@ impl CapabilityExecutor {
             effective.requires_auth = false;
         }
         effective
+    }
+
+    fn request_for_capability(
+        tool_name: &str,
+        capability: &CapabilitySpec,
+        input: Value,
+    ) -> CapabilityExecutionRequest {
+        CapabilityExecutionRequest {
+            tool_name: tool_name.to_string(),
+            capability_id: capability.capability_id.clone(),
+            dispatch_kind: dispatch_kind_for_capability(capability),
+            required_permission: capability.permission_profile.required_permission,
+            concurrency_policy: capability.concurrency_policy,
+            requires_auth: capability.invocation_policy.requires_auth,
+            requires_approval: capability.invocation_policy.requires_approval,
+            input,
+        }
     }
 
     fn handle_mediation_decision(
@@ -416,9 +443,12 @@ impl CapabilityExecutor {
         &self,
         request: &CapabilityExecutionRequest,
         outcome: &ToolExecutionOutcome,
+        detail_override: Option<String>,
     ) {
         let (phase, detail) = match outcome {
-            ToolExecutionOutcome::Allow { .. } => (CapabilityExecutionPhase::Completed, None),
+            ToolExecutionOutcome::Allow { .. } => {
+                (CapabilityExecutionPhase::Completed, detail_override)
+            }
             ToolExecutionOutcome::RequireApproval { reason } => {
                 (CapabilityExecutionPhase::BlockedApproval, reason.clone())
             }
@@ -487,27 +517,40 @@ impl CapabilityExecutor {
         };
         let capability = surface
             .visible_tools
-            .into_iter()
+            .iter()
             .find(|capability| capability.display_name == tool_name)
-            .ok_or_else(|| {
-                ToolError::new(format!(
-                    "tool `{tool_name}` is not enabled in the current capability surface"
-                ))
-            });
+            .cloned();
         let capability = match capability {
-            Ok(capability) => capability,
-            Err(error) => return Self::classify_dispatch_error(tool_name, error),
+            Some(capability) => capability,
+            None => {
+                if let Some(deferred_capability) = surface
+                    .deferred_tools
+                    .iter()
+                    .find(|capability| capability.display_name == tool_name)
+                    .cloned()
+                {
+                    let request = Self::request_for_capability(
+                        tool_name,
+                        &deferred_capability,
+                        input.clone(),
+                    );
+                    let outcome = ToolExecutionOutcome::Failed {
+                        message: format!(
+                            "{tool_name}: tool `{tool_name}` is not exposed in the current capability surface. Use `ToolSearch` with query `select:{tool_name}` to expose it, then retry."
+                        ),
+                    };
+                    self.emit_terminal_event(&request, &outcome, None);
+                    return outcome;
+                }
+                return Self::classify_dispatch_error(
+                    tool_name,
+                    ToolError::new(format!(
+                        "tool `{tool_name}` is not enabled in the current capability surface"
+                    )),
+                );
+            }
         };
-        let request = CapabilityExecutionRequest {
-            tool_name: tool_name.to_string(),
-            capability_id: capability.capability_id.clone(),
-            dispatch_kind: dispatch_kind_for_capability(&capability),
-            required_permission: capability.permission_profile.required_permission,
-            concurrency_policy: capability.concurrency_policy,
-            requires_auth: capability.invocation_policy.requires_auth,
-            requires_approval: capability.invocation_policy.requires_approval,
-            input: input.clone(),
-        };
+        let request = Self::request_for_capability(tool_name, &capability, input.clone());
         let effective_request = self.effective_request(&request, store);
         if let Some(outcome) = self.handle_mediation_decision(
             &effective_request,
@@ -522,6 +565,7 @@ impl CapabilityExecutor {
             None,
         ));
 
+        let mut terminal_detail = None;
         let result =
             self.with_concurrency_gate(effective_request.concurrency_policy, || match tool_name {
                 "ToolSearch" => {
@@ -536,7 +580,7 @@ impl CapabilityExecutor {
                         pending_mcp_servers,
                         mcp_degraded,
                     );
-                    self.activate_search_selection(&input.query, &output, store);
+                    terminal_detail = self.activate_search_selection(&input.query, &output, store);
                     serde_json::to_string_pretty(&output)
                         .map(|output| ToolExecutionOutcome::Allow { output })
                         .map_err(|error| ToolError::new(error.to_string()))
@@ -554,7 +598,7 @@ impl CapabilityExecutor {
             Ok(outcome) => outcome,
             Err(error) => Self::classify_dispatch_error(tool_name, error),
         };
-        self.emit_terminal_event(&effective_request, &outcome);
+        self.emit_terminal_event(&effective_request, &outcome, terminal_detail);
         outcome
     }
 

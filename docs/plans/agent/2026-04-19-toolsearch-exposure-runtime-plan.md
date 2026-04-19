@@ -139,12 +139,13 @@ Claude Code 仅作为机制参考，而不是实现模板。Octopus 可以保留
 
 ### Task 1: 重建 `BuiltinCapabilityCatalog` 与 built-in 单点装配
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/tools/src/builtin_catalog.rs`
 - Modify: `crates/tools/src/tool_registry.rs`
 - Modify: `crates/tools/src/builtin_exec.rs`
+- Modify: `crates/tools/src/capability_runtime/planner.rs`
 - Modify: `crates/tools/src/capability_runtime/provider.rs`
 - Modify: `crates/tools/src/lib.rs`
 - Test: `crates/tools/src/split_module_tests.rs`
@@ -186,10 +187,13 @@ Step 3:
 Notes:
 - 本任务完成后，后续 ToolSearch / exposure 任务都以新的 built-in catalog 为基础继续，不回头兼容旧平铺结构。
 - 借鉴 Claude Code 的是“分类 + 可见性 + 单点装配”机制，不是把 feature flag 分支数量原样搬进 Octopus。
+- Current batch:
+  - 执行位置：Task 1 Step 1 -> Step 3
+  - 当前状态：已完成。built-ins 已切到 `BuiltinCapabilityCatalog` 单点装配；`planner.rs` 的默认 visibility 改由 catalog 提供；`builtin_exec.rs` 已按 catalog handler key 分发，不再依赖裸字符串 `match`。
 
 ### Task 2: 建立 `CapabilityExposureSnapshot` 与 discovery 状态模型
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/tools/src/capability_runtime/exposure.rs`
@@ -238,10 +242,13 @@ Step 3:
 Notes:
 - 本任务完成前，不进入 OpenAPI 和 adapter projection 改动。
 - Claude Code 用 `tool_reference` block 传递 discovered names；Octopus 只需要保留等价语义，不需要把该 wire 结构本身变成内部 truth。
+- Current batch:
+  - 执行位置：Task 2 Step 1 -> Step 3
+  - 当前状态：已完成。`SessionCapabilityState` 已切到 `CapabilityExposureSnapshot`；planner 仅在 `exposed` 或 `granted` 时把 deferred tool 提升到 visible surface；`ToolSearch` 结果现在显式返回 `discovered` / `activated` / `exposed` 元数据，并保留已暴露 deferred tool 的可搜索性。
 
 ### Task 3: 把 ToolSearch 选择与 deferred tool 调用变成正式执行链路
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/tools/src/capability_runtime/events.rs`
@@ -265,6 +272,10 @@ Preconditions:
 - Task 2 已经冻结 discovery / exposure 状态模型与命名。
 - 现有 `ToolSearch select:<tool>` 仍然是合法入口，不更换用户可见语法。
 
+Current batch:
+- 执行位置：Task 3 Step 1 -> Step 3
+- 当前状态：已完成。`ToolSearch select:<tool>` 现在会留下 selection detail，并显式写入 discovered / activated / exposed 状态；未暴露 deferred tool 的直接调用会稳定返回 `ToolSearch select:<tool>` retry hint，同时发出 failed capability event；runtime adapter 端到端验证了该 guard 不会污染下一轮 surface。
+
 Step 1:
 - Action: 在 `executor.rs` 中把 `ToolSearch` 的副作用从“只激活工具”升级为“记录 discovered / activated transition，并发出可持久化的 execution event / state update”。
 - Done when: `ToolSearch select:<tool>` 后，runtime 内部可以区分该工具是被发现、被激活，还是已经暴露给模型。
@@ -286,7 +297,7 @@ Step 3:
 
 ### Task 4: 持久化 exposure projection，并把它接入 runtime transport contract
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `contracts/openapi/src/components/schemas/runtime.yaml`
@@ -312,6 +323,10 @@ Preconditions:
 - Task 2 和 Task 3 已确定公开最小字段集合。
 - 公开 contract 先以 runtime summary / snapshot 为中心，不引入新的独立 API endpoint。
 
+Current batch:
+- 执行位置：Task 4 Step 1 -> Step 3
+- 当前状态：已完成。runtime transport 已公开 `discoveredTools` / `exposedTools`；OpenAPI bundle、generated schema、adapter projection 与 legacy payload 兼容测试全部对齐。
+
 Step 1:
 - Action: 在 `runtime.yaml` 中扩展 `RuntimeCapabilityPlanSummary` 与 `RuntimeCapabilityStateSnapshot`，加入 exposure 相关字段；随后运行 OpenAPI bundle 与 schema 生成。
 - Done when: OpenAPI human source、bundled artifact、generated schema 对 exposure 语义达成一致，且没有手改生成文件；公开 contract 只暴露运行时需要消费的稳定字段，不泄露 handler key、内部 enum 或调试态冗余数据。
@@ -336,7 +351,7 @@ Step 3:
 
 ### Task 5: 让 request assembly、resume 与回放统一依赖 exposure projection
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-runtime-adapter/src/agent_runtime_core.rs`
@@ -366,6 +381,10 @@ Step 1:
 - Done when: 新会话、继续运行、resume、approval/auth 恢复后，都能稳定复现相同的 visible/deferred 结果，不依赖内存中偶然保留的 planner 结果。
 - Verify: `cargo test -p octopus-runtime-adapter capability_runtime_tests`
 - Stop if: 当前模型请求装配与 capability projection 之间没有单点边界，必须先抽取装配函数再继续。
+
+Current batch:
+- 执行位置：Task 5 Step 1 -> Step 3
+- 当前状态：已完成。request assembly、approval/auth replay、subrun 默认 summary 与回归测试现在统一依赖 exposure-aware capability projection；checkpoint replay 优先使用持久化 `capability_state_ref`，subrun 默认 ref 命名已与主 runtime 对齐。
 
 Step 2:
 - Action: 在 `execution_events.rs`、`subrun_orchestrator.rs`、`memory_selector.rs` 等衍生路径里补齐新字段传播，确保 event timeline、subrun 默认 summary、memory selection 不会丢失 exposure 状态或因新增字段崩溃。
@@ -399,3 +418,90 @@ After each batch, append a short checkpoint using this shape:
 - Next:
   - Task 2 Step 1
 ```
+
+## Checkpoint 2026-04-19 10:31
+
+- Batch: Task 1 Step 1 -> Task 1 Step 3
+- Completed: 新增 `crates/tools/src/builtin_catalog.rs` 作为 built-in 唯一真相；`mvp_tool_specs()` 改为从 catalog 派生；`CapabilityProvider` 改为持有 catalog 并以它做 built-in 冲突校验、surface 编译输入和本地执行判断；`builtin_exec.rs` 改为通过 catalog handler key 解析 canonical tool/alias。
+- Verification:
+  - `cargo test -p tools builtin_capability_catalog_ -- --nocapture` -> pass
+  - `cargo fmt --all` -> pass
+  - `cargo test -p tools split_module_tests` -> pass (103 passed)
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-19 10:52
+
+- Batch: Task 2 Step 1 -> Task 2 Step 3
+- Completed: 新增 `crates/tools/src/capability_runtime/exposure.rs` 并把 `SessionCapabilityState` 改为持有 `CapabilityExposureSnapshot`；补齐 `discover_tool`、`activate_discovered_tool`、`expose_tool` 访问器和 store 转发；planner/provider 改为以 `exposed` 或 `granted` 作为 deferred tool 提升条件；`ToolSearch` searchable projection 现在返回 `discovered`、`activated`、`exposed` 三层状态，并允许已暴露 deferred tool 继续被检索到。
+- Verification:
+  - `cargo test -p tools session_capability_state_tracks_discovery -- --nocapture` -> pass
+  - `cargo test -p tools session_exposure_snapshot_controls -- --nocapture` -> pass
+  - `cargo test -p tools session_capability_store_persists_and_restores_shared_runtime_state -- --nocapture` -> pass
+  - `cargo fmt --all` -> pass
+  - `cargo test -p tools split_module_tests` -> pass (104 passed)
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-19 11:28
+
+- Batch: Task 3 Step 1 -> Task 3 Step 3
+- Completed: `crates/tools/src/capability_runtime/executor.rs` 中的 `ToolSearch select:<tool>` 副作用从旧 `activate()` 近似语义改为显式记录 discovered / activated / exposed，并把 selection detail 写入完成事件；未暴露 deferred tool 现在会返回稳定的 `ToolSearch select:<tool>` retry hint，且不会污染 capability state；runtime loop 侧验证了 pending tool execution 会复用同一 guard，而不会把 deferred capability 偷跑进 visible surface。
+- Verification:
+  - `cargo test -p tools tool_search_select_records_selection_detail_and_exposure_state -- --nocapture` -> pass
+  - `cargo test -p tools deferred_tool_direct_call_returns_retry_hint_without_state_mutation -- --nocapture` -> pass
+  - `cargo test -p octopus-runtime-adapter submit_turn_direct_deferred_tool_call_returns_retry_hint_without_exposing_tool -- --nocapture` -> pass
+  - `cargo fmt --all` -> pass
+  - `cargo test -p tools split_module_tests` -> pass (106 passed)
+  - `cargo test -p octopus-runtime-adapter capability_runtime_tests` -> pass (12 passed)
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-19 12:13
+
+- Batch: Task 4 Step 1 -> Task 4 Step 3
+- Completed: `RuntimeCapabilityPlanSummary`、`RuntimeCapabilitySummary` 与 `RuntimeCapabilityStateSnapshot` 已公开 `discoveredTools` / `exposedTools`；adapter 侧 summary/snapshot projection 会持久化并回读这两组字段；legacy payload 缺失新字段时通过默认值保持兼容。
+- Verification:
+  - `pnpm openapi:bundle` -> pass
+  - `pnpm schema:generate` -> pass
+  - `pnpm schema:check` -> pass
+  - `cargo test -p octopus-runtime-adapter runtime_compatibility_tests` -> pass (10 passed)
+  - `cargo test -p octopus-runtime-adapter capability_runtime_tests` -> pass (12 passed)
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-19 12:41
+
+- Batch: Task 5 Step 1
+- Completed: 为 approval replay 增加 exposure-aware 回归测试，覆盖“聚合态 capability_state_ref 被污染后，resume 仍应继续使用 checkpoint capability snapshot”场景；`agent_runtime_core.rs` 的 approval/auth checkpoint loader 现已优先采用 checkpoint 自带的 `capability_state_ref`，避免 request assembly 在恢复时退回错误 projection。
+- Verification:
+  - `cargo test -p octopus-runtime-adapter resolve_approval_replays_selected_deferred_tool_from_checkpoint_capability_state -- --nocapture` -> pass
+  - `cargo test -p octopus-runtime-adapter capability_runtime_tests` -> pass (13 passed)
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 2
+
+## Checkpoint 2026-04-19 13:08
+
+- Batch: Task 5 Step 2 -> Task 5 Step 3
+- Completed: `subrun_orchestrator.rs` 的默认 `capability_state_ref` 命名已切到与主 runtime 一致的 `{run_id}-capability-state` 形状，并补充断言默认 `discovered_tools` / `exposed_tools` 为空；approval replay 回归测试进一步校验 `approval.resolved` 事件会携带 exposure-aware summary；端到端验证覆盖了首轮仅暴露 `ToolSearch`、`select:` 后下一轮暴露 deferred tool、未暴露直接调用返回 retry hint，以及 replay / compatibility 保持同一 exposure 结果的完整闭环。
+- Verification:
+  - `cargo test -p octopus-runtime-adapter test_subrun_uses_runtime_capability_state_ref_shape_and_empty_exposure_fields -- --nocapture` -> pass
+  - `cargo test -p octopus-runtime-adapter capability_runtime_tests` -> pass (13 passed)
+  - `cargo test -p octopus-runtime-adapter approval_runtime_tests` -> pass (14 passed)
+  - `cargo test -p octopus-runtime-adapter actor_runtime_tests` -> pass (3 passed)
+  - `cargo test -p tools split_module_tests` -> pass (106 passed)
+  - `cargo test -p octopus-runtime-adapter runtime_compatibility_tests` -> pass (10 passed)
+- Blockers:
+  - none
+- Next:
+  - 进入 `finishing-a-development-branch` 收尾流程

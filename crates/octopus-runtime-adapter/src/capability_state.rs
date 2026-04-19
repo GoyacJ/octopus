@@ -11,7 +11,9 @@ pub(crate) fn capability_state_snapshot(
     state: &tools::SessionCapabilityState,
 ) -> RuntimeCapabilityStateSnapshot {
     RuntimeCapabilityStateSnapshot {
+        discovered_tools: state.discovered_tools().iter().cloned().collect(),
         activated_tools: state.activated_tools().iter().cloned().collect(),
+        exposed_tools: state.exposed_tools().iter().cloned().collect(),
         granted_tools: state.granted_tools().iter().cloned().collect(),
         pending_tools: state.pending_tools().iter().cloned().collect(),
         approved_tools: state.approved_tools().iter().cloned().collect(),

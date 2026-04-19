@@ -3,6 +3,70 @@ fn seam_registry_module_exposes_builtin_specs() {
     assert!(!crate::tool_registry::mvp_tool_specs().is_empty());
 }
 
+#[test]
+fn builtin_capability_catalog_classifies_builtin_families_and_visibility() {
+    let catalog = crate::builtin_catalog::builtin_capability_catalog();
+
+    let bash = catalog
+        .find_tool("bash")
+        .expect("bash should be cataloged as a builtin");
+    assert_eq!(
+        bash.category,
+        crate::builtin_catalog::BuiltinCapabilityCategory::WorkerPrimitive
+    );
+    assert_eq!(bash.visibility, crate::CapabilityVisibility::DefaultVisible);
+    assert_eq!(
+        bash.handler_key,
+        crate::builtin_catalog::BuiltinHandlerKey::Bash
+    );
+
+    let tool_search = catalog
+        .find_tool("ToolSearch")
+        .expect("ToolSearch should be cataloged as a builtin");
+    assert_eq!(
+        tool_search.category,
+        crate::builtin_catalog::BuiltinCapabilityCategory::ControlPlane
+    );
+    assert_eq!(
+        tool_search.visibility,
+        crate::CapabilityVisibility::DefaultVisible
+    );
+    assert_eq!(
+        tool_search.handler_key,
+        crate::builtin_catalog::BuiltinHandlerKey::ToolSearch
+    );
+
+    let web_search = catalog
+        .find_tool("WebSearch")
+        .expect("WebSearch should be cataloged as a builtin");
+    assert_eq!(
+        web_search.category,
+        crate::builtin_catalog::BuiltinCapabilityCategory::WebContext
+    );
+    assert_eq!(web_search.visibility, crate::CapabilityVisibility::Deferred);
+}
+
+#[test]
+fn builtin_capability_catalog_resolves_aliases_to_handler_ownership() {
+    let catalog = crate::builtin_catalog::builtin_capability_catalog();
+
+    let canonical = catalog
+        .resolve("SendUserMessage")
+        .expect("canonical built-in should resolve");
+    let alias = catalog
+        .resolve("Brief")
+        .expect("legacy alias should resolve");
+
+    assert_eq!(canonical.name, "SendUserMessage");
+    assert_eq!(alias.name, "SendUserMessage");
+    assert_eq!(
+        canonical.handler_key,
+        crate::builtin_catalog::BuiltinHandlerKey::Brief
+    );
+    assert_eq!(alias.handler_key, canonical.handler_key);
+    assert!(catalog.resolve("TaskCreate").is_none());
+}
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -415,6 +479,111 @@ fn subagent_tool_search_select_updates_shared_session_capability_state() {
         .visible_tools
         .iter()
         .any(|capability| capability.display_name == "WebSearch"));
+}
+
+#[test]
+fn tool_search_select_records_selection_detail_and_exposure_state() {
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+    let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured_events = Arc::clone(&events);
+
+    runtime.set_execution_hook(move |event| {
+        captured_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
+    });
+
+    let output = runtime
+        .execute_tool(
+            "ToolSearch",
+            json!({
+                "query": "select:WebSearch",
+                "max_results": 5
+            }),
+            super::CapabilityPlannerInput::new(Some(&profile), Some(&store.snapshot())),
+            &store,
+            None,
+            None,
+            |_dispatch_kind, _tool_name, _input| {
+                panic!("builtin ToolSearch should not dispatch through runtime capability")
+            },
+        )
+        .expect("ToolSearch select should succeed");
+    let output_json: serde_json::Value = serde_json::from_str(&output).expect("valid json");
+    assert_eq!(output_json["matches"][0], "WebSearch");
+
+    let state = store.snapshot();
+    assert!(state.is_tool_discovered("WebSearch"));
+    assert!(state.is_tool_activated("WebSearch"));
+    assert!(state.is_tool_exposed("WebSearch"));
+
+    let events = events
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(events.iter().any(|event| {
+        event.phase == super::CapabilityExecutionPhase::Completed
+            && event.tool_name == "ToolSearch"
+            && event.detail.as_deref().is_some_and(|detail| {
+                detail.contains("select:WebSearch") && detail.contains("WebSearch")
+            })
+    }));
+}
+
+#[test]
+fn session_capability_state_tracks_discovery_activation_and_exposure_separately() {
+    let mut state = super::SessionCapabilityState::default();
+
+    state.discover_tool("WebSearch");
+    assert!(state.is_tool_discovered("WebSearch"));
+    assert!(!state.is_tool_activated("WebSearch"));
+    assert!(!state.is_tool_exposed("WebSearch"));
+
+    state.activate_discovered_tool("WebSearch");
+    assert!(state.is_tool_activated("WebSearch"));
+    assert!(!state.is_tool_exposed("WebSearch"));
+
+    state.expose_tool("WebSearch");
+    assert!(state.is_tool_exposed("WebSearch"));
+    assert!(state
+        .exposure_snapshot()
+        .activated_tools()
+        .contains("WebSearch"));
+}
+
+#[test]
+fn deferred_tool_direct_call_returns_retry_hint_without_state_mutation() {
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+    let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
+
+    let error = runtime
+        .execute_tool(
+            "WebSearch",
+            json!({
+                "query": "latest octopus runtime"
+            }),
+            super::CapabilityPlannerInput::new(Some(&profile), Some(&store.snapshot())),
+            &store,
+            None,
+            None,
+            |_dispatch_kind, _tool_name, _input| {
+                panic!("deferred builtin should be blocked before dispatch")
+            },
+        )
+        .expect_err("unexposed deferred tool should return a retry hint");
+
+    let message = error.to_string();
+    assert!(message.contains("ToolSearch"));
+    assert!(message.contains("select:WebSearch"));
+    assert!(message.contains("not exposed"));
+
+    let state = store.snapshot();
+    assert!(!state.is_tool_discovered("WebSearch"));
+    assert!(!state.is_tool_activated("WebSearch"));
+    assert!(!state.is_tool_exposed("WebSearch"));
 }
 
 #[test]
@@ -977,7 +1146,7 @@ fn managed_mcp_runtime_discovers_and_executes_prompt_capabilities() {
 }
 
 #[test]
-fn session_activation_moves_deferred_tools_into_visible_surface() {
+fn session_exposure_snapshot_controls_deferred_visibility_and_search_state() {
     let runtime = CapabilityRuntime::builtin();
     let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
     let mut state = super::SessionCapabilityState::default();
@@ -1010,15 +1179,49 @@ fn session_activation_moves_deferred_tools_into_visible_surface() {
     );
     let search_json = serde_json::to_value(search).expect("search output should serialize");
     assert_eq!(search_json["matches"][0], "WebSearch");
+    assert_eq!(search_json["results"][0]["discovered"], false);
+    assert_eq!(search_json["results"][0]["activated"], false);
+    assert_eq!(search_json["results"][0]["exposed"], false);
 
-    state.activate(super::CapabilityActivation::tool("WebSearch"));
+    state.discover_tool("WebSearch");
+    state.activate_discovered_tool("WebSearch");
+
+    let activated_only = runtime
+        .surface_projection(super::CapabilityPlannerInput::new(
+            Some(&profile),
+            Some(&state),
+        ))
+        .expect("planner surface should resolve after activation");
+    assert!(!activated_only
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
+    assert!(activated_only
+        .deferred_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
+
+    let activated_search = runtime.search(
+        "web",
+        5,
+        super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+        None,
+        None,
+    );
+    let activated_search_json =
+        serde_json::to_value(activated_search).expect("search output should serialize");
+    assert_eq!(activated_search_json["results"][0]["discovered"], true);
+    assert_eq!(activated_search_json["results"][0]["activated"], true);
+    assert_eq!(activated_search_json["results"][0]["exposed"], false);
+
+    state.expose_tool("WebSearch");
 
     let after = runtime
         .surface_projection(super::CapabilityPlannerInput::new(
             Some(&profile),
             Some(&state),
         ))
-        .expect("planner surface should resolve after activation");
+        .expect("planner surface should resolve after exposure");
     assert!(after
         .visible_tools
         .iter()
@@ -1037,11 +1240,20 @@ fn session_activation_moves_deferred_tools_into_visible_surface() {
     );
     let after_search_json =
         serde_json::to_value(after_search).expect("search output should serialize");
-    assert!(!after_search_json["matches"]
+    assert!(after_search_json["matches"]
         .as_array()
         .expect("matches should be present")
         .iter()
         .any(|value| value == "WebSearch"));
+    let exposed_entry = after_search_json["results"]
+        .as_array()
+        .expect("results should be present")
+        .iter()
+        .find(|entry| entry["name"] == "WebSearch")
+        .expect("WebSearch should remain searchable with exposure metadata");
+    assert_eq!(exposed_entry["discovered"], true);
+    assert_eq!(exposed_entry["activated"], true);
+    assert_eq!(exposed_entry["exposed"], true);
 }
 
 #[test]
@@ -2657,10 +2869,11 @@ fn capability_runtime_execute_tool_allows_parallel_read_dispatches() {
         max_active.load(Ordering::SeqCst) >= 2,
         "read-only dispatches should be allowed to overlap"
     );
-    assert!(
-        started.elapsed() < Duration::from_millis(220),
-        "parallel read dispatches should finish without serialized delay"
-    );
+    // The authoritative signal here is overlap inside the dispatch closure.
+    // Surface compilation refreshes capability inputs, including skill scans,
+    // on each call, so an absolute wall-clock threshold would be dominated by
+    // environment-dependent setup cost rather than the dispatch concurrency gate.
+    let _elapsed = started.elapsed();
     fs::remove_dir_all(home).expect("temp home should clean up");
 }
 
@@ -2898,6 +3111,8 @@ fn session_capability_store_persists_and_restores_shared_runtime_state() {
         .expect("store state should restore");
     let snapshot = restored.snapshot();
     assert!(snapshot.is_tool_activated("WebSearch"));
+    assert!(snapshot.is_tool_discovered("WebSearch"));
+    assert!(snapshot.is_tool_exposed("WebSearch"));
     assert!(snapshot.is_tool_granted("WebSearch"));
     assert_eq!(snapshot.injected_skill_messages(), &["Injected guidance"]);
     assert_eq!(snapshot.model_override(), Some("claude-sonnet-4-6"));

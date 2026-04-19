@@ -957,6 +957,9 @@ impl SearchableSkillSpec {
             requires_auth: false,
             requires_approval: false,
             deferred: false,
+            discovered: false,
+            activated: false,
+            exposed: false,
             search_hint: self.search_hint.clone(),
         }
     }

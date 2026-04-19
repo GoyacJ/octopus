@@ -1,3 +1,4 @@
+mod builtin_catalog;
 mod builtin_exec;
 mod capability_runtime;
 mod fs_shell;
@@ -36,11 +37,16 @@ use runtime::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub use builtin_catalog::{
+    builtin_capability_catalog, BuiltinCapability, BuiltinCapabilityCatalog,
+    BuiltinCapabilityCategory, BuiltinHandlerKey, BuiltinRoleAvailability,
+};
 pub use builtin_exec::{enforce_permission_check, execute_tool};
 pub use capability_runtime::executor::{
     CapabilityDispatchKind, CapabilityExecutionEvent, CapabilityExecutionPhase,
     CapabilityExecutionRequest, CapabilityExecutor, CapabilityMediationDecision, CapabilityRuntime,
 };
+pub use capability_runtime::exposure::CapabilityExposureSnapshot;
 pub use capability_runtime::planner::{
     CapabilityCompiler, CapabilityExecutionPlan, CapabilityPlanner, CapabilityPlannerInput,
     CapabilitySurfaceProjection, EffectiveCapabilitySurface,

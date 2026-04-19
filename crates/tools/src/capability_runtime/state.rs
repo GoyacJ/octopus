@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 use runtime::{JsonValue as RuntimeJsonValue, Session};
 use serde::{Deserialize, Serialize};
 
+use super::exposure::CapabilityExposureSnapshot;
+
 const CAPABILITY_RUNTIME_SESSION_EXTENSION_KEY: &str = "capability_runtime";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -43,7 +45,7 @@ impl CapabilityActivation {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionCapabilityState {
-    activated_tools: BTreeSet<String>,
+    exposure_snapshot: CapabilityExposureSnapshot,
     granted_tools: BTreeSet<String>,
     pending_tools: BTreeSet<String>,
     approved_tools: BTreeSet<String>,
@@ -89,19 +91,56 @@ impl SessionCapabilityState {
     pub fn activate(&mut self, activation: CapabilityActivation) {
         match activation {
             CapabilityActivation::Tool(name) => {
-                self.activated_tools.insert(name);
+                self.exposure_snapshot.expose_tool(name);
             }
         }
     }
 
+    pub fn discover_tool(&mut self, tool_name: impl Into<String>) {
+        self.exposure_snapshot.discover_tool(tool_name);
+    }
+
+    pub fn activate_discovered_tool(&mut self, tool_name: impl Into<String>) {
+        self.exposure_snapshot.activate_tool(tool_name);
+    }
+
+    pub fn expose_tool(&mut self, tool_name: impl Into<String>) {
+        self.exposure_snapshot.expose_tool(tool_name);
+    }
+
+    #[must_use]
+    pub fn exposure_snapshot(&self) -> &CapabilityExposureSnapshot {
+        &self.exposure_snapshot
+    }
+
+    #[must_use]
+    pub fn is_tool_discovered(&self, tool_name: &str) -> bool {
+        self.exposure_snapshot.is_tool_discovered(tool_name)
+    }
+
     #[must_use]
     pub fn is_tool_activated(&self, tool_name: &str) -> bool {
-        self.activated_tools.contains(tool_name)
+        self.exposure_snapshot.is_tool_activated(tool_name)
+    }
+
+    #[must_use]
+    pub fn is_tool_exposed(&self, tool_name: &str) -> bool {
+        self.exposure_snapshot.is_tool_exposed(tool_name)
+    }
+
+    #[must_use]
+    pub fn discovered_tools(&self) -> &BTreeSet<String> {
+        self.exposure_snapshot.discovered_tools()
     }
 
     #[must_use]
     pub fn activated_tools(&self) -> &BTreeSet<String> {
-        &self.activated_tools
+        self.exposure_snapshot.activated_tools()
+    }
+
+    #[must_use]
+    pub fn exposed_tools(&self) -> &BTreeSet<String> {
+        self.exposure_snapshot.exposed_tools()
     }
 
     pub fn grant_tool(&mut self, tool_name: impl Into<String>) {
@@ -292,6 +331,18 @@ impl SessionCapabilityStore {
 
     pub fn activate(&self, activation: CapabilityActivation) {
         self.mutate(|state| state.activate(activation));
+    }
+
+    pub fn discover_tool(&self, tool_name: impl Into<String>) {
+        self.mutate(|state| state.discover_tool(tool_name.into()));
+    }
+
+    pub fn activate_discovered_tool(&self, tool_name: impl Into<String>) {
+        self.mutate(|state| state.activate_discovered_tool(tool_name.into()));
+    }
+
+    pub fn expose_tool(&self, tool_name: impl Into<String>) {
+        self.mutate(|state| state.expose_tool(tool_name.into()));
     }
 
     pub fn apply_skill_execution_result(&self, result: &crate::SkillExecutionResult) {

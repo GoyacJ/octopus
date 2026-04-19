@@ -1,4 +1,5 @@
 use super::*;
+use crate::builtin_catalog::{builtin_capability_catalog, BuiltinHandlerKey};
 
 /// Check permission before executing a tool. Returns Err with denial reason if blocked.
 pub fn enforce_permission_check(
@@ -24,55 +25,75 @@ pub(crate) fn execute_tool_with_enforcer(
     name: &str,
     input: &Value,
 ) -> Result<String, String> {
-    match name {
-        "bash" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+    let builtin = builtin_capability_catalog()
+        .resolve(name)
+        .ok_or_else(|| format!("unsupported tool: {name}"))?;
+    let canonical_name = builtin.name;
+
+    match builtin.handler_key {
+        BuiltinHandlerKey::Bash => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<BashCommandInput>(input).and_then(run_bash)
         }
-        "read_file" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+        BuiltinHandlerKey::ReadFile => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<ReadFileInput>(input).and_then(run_read_file)
         }
-        "write_file" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+        BuiltinHandlerKey::WriteFile => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<WriteFileInput>(input).and_then(run_write_file)
         }
-        "edit_file" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+        BuiltinHandlerKey::EditFile => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<EditFileInput>(input).and_then(run_edit_file)
         }
-        "glob_search" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+        BuiltinHandlerKey::GlobSearch => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<GlobSearchInputValue>(input).and_then(run_glob_search)
         }
-        "grep_search" => {
-            maybe_enforce_permission_check(enforcer, name, input)?;
+        BuiltinHandlerKey::GrepSearch => {
+            maybe_enforce_permission_check(enforcer, canonical_name, input)?;
             from_value::<GrepSearchInput>(input).and_then(run_grep_search)
         }
-        "WebFetch" => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
-        "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
-        "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
-        "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
-        "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
-        "Sleep" => from_value::<SleepInput>(input).and_then(run_sleep),
-        "SendUserMessage" | "Brief" => from_value::<BriefInput>(input).and_then(run_brief),
-        "Config" => from_value::<ConfigInput>(input).and_then(run_config),
-        "EnterPlanMode" => from_value::<EnterPlanModeInput>(input).and_then(run_enter_plan_mode),
-        "ExitPlanMode" => from_value::<ExitPlanModeInput>(input).and_then(run_exit_plan_mode),
-        "StructuredOutput" => {
+        BuiltinHandlerKey::WebFetch => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
+        BuiltinHandlerKey::WebSearch => {
+            from_value::<WebSearchInput>(input).and_then(run_web_search)
+        }
+        BuiltinHandlerKey::TodoWrite => {
+            from_value::<TodoWriteInput>(input).and_then(run_todo_write)
+        }
+        BuiltinHandlerKey::ToolSearch => {
+            from_value::<ToolSearchInput>(input).and_then(run_tool_search)
+        }
+        BuiltinHandlerKey::NotebookEdit => {
+            from_value::<NotebookEditInput>(input).and_then(run_notebook_edit)
+        }
+        BuiltinHandlerKey::Sleep => from_value::<SleepInput>(input).and_then(run_sleep),
+        BuiltinHandlerKey::Brief => from_value::<BriefInput>(input).and_then(run_brief),
+        BuiltinHandlerKey::Config => from_value::<ConfigInput>(input).and_then(run_config),
+        BuiltinHandlerKey::EnterPlanMode => {
+            from_value::<EnterPlanModeInput>(input).and_then(run_enter_plan_mode)
+        }
+        BuiltinHandlerKey::ExitPlanMode => {
+            from_value::<ExitPlanModeInput>(input).and_then(run_exit_plan_mode)
+        }
+        BuiltinHandlerKey::StructuredOutput => {
             from_value::<StructuredOutputInput>(input).and_then(run_structured_output)
         }
-        "REPL" => from_value::<ReplInput>(input).and_then(run_repl),
-        "PowerShell" => from_value::<PowerShellInput>(input).and_then(run_powershell),
-        "AskUserQuestion" => {
+        BuiltinHandlerKey::Repl => from_value::<ReplInput>(input).and_then(run_repl),
+        BuiltinHandlerKey::PowerShell => {
+            from_value::<PowerShellInput>(input).and_then(run_powershell)
+        }
+        BuiltinHandlerKey::AskUserQuestion => {
             from_value::<AskUserQuestionInput>(input).and_then(run_ask_user_question)
         }
-        "LSP" => from_value::<LspInput>(input).and_then(run_lsp),
-        "RemoteTrigger" => from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger),
-        "TestingPermission" => {
+        BuiltinHandlerKey::Lsp => from_value::<LspInput>(input).and_then(run_lsp),
+        BuiltinHandlerKey::RemoteTrigger => {
+            from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger)
+        }
+        BuiltinHandlerKey::TestingPermission => {
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }
-        _ => Err(format!("unsupported tool: {name}")),
     }
 }
 

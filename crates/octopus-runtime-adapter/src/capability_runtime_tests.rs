@@ -426,6 +426,222 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
             .as_ref()
             .is_some_and(|summary| summary.visible_tools.contains(&"plugin_echo".to_string()))
     }));
+    assert!(planner_completed.iter().any(|event| {
+        event.capability_plan_summary.as_ref().is_some_and(|summary| {
+            summary.discovered_tools.contains(&"plugin_echo".to_string())
+                && summary.exposed_tools.contains(&"plugin_echo".to_string())
+        })
+    }));
+
+    let capability_snapshot = adapter
+        .load_capability_state_snapshot(run.capability_state_ref.as_deref())
+        .expect("capability snapshot")
+        .expect("persisted capability snapshot");
+    assert!(capability_snapshot
+        .discovered_tools
+        .contains(&"plugin_echo".to_string()));
+    assert!(capability_snapshot
+        .exposed_tools
+        .contains(&"plugin_echo".to_string()));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_direct_deferred_tool_call_returns_retry_hint_without_exposing_tool() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_external_plugin(&root, "sample-plugin", "sample-plugin", "plugin_echo");
+    write_workspace_config_with_plugins(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        json!({
+            "sample-plugin@external": true
+        }),
+        &["./external-plugins"],
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, capability_policy_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                "agent-plugin-runtime-guard",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Plugin Runtime Guard Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Do not bypass deferred capability exposure.",
+                serde_json::to_string(&vec!["ToolSearch"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for deferred capability guard tests.",
+                serde_json::to_string(&json!({
+                    "pluginCapabilityRefs": ["plugin_echo"]
+                }))
+                .expect("capability policy"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert plugin runtime guard agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Calling the deferred plugin directly.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-plugin-echo-direct".into(),
+                name: "plugin_echo".into(),
+                input: serde_json::json!({
+                    "message": "hello without selection"
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Observed the retry hint.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 6,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-plugin-runtime-guard",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Plugin Runtime Guard Session",
+                "agent:agent-plugin-runtime-guard",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Try using the deferred plugin directly", None),
+        )
+        .await
+        .expect("run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(executor.request_count(), 2);
+
+    let requests = executor.requests();
+    assert_eq!(
+        requests[0]
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ToolSearch"]
+    );
+    assert_eq!(
+        requests[1]
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ToolSearch"]
+    );
+
+    let output_artifact_ref = run
+        .artifact_refs
+        .first()
+        .cloned()
+        .expect("runtime output artifact ref");
+    let output_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(
+            root.join("data")
+                .join("artifacts")
+                .join("runtime")
+                .join(format!("{output_artifact_ref}.json")),
+        )
+        .expect("runtime output artifact"),
+    )
+    .expect("runtime output artifact json");
+    let serialized_messages = output_artifact
+        .get("serializedSession")
+        .and_then(|value| value.get("session"))
+        .and_then(|value| value.get("messages"))
+        .and_then(serde_json::Value::as_array)
+        .expect("serialized runtime messages");
+    let plugin_tool_result = serialized_messages
+        .iter()
+        .flat_map(|message| {
+            message
+                .get("blocks")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .find(|block| {
+            block.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && block.get("toolName").and_then(serde_json::Value::as_str) == Some("plugin_echo")
+        })
+        .expect("plugin tool result");
+    assert_eq!(
+        plugin_tool_result
+            .get("isError")
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+    let result_output = plugin_tool_result
+        .get("output")
+        .and_then(serde_json::Value::as_str)
+        .expect("tool result output");
+    assert!(result_output.contains("ToolSearch"));
+    assert!(result_output.contains("select:plugin_echo"));
+    assert!(result_output.contains("not exposed"));
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    let event_kinds = events
+        .iter()
+        .map(|event| event.kind.as_deref().unwrap_or(event.event_type.as_str()))
+        .collect::<Vec<_>>();
+    assert!(event_kinds.contains(&"tool.failed"));
+    let planner_completed = events
+        .iter()
+        .filter(|event| event.kind.as_deref() == Some("planner.completed"))
+        .collect::<Vec<_>>();
+    assert!(planner_completed.iter().all(|event| {
+        event
+            .capability_plan_summary
+            .as_ref()
+            .is_none_or(|summary| !summary.visible_tools.contains(&"plugin_echo".to_string()))
+    }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -914,6 +1130,250 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         serde_json::from_str(&persisted.3).expect("plan json");
     assert_eq!(persisted_plan.visible_tools, vec!["bash".to_string()]);
     assert_eq!(persisted.4, 0);
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn resolve_approval_replays_selected_deferred_tool_from_checkpoint_capability_state() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_external_plugin(&root, "sample-plugin", "sample-plugin", "plugin_echo");
+    write_workspace_config_with_plugins(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        json!({
+            "sample-plugin@external": true
+        }),
+        &["./external-plugins"],
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, capability_policy_json, default_model_strategy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "agent-plugin-approval-replay",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Plugin Approval Replay Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Select the deferred plugin before executing it.",
+                serde_json::to_string(&vec!["ToolSearch"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for approval replay exposure tests.",
+                serde_json::to_string(&json!({
+                    "pluginCapabilityRefs": ["plugin_echo"]
+                }))
+                .expect("capability policy"),
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("memory policy"),
+                serde_json::to_string(&json!({})).expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert approval replay agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Selecting the plugin tool.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-select-plugin-echo".into(),
+                name: "ToolSearch".into(),
+                input: serde_json::json!({
+                    "query": "select:plugin_echo",
+                    "max_results": 5
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Calling the selected plugin tool.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-plugin-echo".into(),
+                name: "plugin_echo".into(),
+                input: serde_json::json!({
+                    "message": "hello after approval"
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 6,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Replay completed after approval.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-plugin-approval-replay",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Plugin Approval Replay Session",
+                "agent:agent-plugin-approval-replay",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_READ_ONLY,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Select the plugin and pause for approval", None),
+        )
+        .await
+        .expect("pending run");
+    assert_eq!(pending_run.status, "waiting_approval");
+    let checkpoint_capability_state_ref = pending_run
+        .checkpoint
+        .capability_state_ref
+        .clone()
+        .expect("checkpoint capability state ref");
+
+    let approval_id = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail")
+        .pending_approval
+        .map(|approval| approval.id)
+        .expect("approval id");
+
+    {
+        let mut sessions = adapter.state.sessions.lock().expect("sessions mutex");
+        let aggregate = sessions
+            .get_mut(&session.summary.id)
+            .expect("runtime aggregate");
+        aggregate.detail.run.capability_state_ref = Some("corrupted-capability-state".into());
+        aggregate.detail.capability_state_ref = Some("corrupted-capability-state".into());
+    }
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved approval");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(executor.request_count(), 3);
+    assert_eq!(
+        resolved.capability_state_ref.as_deref(),
+        Some(checkpoint_capability_state_ref.as_str()),
+        "approval replay should keep using the checkpoint capability snapshot ref"
+    );
+    assert!(
+        resolved
+            .capability_plan_summary
+            .visible_tools
+            .contains(&"plugin_echo".to_string()),
+        "approval replay should rebuild the visible surface from the durable capability snapshot"
+    );
+
+    let output_artifact_ref = resolved
+        .artifact_refs
+        .first()
+        .cloned()
+        .expect("runtime output artifact ref");
+    let output_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(
+            root.join("data")
+                .join("artifacts")
+                .join("runtime")
+                .join(format!("{output_artifact_ref}.json")),
+        )
+        .expect("runtime output artifact"),
+    )
+    .expect("runtime output artifact json");
+    let serialized_messages = output_artifact
+        .get("serializedSession")
+        .and_then(|value| value.get("session"))
+        .and_then(|value| value.get("messages"))
+        .and_then(serde_json::Value::as_array)
+        .expect("serialized runtime messages");
+    let plugin_tool_result = serialized_messages
+        .iter()
+        .flat_map(|message| {
+            message
+                .get("blocks")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .find(|block| {
+            block.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && block.get("toolName").and_then(serde_json::Value::as_str) == Some("plugin_echo")
+        })
+        .expect("plugin tool result");
+    assert_eq!(
+        plugin_tool_result
+            .get("isError")
+            .and_then(serde_json::Value::as_bool),
+        Some(false),
+        "approval replay should execute the previously selected deferred tool"
+    );
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    assert!(events.iter().any(|event| {
+        event.kind.as_deref() == Some("approval.resolved")
+            && event.capability_plan_summary.as_ref().is_some_and(|summary| {
+                summary.discovered_tools.contains(&"plugin_echo".to_string())
+                    && summary.exposed_tools.contains(&"plugin_echo".to_string())
+            })
+    }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

@@ -2355,7 +2355,11 @@ pub struct RuntimeCapabilityPlanSummary {
     #[serde(default)]
     pub hidden_capabilities: Vec<String>,
     #[serde(default)]
+    pub discovered_tools: Vec<String>,
+    #[serde(default)]
     pub activated_tools: Vec<String>,
+    #[serde(default)]
+    pub exposed_tools: Vec<String>,
     #[serde(default)]
     pub granted_tools: Vec<String>,
     #[serde(default)]
@@ -2387,7 +2391,11 @@ pub struct RuntimeCapabilitySurface {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilityStateSnapshot {
     #[serde(default)]
+    pub discovered_tools: Vec<String>,
+    #[serde(default)]
     pub activated_tools: Vec<String>,
+    #[serde(default)]
+    pub exposed_tools: Vec<String>,
     #[serde(default)]
     pub granted_tools: Vec<String>,
     #[serde(default)]

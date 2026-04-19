@@ -4,7 +4,8 @@ use std::path::Path;
 use plugins::PluginTool;
 use runtime::{permission_enforcer::PermissionEnforcer, PermissionMode};
 
-use crate::tool_registry::{permission_mode_from_plugin, RuntimeToolDefinition, ToolSpec};
+use crate::builtin_catalog::BuiltinCapability;
+use crate::tool_registry::{permission_mode_from_plugin, RuntimeToolDefinition};
 
 use super::provider::{
     CapabilityExecutionKind, CapabilityInvocationPolicy, CapabilityPermissionProfile,
@@ -23,7 +24,9 @@ pub struct CapabilityExecutionPlan {
     pub discoverable_skills: Vec<CapabilitySpec>,
     pub available_resources: Vec<CapabilitySpec>,
     pub hidden_capabilities: Vec<CapabilitySpec>,
+    pub discovered_tools: Vec<String>,
     pub activated_tools: Vec<String>,
+    pub exposed_tools: Vec<String>,
     pub granted_tools: Vec<String>,
     pub pending_tools: Vec<String>,
     pub approved_tools: Vec<String>,
@@ -46,7 +49,7 @@ impl CapabilityExecutionPlan {
 
 #[derive(Debug, Clone)]
 pub(crate) struct CapabilityCompilationInput {
-    pub(crate) builtin_specs: Vec<ToolSpec>,
+    pub(crate) builtin_capabilities: Vec<BuiltinCapability>,
     pub(crate) runtime_tools: Vec<RuntimeToolDefinition>,
     pub(crate) plugin_tools: Vec<PluginTool>,
     pub(crate) provided_capabilities: Vec<CapabilitySpec>,
@@ -79,7 +82,7 @@ impl CapabilityCompiler {
         }
 
         let capabilities = compile_capability_specs(
-            input.builtin_specs,
+            input.builtin_capabilities,
             &input.runtime_tools,
             &input.plugin_tools,
             &input.provided_capabilities,
@@ -137,30 +140,6 @@ impl<'a> CapabilityPlannerInput<'a> {
     }
 }
 
-const DEFAULT_VISIBLE_BUILTIN_TOOL_NAMES: &[&str] = &[
-    "bash",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob_search",
-    "grep_search",
-    "ToolSearch",
-    "TodoWrite",
-    "SendUserMessage",
-    "AskUserQuestion",
-    "EnterPlanMode",
-    "ExitPlanMode",
-    "StructuredOutput",
-];
-
-fn builtin_visibility(name: &str) -> CapabilityVisibility {
-    if DEFAULT_VISIBLE_BUILTIN_TOOL_NAMES.contains(&name) {
-        CapabilityVisibility::DefaultVisible
-    } else {
-        CapabilityVisibility::Deferred
-    }
-}
-
 pub(crate) fn concurrency_policy(
     required_permission: PermissionMode,
 ) -> super::provider::CapabilityConcurrencyPolicy {
@@ -179,7 +158,7 @@ fn invocation_policy(required_permission: PermissionMode) -> CapabilityInvocatio
     }
 }
 
-fn compile_builtin_capability(spec: ToolSpec) -> CapabilitySpec {
+fn compile_builtin_capability(spec: BuiltinCapability) -> CapabilitySpec {
     CapabilitySpec {
         capability_id: spec.name.to_string(),
         source_kind: CapabilitySourceKind::Builtin,
@@ -190,8 +169,11 @@ fn compile_builtin_capability(spec: ToolSpec) -> CapabilitySpec {
         description: spec.description.to_string(),
         when_to_use: None,
         input_schema: spec.input_schema,
-        search_hint: Some(spec.description.to_string()),
-        visibility: builtin_visibility(spec.name),
+        search_hint: spec
+            .search_hint
+            .map(str::to_string)
+            .or_else(|| Some(spec.description.to_string())),
+        visibility: spec.visibility,
         state: CapabilityState::Ready,
         permission_profile: CapabilityPermissionProfile {
             required_permission: spec.required_permission,
@@ -261,13 +243,15 @@ fn compile_plugin_capability(tool: &PluginTool) -> CapabilitySpec {
 
 #[must_use]
 pub(crate) fn compile_capability_specs(
-    builtin_specs: Vec<ToolSpec>,
+    builtin_capabilities: Vec<BuiltinCapability>,
     runtime_tools: &[RuntimeToolDefinition],
     plugin_tools: &[PluginTool],
     provided_capabilities: &[CapabilitySpec],
     current_dir: Option<&Path>,
 ) -> Vec<CapabilitySpec> {
-    let builtin = builtin_specs.into_iter().map(compile_builtin_capability);
+    let builtin = builtin_capabilities
+        .into_iter()
+        .map(compile_builtin_capability);
     let runtime = runtime_tools.iter().map(compile_runtime_capability);
     let plugin = plugin_tools.iter().map(compile_plugin_capability);
     let skills = crate::skill_runtime::compile_skill_capability_specs(current_dir).into_iter();
@@ -412,7 +396,7 @@ pub(crate) fn plan_effective_capability_surface_with_planner(
                     CapabilityVisibility::DefaultVisible => visible_tools.push(capability),
                     CapabilityVisibility::Deferred => {
                         if planner_input.session_state.is_some_and(|state| {
-                            state.is_tool_activated(&capability.display_name)
+                            state.is_tool_exposed(&capability.display_name)
                                 || state.is_tool_granted(&capability.display_name)
                         }) {
                             visible_tools.push(capability);
