@@ -32,7 +32,7 @@ use crate::{
         HealthcheckStatusPayload, ShellBootstrapPayload,
     },
     error::into_command_error,
-    state::ShellState,
+    state::{resolve_workspace_root_for_backend, ShellState},
     updates::{
         check_host_update as check_host_update_payload,
         download_host_update as download_host_update_payload,
@@ -186,6 +186,9 @@ pub async fn restart_desktop_backend(
     state: State<'_, ShellState>,
 ) -> Result<DesktopBackendConnection, String> {
     let preferences_path = state.preferences_service.path().to_path_buf();
+    let workspace_root =
+        resolve_workspace_root_for_backend(&preferences_path, state.host_state.cargo_workspace);
+    state.backend_supervisor.set_workspace_root(workspace_root);
     state
         .backend_supervisor
         .restart(&app, &state.host_state, &preferences_path)

@@ -515,6 +515,16 @@ pub struct ProjectLinkedWorkspaceAssets {
     pub knowledge_ids: Vec<String>,
 }
 
+#[must_use]
+pub fn empty_project_linked_workspace_assets() -> ProjectLinkedWorkspaceAssets {
+    ProjectLinkedWorkspaceAssets {
+        agent_ids: Vec::new(),
+        resource_ids: Vec::new(),
+        tool_source_keys: Vec::new(),
+        knowledge_ids: Vec::new(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRecord {
@@ -530,7 +540,13 @@ pub struct ProjectRecord {
     pub owner_user_id: String,
     pub member_user_ids: Vec<String>,
     pub permission_overrides: ProjectPermissionOverrides,
+    #[serde(
+        default = "empty_project_linked_workspace_assets",
+        skip_serializing,
+        skip_deserializing
+    )]
     pub linked_workspace_assets: ProjectLinkedWorkspaceAssets,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -543,10 +559,12 @@ pub struct CreateProjectRequest {
     pub owner_user_id: Option<String>,
     pub member_user_ids: Option<Vec<String>>,
     pub permission_overrides: Option<ProjectPermissionOverrides>,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub leader_agent_id: Option<String>,
     pub manager_user_id: Option<String>,
     pub preset_code: Option<String>,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -560,10 +578,12 @@ pub struct UpdateProjectRequest {
     pub owner_user_id: Option<String>,
     pub member_user_ids: Option<Vec<String>>,
     pub permission_overrides: Option<ProjectPermissionOverrides>,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub leader_agent_id: Option<String>,
     pub manager_user_id: Option<String>,
     pub preset_code: Option<String>,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 

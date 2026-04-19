@@ -51,7 +51,14 @@ export function canAccessProjectSettings(
   permissionCodes: readonly string[] = [],
   roleCodes: readonly string[] = [],
 ): boolean {
-  return isProjectOwner(project, actorUserId) || canReviewProjectDeletion(permissionCodes, roleCodes)
+  return canManageProjectSettings(project, actorUserId) || canReviewProjectDeletion(permissionCodes, roleCodes)
+}
+
+export function canManageProjectSettings(
+  project?: Pick<ProjectRecord, 'ownerUserId'> | null,
+  actorUserId?: string | null,
+): boolean {
+  return isProjectOwner(project, actorUserId)
 }
 
 export function canShowProjectInShell(

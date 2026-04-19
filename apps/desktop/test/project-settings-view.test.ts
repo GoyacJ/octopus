@@ -755,6 +755,73 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
+  it('lets governance reviewers review deletion requests while hiding owner-only settings controls', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+        state.currentUserId = 'user-operator'
+        state.projectDeletionRequests = [{
+          id: 'delete-req-pending',
+          workspaceId: state.workspace.id,
+          projectId: governance.id,
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: undefined,
+          status: 'pending',
+          reviewComment: undefined,
+          createdAt: 1,
+          updatedAt: 1,
+          reviewedAt: undefined,
+        }]
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request')
+    const inboxStore = useInboxStore()
+    const notificationStore = useNotificationStore()
+    const workspaceStore = useWorkspaceStore()
+    const inboxBootstrapSpy = vi.spyOn(inboxStore, 'bootstrap')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+    await waitForSelector(mounted.container, '[data-testid="project-settings-delete-request-approve-button"]')
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-overview-section"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-capabilities-section"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-members-section"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-restore-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-request-delete-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-settings-delete-project-button"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-delete-request-approve-button"]')?.click()
+
+    await waitFor(() =>
+      workspaceStore.getProjectDeletionRequests('proj-governance')[0]?.status === 'approved',
+    )
+    await waitFor(() =>
+      inboxBootstrapSpy.mock.calls.some(call => call[0] === undefined && call[1] === true),
+    )
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === '/workspaces/ws-local/projects/proj-governance/settings?review=deletion-request'
+        && notification.body?.includes('Workspace Governance'),
+      ),
+    )
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-delete-project-button"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
   it('supports rejecting deletion requests from the project settings review state', async () => {
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
@@ -768,6 +835,7 @@ describe('Project settings view', () => {
         }
 
         governance.status = 'archived'
+        state.currentUserId = 'user-operator'
         state.projectDeletionRequests = [{
           id: 'delete-req-pending',
           workspaceId: state.workspace.id,

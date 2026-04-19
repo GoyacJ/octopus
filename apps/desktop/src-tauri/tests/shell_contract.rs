@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -55,18 +56,26 @@ async fn bootstrap_admin_session(base_url: &str) -> String {
 }
 
 fn test_host_state() -> HostState {
+    test_host_state_with_cargo_workspace(true)
+}
+
+fn test_host_state_with_cargo_workspace(cargo_workspace: bool) -> HostState {
     HostState {
         platform: "tauri".into(),
         mode: "local".into(),
         app_version: "0.1.0-test".into(),
-        cargo_workspace: true,
+        cargo_workspace,
         shell: "tauri2".into(),
     }
 }
 
 fn test_state(root: PathBuf) -> ShellState {
+    test_state_with_host_state(root, test_host_state())
+}
+
+fn test_state_with_host_state(root: PathBuf, host_state: HostState) -> ShellState {
     ShellState::new(
-        test_host_state(),
+        host_state,
         PreferencesService::new(
             root.join("preferences.json"),
             default_preferences("ws-local", "proj-redesign"),
@@ -508,4 +517,54 @@ async fn runtime_config_sources_expose_workspace_relative_metadata_without_absol
     assert!(!serialized.contains(&workspace_root.display().to_string()));
 
     supervisor.shutdown();
+}
+
+#[tokio::test]
+async fn shell_state_uses_persisted_mapped_directory_for_loopback_backend_root() {
+    ensure_backend_binary_exists();
+
+    let temp = tempdir().expect("tempdir");
+    let shell_root = temp.path().join("shell-root");
+    let mapped_root = temp.path().join("mapped-root");
+    fs::create_dir_all(shell_root.join("config")).expect("shell config dir");
+    fs::write(
+        shell_root.join("config").join("workspace.toml"),
+        format!(
+            "mapped_directory = {:?}\n",
+            mapped_root.display().to_string()
+        ),
+    )
+    .expect("write workspace config");
+
+    let state = test_state_with_host_state(
+        shell_root.clone(),
+        test_host_state_with_cargo_workspace(false),
+    );
+    let connection = state
+        .backend_supervisor
+        .start_dev(&state.host_state, state.preferences_service.path())
+        .await
+        .expect("backend should start in dev mode");
+    let base_url = connection.base_url.expect("backend base url");
+    let session_token = bootstrap_admin_session(&base_url).await;
+
+    let workspace = reqwest::Client::new()
+        .get(format!("{base_url}/api/v1/workspace"))
+        .bearer_auth(session_token)
+        .header("X-Workspace-Id", "ws-local")
+        .send()
+        .await
+        .expect("workspace request")
+        .json::<octopus_core::WorkspaceSummary>()
+        .await
+        .expect("workspace payload");
+
+    assert_eq!(
+        workspace.mapped_directory_default.as_deref(),
+        Some(mapped_root.to_string_lossy().as_ref()),
+    );
+    assert!(mapped_root.join("config").join("workspace.toml").exists());
+    assert!(mapped_root.join("data").join("main.db").exists());
+
+    state.backend_supervisor.shutdown();
 }

@@ -111,6 +111,12 @@ describe('Workspace settings view', () => {
     )
 
     const updateWorkspaceSpy = vi.spyOn(workspaceStore, 'updateWorkspace')
+    const clearWorkspaceScopeSpy = vi.spyOn(workspaceStore, 'clearWorkspaceScope')
+    const ensureWorkspaceBootstrapSpy = vi.spyOn(workspaceStore, 'ensureWorkspaceBootstrap')
+    const restartDesktopBackendSpy = vi.spyOn(tauriClient, 'restartDesktopBackend')
+    clearWorkspaceScopeSpy.mockClear()
+    ensureWorkspaceBootstrapSpy.mockClear()
+    restartDesktopBackendSpy.mockClear()
 
     await waitFor(() =>
       mounted.container.querySelector<HTMLButtonElement>('[data-testid="workspace-settings-save"]')?.disabled === false,
@@ -131,6 +137,9 @@ describe('Workspace settings view', () => {
       name: 'Workspace HQ',
       mappedDirectory: '/Users/goya/Workspace HQ',
     }))
+    expect(restartDesktopBackendSpy).toHaveBeenCalledTimes(1)
+    expect(clearWorkspaceScopeSpy).toHaveBeenCalledWith('conn-local')
+    expect(ensureWorkspaceBootstrapSpy).toHaveBeenCalledWith('conn-local', { force: true })
     expect(notificationStore.notificationsState.some(notification =>
       notification.source === 'workspace-project-governance'
       && notification.routeTo === '/workspaces/ws-local/console/settings'

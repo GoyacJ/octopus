@@ -88,6 +88,7 @@ const {
   accessSummary,
   deletionRequestsReady,
   latestDeletionRequest,
+  canManageProjectSettings,
   canReviewDeletion,
   lifecycleReviewCallout,
   lifecycleError,
@@ -198,6 +199,7 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
       <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div class="space-y-4">
           <section
+            v-if="canManageProjectSettings"
             data-testid="project-settings-overview-section"
             class="space-y-4"
           >
@@ -233,6 +235,7 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
           </section>
 
           <section
+            v-if="canManageProjectSettings"
             data-testid="project-settings-capabilities-section"
             class="space-y-4"
           >
@@ -255,6 +258,7 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
             :deletion-request-status-label="deletionRequestStatusLabel(latestDeletionRequest?.status)"
             :latest-deletion-request="latestDeletionRequest"
             :deletion-requests-ready="deletionRequestsReady"
+            :can-manage-project-settings="canManageProjectSettings"
             :can-review-deletion="canReviewDeletion"
             :creating-deletion-request="creatingDeletionRequest"
             :reviewing-deletion-request="reviewingDeletionRequest"
@@ -269,6 +273,7 @@ const summaryRowButtonClass = 'h-auto w-full justify-between whitespace-normal r
           />
 
           <section
+            v-if="canManageProjectSettings"
             data-testid="project-settings-members-section"
             class="rounded-[var(--radius-xl)] border border-border bg-surface px-5 py-5"
           >

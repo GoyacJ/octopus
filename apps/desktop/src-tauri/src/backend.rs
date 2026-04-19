@@ -25,7 +25,7 @@ pub struct BackendSupervisor {
     connection: Arc<RwLock<DesktopBackendConnection>>,
     child: Arc<Mutex<Option<ManagedBackendChild>>>,
     generation: Arc<AtomicU64>,
-    workspace_root: PathBuf,
+    workspace_root: Arc<RwLock<PathBuf>>,
 }
 
 enum ManagedBackendChild {
@@ -54,12 +54,20 @@ impl BackendSupervisor {
             connection,
             child: Arc::new(Mutex::new(None)),
             generation: Arc::new(AtomicU64::new(0)),
-            workspace_root,
+            workspace_root: Arc::new(RwLock::new(workspace_root)),
         }
     }
 
     pub fn connection(&self) -> DesktopBackendConnection {
         self.connection.read().clone()
+    }
+
+    pub fn set_workspace_root(&self, workspace_root: PathBuf) {
+        *self.workspace_root.write() = workspace_root;
+    }
+
+    fn workspace_root(&self) -> PathBuf {
+        self.workspace_root.read().clone()
     }
 
     fn mark_unavailable(&self) {
@@ -115,7 +123,7 @@ impl BackendSupervisor {
             &auth_token,
             host_state,
             preferences_path,
-            &self.workspace_root,
+            &self.workspace_root(),
             &workspace_root(),
         ) {
             Ok(child) => child,
@@ -154,7 +162,7 @@ impl BackendSupervisor {
             &auth_token,
             host_state,
             preferences_path,
-            &self.workspace_root,
+            &self.workspace_root(),
         ) {
             Ok(child) => child,
             Err(error) => {

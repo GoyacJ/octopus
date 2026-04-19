@@ -34,6 +34,8 @@ pub(super) struct WorkspaceConfigFile {
     pub(super) default_project_id: String,
     #[serde(default)]
     pub(super) mapped_directory: Option<String>,
+    #[serde(default)]
+    pub(super) mapped_directory_default: Option<String>,
     #[serde(default = "default_project_default_permissions")]
     pub(super) project_default_permissions: ProjectDefaultPermissions,
 }
@@ -230,6 +232,7 @@ pub(super) fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), 
         listen_address: "127.0.0.1".into(),
         default_project_id: DEFAULT_PROJECT_ID.into(),
         mapped_directory: None,
+        mapped_directory_default: Some(workspace_root_display_path(paths)),
         project_default_permissions: ProjectDefaultPermissions {
             agents: "allow".into(),
             resources: "allow".into(),
@@ -3203,11 +3206,11 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         host: workspace_file.host,
         listen_address: workspace_file.listen_address,
         default_project_id: workspace_file.default_project_id,
-        mapped_directory: stored_mapped_directory(
-            &paths,
-            workspace_file.mapped_directory.as_deref(),
-        ),
-        mapped_directory_default: Some(workspace_root_display_path(&paths)),
+        mapped_directory: stored_mapped_directory(workspace_file.mapped_directory.as_deref()),
+        mapped_directory_default: workspace_file
+            .mapped_directory_default
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| Some(workspace_root_display_path(&paths))),
         project_default_permissions: workspace_file.project_default_permissions,
     };
 

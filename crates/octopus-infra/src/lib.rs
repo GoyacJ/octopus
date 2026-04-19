@@ -120,30 +120,34 @@ pub(crate) fn workspace_root_display_path(paths: &WorkspacePaths) -> String {
 }
 
 pub(crate) fn stored_mapped_directory(
-    paths: &WorkspacePaths,
     value: Option<&str>,
 ) -> Option<String> {
-    let workspace_root = workspace_root_display_path(paths);
     value
         .map(str::trim)
-        .filter(|entry| !entry.is_empty() && *entry == workspace_root)
-        .map(|_| workspace_root)
+        .filter(|entry| !entry.is_empty())
+        .map(str::to_string)
+}
+
+pub(crate) fn workspace_shell_root_display_path(workspace: &WorkspaceSummary, paths: &WorkspacePaths) -> String {
+    workspace
+        .mapped_directory_default
+        .clone()
+        .unwrap_or_else(|| workspace_root_display_path(paths))
 }
 
 pub(crate) fn normalize_mapped_directory_input(
-    paths: &WorkspacePaths,
     value: Option<&str>,
 ) -> Result<Option<String>, AppError> {
     let Some(mapped_directory) = value.map(str::trim).filter(|entry| !entry.is_empty()) else {
         return Ok(None);
     };
-    let workspace_root = workspace_root_display_path(paths);
-    if mapped_directory != workspace_root {
+    let normalized = PathBuf::from(mapped_directory);
+    if !normalized.is_absolute() {
         return Err(AppError::invalid_input(
-            "mapped directory must match the current workspace root",
+            "mapped directory must be an absolute path",
         ));
     }
-    Ok(Some(workspace_root))
+    Ok(Some(normalized.to_string_lossy().to_string()))
 }
 
 #[derive(Clone)]

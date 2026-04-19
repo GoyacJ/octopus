@@ -824,10 +824,9 @@ impl AuthService for InfraAuthService {
         if workspace.bootstrap_status != "setup_required" && workspace.owner_user_id.is_some() {
             return Err(AppError::conflict("workspace owner already exists"));
         }
-        let mapped_directory = normalize_mapped_directory_input(
-            &self.state.paths,
-            request.mapped_directory.as_deref(),
-        )?;
+        let mapped_directory = normalize_mapped_directory_input(request.mapped_directory.as_deref())?;
+        let current_workspace_root = self.state.paths.root.clone();
+        let shell_root = PathBuf::from(workspace_shell_root_display_path(&workspace, &self.state.paths));
 
         {
             let users = self
@@ -913,9 +912,9 @@ impl AuthService for InfraAuthService {
                 .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
             workspace_state.bootstrap_status = "ready".into();
             workspace_state.owner_user_id = Some(user_id.clone());
-            workspace_state.mapped_directory = mapped_directory;
+            workspace_state.mapped_directory = mapped_directory.clone();
             workspace_state.mapped_directory_default =
-                Some(workspace_root_display_path(&self.state.paths));
+                Some(shell_root.to_string_lossy().to_string());
         }
         self.state.save_workspace_config()?;
 
@@ -942,6 +941,33 @@ impl AuthService for InfraAuthService {
             load_pet_agent_extensions(&db)?;
 
         let session = self.persist_session(&stored_user, request.client_app_id)?;
+        if let Some(next_workspace_root) = mapped_directory
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|path| path != &current_workspace_root)
+        {
+            let workspace = self.state.workspace_snapshot()?;
+            let workspace_avatar_path = self
+                .state
+                .workspace_avatar_path
+                .lock()
+                .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+                .clone();
+            let workspace_avatar_content_type = self
+                .state
+                .workspace_avatar_content_type
+                .lock()
+                .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+                .clone();
+            bootstrap::relocate_workspace_root(
+                &current_workspace_root,
+                &next_workspace_root,
+                &shell_root,
+                &workspace,
+                workspace_avatar_path.as_deref(),
+                workspace_avatar_content_type.as_deref(),
+            )?;
+        }
 
         Ok(RegisterBootstrapAdminResponse {
             session,
@@ -1525,7 +1551,12 @@ mod tests {
     fn bootstrap_admin_persists_requested_mapped_directory_in_workspace_summary() {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("bundle");
-        let mapped_root = temp.path().to_string_lossy().to_string();
+        let mapped_root = temp
+            .path()
+            .parent()
+            .expect("temp parent")
+            .join(format!("octopus-mapped-root-{}", uuid::Uuid::new_v4()));
+        let mapped_root_string = mapped_root.to_string_lossy().to_string();
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let response = runtime
@@ -1540,24 +1571,41 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
-                        mapped_directory: Some(mapped_root.clone()),
+                        mapped_directory: Some(mapped_root_string.clone()),
                     }),
             )
             .expect("bootstrap admin");
 
         assert_eq!(
             response.workspace.mapped_directory.as_deref(),
-            Some(mapped_root.as_str())
+            Some(mapped_root_string.as_str())
         );
         assert_eq!(
             response.workspace.mapped_directory_default.as_deref(),
-            Some(mapped_root.as_str())
+            Some(temp.path().to_string_lossy().as_ref())
         );
 
         let saved = fs::read_to_string(temp.path().join("config").join("workspace.toml"))
             .expect("workspace config");
         assert!(saved.contains("mapped_directory"));
-        assert!(saved.contains(mapped_root.as_str()));
+        assert!(saved.contains(mapped_root_string.as_str()));
+        assert!(mapped_root.join("data").join("main.db").exists());
+        assert!(mapped_root.join("config").join("workspace.toml").exists());
+        assert!(!temp.path().join("data").join("main.db").exists());
+
+        let reloaded = build_infra_bundle(&mapped_root).expect("reloaded bundle");
+        let reloaded_workspace = tokio::runtime::Runtime::new()
+            .expect("reload runtime")
+            .block_on(reloaded.workspace.workspace_summary())
+            .expect("reloaded workspace summary");
+        assert_eq!(
+            reloaded_workspace.mapped_directory.as_deref(),
+            Some(mapped_root_string.as_str())
+        );
+        assert_eq!(
+            reloaded_workspace.mapped_directory_default.as_deref(),
+            Some(temp.path().to_string_lossy().as_ref())
+        );
     }
 
     #[test]

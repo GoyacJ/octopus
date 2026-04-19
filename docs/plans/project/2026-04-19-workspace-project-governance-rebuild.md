@@ -408,6 +408,138 @@ Step 2:
 - Verify: `pnpm -C apps/desktop exec vitest run test/project-governance.test.ts test/router.test.ts test/layout-shell.test.ts`
 - Stop if: router and shell navigation would require separate duplicated authorization rules instead of one shared project-governance contract.
 
+### Task 10: Repair Reviewer-Visible Project Deletion Review Flow
+
+Status: `done`
+Current step: `Completed`
+
+Files:
+- Modify: `crates/octopus-server/src/workspace_runtime.rs`
+- Modify: `apps/desktop/src/composables/project-governance.ts`
+- Modify: `apps/desktop/src/views/project/useProjectSettings.ts`
+- Modify: `apps/desktop/src/views/project/ProjectSettingsView.vue`
+- Modify: `apps/desktop/src/views/project/ProjectLifecyclePanel.vue`
+- Modify: `apps/desktop/test/support/workspace-fixture-client.ts`
+- Test: `apps/desktop/test/project-governance.test.ts`
+- Test: `apps/desktop/test/project-settings-view.test.ts`
+- Test: `apps/desktop/test/router.test.ts`
+- Test: `apps/desktop/test/layout-shell.test.ts`
+- Test: `crates/octopus-server/src/workspace_runtime.rs`
+
+Preconditions:
+- Task 9 route and shell navigation behavior is already merged.
+- Project deletion requests still load through the project settings surface.
+
+Step 1:
+- Action: Change the deletion-request list route to use the same reviewer eligibility contract as approve/reject, and add focused server coverage for reviewer list access while keeping create/final delete owner-only.
+- Done when: project owners and governance reviewers can both load `GET /api/v1/projects/{projectId}/deletion-requests`, while create/delete routes still reject non-owners.
+- Verify: `cargo test -p octopus-server project_delete_request -- --nocapture`
+- Stop if: reviewer list access would expose non-project-scoped deletion records or require a second independent authorization rule.
+
+Step 2:
+- Action: Split project settings UI capabilities into owner-edit actions versus reviewer-only deletion review actions, and remove owner-only buttons from reviewer-visible settings state.
+- Done when: non-member governance reviewers can open `project-settings?review=deletion-request`, see the pending request, and only see approve/reject review actions; owner-only metadata/capability/member/lifecycle mutations stay hidden.
+- Verify: `pnpm -C apps/desktop test -- test/project-governance.test.ts test/project-settings-view.test.ts test/router.test.ts test/layout-shell.test.ts`
+- Stop if: the page still requires route-local permission branching instead of shared governance helpers.
+
+Step 3:
+- Action: Align fixture client permission behavior with the real server contract so reviewer list/review flows stop passing under an owner-only mismatch.
+- Done when: fixture list/create/review/delete permissions mirror the server routes closely enough that the reviewer deep-link flow would fail in tests if the server/UI contract regresses again.
+- Verify: `pnpm -C apps/desktop test -- test/project-settings-view.test.ts test/layout-shell.test.ts`
+- Stop if: fixture parity would require duplicating backend authorization logic that belongs in shared test helpers instead.
+
+### Task 11: Remove Legacy Project Snapshot Fields From Live Rust Transport
+
+Status: `done`
+Current step: `Completed`
+
+Files:
+- Modify: `crates/octopus-core/src/lib.rs`
+- Modify: `crates/octopus-server/src/workspace_runtime.rs`
+- Test: `crates/octopus-server/src/workspace_runtime.rs`
+
+Preconditions:
+- Task 10 reviewer-flow fixes are in place so project governance regressions are isolated from transport cleanup.
+
+Step 1:
+- Action: Remove `assignments` and `linkedWorkspaceAssets` from the live Rust `ProjectRecord`, `CreateProjectRequest`, and `UpdateProjectRequest` shapes, plus any server validation or helper code that still reads/writes them.
+- Done when: the live Rust transport shapes match the current OpenAPI contract and no project create/update/list/overview path serializes or accepts the removed fields.
+- Verify: `cargo test -p octopus-server validate_create_project_request -- --nocapture`
+- Stop if: another canonical HTTP payload still depends on those fields and the ownership boundary is unclear.
+
+Step 2:
+- Action: Update server tests and request builders to use the cleaned project metadata contract only.
+- Done when: server tests cover `managerUserId`, `presetCode`, `leaderAgentId`, and `resourceDirectory` without constructing legacy snapshot fields anywhere in the project governance path.
+- Verify: `cargo test -p octopus-server project_delete_request -- --nocapture`
+- Stop if: test helpers still require a hidden compatibility layer to seed project capability state.
+
+### Task 12: Make `mappedDirectory` The Real Workspace Root
+
+Status: `done`
+Current step: `Completed`
+
+Files:
+- Modify: `apps/desktop/src-tauri/src/state.rs`
+- Modify: `apps/desktop/src-tauri/src/backend.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src/tauri/shell.ts`
+- Modify: `apps/desktop/src/tauri/shell_tauri.ts`
+- Modify: `apps/desktop/src/stores/workspace_actions.ts`
+- Modify: `apps/desktop/src/views/workspace/WorkspaceSettingsView.vue`
+- Modify: `crates/octopus-infra/src/lib.rs`
+- Modify: `crates/octopus-infra/src/auth_users.rs`
+- Modify: `crates/octopus-infra/src/projects_teams.rs`
+- Modify: `crates/octopus-infra/src/bootstrap.rs`
+- Modify: `crates/octopus-infra/src/infra_state.rs`
+- Test: `apps/desktop/test/workspace-settings-view.test.ts`
+- Test: `apps/desktop/src-tauri/tests/shell_contract.rs`
+- Test: `crates/octopus-infra/src/auth_users.rs`
+- Test: `crates/octopus-infra/src/projects_teams.rs`
+- Test: `crates/octopus-server/src/workspace_runtime.rs`
+
+Preconditions:
+- Task 11 transport cleanup is complete so mapped-directory changes do not carry old project contract noise.
+- Loopback desktop backend restart flow remains available through the existing shell command boundary.
+
+Step 1:
+- Action: Teach Tauri shell/backend startup to resolve the backend workspace root from persisted workspace config `mapped_directory` first, instead of treating it as a display-only echo of the current root.
+- Done when: loopback backend startup and restart pass the configured mapped directory as `--workspace-root`, and shell bootstrap can recover the active root from persisted workspace config on the next launch.
+- Verify: `cargo test -p octopus-desktop-shell --test shell_contract`
+- Stop if: startup would require a second hidden source of truth outside the workspace config file.
+
+Step 2:
+- Action: Add an explicit infra relocation flow for bootstrap-admin and `PATCH /api/v1/workspace`, so setting `mappedDirectory` initializes or migrates the real workspace root instead of only saving a string.
+- Done when: bootstrap can create the initial workspace at the requested mapped directory, workspace updates can move the local workspace root safely, and failure paths reject disconnected display-path saves.
+- Verify: `cargo test -p octopus-infra auth_users && cargo test -p octopus-infra projects_teams && cargo test -p octopus-server workspace_summary -- --nocapture`
+- Stop if: the move would partially copy workspace state, silently diverge on disk, or cross an unsupported filesystem boundary without a clear recovery rule.
+
+Step 3:
+- Action: Refresh desktop bootstrap state after mapped-directory changes by restarting the backend and clearing cached workspace bootstrap data before reloading workspace settings.
+- Done when: saving a new mapped directory updates the real backend root and the refreshed workspace summary/overview/project state all reflect the new root without manual user intervention.
+- Verify: `pnpm -C apps/desktop test -- test/workspace-settings-view.test.ts`
+- Stop if: the desktop would keep stale workspace summary or route state after the backend root changes.
+
+### Task 13: Re-verify Audit Gaps With Realistic Test Coverage
+
+Status: `done`
+Current step: `Completed`
+
+Files:
+- Modify: `apps/desktop/test/project-settings-view.test.ts`
+- Modify: `apps/desktop/test/workspace-settings-view.test.ts`
+- Modify: `apps/desktop/test/layout-shell.test.ts`
+- Modify: `crates/octopus-server/src/workspace_runtime.rs`
+- Modify: `apps/desktop/src-tauri/tests/shell_contract.rs`
+
+Preconditions:
+- Tasks 10 through 12 are done.
+
+Step 1:
+- Action: Add regression coverage that would fail if reviewer list access reverts, legacy project transport fields reappear, or mapped-directory changes stop updating the real backend root.
+- Done when: each audit finding is covered by at least one server or desktop test that asserts the true runtime behavior instead of a weaker fixture-only approximation.
+- Verify: `pnpm -C apps/desktop test -- test/project-settings-view.test.ts test/layout-shell.test.ts test/workspace-settings-view.test.ts && cargo test -p octopus-server workspace_summary project_delete_request validate_create_project_request -- --nocapture && cargo test -p octopus-desktop-shell --test shell_contract`
+- Stop if: the only way to assert the behavior would require fragile timing-based tests instead of deterministic transport or state assertions.
+
 ## Batch Checkpoint Format
 
 After each batch, append a short checkpoint using this shape:
@@ -512,6 +644,73 @@ After each batch, append a short checkpoint using this shape:
   - none
 - Next:
   - Task 3 Step 2
+
+## Checkpoint 2026-04-20 00:44
+
+- Batch: Task 11 Step 1 -> Task 11 Step 2
+- Completed:
+  - removed legacy `assignments` and `linked_workspace_assets` from the live Rust serde transport for project create/update/read payloads while keeping internal helper types available for non-transport runtime usage
+  - normalized server create/update validation to drop legacy snapshot fields explicitly and switched project scope/leader tests to seed capability exclusions through runtime config instead of hidden request payload fields
+  - updated server request builders and regression tests so current governance coverage exercises only `manager_user_id`, `preset_code`, `leader_agent_id`, and `resource_directory`
+- Verification:
+  - `cargo test -p octopus-server validate_create_project_request -- --nocapture` -> pass
+  - `cargo test -p octopus-server project_leader -- --nocapture` -> pass
+  - `cargo test -p octopus-server project_scope_uses_live_workspace_inheritance -- --nocapture` -> pass
+  - `cargo test -p octopus-server project_delete_request -- --nocapture` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 12 Step 1
+
+## Checkpoint 2026-04-20 00:44
+
+- Batch: Task 12 Step 1
+- Completed:
+  - taught the Tauri shell to recover the backend workspace root from persisted `config/workspace.toml` `mapped_directory` before falling back to the shell-default root
+  - made desktop backend supervisor restarts read the current workspace root dynamically so loopback backend restarts can switch roots without rebuilding shell state
+  - added shell contract coverage proving persisted `mapped_directory` drives the loopback backend `--workspace-root` on the next startup
+- Verification:
+  - `pnpm prepare:desktop-backend:sidecar` -> pass
+  - `cargo test -p octopus-desktop-shell --test shell_contract` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 12 Step 2
+
+## Checkpoint 2026-04-20 00:57
+
+- Batch: Task 12 Step 2 -> Task 12 Step 3
+- Completed:
+  - persisted `mapped_directory_default` in the workspace config so the backend can keep the original shell root as the durable pointer root across repeated workspace-root moves
+  - replaced display-only mapped-directory validation with absolute-path validation plus an explicit same-filesystem rename flow that rewrites both the live workspace config and the shell-root pointer config
+  - made bootstrap-admin and `PATCH /api/v1/workspace` move the real workspace root on disk, reject nested/self-containing targets, and preserve reloadable workspace metadata after restarting on the moved root
+  - refreshed desktop workspace settings saves so loopback mapped-directory changes restart the backend, clear cached workspace scope state, and force a bootstrap reload without manual user intervention
+- Verification:
+  - `cargo test -p octopus-infra auth_users -- --nocapture` -> pass
+  - `cargo test -p octopus-infra projects_teams -- --nocapture` -> pass
+  - `cargo test -p octopus-server workspace_summary -- --nocapture` -> pass
+  - `pnpm -C apps/desktop exec vitest run test/workspace-settings-view.test.ts` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 13 Step 1
+
+## Checkpoint 2026-04-20 00:57
+
+- Batch: Task 13 Step 1
+- Completed:
+  - re-verified the reviewer deletion-review flow through project settings and shell navigation coverage
+  - re-verified that legacy project snapshot transport fields remain removed from live server create/update validation coverage
+  - re-verified mapped-directory root switching through desktop workspace settings, server workspace summary reloads, and the loopback shell contract
+- Verification:
+  - `pnpm -C apps/desktop exec vitest run test/project-settings-view.test.ts test/layout-shell.test.ts test/workspace-settings-view.test.ts` -> pass
+  - `cargo test -p octopus-server project_delete_request -- --nocapture` -> pass
+  - `cargo test -p octopus-server validate_create_project_request -- --nocapture` -> pass
+  - `cargo test -p octopus-desktop-shell --test shell_contract` -> pass
+- Blockers:
+  - none
+- Next:
+  - Plan complete
 
 ## Checkpoint 2026-04-19 04:06
 

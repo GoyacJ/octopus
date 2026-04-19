@@ -91,6 +91,16 @@ fn normalize_project_assignments(
     })
 }
 
+fn project_workspace_assignments(
+    document: &serde_json::Value,
+) -> Option<octopus_core::ProjectWorkspaceAssignments> {
+    let assignments = document
+        .get("projectSettings")
+        .and_then(|settings| settings.get("workspaceAssignments"))?;
+    let assignments = serde_json::from_value(assignments.clone()).ok()?;
+    normalize_project_assignments(Some(assignments))
+}
+
 #[derive(Debug, Default)]
 struct ProjectGrantedScope {
     workspace_active_agent_ids: BTreeSet<String>,
@@ -105,28 +115,24 @@ struct ProjectRuntimeDisables {
 }
 
 fn project_tool_assignments(
-    project: &ProjectRecord,
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
 ) -> Option<&octopus_core::ProjectToolAssignments> {
-    project
-        .assignments
-        .as_ref()
-        .and_then(|assignments| assignments.tools.as_ref())
+    assignments.and_then(|assignments| assignments.tools.as_ref())
 }
 
 fn project_agent_assignments(
-    project: &ProjectRecord,
+    assignments: Option<&octopus_core::ProjectWorkspaceAssignments>,
 ) -> Option<&octopus_core::ProjectAgentAssignments> {
-    project
-        .assignments
-        .as_ref()
-        .and_then(|assignments| assignments.agents.as_ref())
+    assignments.and_then(|assignments| assignments.agents.as_ref())
 }
 
 async fn resolve_project_granted_scope(
     state: &ServerState,
     project: &ProjectRecord,
+    runtime_document: &serde_json::Value,
 ) -> Result<ProjectGrantedScope, ApiError> {
-    let excluded_agent_ids = project_agent_assignments(project)
+    let assignments = project_workspace_assignments(runtime_document);
+    let excluded_agent_ids = project_agent_assignments(assignments.as_ref())
         .map(|assignments| {
             assignments
                 .excluded_agent_ids
@@ -135,7 +141,7 @@ async fn resolve_project_granted_scope(
                 .collect::<BTreeSet<_>>()
         })
         .unwrap_or_default();
-    let excluded_team_ids = project_agent_assignments(project)
+    let excluded_team_ids = project_agent_assignments(assignments.as_ref())
         .map(|assignments| {
             assignments
                 .excluded_team_ids
@@ -144,7 +150,7 @@ async fn resolve_project_granted_scope(
                 .collect::<BTreeSet<_>>()
         })
         .unwrap_or_default();
-    let excluded_tool_source_keys = project_tool_assignments(project)
+    let excluded_tool_source_keys = project_tool_assignments(assignments.as_ref())
         .map(|assignments| {
             assignments
                 .excluded_source_keys
@@ -361,18 +367,6 @@ async fn validate_create_project_leader(
     let Some(leader_agent_id) = request.leader_agent_id.as_deref() else {
         return Ok(());
     };
-    let excluded_agent_ids = request
-        .assignments
-        .as_ref()
-        .and_then(|assignments| assignments.agents.as_ref())
-        .map(|assignments| {
-            assignments
-                .excluded_agent_ids
-                .iter()
-                .cloned()
-                .collect::<BTreeSet<_>>()
-        })
-        .unwrap_or_default();
     let workspace_active_agent_ids = state
         .services
         .workspace
@@ -386,9 +380,7 @@ async fn validate_create_project_leader(
         })
         .map(|record| record.id)
         .collect::<BTreeSet<_>>();
-    if !workspace_active_agent_ids.contains(leader_agent_id)
-        || excluded_agent_ids.contains(leader_agent_id)
-    {
+    if !workspace_active_agent_ids.contains(leader_agent_id) {
         return Err(AppError::invalid_input(
             "project leader must reference a granted active workspace agent",
         )
@@ -402,21 +394,14 @@ async fn validate_updated_project_leader(
     project: &ProjectRecord,
     request: &UpdateProjectRequest,
 ) -> Result<(), ApiError> {
-    let mut candidate = project.clone();
-    candidate.assignments = request.assignments.clone();
-    candidate.leader_agent_id = request
-        .leader_agent_id
-        .clone()
-        .or(project.leader_agent_id.clone());
-
-    let scope = resolve_project_granted_scope(state, &candidate).await?;
     let runtime_document = load_project_runtime_document(state, project, None).await?;
+    let scope = resolve_project_granted_scope(state, project, &runtime_document).await?;
     let runtime_disables = resolve_project_runtime_disables(&runtime_document, &scope);
-    validate_project_leader_against_scope(
-        candidate.leader_agent_id.as_deref(),
-        &scope,
-        &runtime_disables,
-    )
+    let leader_agent_id = request
+        .leader_agent_id
+        .as_deref()
+        .or(project.leader_agent_id.as_deref());
+    validate_project_leader_against_scope(leader_agent_id, &scope, &runtime_disables)
 }
 
 async fn validate_project_runtime_leader(
@@ -424,9 +409,9 @@ async fn validate_project_runtime_leader(
     project: &ProjectRecord,
     patch: &RuntimeConfigPatch,
 ) -> Result<(), ApiError> {
-    let scope = resolve_project_granted_scope(state, project).await?;
     let runtime_document =
         load_project_runtime_document(state, project, Some(&patch.patch)).await?;
+    let scope = resolve_project_granted_scope(state, project, &runtime_document).await?;
     let runtime_disables = resolve_project_runtime_disables(&runtime_document, &scope);
     validate_project_leader_against_scope(
         project.leader_agent_id.as_deref(),
@@ -1096,7 +1081,7 @@ pub(crate) fn validate_create_project_request(
                 .collect()
         }),
         permission_overrides: request.permission_overrides,
-        linked_workspace_assets: request.linked_workspace_assets,
+        linked_workspace_assets: None,
         leader_agent_id,
         manager_user_id: request
             .manager_user_id
@@ -1106,7 +1091,7 @@ pub(crate) fn validate_create_project_request(
             .preset_code
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty()),
-        assignments: normalize_project_assignments(request.assignments),
+        assignments: None,
     })
 }
 
@@ -1156,7 +1141,7 @@ pub(crate) fn validate_update_project_request(
                 .collect()
         }),
         permission_overrides: request.permission_overrides,
-        linked_workspace_assets: request.linked_workspace_assets,
+        linked_workspace_assets: None,
         leader_agent_id,
         manager_user_id: request
             .manager_user_id
@@ -1166,7 +1151,7 @@ pub(crate) fn validate_update_project_request(
             .preset_code
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty()),
-        assignments: normalize_project_assignments(request.assignments),
+        assignments: None,
     })
 }
 
@@ -1855,16 +1840,7 @@ pub(crate) async fn list_project_deletion_requests(
     headers: HeaderMap,
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<ProjectDeletionRequest>>, ApiError> {
-    ensure_capability_session(
-        &state,
-        &headers,
-        "project.manage",
-        Some(&project_id),
-        Some("project"),
-        Some(&project_id),
-    )
-    .await?;
-    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    ensure_project_delete_review_session(&state, &headers, &project_id).await?;
     Ok(Json(
         state
             .services
@@ -1974,7 +1950,8 @@ pub(crate) async fn project_dashboard(
     .await?;
 
     let project = lookup_project(&state, &project_id).await?;
-    let project_scope = resolve_project_granted_scope(&state, &project).await?;
+    let runtime_document = load_project_runtime_document(&state, &project, None).await?;
+    let project_scope = resolve_project_granted_scope(&state, &project, &runtime_document).await?;
     let mut sessions = state.services.runtime_session.list_sessions().await?;
     sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
     sessions.retain(|record| record.project_id == project_id);
@@ -6269,15 +6246,6 @@ mod tests {
         }
     }
 
-    fn empty_linked_workspace_assets() -> octopus_core::ProjectLinkedWorkspaceAssets {
-        octopus_core::ProjectLinkedWorkspaceAssets {
-            agent_ids: Vec::new(),
-            resource_ids: Vec::new(),
-            tool_source_keys: Vec::new(),
-            knowledge_ids: Vec::new(),
-        }
-    }
-
     fn update_request_from_project(project: ProjectRecord) -> UpdateProjectRequest {
         UpdateProjectRequest {
             name: project.name,
@@ -6287,11 +6255,11 @@ mod tests {
             owner_user_id: Some(project.owner_user_id),
             member_user_ids: Some(project.member_user_ids),
             permission_overrides: Some(project.permission_overrides),
-            linked_workspace_assets: Some(project.linked_workspace_assets),
             leader_agent_id: project.leader_agent_id,
             manager_user_id: project.manager_user_id,
             preset_code: project.preset_code,
-            assignments: project.assignments,
+            linked_workspace_assets: None,
+            assignments: None,
         }
     }
 
@@ -6592,7 +6560,6 @@ mod tests {
             .expect("runtime config json"),
         )
         .expect("write runtime config");
-
     }
 
     #[tokio::test]
@@ -6688,6 +6655,68 @@ mod tests {
         assert_eq!(
             workspace.mapped_directory.as_deref(),
             Some(current_root.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_summary_patch_route_moves_workspace_root_and_preserves_shell_root_pointer() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let session = bootstrap_owner(&state).await;
+        let mapped_root = temp
+            .path()
+            .parent()
+            .expect("temp parent")
+            .join(format!("octopus-mapped-root-{}", uuid::Uuid::new_v4()));
+        let mapped_root_string = mapped_root.to_string_lossy().to_string();
+        let shell_root_string = temp.path().to_string_lossy().to_string();
+        let app = crate::routes::build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PATCH)
+                    .uri("/api/v1/workspace")
+                    .header("authorization", format!("Bearer {}", session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&UpdateWorkspaceRequest {
+                            name: Some("Workspace Moved".into()),
+                            avatar: None,
+                            remove_avatar: Some(false),
+                            mapped_directory: Some(mapped_root_string.clone()),
+                        })
+                        .expect("workspace update json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("workspace update response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(mapped_root.join("data").join("main.db").exists());
+        assert!(!temp.path().join("data").join("main.db").exists());
+
+        let shell_pointer = fs::read_to_string(temp.path().join("config").join("workspace.toml"))
+            .expect("shell pointer workspace config");
+        assert!(shell_pointer.contains(mapped_root_string.as_str()));
+
+        let reloaded = test_server_state(&mapped_root);
+        let workspace = reloaded
+            .services
+            .workspace
+            .workspace_summary()
+            .await
+            .expect("reloaded workspace summary");
+        assert_eq!(workspace.name, "Workspace Moved");
+        assert_eq!(
+            workspace.mapped_directory.as_deref(),
+            Some(mapped_root_string.as_str())
+        );
+        assert_eq!(
+            workspace.mapped_directory_default.as_deref(),
+            Some(shell_root_string.as_str())
         );
     }
 
@@ -6800,11 +6829,13 @@ mod tests {
             .expect("project deletion request inbox item");
         assert_eq!(
             inbox_item.route_to.as_deref(),
-            Some(format!(
-                "/workspaces/{}/projects/{}/settings",
-                DEFAULT_WORKSPACE_ID, project.id
+            Some(
+                format!(
+                    "/workspaces/{}/projects/{}/settings",
+                    DEFAULT_WORKSPACE_ID, project.id
+                )
+                .as_str()
             )
-            .as_str())
         );
         assert_eq!(inbox_item.action_label.as_deref(), Some("Review approval"));
 
@@ -7305,6 +7336,130 @@ mod tests {
             Some(approver_session.user_id.as_str())
         );
         assert_eq!(approved.status, "approved");
+    }
+
+    #[tokio::test]
+    async fn project_delete_request_list_route_allows_project_scoped_admin_reviewers() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = test_server_state(temp.path());
+        let owner_session = bootstrap_owner(&state).await;
+        let reviewer_session =
+            create_user_session(&state, "project-reviewer", "Project Reviewer").await;
+        let app = crate::routes::build_router(state.clone());
+
+        let reviewer_role = state
+            .services
+            .access_control
+            .create_role(RoleUpsertRequest {
+                code: "custom.project-delete-list-reviewer".into(),
+                name: "Project Delete List Reviewer".into(),
+                description: "Can review scoped project deletions.".into(),
+                status: "active".into(),
+                permission_codes: vec!["project.manage".into()],
+            })
+            .await
+            .expect("create reviewer role");
+        state
+            .services
+            .access_control
+            .create_role_binding(RoleBindingUpsertRequest {
+                role_id: reviewer_role.id,
+                subject_type: "user".into(),
+                subject_id: reviewer_session.user_id.clone(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("bind reviewer role");
+
+        let project = state
+            .services
+            .workspace
+            .create_project(CreateProjectRequest {
+                name: "Scoped Reviewer Delete Project".into(),
+                description: "Deletion list review by scoped reviewer.".into(),
+                resource_directory: "data/projects/scoped-reviewer-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            })
+            .await
+            .expect("created project");
+        let mut archive_request = update_request_from_project(project.clone());
+        archive_request.status = "archived".into();
+        state
+            .services
+            .workspace
+            .update_project(&project.id, archive_request)
+            .await
+            .expect("archived project");
+        state
+            .services
+            .access_control
+            .create_data_policy(DataPolicyUpsertRequest {
+                name: "project delete list reviewer scope".into(),
+                subject_type: "user".into(),
+                subject_id: reviewer_session.user_id.clone(),
+                resource_type: "project".into(),
+                scope_type: "selected-projects".into(),
+                project_ids: vec![project.id.clone()],
+                tags: Vec::new(),
+                classifications: Vec::new(),
+                effect: "allow".into(),
+            })
+            .await
+            .expect("create reviewer policy");
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header("authorization", format!("Bearer {}", owner_session.token))
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateProjectDeletionRequestInput {
+                            reason: Some("Scoped reviewer should list".into()),
+                        })
+                        .expect("create deletion request json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("create deletion request response");
+        assert_eq!(create_response.status(), StatusCode::OK);
+
+        let list_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/api/v1/projects/{}/deletion-requests", project.id))
+                    .header(
+                        "authorization",
+                        format!("Bearer {}", reviewer_session.token),
+                    )
+                    .header("x-workspace-id", DEFAULT_WORKSPACE_ID)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("list deletion requests response");
+
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .expect("list deletion requests body");
+        let listed: Vec<ProjectDeletionRequest> =
+            serde_json::from_slice(&list_body).expect("project deletion request list json");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].project_id, project.id);
+        assert_eq!(listed[0].status, "pending");
     }
 
     #[tokio::test]
@@ -8077,6 +8232,27 @@ mod tests {
                     && agent_visible_in_generic_catalog(record)
             })
             .expect("workspace agent");
+        let _ = save_project_runtime_config_route(
+            State(state.clone()),
+            headers.clone(),
+            Path(DEFAULT_PROJECT_ID.into()),
+            Json(RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: json!({
+                    "projectSettings": {
+                        "workspaceAssignments": {
+                            "agents": {
+                                "excludedAgentIds": [workspace_agent.id.clone()],
+                            },
+                        },
+                    },
+                }),
+                configured_model_credentials: Vec::new(),
+            }),
+        )
+        .await
+        .expect("save project workspace assignments");
+
         let project = state
             .services
             .workspace
@@ -8086,25 +8262,8 @@ mod tests {
             .into_iter()
             .find(|record| record.id == DEFAULT_PROJECT_ID)
             .expect("default project");
-        let mut request = update_request_from_project(project.clone());
+        let mut request = update_request_from_project(project);
         request.leader_agent_id = Some(workspace_agent.id.clone());
-        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
-        request.assignments = Some(octopus_core::ProjectWorkspaceAssignments {
-            models: project
-                .assignments
-                .as_ref()
-                .and_then(|value| value.models.clone()),
-            tools: project
-                .assignments
-                .as_ref()
-                .and_then(|value| value.tools.clone()),
-            agents: Some(octopus_core::ProjectAgentAssignments {
-                agent_ids: Vec::new(),
-                team_ids: Vec::new(),
-                excluded_agent_ids: vec![workspace_agent.id.clone()],
-                excluded_team_ids: Vec::new(),
-            }),
-        });
 
         let error = update_project(
             State(state.clone()),
@@ -8162,7 +8321,6 @@ mod tests {
             .expect("default project");
         let mut request = update_request_from_project(project);
         request.leader_agent_id = Some(project_owned_agent.id.clone());
-        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
 
         let error = update_project(
             State(state.clone()),
@@ -8334,7 +8492,6 @@ mod tests {
             .expect("default project");
         let mut request = update_request_from_project(project);
         request.leader_agent_id = Some(workspace_agent.id.clone());
-        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
         let _ = update_project(
             State(state.clone()),
             headers.clone(),
@@ -8444,42 +8601,30 @@ mod tests {
             .map(|asset| asset.source_key.clone())
             .collect::<BTreeSet<_>>();
 
-        let project = state
-            .services
-            .workspace
-            .list_projects()
-            .await
-            .expect("list projects")
-            .into_iter()
-            .find(|record| record.id == DEFAULT_PROJECT_ID)
-            .expect("default project");
-        let mut request = update_request_from_project(project.clone());
-        request.linked_workspace_assets = Some(empty_linked_workspace_assets());
-        request.assignments = Some(octopus_core::ProjectWorkspaceAssignments {
-            models: project
-                .assignments
-                .as_ref()
-                .and_then(|value| value.models.clone()),
-            tools: Some(octopus_core::ProjectToolAssignments {
-                source_keys: Vec::new(),
-                excluded_source_keys: vec![excluded_source_key.clone()],
-            }),
-            agents: Some(octopus_core::ProjectAgentAssignments {
-                agent_ids: Vec::new(),
-                team_ids: Vec::new(),
-                excluded_agent_ids: vec![excluded_workspace_agent.id.clone()],
-                excluded_team_ids: vec![excluded_workspace_team.id.clone()],
-            }),
-        });
-
-        let _ = update_project(
+        let _ = save_project_runtime_config_route(
             State(state.clone()),
             headers.clone(),
             Path(DEFAULT_PROJECT_ID.into()),
-            Json(request),
+            Json(RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: json!({
+                    "projectSettings": {
+                        "workspaceAssignments": {
+                            "tools": {
+                                "excludedSourceKeys": [excluded_source_key.clone()],
+                            },
+                            "agents": {
+                                "excludedAgentIds": [excluded_workspace_agent.id.clone()],
+                                "excludedTeamIds": [excluded_workspace_team.id.clone()],
+                            },
+                        },
+                    },
+                }),
+                configured_model_credentials: Vec::new(),
+            }),
         )
         .await
-        .expect("update project");
+        .expect("save project workspace assignments");
 
         let Json(dashboard) = project_dashboard(
             State(state.clone()),
@@ -9552,11 +9697,11 @@ mod tests {
                         tasks: "deny".into(),
                         ..project.permission_overrides
                     }),
-                    linked_workspace_assets: Some(project.linked_workspace_assets),
                     leader_agent_id: project.leader_agent_id,
                     manager_user_id: project.manager_user_id,
                     preset_code: project.preset_code,
-                    assignments: project.assignments,
+                    linked_workspace_assets: None,
+                    assignments: None,
                 },
             )
             .await

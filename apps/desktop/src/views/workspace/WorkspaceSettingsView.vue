@@ -138,6 +138,7 @@ async function saveWorkspaceSettings() {
     return
   }
 
+  const previousMappedDirectory = workspace.value?.mappedDirectory ?? ''
   saving.value = true
   saveMessage.value = ''
   localError.value = ''
@@ -156,10 +157,22 @@ async function saveWorkspaceSettings() {
 
     pendingAvatarUpload.value = null
     pendingAvatarFileName.value = ''
+    if (
+      isLoopbackWorkspace.value
+      && updated.mappedDirectory
+      && updated.mappedDirectory !== previousMappedDirectory
+      && shell.activeWorkspaceConnectionId
+    ) {
+      await shell.restartBackend()
+      workspaceStore.clearWorkspaceScope(shell.activeWorkspaceConnectionId)
+      await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId, { force: true })
+    }
     workspaceName.value = updated.name
     mappedDirectory.value = updated.mappedDirectory ?? ''
     saveMessage.value = t('workspaceSettings.feedback.saved')
     await notifications.notifyWorkspaceSettingsSaved(updated.name)
+  } catch (error) {
+    localError.value = error instanceof Error ? error.message : t('workspaceSettings.feedback.saveError')
   } finally {
     saving.value = false
   }

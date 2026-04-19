@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{fs, path::Path, sync::Arc};
 
 use octopus_core::{
     default_connection_stubs, default_host_state, default_preferences, ConnectionProfile,
@@ -120,7 +120,7 @@ pub fn detect_cargo_workspace_from(manifest_dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn resolve_workspace_root_for_backend(
+fn default_workspace_root_for_backend(
     preferences_path: &Path,
     cargo_workspace: bool,
 ) -> std::path::PathBuf {
@@ -136,6 +136,41 @@ fn resolve_workspace_root_for_backend(
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| Path::new(".").to_path_buf())
+}
+
+fn resolve_workspace_root_from_config(root: std::path::PathBuf) -> std::path::PathBuf {
+    let config_path = root.join("config").join("workspace.toml");
+    fs::read_to_string(config_path)
+        .ok()
+        .and_then(|contents| {
+            contents.lines().find_map(|line| {
+                let trimmed = line.trim();
+                let (key, value) = trimmed.split_once('=')?;
+                if key.trim() != "mapped_directory" {
+                    return None;
+                }
+                Some(
+                    value
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string(),
+                )
+            })
+        })
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or(root)
+}
+
+pub(crate) fn resolve_workspace_root_for_backend(
+    preferences_path: &Path,
+    cargo_workspace: bool,
+) -> std::path::PathBuf {
+    resolve_workspace_root_from_config(default_workspace_root_for_backend(
+        preferences_path,
+        cargo_workspace,
+    ))
 }
 
 fn resolve_notification_db_path(preferences_path: &Path) -> std::path::PathBuf {
@@ -176,6 +211,27 @@ mod tests {
         assert_eq!(
             resolve_workspace_root_for_backend(&preferences_path, false),
             PathBuf::from("/tmp/octopus-shell"),
+        );
+    }
+
+    #[test]
+    fn resolves_persisted_mapped_directory_when_workspace_config_exists() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let shell_root = temp.path().join("shell-root");
+        let mapped_root = temp.path().join("mapped-root");
+        std::fs::create_dir_all(shell_root.join("config")).expect("shell config dir");
+        std::fs::write(
+            shell_root.join("config").join("workspace.toml"),
+            format!(
+                "mapped_directory = {:?}\n",
+                mapped_root.display().to_string()
+            ),
+        )
+        .expect("write workspace config");
+
+        assert_eq!(
+            resolve_workspace_root_for_backend(&shell_root.join("shell-preferences.json"), false),
+            mapped_root,
         );
     }
 

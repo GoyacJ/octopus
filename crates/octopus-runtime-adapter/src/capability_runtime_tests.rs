@@ -427,10 +427,15 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
             .is_some_and(|summary| summary.visible_tools.contains(&"plugin_echo".to_string()))
     }));
     assert!(planner_completed.iter().any(|event| {
-        event.capability_plan_summary.as_ref().is_some_and(|summary| {
-            summary.discovered_tools.contains(&"plugin_echo".to_string())
-                && summary.exposed_tools.contains(&"plugin_echo".to_string())
-        })
+        event
+            .capability_plan_summary
+            .as_ref()
+            .is_some_and(|summary| {
+                summary
+                    .discovered_tools
+                    .contains(&"plugin_echo".to_string())
+                    && summary.exposed_tools.contains(&"plugin_echo".to_string())
+            })
     }));
 
     let capability_snapshot = adapter
@@ -1369,10 +1374,15 @@ async fn resolve_approval_replays_selected_deferred_tool_from_checkpoint_capabil
         .expect("events");
     assert!(events.iter().any(|event| {
         event.kind.as_deref() == Some("approval.resolved")
-            && event.capability_plan_summary.as_ref().is_some_and(|summary| {
-                summary.discovered_tools.contains(&"plugin_echo".to_string())
-                    && summary.exposed_tools.contains(&"plugin_echo".to_string())
-            })
+            && event
+                .capability_plan_summary
+                .as_ref()
+                .is_some_and(|summary| {
+                    summary
+                        .discovered_tools
+                        .contains(&"plugin_echo".to_string())
+                        && summary.exposed_tools.contains(&"plugin_echo".to_string())
+                })
     }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");

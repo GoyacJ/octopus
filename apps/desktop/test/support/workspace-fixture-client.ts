@@ -84,6 +84,7 @@ import type {
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
+import { canReviewProjectDeletion } from '@/composables/project-governance'
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import { WorkspaceApiError } from '@/tauri/shared'
 import { deriveCapabilityManagementProjection } from '@/stores/catalog_management'
@@ -658,6 +659,28 @@ export function createWorkspaceClientFixture(
       })
     }
     return project
+  }
+
+  const ensureProjectDeletionReviewer = (projectId: string) => {
+    const project = findProjectRecord(projectId)
+    const currentUserId = getCurrentUserId()
+    if (project.ownerUserId === currentUserId) {
+      return project
+    }
+
+    const roleCodes = getEffectiveRoleRecords(currentUserId).map(role => role.code)
+    const permissionCodes = getEffectivePermissionCodes(currentUserId)
+    if (canReviewProjectDeletion(permissionCodes, roleCodes)) {
+      return project
+    }
+
+    throw new WorkspaceApiError({
+      message: 'project deletion reviewer required',
+      status: 403,
+      requestId: 'req-project-delete-reviewer-required',
+      retryable: false,
+      code: 'FORBIDDEN',
+    })
   }
 
   const taskDetailByKey = workspaceState.taskDetailsByKey
@@ -2558,7 +2581,7 @@ export function createWorkspaceClientFixture(
         return clone(workspaceState.dashboards[projectId])
       },
       async listDeletionRequests(projectId) {
-        findProjectRecord(projectId)
+        ensureProjectDeletionReviewer(projectId)
         return clone(
           workspaceState.projectDeletionRequests
             .filter(record => record.projectId === projectId)
@@ -2605,7 +2628,7 @@ export function createWorkspaceClientFixture(
         return clone(record)
       },
       async approveDeletionRequest(projectId, requestId, input: ReviewProjectDeletionRequestInput) {
-        findProjectRecord(projectId)
+        ensureProjectDeletionReviewer(projectId)
         const existing = workspaceState.projectDeletionRequests.find(record => record.id === requestId && record.projectId === projectId)
         if (!existing) {
           throw new WorkspaceApiError({
@@ -2639,7 +2662,7 @@ export function createWorkspaceClientFixture(
         return clone(updated)
       },
       async rejectDeletionRequest(projectId, requestId, input: ReviewProjectDeletionRequestInput) {
-        findProjectRecord(projectId)
+        ensureProjectDeletionReviewer(projectId)
         const existing = workspaceState.projectDeletionRequests.find(record => record.id === requestId && record.projectId === projectId)
         if (!existing) {
           throw new WorkspaceApiError({

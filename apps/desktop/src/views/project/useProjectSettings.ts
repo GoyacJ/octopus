@@ -13,7 +13,10 @@ import type {
   WorkspaceToolPermissionMode,
 } from '@octopus/schema'
 
-import { canReviewProjectDeletion } from '@/composables/project-governance'
+import {
+  canManageProjectSettings as canManageProjectSettingsAccess,
+  canReviewProjectDeletion,
+} from '@/composables/project-governance'
 import { useWorkspaceProjectNotifications } from '@/composables/useWorkspaceProjectNotifications'
 import { createWorkspaceConsoleSurfaceTarget } from '@/i18n/navigation'
 import { useAgentStore } from '@/stores/agent'
@@ -186,6 +189,9 @@ export function useProjectSettings() {
     projectId.value ? workspaceStore.getProjectDeletionRequests(projectId.value) : [],
   )
   const latestDeletionRequest = computed(() => deletionRequests.value[0] ?? null)
+  const canManageProjectSettings = computed(() =>
+    canManageProjectSettingsAccess(project.value, workspaceAccessControlStore.currentUser?.id),
+  )
   const canReviewDeletion = computed(() =>
     canReviewProjectDeletion(
       workspaceAccessControlStore.currentEffectivePermissionCodes,
@@ -1092,11 +1098,17 @@ export function useProjectSettings() {
   }
 
   function openLeaderDialog() {
+    if (!canManageProjectSettings.value) {
+      return
+    }
     resetLeader()
     dialogOpen.leader = true
   }
 
   function openModelsDialog(scope: CapabilityDialogScope = 'workspace') {
+    if (!canManageProjectSettings.value) {
+      return
+    }
     resetGrantModels()
     resetRuntimeModels()
     modelDialogScope.value = scope
@@ -1104,6 +1116,9 @@ export function useProjectSettings() {
   }
 
   function openToolsDialog(scope: CapabilityDialogScope = 'workspace') {
+    if (!canManageProjectSettings.value) {
+      return
+    }
     resetGrantTools()
     resetRuntimeTools()
     toolDialogScope.value = scope
@@ -1111,6 +1126,9 @@ export function useProjectSettings() {
   }
 
   function openActorsDialog(actorTab: ActorDialogTab = 'agents', scope: CapabilityDialogScope = 'workspace') {
+    if (!canManageProjectSettings.value) {
+      return
+    }
     resetGrantActors()
     resetRuntimeModels()
     actorDialogScope.value = scope
@@ -1123,12 +1141,15 @@ export function useProjectSettings() {
   }
 
   function openMembersDialog() {
+    if (!canManageProjectSettings.value) {
+      return
+    }
     resetMembers()
     dialogOpen.members = true
   }
 
   async function archiveProject() {
-    if (!project.value) {
+    if (!project.value || !canManageProjectSettings.value) {
       return
     }
 
@@ -1143,7 +1164,7 @@ export function useProjectSettings() {
   }
 
   async function restoreProject() {
-    if (!project.value) {
+    if (!project.value || !canManageProjectSettings.value) {
       return
     }
 
@@ -1158,7 +1179,12 @@ export function useProjectSettings() {
   }
 
   async function createDeletionRequest() {
-    if (!project.value || project.value.status !== 'archived' || creatingDeletionRequest.value) {
+    if (
+      !project.value
+      || !canManageProjectSettings.value
+      || project.value.status !== 'archived'
+      || creatingDeletionRequest.value
+    ) {
       return
     }
 
@@ -1217,7 +1243,12 @@ export function useProjectSettings() {
   }
 
   async function deleteProject() {
-    if (!project.value || project.value.status !== 'archived' || deletingProject.value) {
+    if (
+      !project.value
+      || !canManageProjectSettings.value
+      || project.value.status !== 'archived'
+      || deletingProject.value
+    ) {
       return
     }
 
@@ -1267,7 +1298,7 @@ export function useProjectSettings() {
   }
 
   async function saveLeader() {
-    if (!project.value || saving.leader) {
+    if (!project.value || !canManageProjectSettings.value || saving.leader) {
       return
     }
     if (!leaderDraft.value) {
@@ -1298,7 +1329,7 @@ export function useProjectSettings() {
   }
 
   async function saveBasics() {
-    if (!project.value || savingBasics.value) {
+    if (!project.value || !canManageProjectSettings.value || savingBasics.value) {
       return
     }
     if (!basicsForm.name.trim() || !basicsForm.resourceDirectory.trim()) {
@@ -1331,7 +1362,7 @@ export function useProjectSettings() {
   }
 
   async function saveGrantModels() {
-    if (!project.value || saving.grantModels) {
+    if (!project.value || !canManageProjectSettings.value || saving.grantModels) {
       return
     }
 
@@ -1382,7 +1413,7 @@ export function useProjectSettings() {
   }
 
   async function saveGrantTools() {
-    if (!project.value || saving.grantTools) {
+    if (!project.value || !canManageProjectSettings.value || saving.grantTools) {
       return
     }
 
@@ -1418,7 +1449,7 @@ export function useProjectSettings() {
   }
 
   async function saveGrantActors() {
-    if (!project.value || saving.grantActors) {
+    if (!project.value || !canManageProjectSettings.value || saving.grantActors) {
       return
     }
 
@@ -1490,7 +1521,7 @@ export function useProjectSettings() {
   }
 
   async function saveRuntimeModels() {
-    if (!project.value || saving.runtimeModels) {
+    if (!project.value || !canManageProjectSettings.value || saving.runtimeModels) {
       return
     }
 
@@ -1533,7 +1564,7 @@ export function useProjectSettings() {
   }
 
   async function saveRuntimeTools() {
-    if (!project.value || saving.runtimeTools) {
+    if (!project.value || !canManageProjectSettings.value || saving.runtimeTools) {
       return
     }
 
@@ -1580,7 +1611,7 @@ export function useProjectSettings() {
   }
 
   async function saveRuntimeActors() {
-    if (!project.value || saving.runtimeActors) {
+    if (!project.value || !canManageProjectSettings.value || saving.runtimeActors) {
       return
     }
 
@@ -1621,7 +1652,7 @@ export function useProjectSettings() {
   }
 
   async function saveMembers() {
-    if (!project.value || saving.members) {
+    if (!project.value || !canManageProjectSettings.value || saving.members) {
       return
     }
 
@@ -1721,6 +1752,7 @@ export function useProjectSettings() {
     permissionOverrideCount,
     deletionRequestsReady,
     latestDeletionRequest,
+    canManageProjectSettings,
     canReviewDeletion,
     lifecycleReviewCallout,
     lifecycleError,

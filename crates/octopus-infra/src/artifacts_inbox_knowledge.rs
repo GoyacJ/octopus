@@ -1057,11 +1057,13 @@ default_project_id = "proj-redesign"
         );
         assert!(pending_items.iter().all(|item| {
             item.route_to.as_deref()
-                == Some(format!(
-                    "/workspaces/{}/projects/{}/settings",
-                    request.workspace_id, request.project_id
+                == Some(
+                    format!(
+                        "/workspaces/{}/projects/{}/settings",
+                        request.workspace_id, request.project_id
+                    )
+                    .as_str(),
                 )
-                .as_str())
         }));
         assert!(pending_items
             .iter()

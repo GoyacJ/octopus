@@ -45,6 +45,9 @@ impl WorkspaceService for InfraWorkspaceService {
         request: UpdateWorkspaceRequest,
     ) -> Result<WorkspaceSummary, AppError> {
         let current_workspace = self.state.workspace_snapshot()?;
+        let current_workspace_root = self.state.paths.root.clone();
+        let shell_root =
+            PathBuf::from(workspace_shell_root_display_path(&current_workspace, &self.state.paths));
         let next_name = match request.name {
             Some(value) => {
                 let trimmed = value.trim();
@@ -85,11 +88,9 @@ impl WorkspaceService for InfraWorkspaceService {
                     .clone(),
             )
         };
-        let next_mapped_directory = normalize_mapped_directory_input(
-            &self.state.paths,
-            request.mapped_directory.as_deref(),
-        )?
-        .or(current_workspace.mapped_directory.clone());
+        let next_mapped_directory =
+            normalize_mapped_directory_input(request.mapped_directory.as_deref())?
+                .or(current_workspace.mapped_directory.clone());
 
         {
             let mut workspace = self
@@ -99,9 +100,9 @@ impl WorkspaceService for InfraWorkspaceService {
                 .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
             workspace.name = next_name;
             workspace.avatar = next_avatar.0.clone();
-            workspace.mapped_directory = next_mapped_directory;
+            workspace.mapped_directory = next_mapped_directory.clone();
             workspace.mapped_directory_default =
-                Some(workspace_root_display_path(&self.state.paths));
+                Some(shell_root.to_string_lossy().to_string());
         }
         {
             let mut avatar_path = self
@@ -121,6 +122,21 @@ impl WorkspaceService for InfraWorkspaceService {
         }
 
         self.state.save_workspace_config()?;
+        if let Some(next_workspace_root) = next_mapped_directory
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|path| path != &current_workspace_root)
+        {
+            let workspace = self.state.workspace_snapshot()?;
+            bootstrap::relocate_workspace_root(
+                &current_workspace_root,
+                &next_workspace_root,
+                &shell_root,
+                &workspace,
+                next_avatar.1.as_deref(),
+                next_avatar.2.as_deref(),
+            )?;
+        }
         Ok(self.state.workspace_snapshot()?)
     }
 
@@ -3633,6 +3649,68 @@ mod tests {
                 .expect("login user")
                 .session
         })
+    }
+
+    #[test]
+    fn update_workspace_moves_the_real_workspace_root_and_preserves_shell_root_pointer() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        bootstrap_admin_session(&bundle);
+        let mapped_root = temp
+            .path()
+            .parent()
+            .expect("temp parent")
+            .join(format!("octopus-mapped-root-{}", uuid::Uuid::new_v4()));
+
+        let updated = runtime()
+            .block_on(bundle.workspace.update_workspace(UpdateWorkspaceRequest {
+                name: Some("Workspace Moved".into()),
+                avatar: None,
+                remove_avatar: Some(false),
+                mapped_directory: Some(mapped_root.to_string_lossy().to_string()),
+            }))
+            .expect("updated workspace");
+
+        assert_eq!(updated.name, "Workspace Moved");
+        assert_eq!(
+            updated.mapped_directory.as_deref(),
+            Some(mapped_root.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            updated.mapped_directory_default.as_deref(),
+            Some(temp.path().to_string_lossy().as_ref())
+        );
+        assert!(mapped_root.join("data").join("main.db").exists());
+        assert!(mapped_root.join("config").join("workspace.toml").exists());
+        assert!(!temp.path().join("data").join("main.db").exists());
+
+        let shell_pointer = fs::read_to_string(temp.path().join("config").join("workspace.toml"))
+            .expect("shell root workspace config");
+        assert!(shell_pointer.contains(mapped_root.to_string_lossy().as_ref()));
+
+        let reloaded = build_infra_bundle(&mapped_root).expect("reloaded bundle");
+        let workspace = runtime()
+            .block_on(reloaded.workspace.workspace_summary())
+            .expect("reloaded workspace summary");
+        assert_eq!(workspace.name, "Workspace Moved");
+        assert_eq!(
+            workspace.mapped_directory.as_deref(),
+            Some(mapped_root.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            workspace.mapped_directory_default.as_deref(),
+            Some(temp.path().to_string_lossy().as_ref())
+        );
+
+        let login = runtime()
+            .block_on(reloaded.auth.login(LoginRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                password: "password123".into(),
+                workspace_id: Some("ws-local".into()),
+            }))
+            .expect("login after move");
+        assert_eq!(login.session.user_id, workspace.owner_user_id.expect("owner user id"));
     }
 
     fn insert_artifact_record(

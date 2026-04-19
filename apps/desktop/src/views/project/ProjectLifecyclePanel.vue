@@ -19,6 +19,7 @@ const props = defineProps<{
   deletionRequestStatusLabel: string
   latestDeletionRequest: ProjectDeletionRequest | null
   deletionRequestsReady: boolean
+  canManageProjectSettings: boolean
   canReviewDeletion: boolean
   creatingDeletionRequest: boolean
   reviewingDeletionRequest: 'approve' | 'reject' | null
@@ -94,7 +95,7 @@ const showDeleteProject = computed(() =>
 
       <div class="flex flex-wrap gap-2">
         <UiButton
-          v-if="projectStatus === 'active'"
+          v-if="canManageProjectSettings && projectStatus === 'active'"
           data-testid="project-settings-archive-button"
           variant="ghost"
           @click="emit('archive')"
@@ -103,7 +104,7 @@ const showDeleteProject = computed(() =>
         </UiButton>
 
         <UiButton
-          v-if="projectStatus === 'archived'"
+          v-if="canManageProjectSettings && projectStatus === 'archived'"
           data-testid="project-settings-restore-button"
           variant="ghost"
           @click="emit('restore')"
@@ -112,7 +113,7 @@ const showDeleteProject = computed(() =>
         </UiButton>
 
         <UiButton
-          v-if="showRequestDelete"
+          v-if="canManageProjectSettings && showRequestDelete"
           data-testid="project-settings-request-delete-button"
           variant="ghost"
           :disabled="creatingDeletionRequest || reviewingDeletionRequest !== null"
@@ -142,7 +143,7 @@ const showDeleteProject = computed(() =>
         </UiButton>
 
         <UiButton
-          v-if="showDeleteProject"
+          v-if="canManageProjectSettings && showDeleteProject"
           data-testid="project-settings-delete-project-button"
           variant="destructive"
           :disabled="deletingProject || reviewingDeletionRequest !== null"

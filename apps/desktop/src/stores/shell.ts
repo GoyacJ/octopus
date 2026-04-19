@@ -541,6 +541,7 @@ export const useShellStore = defineStore('shell', {
         await this.refreshBackendStatus()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to restart desktop backend'
+        throw error
       } finally {
         this.restartingBackend = false
       }
