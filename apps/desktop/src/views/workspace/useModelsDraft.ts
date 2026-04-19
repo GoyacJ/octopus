@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type {
+  ConfiguredModelBudgetPolicy,
   ConfiguredModelRecord,
   JsonValue,
   ModelRegistryRecord,
@@ -12,6 +13,7 @@ import type {
 
 import { enumLabel } from '@/i18n/copy'
 import type { CatalogConfiguredModelRow, CatalogFilterOption } from '@/stores/catalog'
+import { summarizeModelExecution } from '@/stores/catalog_normalizers'
 import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
@@ -24,7 +26,6 @@ import {
   createCustomProviderId,
   CUSTOM_BASE_URL_PLACEHOLDER,
   CUSTOM_PROVIDER_MODE,
-  hasRuntimeExecutionSupport,
   isManagedByPage,
   isSpecialProviderType,
   PAGE_SIZE,
@@ -75,7 +76,11 @@ export function useModelsDraft() {
   const createModelId = ref('')
   const createApiKey = ref('')
   const createBaseUrl = ref('')
-  const createTotalTokens = ref('')
+  const createBudgetTotal = ref('')
+  const createBudgetAccountingMode = ref('')
+  const createBudgetTrafficClasses = ref('')
+  const createBudgetWarningThresholds = ref('')
+  const createBudgetReservationStrategy = ref('')
   const createEnabled = ref(true)
   const createFormError = ref('')
 
@@ -129,6 +134,17 @@ export function useModelsDraft() {
     }
     return catalogStore.getProviderBaseUrl(createProviderType.value) ?? ''
   })
+  const budgetAccountingModeOptions = computed<CatalogFilterOption[]>(() => [
+    { value: '', label: t('models.budget.accountingModes.unset') },
+    { value: 'provider_reported', label: t('models.budget.accountingModes.provider_reported') },
+    { value: 'estimated', label: t('models.budget.accountingModes.estimated') },
+    { value: 'non_billable', label: t('models.budget.accountingModes.non_billable') },
+  ])
+  const budgetReservationStrategyOptions = computed<CatalogFilterOption[]>(() => [
+    { value: '', label: t('models.budget.reservationStrategies.unset') },
+    { value: 'none', label: t('models.budget.reservationStrategies.none') },
+    { value: 'fixed', label: t('models.budget.reservationStrategies.fixed') },
+  ])
 
   const localRows = computed<CatalogConfiguredModelRow[]>(() =>
     Object.values(draftConfiguredModels.value)
@@ -140,8 +156,9 @@ export function useModelsDraft() {
         const model = draftModelOverrides.value[configuredModel.modelId]
           ?? catalogStore.getModelById(configuredModel.modelId)
         const providerCredential = catalogStore.getCredentialByProviderId(configuredModel.providerId)
-        const totalTokens = configuredModel.tokenQuota?.totalTokens ?? liveConfiguredModel?.tokenQuota?.totalTokens
+        const totalTokens = configuredModel.budgetPolicy?.totalBudgetTokens ?? liveConfiguredModel?.budgetPolicy?.totalBudgetTokens
         const usedTokens = liveConfiguredModel?.tokenUsage.usedTokens ?? configuredModel.tokenUsage.usedTokens ?? 0
+        const runtimeSummary = summarizeModelExecution(model)
         const hasDiagnostics = catalogStore.diagnostics.warnings.some(item =>
           item.includes(configuredModel.configuredModelId) || item.includes(configuredModel.providerId) || item.includes(configuredModel.modelId))
           || catalogStore.diagnostics.errors.some(item =>
@@ -173,24 +190,29 @@ export function useModelsDraft() {
           track: model?.track ?? '',
           enabled: configuredModel.enabled,
           source: configuredModel.source,
-          surfaces: model?.surfaceBindings
-            .filter(binding => binding.enabled && hasRuntimeExecutionSupport(binding.runtimeSupport))
-            .map(binding => binding.surface)
-            ?? [],
+          surfaces: runtimeSummary.enabledSurfaces,
+          conversationSurfaces: runtimeSummary.conversationSurfaces,
           capabilities: model?.capabilities.map(capability => capability.capabilityId) ?? [],
           defaultSurfaces: [],
           contextWindow: model?.contextWindow,
           maxOutputTokens: model?.maxOutputTokens,
+          executionClass: runtimeSummary.executionClass,
+          upstreamStreaming: runtimeSummary.upstreamStreaming,
+          toolLoop: runtimeSummary.toolLoop,
+          supportsConversationExecution: runtimeSummary.supportsConversationExecution,
           credentialRef: configuredModel.credentialRef,
           credentialStatus: (providerCredential?.status ?? (effectiveCredentialRef ? 'configured' : 'unconfigured')) as CatalogConfiguredModelRow['credentialStatus'],
           credentialConfigured: Boolean(effectiveCredentialRef),
           credentialDisplayLabel: localizeModelCredentialSourceLabel(t, credentialSourceKind),
           credentialHealthLabel: localizeModelCredentialLabel(t, credentialSecurityState),
           baseUrl: configuredModel.baseUrl,
+          budgetAccountingMode: configuredModel.budgetPolicy?.accountingMode,
+          budgetReservationStrategy: configuredModel.budgetPolicy?.reservationStrategy,
+          budgetTrafficClasses: configuredModel.budgetPolicy?.trafficClasses ?? [],
           totalTokens,
           usedTokens,
           remainingTokens: totalTokens ? Math.max(0, totalTokens - usedTokens) : undefined,
-          quotaExhausted: totalTokens ? usedTokens >= totalTokens : false,
+          budgetExhausted: totalTokens ? usedTokens >= totalTokens : false,
           hasDiagnostics,
         }
       })
@@ -341,6 +363,14 @@ export function useModelsDraft() {
     isModelCredentialBlocked(selectedCredentialSecurityState.value))
   const selectedCanClearCredentialOverride = computed(() =>
     Boolean(selectedConfiguredModel.value?.credentialRef))
+  const selectedBudgetAccountingMode = computed(() =>
+    selectedConfiguredModel.value?.budgetPolicy?.accountingMode ?? '')
+  const selectedBudgetTrafficClasses = computed(() =>
+    formatBudgetStringValues(selectedConfiguredModel.value?.budgetPolicy?.trafficClasses))
+  const selectedBudgetWarningThresholds = computed(() =>
+    formatBudgetNumberValues(selectedConfiguredModel.value?.budgetPolicy?.warningThresholdPercentages))
+  const selectedBudgetReservationStrategy = computed(() =>
+    selectedConfiguredModel.value?.budgetPolicy?.reservationStrategy ?? '')
 
   const patchDocument = computed<Record<string, JsonValue>>(() => {
     const patch: Record<string, JsonValue> = {}
@@ -430,13 +460,42 @@ export function useModelsDraft() {
     selectedApiKey.value = value
   }
 
-  function updateSelectedTokenQuota(value: string) {
-    const trimmed = value.trim()
-    const totalTokens = trimmed ? Number(trimmed) : undefined
+  function updateSelectedBudgetPolicy(patch: Partial<ConfiguredModelBudgetPolicy>) {
     updateSelectedConfiguredModel({
-      tokenQuota: totalTokens && totalTokens > 0
-        ? { totalTokens }
-        : undefined,
+      budgetPolicy: normalizeBudgetPolicy({
+        ...selectedConfiguredModel.value?.budgetPolicy,
+        ...patch,
+      }),
+    })
+  }
+
+  function updateSelectedBudgetTotal(value: string) {
+    updateSelectedBudgetPolicy({
+      totalBudgetTokens: parseBudgetTokenCount(value),
+    })
+  }
+
+  function updateSelectedBudgetAccountingMode(value: string) {
+    updateSelectedBudgetPolicy({
+      accountingMode: parseBudgetAccountingMode(value),
+    })
+  }
+
+  function updateSelectedBudgetTrafficClasses(value: string) {
+    updateSelectedBudgetPolicy({
+      trafficClasses: parseBudgetTrafficClasses(value),
+    })
+  }
+
+  function updateSelectedBudgetWarningThresholds(value: string) {
+    updateSelectedBudgetPolicy({
+      warningThresholdPercentages: parseBudgetWarningThresholds(value),
+    })
+  }
+
+  function updateSelectedBudgetReservationStrategy(value: string) {
+    updateSelectedBudgetPolicy({
+      reservationStrategy: parseBudgetReservationStrategy(value),
     })
   }
 
@@ -551,7 +610,11 @@ export function useModelsDraft() {
     createModelId.value = ''
     createApiKey.value = ''
     createBaseUrl.value = createBaseUrlDefault.value
-    createTotalTokens.value = ''
+    createBudgetTotal.value = ''
+    createBudgetAccountingMode.value = ''
+    createBudgetTrafficClasses.value = ''
+    createBudgetWarningThresholds.value = ''
+    createBudgetReservationStrategy.value = ''
     createEnabled.value = true
     createFormError.value = ''
     createDialogOpen.value = true
@@ -591,8 +654,14 @@ export function useModelsDraft() {
       ? createManagedRegistryModelId(providerId, upstreamModelId)
       : upstreamModelId
     const baseUrl = createBaseUrl.value.trim() || createBaseUrlDefault.value || undefined
-    const totalTokensValue = createTotalTokens.value.trim()
-    const totalTokens = totalTokensValue ? Number(totalTokensValue) : undefined
+    const budgetPolicy = normalizeBudgetPolicy({
+      accountingMode: parseBudgetAccountingMode(createBudgetAccountingMode.value),
+      trafficClasses: parseBudgetTrafficClasses(createBudgetTrafficClasses.value),
+      totalBudgetTokens: parseBudgetTokenCount(createBudgetTotal.value),
+      reservationStrategy: parseBudgetReservationStrategy(createBudgetReservationStrategy.value),
+      warningThresholdPercentages: parseBudgetWarningThresholds(createBudgetWarningThresholds.value),
+    })
+    const totalBudgetTokens = budgetPolicy?.totalBudgetTokens
     const configuredModelId = createConfiguredModelId(providerId, registryModelId)
     const previousConfiguredModels = cloneJson(draftConfiguredModels.value)
     const previousProviderOverrides = cloneJson(draftProviderOverrides.value)
@@ -634,10 +703,10 @@ export function useModelsDraft() {
         providerId,
         modelId: registryModelId,
         baseUrl,
-        tokenQuota: totalTokens && totalTokens > 0 ? { totalTokens } : undefined,
+        budgetPolicy,
         tokenUsage: {
           usedTokens: 0,
-          remainingTokens: totalTokens && totalTokens > 0 ? totalTokens : undefined,
+          remainingTokens: totalBudgetTokens,
           exhausted: false,
         },
         enabled: createEnabled.value,
@@ -855,7 +924,11 @@ export function useModelsDraft() {
     createModelId,
     createApiKey,
     createBaseUrl,
-    createTotalTokens,
+    createBudgetTotal,
+    createBudgetAccountingMode,
+    createBudgetTrafficClasses,
+    createBudgetWarningThresholds,
+    createBudgetReservationStrategy,
     createEnabled,
     createFormError,
     localFilterOptions,
@@ -878,16 +951,26 @@ export function useModelsDraft() {
     selectedCanClearCredentialOverride,
     selectedIsCustomManaged,
     selectedProbeResult,
+    selectedBudgetAccountingMode,
+    selectedBudgetTrafficClasses,
+    selectedBudgetWarningThresholds,
+    selectedBudgetReservationStrategy,
     validationErrors,
     validationWarnings,
     hasPendingSaveChanges,
     createProviderOptions,
+    budgetAccountingModeOptions,
+    budgetReservationStrategyOptions,
     createUsesFreeformModel,
     createRequiresCustomProviderName,
     createUpstreamModelOptions,
     updateSelectedConfiguredModel,
     updateSelectedApiKey,
-    updateSelectedTokenQuota,
+    updateSelectedBudgetTotal,
+    updateSelectedBudgetAccountingMode,
+    updateSelectedBudgetTrafficClasses,
+    updateSelectedBudgetWarningThresholds,
+    updateSelectedBudgetReservationStrategy,
     updateSelectedBaseUrl,
     updateSelectedCustomProviderLabel,
     clearSelectedCredentialOverride,
@@ -898,4 +981,89 @@ export function useModelsDraft() {
     saveWorkspacePatch,
     selectRow,
   }
+}
+
+function parseBudgetTokenCount(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
+}
+
+function parseBudgetAccountingMode(value: string): ConfiguredModelBudgetPolicy['accountingMode'] | undefined {
+  return value === 'provider_reported' || value === 'estimated' || value === 'non_billable'
+    ? value
+    : undefined
+}
+
+function parseBudgetReservationStrategy(value: string): ConfiguredModelBudgetPolicy['reservationStrategy'] | undefined {
+  return value === 'none' || value === 'fixed'
+    ? value
+    : undefined
+}
+
+function parseBudgetTrafficClasses(value: string) {
+  return sanitizeBudgetStringList(value.split(',').map(entry => entry.trim()))
+}
+
+function parseBudgetWarningThresholds(value: string) {
+  const values = value
+    .split(',')
+    .map(entry => Number(entry.trim()))
+    .filter(entry => Number.isFinite(entry) && entry > 0)
+  return sanitizeBudgetNumberList(values)
+}
+
+function sanitizeBudgetStringList(values: string[] | undefined) {
+  if (!values?.length) {
+    return undefined
+  }
+
+  const deduped = Array.from(new Set(values.filter(Boolean)))
+  return deduped.length ? deduped : undefined
+}
+
+function sanitizeBudgetNumberList(values: number[] | undefined) {
+  if (!values?.length) {
+    return undefined
+  }
+
+  const deduped = Array.from(new Set(values.map(value => Math.trunc(value)).filter(value => value > 0)))
+  return deduped.length ? deduped : undefined
+}
+
+function normalizeBudgetPolicy(policy: Partial<ConfiguredModelBudgetPolicy> | undefined): ConfiguredModelBudgetPolicy | undefined {
+  if (!policy) {
+    return undefined
+  }
+
+  const next: ConfiguredModelBudgetPolicy = {}
+  if (policy.accountingMode) {
+    next.accountingMode = policy.accountingMode
+  }
+  if (policy.trafficClasses?.length) {
+    next.trafficClasses = sanitizeBudgetStringList(policy.trafficClasses)
+  }
+  if (typeof policy.totalBudgetTokens === 'number' && Number.isFinite(policy.totalBudgetTokens) && policy.totalBudgetTokens > 0) {
+    next.totalBudgetTokens = Math.trunc(policy.totalBudgetTokens)
+  }
+  if (policy.reservationStrategy) {
+    next.reservationStrategy = policy.reservationStrategy
+  }
+  if (policy.warningThresholdPercentages?.length) {
+    next.warningThresholdPercentages = sanitizeBudgetNumberList(policy.warningThresholdPercentages)
+  }
+
+  return Object.keys(next).length ? next : undefined
+}
+
+function formatBudgetStringValues(values: string[] | undefined) {
+  return values?.join(', ') ?? ''
+}
+
+function formatBudgetNumberValues(values: number[] | undefined) {
+  return values?.join(', ') ?? ''
 }

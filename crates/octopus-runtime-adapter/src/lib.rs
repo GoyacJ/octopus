@@ -33,8 +33,8 @@ mod memory_runtime;
 mod memory_runtime_tests;
 mod memory_selector;
 mod memory_writer;
+mod model_budget;
 mod model_runtime;
-mod model_usage;
 mod persistence;
 mod policy_compiler;
 mod registry;
@@ -77,22 +77,23 @@ use octopus_core::{
     DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
     ProjectWorkspaceAssignments, PromoteDeliverableInput, ResolveRuntimeApprovalInput,
     ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget,
-    RuntimeAuthChallengeSummary, RuntimeAuthStateSummary, RuntimeBackgroundRunSummary,
-    RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
-    RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
+    RunRuntimeGenerationInput, RuntimeAuthChallengeSummary, RuntimeAuthStateSummary,
+    RuntimeBackgroundRunSummary, RuntimeBootstrap, RuntimeCapabilityExecutionOutcome,
+    RuntimeCapabilityPlanSummary, RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
     RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
     RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialInput,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    RuntimeEventEnvelope, RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMediationOutcome,
-    RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
-    RuntimeMemorySelectionSummary, RuntimeMemorySummary, RuntimeMessage,
-    RuntimePendingMediationSummary, RuntimePolicyDecisionSummary, RuntimeRunCheckpoint,
-    RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSelectedMemoryItem,
-    RuntimeSessionDetail, RuntimeSessionPolicySnapshot, RuntimeSessionSummary,
-    RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
-    RuntimeWorkerDispatchSummary, RuntimeWorkflowBlockingSummary, RuntimeWorkflowRunDetail,
-    RuntimeWorkflowStepSummary, RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord,
-    TraceEventRecord, RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    RuntimeEventEnvelope, RuntimeGenerationResult, RuntimeHandoffSummary, RuntimeMailboxSummary,
+    RuntimeMediationOutcome, RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal,
+    RuntimeMemoryProposalReview, RuntimeMemorySelectionSummary, RuntimeMemorySummary,
+    RuntimeMessage, RuntimePendingMediationSummary, RuntimePolicyDecisionSummary,
+    RuntimeRunCheckpoint, RuntimeRunSnapshot, RuntimeSecretReferenceStatus,
+    RuntimeSelectedMemoryItem, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
+    RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
+    RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowBlockingSummary,
+    RuntimeWorkflowRunDetail, RuntimeWorkflowStepSummary, RuntimeWorkflowSummary,
+    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_READ_ONLY,
+    RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
@@ -115,10 +116,11 @@ use adapter_state::{
 };
 pub use model_runtime::{
     resolve_model_auth_source, resolve_request_policy, CanonicalDefaultSelection,
-    CanonicalModelAlias, CanonicalModelPolicy, LiveRuntimeModelDriver, MockRuntimeModelDriver,
-    ModelDriverRegistry, ModelExecutionDeliverable, ModelExecutionResult, ProtocolDriver,
-    ProtocolDriverCapability, ResolvedModelAuth, ResolvedModelAuthMode,
-    RuntimeConversationExecution, RuntimeConversationRequest, RuntimeModelDriver,
+    CanonicalModelAlias, CanonicalModelPolicy, ConversationModelDriver,
+    ConversationModelDriverCapability, GenerationModelDriver, GenerationModelDriverCapability,
+    LiveRuntimeModelDriver, MockRuntimeModelDriver, ModelDriverRegistry, ModelExecutionDeliverable,
+    ModelExecutionResult, ResolvedModelAuth, ResolvedModelAuthMode, RuntimeConversationExecution,
+    RuntimeConversationRequest, RuntimeModelDriver,
 };
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};

@@ -716,6 +716,31 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               used_tokens INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS configured_model_budget_reservations (
+              id TEXT PRIMARY KEY,
+              configured_model_id TEXT NOT NULL,
+              traffic_class TEXT NOT NULL DEFAULT 'interactive_turn',
+              reserved_tokens INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              released_at INTEGER,
+              settled_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS configured_model_budget_settlements (
+              reservation_id TEXT PRIMARY KEY,
+              configured_model_id TEXT NOT NULL,
+              traffic_class TEXT NOT NULL DEFAULT 'interactive_turn',
+              settled_tokens INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS configured_model_budget_projections (
+              configured_model_id TEXT PRIMARY KEY,
+              settled_tokens INTEGER NOT NULL,
+              active_reserved_tokens INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS project_token_usage_projections (
               project_id TEXT PRIMARY KEY,
               used_tokens INTEGER NOT NULL,
@@ -2519,6 +2544,56 @@ pub(super) fn ensure_cost_entry_columns(connection: &Connection) -> Result<(), A
             [],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS configured_model_budget_reservations (
+              id TEXT PRIMARY KEY,
+              configured_model_id TEXT NOT NULL,
+              traffic_class TEXT NOT NULL DEFAULT 'interactive_turn',
+              reserved_tokens INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              released_at INTEGER,
+              settled_at INTEGER
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS configured_model_budget_settlements (
+              reservation_id TEXT PRIMARY KEY,
+              configured_model_id TEXT NOT NULL,
+              traffic_class TEXT NOT NULL DEFAULT 'interactive_turn',
+              settled_tokens INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "configured_model_budget_reservations",
+        &[("traffic_class", "TEXT NOT NULL DEFAULT 'interactive_turn'")],
+    )?;
+    ensure_columns(
+        connection,
+        "configured_model_budget_settlements",
+        &[("traffic_class", "TEXT NOT NULL DEFAULT 'interactive_turn'")],
+    )?;
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS configured_model_budget_projections (
+              configured_model_id TEXT PRIMARY KEY,
+              settled_tokens INTEGER NOT NULL,
+              active_reserved_tokens INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
 
     let project_projection_count: i64 = connection
         .query_row(
@@ -2529,6 +2604,16 @@ pub(super) fn ensure_cost_entry_columns(connection: &Connection) -> Result<(), A
         .map_err(|error| AppError::database(error.to_string()))?;
     if project_projection_count == 0 {
         rebuild_project_token_usage_projections(connection)?;
+    }
+    let configured_model_budget_projection_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM configured_model_budget_projections",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    if configured_model_budget_projection_count == 0 {
+        backfill_configured_model_budget_projections(connection)?;
     }
 
     Ok(())
@@ -2549,6 +2634,23 @@ fn rebuild_project_token_usage_projections(connection: &Connection) -> Result<()
                AND metric = 'tokens'
              GROUP BY project_id
              HAVING SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) > 0",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
+}
+
+fn backfill_configured_model_budget_projections(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute(
+            "INSERT INTO configured_model_budget_projections (
+                configured_model_id,
+                settled_tokens,
+                active_reserved_tokens,
+                updated_at
+            )
+            SELECT configured_model_id, used_tokens, 0, updated_at
+            FROM configured_model_usage_projections",
             [],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -4712,14 +4814,8 @@ mod tests {
             .collect::<Result<BTreeMap<_, _>, _>>()
             .expect("collect columns");
 
-        assert_eq!(
-            columns.get("reference").map(String::as_str),
-            Some("TEXT")
-        );
-        assert_eq!(
-            columns.get("ciphertext").map(String::as_str),
-            Some("BLOB")
-        );
+        assert_eq!(columns.get("reference").map(String::as_str), Some("TEXT"));
+        assert_eq!(columns.get("ciphertext").map(String::as_str), Some("BLOB"));
         assert_eq!(columns.get("nonce").map(String::as_str), Some("BLOB"));
         assert_eq!(
             columns.get("key_version").map(String::as_str),

@@ -79,6 +79,12 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         body: JSON.stringify(patch),
       })
     },
+    async runGeneration(input) {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/generations', 'post', {
+        session: assertWorkspaceRequestReady(context),
+        body: JSON.stringify(input),
+      })
+    },
     async listSessions() {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions', 'get', {
         session: assertWorkspaceRequestReady(context),

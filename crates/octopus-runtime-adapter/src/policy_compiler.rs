@@ -439,6 +439,7 @@ pub(super) async fn compile_session_policy(
     owner_permission_ceiling: Option<&str>,
 ) -> Result<session_policy::CompiledSessionPolicy, AppError> {
     let effective_config = adapter.config_snapshot_value(&snapshot.id)?;
+    let registry = adapter.effective_registry_from_json(&effective_config)?;
     let configured_default_mode =
         configured_permission_mode(&effective_config, "/permissions/defaultMode");
     let configured_max_mode = configured_permission_mode(&effective_config, "/permissions/maxMode");
@@ -495,7 +496,11 @@ pub(super) async fn compile_session_policy(
 
     let configured_model_id = selected_configured_model_id
         .map(ToOwned::to_owned)
-        .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned));
+        .or_else(|| {
+            manifest
+                .default_model_ref()
+                .and_then(|model_ref| registry.normalize_configured_model_ref(model_ref))
+        });
     let target_decisions = compile_manifest_target_decisions(
         manifest,
         &normalized_execution_permission_mode,
@@ -506,9 +511,7 @@ pub(super) async fn compile_session_policy(
     Ok(session_policy::CompiledSessionPolicy {
         user_id: user_id.to_string(),
         selected_actor_ref: manifest.actor_ref().to_string(),
-        selected_configured_model_id: selected_configured_model_id
-            .map(ToOwned::to_owned)
-            .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned)),
+        selected_configured_model_id: configured_model_id.clone(),
         execution_permission_mode: normalized_execution_permission_mode,
         config_snapshot_id: snapshot.id.clone(),
         effective_config_hash: snapshot.effective_config_hash.clone(),

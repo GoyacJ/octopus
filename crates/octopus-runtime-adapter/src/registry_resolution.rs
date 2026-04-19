@@ -2,6 +2,7 @@ use super::*;
 use crate::model_runtime::{
     parse_model_credential_reference, validate_runtime_credential_reference, CredentialReference,
 };
+use octopus_core::{BudgetAccountingMode, BudgetReservationStrategy};
 
 pub(super) fn validate_configured_models(
     providers: &BTreeMap<String, ProviderRegistryRecord>,
@@ -49,6 +50,14 @@ pub(super) fn validate_configured_models(
                 configured_model.model_id,
                 configured_model.provider_id
             ));
+        }
+        if let Some(message) = configured_model.budget_policy.as_ref().and_then(|policy| {
+            crate::model_budget::unsupported_budget_accounting_mode_message(
+                &configured_model.configured_model_id,
+                policy,
+            )
+        }) {
+            diagnostics.errors.push(message);
         }
 
         let provider_type = provider
@@ -147,8 +156,8 @@ pub(super) fn build_configured_models(
             .map(ToOwned::to_owned)
             .or_else(|| models.get(&model_id).map(|model| model.label.clone()))
             .unwrap_or_else(|| configured_model_id.clone());
-        let token_quota =
-            parse_token_quota(value.get("tokenQuota"), &configured_model_id, diagnostics);
+        let budget_policy =
+            parse_budget_policy(value.get("budgetPolicy"), &configured_model_id, diagnostics);
 
         let _ = providers;
         configured_models.insert(
@@ -163,8 +172,8 @@ pub(super) fn build_configured_models(
                     .get("baseUrl")
                     .and_then(Value::as_str)
                     .map(ToOwned::to_owned),
-                token_quota: token_quota.clone(),
-                token_usage: token_usage_summary(token_quota.as_ref(), 0),
+                budget_policy: budget_policy.clone(),
+                token_usage: token_usage_summary(budget_policy.as_ref(), 0),
                 enabled: value
                     .get("enabled")
                     .and_then(Value::as_bool)
@@ -200,7 +209,7 @@ pub(super) fn build_seeded_configured_models(
                 model_id: model.model_id.clone(),
                 credential_ref: binding.map(|entry| entry.credential_ref.clone()),
                 base_url: binding.and_then(|entry| entry.base_url.clone()),
-                token_quota: None,
+                budget_policy: None,
                 token_usage: token_usage_summary(None, 0),
                 enabled: model.enabled,
                 source: "seeded".into(),
@@ -215,33 +224,33 @@ pub(super) fn build_seeded_configured_models(
     configured_models
 }
 
-pub(super) fn parse_token_quota(
-    token_quota_value: Option<&Value>,
+pub(super) fn parse_budget_policy(
+    budget_policy_value: Option<&Value>,
     configured_model_id: &str,
     diagnostics: &mut ModelRegistryDiagnostics,
-) -> Option<ConfiguredModelTokenQuota> {
-    let Some(token_quota_value) = token_quota_value else {
+) -> Option<ConfiguredModelBudgetPolicy> {
+    let Some(budget_policy_value) = budget_policy_value else {
         return None;
     };
-    let Some(token_quota_object) = token_quota_value.as_object() else {
+    let Some(budget_policy_object) = budget_policy_value.as_object() else {
         diagnostics.errors.push(format!(
-            "configured model `{configured_model_id}` tokenQuota must be an object"
+            "configured model `{configured_model_id}` budgetPolicy must be an object"
         ));
         return None;
     };
 
-    let total_tokens = match token_quota_object.get("totalTokens") {
+    let total_budget_tokens = match budget_policy_object.get("totalBudgetTokens") {
         None | Some(Value::Null) => None,
         Some(Value::Number(number)) => {
             let Some(value) = number.as_u64() else {
                 diagnostics.errors.push(format!(
-                    "configured model `{configured_model_id}` tokenQuota.totalTokens must be a positive integer"
+                    "configured model `{configured_model_id}` budgetPolicy.totalBudgetTokens must be a positive integer"
                 ));
                 return None;
             };
             if value == 0 {
                 diagnostics.errors.push(format!(
-                    "configured model `{configured_model_id}` tokenQuota.totalTokens must be greater than zero"
+                    "configured model `{configured_model_id}` budgetPolicy.totalBudgetTokens must be greater than zero"
                 ));
                 return None;
             }
@@ -249,13 +258,62 @@ pub(super) fn parse_token_quota(
         }
         Some(_) => {
             diagnostics.errors.push(format!(
-                "configured model `{configured_model_id}` tokenQuota.totalTokens must be a positive integer"
+                "configured model `{configured_model_id}` budgetPolicy.totalBudgetTokens must be a positive integer"
             ));
             return None;
         }
     };
 
-    Some(ConfiguredModelTokenQuota { total_tokens })
+    let accounting_mode = budget_policy_object
+        .get("accountingMode")
+        .and_then(Value::as_str)
+        .and_then(|value| match value {
+            "provider_reported" => Some(BudgetAccountingMode::ProviderReported),
+            "estimated" => Some(BudgetAccountingMode::Estimated),
+            "non_billable" => Some(BudgetAccountingMode::NonBillable),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let reservation_strategy = budget_policy_object
+        .get("reservationStrategy")
+        .and_then(Value::as_str)
+        .and_then(|value| match value {
+            "none" => Some(BudgetReservationStrategy::None),
+            "fixed" => Some(BudgetReservationStrategy::Fixed),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let traffic_classes = budget_policy_object
+        .get("trafficClasses")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let warning_threshold_percentages = budget_policy_object
+        .get("warningThresholdPercentages")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(Value::as_u64)
+                .filter(|value| (1..=100).contains(value))
+                .map(|value| value as u8)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Some(ConfiguredModelBudgetPolicy {
+        accounting_mode,
+        traffic_classes,
+        total_budget_tokens,
+        reservation_strategy,
+        warning_threshold_percentages,
+    })
 }
 
 pub(super) fn build_credential_bindings(

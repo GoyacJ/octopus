@@ -18,10 +18,10 @@ pub(super) fn capability(capability_id: &str) -> CapabilityDescriptor {
 }
 
 pub(super) fn token_usage_summary(
-    quota: Option<&ConfiguredModelTokenQuota>,
+    policy: Option<&ConfiguredModelBudgetPolicy>,
     used_tokens: u64,
 ) -> ConfiguredModelTokenUsage {
-    let total_tokens = quota.and_then(|entry| entry.total_tokens);
+    let total_tokens = policy.and_then(|entry| entry.total_budget_tokens);
     ConfiguredModelTokenUsage {
         used_tokens,
         remaining_tokens: total_tokens.map(|total| total.saturating_sub(used_tokens)),
@@ -34,7 +34,7 @@ pub(super) fn binding(surface: &str, protocol_family: &str) -> ModelSurfaceBindi
         surface: surface.into(),
         protocol_family: protocol_family.into(),
         enabled: true,
-        runtime_support: RuntimeExecutionSupport::default(),
+        execution_profile: RuntimeExecutionProfile::default(),
     }
 }
 
@@ -56,7 +56,7 @@ pub(super) fn surface(
         base_url_policy: base_url_policy.into(),
         enabled: true,
         capabilities: capabilities.iter().map(|value| capability(value)).collect(),
-        runtime_support: RuntimeExecutionSupport::default(),
+        execution_profile: RuntimeExecutionProfile::default(),
     }
 }
 

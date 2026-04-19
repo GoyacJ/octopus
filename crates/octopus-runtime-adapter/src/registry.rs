@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use octopus_core::{
-    AppError, CapabilityDescriptor, ConfiguredModelRecord, ConfiguredModelTokenQuota,
+    AppError, CapabilityDescriptor, ConfiguredModelBudgetPolicy, ConfiguredModelRecord,
     ConfiguredModelTokenUsage, CredentialBinding, DefaultSelection, ModelCatalogSnapshot,
     ModelRegistryDiagnostics, ModelRegistryRecord, ModelSurfaceBinding,
     ProjectWorkspaceAssignments, ProviderConfig, ProviderRegistryRecord, ResolvedExecutionTarget,
-    ResolvedRequestPolicyInput, RuntimeExecutionSupport, SurfaceDescriptor,
+    ResolvedRequestPolicyInput, RuntimeExecutionClass, RuntimeExecutionProfile, SurfaceDescriptor,
 };
 use serde_json::{json, Value};
 
@@ -74,7 +74,7 @@ impl EffectiveModelRegistry {
             }
         }
 
-        apply_runtime_support(&driver_registry, &mut providers, &mut models);
+        apply_execution_profiles(&driver_registry, &mut providers, &mut models);
 
         let credential_bindings =
             build_credential_bindings(&providers, effective_config.get("credentialRefs"))?;
@@ -182,7 +182,9 @@ impl EffectiveModelRegistry {
             if !model.surface_bindings.iter().any(|binding| {
                 binding.enabled
                     && binding.surface == selection.surface
-                    && binding.runtime_support.executable()
+                    && binding.execution_profile.executable()
+                    && required_execution_class_for_purpose(purpose)
+                        .is_none_or(|class| binding.execution_profile.supports(class))
             }) {
                 diagnostics.errors.push(format!(
                     "default selection `{purpose}` model `{}` does not support surface `{}`",
@@ -234,7 +236,7 @@ impl EffectiveModelRegistry {
                 .copied()
                 .unwrap_or(0);
             configured_model.token_usage =
-                token_usage_summary(configured_model.token_quota.as_ref(), used_tokens);
+                token_usage_summary(configured_model.budget_policy.as_ref(), used_tokens);
         }
         snapshot
     }
@@ -245,6 +247,37 @@ impl EffectiveModelRegistry {
 
     pub fn configured_model(&self, configured_model_id: &str) -> Option<&ConfiguredModelRecord> {
         self.configured_models_by_id.get(configured_model_id)
+    }
+
+    pub fn normalize_configured_model_ref(&self, model_ref: &str) -> Option<String> {
+        let trimmed = model_ref.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if self.configured_models_by_id.contains_key(trimmed) {
+            return Some(trimmed.to_string());
+        }
+
+        let canonical_model_id = CanonicalModelPolicy.canonical_model(trimmed);
+        if self
+            .configured_models_by_id
+            .contains_key(canonical_model_id.as_ref())
+        {
+            return Some(canonical_model_id.into_owned());
+        }
+        if let Some(selection) = self
+            .snapshot
+            .default_selections
+            .values()
+            .find(|selection| selection.model_id == canonical_model_id.as_ref())
+            .and_then(|selection| selection.configured_model_id.clone())
+        {
+            return Some(selection);
+        }
+        self.configured_models_by_id
+            .values()
+            .find(|configured_model| configured_model.model_id == canonical_model_id.as_ref())
+            .map(|configured_model| configured_model.configured_model_id.clone())
     }
 
     pub fn default_configured_model_id(&self, purpose: &str) -> Option<&str> {
@@ -275,7 +308,11 @@ impl EffectiveModelRegistry {
         else {
             return fallback;
         };
-        let Ok(target) = self.resolve_target(configured_model_id, Some(&selection.surface)) else {
+        let Ok(target) = self.resolve_target(
+            configured_model_id,
+            Some(&selection.surface),
+            Some(RuntimeExecutionClass::AgentConversation),
+        ) else {
             return fallback;
         };
         ProviderConfig {
@@ -292,6 +329,7 @@ impl EffectiveModelRegistry {
         &self,
         configured_model_id: &str,
         preferred_surface: Option<&str>,
+        required_execution_class: Option<RuntimeExecutionClass>,
     ) -> Result<ResolvedExecutionTarget, AppError> {
         if self
             .allowed_configured_model_ids
@@ -353,15 +391,19 @@ impl EffectiveModelRegistry {
             .and_then(|surface| {
                 model.surface_bindings.iter().find(|binding| {
                     binding.enabled
-                        && binding.runtime_support.executable()
+                        && binding.execution_profile.executable()
+                        && required_execution_class
+                            .is_none_or(|class| binding.execution_profile.supports(class))
                         && binding.surface == surface
                 })
             })
             .or_else(|| {
-                model
-                    .surface_bindings
-                    .iter()
-                    .find(|binding| binding.enabled && binding.runtime_support.executable())
+                model.surface_bindings.iter().find(|binding| {
+                    binding.enabled
+                        && binding.execution_profile.executable()
+                        && required_execution_class
+                            .is_none_or(|class| binding.execution_profile.supports(class))
+                })
             })
             .ok_or_else(|| {
                 AppError::invalid_input(format!(
@@ -375,7 +417,9 @@ impl EffectiveModelRegistry {
             .iter()
             .find(|surface| {
                 surface.enabled
-                    && surface.runtime_support.executable()
+                    && surface.execution_profile.executable()
+                    && required_execution_class
+                        .is_none_or(|class| surface.execution_profile.supports(class))
                     && surface.surface == model_surface.surface
                     && surface.protocol_family == model_surface.protocol_family
             })
@@ -385,7 +429,9 @@ impl EffectiveModelRegistry {
                     .iter()
                     .find(|surface| {
                         surface.enabled
-                            && surface.runtime_support.executable()
+                            && surface.execution_profile.executable()
+                            && required_execution_class
+                                .is_none_or(|class| surface.execution_profile.supports(class))
                             && surface.surface == model_surface.surface
                     })
             })
@@ -437,6 +483,7 @@ impl EffectiveModelRegistry {
             model_id: model.model_id.clone(),
             surface: model_surface.surface.clone(),
             protocol_family: provider_surface.protocol_family.clone(),
+            execution_profile: provider_surface.execution_profile,
             credential_ref,
             credential_source,
             request_policy,
@@ -447,31 +494,39 @@ impl EffectiveModelRegistry {
     }
 }
 
-fn apply_runtime_support(
+fn apply_execution_profiles(
     driver_registry: &ModelDriverRegistry,
     providers: &mut BTreeMap<String, ProviderRegistryRecord>,
     models: &mut BTreeMap<String, ModelRegistryRecord>,
 ) {
     for provider in providers.values_mut() {
         for surface in &mut provider.surfaces {
-            surface.runtime_support =
-                runtime_support_for_protocol(driver_registry, &surface.protocol_family);
+            surface.execution_profile =
+                execution_profile_for_protocol(driver_registry, &surface.protocol_family);
         }
     }
 
     for model in models.values_mut() {
         for binding in &mut model.surface_bindings {
-            binding.runtime_support =
-                runtime_support_for_protocol(driver_registry, &binding.protocol_family);
+            binding.execution_profile =
+                execution_profile_for_protocol(driver_registry, &binding.protocol_family);
         }
     }
 }
 
-fn runtime_support_for_protocol(
+fn execution_profile_for_protocol(
     driver_registry: &ModelDriverRegistry,
     protocol_family: &str,
-) -> RuntimeExecutionSupport {
-    driver_registry.runtime_support_for(protocol_family)
+) -> RuntimeExecutionProfile {
+    driver_registry.execution_profile_for(protocol_family)
+}
+
+fn required_execution_class_for_purpose(purpose: &str) -> Option<RuntimeExecutionClass> {
+    match purpose {
+        "conversation" => Some(RuntimeExecutionClass::AgentConversation),
+        "responses" | "fast" => Some(RuntimeExecutionClass::SingleShotGeneration),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -579,7 +634,7 @@ mod tests {
         .expect("registry should load");
 
         let resolved = registry
-            .resolve_target("minimax-primary", Some("conversation"))
+            .resolve_target("minimax-primary", Some("conversation"), None)
             .expect("minimax target should resolve");
 
         assert_eq!(resolved.protocol_family, "anthropic_messages");
@@ -610,7 +665,7 @@ mod tests {
         .expect("registry should load");
 
         let resolved = registry
-            .resolve_target("quota-model", Some("conversation"))
+            .resolve_target("quota-model", Some("conversation"), None)
             .expect("target should resolve");
 
         assert_eq!(resolved.max_output_tokens, Some(4096));

@@ -37,7 +37,11 @@ const {
   createModelId,
   createApiKey,
   createBaseUrl,
-  createTotalTokens,
+  createBudgetTotal,
+  createBudgetAccountingMode,
+  createBudgetTrafficClasses,
+  createBudgetWarningThresholds,
+  createBudgetReservationStrategy,
   createEnabled,
   createFormError,
   localFilterOptions,
@@ -59,15 +63,25 @@ const {
   selectedCanClearCredentialOverride,
   selectedIsCustomManaged,
   selectedProbeResult,
+  selectedBudgetAccountingMode,
+  selectedBudgetTrafficClasses,
+  selectedBudgetWarningThresholds,
+  selectedBudgetReservationStrategy,
   validationErrors,
   validationWarnings,
   createProviderOptions,
+  budgetAccountingModeOptions,
+  budgetReservationStrategyOptions,
   createUsesFreeformModel,
   createRequiresCustomProviderName,
   createUpstreamModelOptions,
   updateSelectedConfiguredModel,
   updateSelectedApiKey,
-  updateSelectedTokenQuota,
+  updateSelectedBudgetTotal,
+  updateSelectedBudgetAccountingMode,
+  updateSelectedBudgetTrafficClasses,
+  updateSelectedBudgetWarningThresholds,
+  updateSelectedBudgetReservationStrategy,
   updateSelectedBaseUrl,
   updateSelectedCustomProviderLabel,
   clearSelectedCredentialOverride,
@@ -176,12 +190,22 @@ const {
           :runtime-config-saving="runtime.configSaving"
           :validation-errors="validationErrors"
           :validation-warnings="validationWarnings"
+          :selected-budget-accounting-mode="selectedBudgetAccountingMode"
+          :selected-budget-traffic-classes="selectedBudgetTrafficClasses"
+          :selected-budget-warning-thresholds="selectedBudgetWarningThresholds"
+          :selected-budget-reservation-strategy="selectedBudgetReservationStrategy"
+          :budget-accounting-mode-options="budgetAccountingModeOptions"
+          :budget-reservation-strategy-options="budgetReservationStrategyOptions"
           :t="t"
           @update:name="updateSelectedConfiguredModel({ name: $event })"
           @update:custom-provider-label="updateSelectedCustomProviderLabel"
           @update:api-key="updateSelectedApiKey"
           @update:base-url="updateSelectedBaseUrl"
-          @update:total-tokens="updateSelectedTokenQuota"
+          @update:budget-total="updateSelectedBudgetTotal"
+          @update:budget-accounting-mode="updateSelectedBudgetAccountingMode"
+          @update:budget-traffic-classes="updateSelectedBudgetTrafficClasses"
+          @update:budget-warning-thresholds="updateSelectedBudgetWarningThresholds"
+          @update:budget-reservation-strategy="updateSelectedBudgetReservationStrategy"
           @update:enabled="updateSelectedConfiguredModel({ enabled: $event })"
           @clear-credential-override="clearSelectedCredentialOverride"
           @validate="validateSelectedConfiguredModel"
@@ -203,7 +227,13 @@ const {
       :create-upstream-model-options="createUpstreamModelOptions"
       :create-api-key="createApiKey"
       :create-base-url="createBaseUrl"
-      :create-total-tokens="createTotalTokens"
+      :create-budget-total="createBudgetTotal"
+      :create-budget-accounting-mode="createBudgetAccountingMode"
+      :create-budget-traffic-classes="createBudgetTrafficClasses"
+      :create-budget-warning-thresholds="createBudgetWarningThresholds"
+      :create-budget-reservation-strategy="createBudgetReservationStrategy"
+      :budget-accounting-mode-options="budgetAccountingModeOptions"
+      :budget-reservation-strategy-options="budgetReservationStrategyOptions"
       :create-enabled="createEnabled"
       :create-form-error="createFormError"
       :runtime-config-saving="runtime.configSaving"
@@ -216,7 +246,11 @@ const {
       @update:create-model-id="createModelId = $event"
       @update:create-api-key="createApiKey = $event"
       @update:create-base-url="createBaseUrl = $event"
-      @update:create-total-tokens="createTotalTokens = $event"
+      @update:create-budget-total="createBudgetTotal = $event"
+      @update:create-budget-accounting-mode="createBudgetAccountingMode = $event"
+      @update:create-budget-traffic-classes="createBudgetTrafficClasses = $event"
+      @update:create-budget-warning-thresholds="createBudgetWarningThresholds = $event"
+      @update:create-budget-reservation-strategy="createBudgetReservationStrategy = $event"
       @update:create-enabled="createEnabled = $event"
       @submit="createConfiguredModel"
     />

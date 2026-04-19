@@ -1517,7 +1517,7 @@
     "header": {
       "eyebrow": "模型",
       "title": "工作区模型中心",
-      "subtitle": "管理工作区显式创建的模型实例，并为每个实例配置名称、ApiKey 与 Base URL。"
+      "subtitle": "管理工作区显式创建的模型实例，并为每个实例配置名称、ApiKey、Base URL 与预算策略。"
     },
     "filters": {
       "searchPlaceholder": "搜索名称、厂商、模型、族系、轨道或能力…",
@@ -1528,7 +1528,11 @@
     "list": {
       "hasDiagnostics": "存在诊断",
       "usedTokens": "已消耗 Token：{count}",
-      "tokenQuota": "Token 总量：{count}"
+      "budgetTotal": "预算总量：{count}",
+      "executionClass": "执行类别：{value}",
+      "upstreamStreaming": "上游流式：{value}",
+      "toolLoop": "工具循环：{value}",
+      "budgetAccountingMode": "计量模式：{value}"
     },
     "table": {
       "columns": {
@@ -1552,11 +1556,23 @@
       "credentialRefPlaceholder": "输入新的 ApiKey；留空则保留当前配置",
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "https://provider.example.test/v1",
-      "totalTokens": "Token 总量",
-      "totalTokensPlaceholder": "留空表示不限量",
+      "budgetTotal": "预算总量",
+      "budgetTotalPlaceholder": "留空表示不限量",
+      "budgetAccountingMode": "计量模式",
+      "budgetTrafficClasses": "流量类别",
+      "budgetTrafficClassesPlaceholder": "例如：interactive_turn, probe",
+      "budgetWarningThresholds": "预警阈值 (%)",
+      "budgetWarningThresholdsPlaceholder": "例如：60, 85, 95",
+      "budgetReservationStrategy": "预留策略",
       "usedTokens": "已消耗 Token",
       "remainingTokens": "剩余 Token",
-      "quotaStatus": "配额状态",
+      "budgetStatus": "预算状态",
+      "executionClass": "执行类别",
+      "agentSessionEligibility": "会话运行时",
+      "upstreamStreaming": "上游流式",
+      "toolLoop": "工具循环",
+      "enabledSurfaces": "已启用接口",
+      "agentSurfaces": "Agent 对话接口",
       "capabilities": "能力",
       "noCapabilities": "当前模型没有声明能力。",
       "surfaces": "接口",
@@ -1568,10 +1584,10 @@
         "overviewDescription": "维护该工作区模型实例的基础标识与来源信息。",
         "authentication": "鉴权",
         "authenticationDescription": "区分当前凭据来自模型覆盖、厂商继承还是缺失，并展示安全存储健康状态。",
-        "routing": "路由",
-        "routingDescription": "查看并调整运行时可执行接口与 Base URL 路由。",
-        "quota": "配额",
-        "quotaDescription": "维护工作区级 Token 配额与当前使用投影。",
+        "executionProfile": "执行画像",
+        "executionProfileDescription": "直接查看该模型实例的真实运行时类别、会话可用性、上游流式能力、工具循环能力以及启用接口。",
+        "budgetPolicy": "预算策略",
+        "budgetPolicyDescription": "维护该模型实例的预算总量、计量模式、流量类别、预警阈值与预留策略。",
         "validation": "校验",
         "validationDescription": "执行真实请求校验，并保留最近一次结果而不是只依赖瞬时提示。",
         "capabilitiesDescription": "列出该模型声明的能力，供运行时选择与编排参考。"
@@ -1590,13 +1606,19 @@
         "model": "模型",
         "credentialRef": "ApiKey",
         "baseUrl": "Base URL",
-        "totalTokens": "Token 总量",
+        "budgetTotal": "预算总量",
+        "budgetAccountingMode": "计量模式",
+        "budgetTrafficClasses": "流量类别",
+        "budgetWarningThresholds": "预警阈值 (%)",
+        "budgetReservationStrategy": "预留策略",
         "enabled": "启用该模型实例"
       },
       "placeholders": {
         "customProviderName": "例如：内部网关",
         "modelId": "输入模型标识，例如 llama3.1:8b",
-        "totalTokens": "例如：1000000"
+        "budgetTotal": "例如：1000000",
+        "budgetTrafficClasses": "例如：interactive_turn, probe",
+        "budgetWarningThresholds": "例如：60, 85, 95"
       },
       "errors": {
         "required": "请先填写名称、厂商和模型。",
@@ -1715,10 +1737,34 @@
         "errorBody": "“{name}”未删除成功：{message}"
       }
     },
-    "quota": {
+    "budget": {
       "unlimited": "不限量",
-      "available": "可用",
-      "exhausted": "已耗尽"
+      "available": "预算可用",
+      "exhausted": "预算已耗尽",
+      "accountingModes": {
+        "unset": "未设置",
+        "provider_reported": "按厂商回传结算",
+        "estimated": "按估算用量结算",
+        "non_billable": "非计费"
+      },
+      "reservationStrategies": {
+        "unset": "未设置",
+        "none": "不预留",
+        "fixed": "固定预留"
+      }
+    },
+    "execution": {
+      "supported": "支持",
+      "notSupported": "不支持",
+      "generationOnlyBadge": "不可用于会话",
+      "profileReadyTitle": "Agent 对话运行时",
+      "profileReadyDescription": "当前模型具备原生对话运行时、上游流式和工具循环能力，可以作为 agent session 的正常执行目标。",
+      "profileGenerationTitle": "仅生成运行时",
+      "profileGenerationDescription": "当前模型仅支持专用的单次生成路径，不应被当作常规 agent session 模型使用。",
+      "profileUnsupportedTitle": "暂不支持运行",
+      "profileUnsupportedDescription": "当前模型还没有暴露可执行的运行时接口。",
+      "noEnabledSurfaces": "当前没有启用的接口。",
+      "noAgentSurfaces": "当前没有启用的 Agent 对话接口。"
     },
     "empty": {
       "title": "还没有创建模型",
@@ -2465,6 +2511,11 @@
       "cache": "缓存",
       "music": "音乐",
       "embeddings": "向量嵌入"
+    },
+    "modelExecutionClass": {
+      "agent_conversation": "Agent 对话",
+      "single_shot_generation": "单次生成",
+      "unsupported": "不支持"
     },
     "modelCapability": {
       "streaming": "流式输出",

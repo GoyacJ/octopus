@@ -1,5 +1,6 @@
 use std::{fs, sync::Arc};
 
+use octopus_core::RuntimeExecutionClass;
 use octopus_infra::build_infra_bundle;
 use octopus_platform::ModelRegistryService;
 use octopus_runtime_adapter::{MockRuntimeModelDriver, RuntimeAdapter};
@@ -14,7 +15,7 @@ fn test_root() -> std::path::PathBuf {
 }
 
 #[tokio::test]
-async fn catalog_marks_tool_runtime_support_per_surface() {
+async fn catalog_marks_execution_profile_per_surface() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     let adapter = RuntimeAdapter::new_with_executor(
@@ -52,20 +53,26 @@ async fn catalog_marks_tool_runtime_support_per_surface() {
         .find(|binding| binding.protocol_family == "openai_responses")
         .expect("responses surface binding");
 
-    assert!(anthropic_binding.runtime_support.prompt);
-    assert!(anthropic_binding.runtime_support.conversation);
-    assert!(anthropic_binding.runtime_support.tool_loop);
-    assert!(!anthropic_binding.runtime_support.streaming);
+    assert_eq!(
+        anthropic_binding.execution_profile.execution_class,
+        RuntimeExecutionClass::AgentConversation
+    );
+    assert!(anthropic_binding.execution_profile.tool_loop);
+    assert!(anthropic_binding.execution_profile.upstream_streaming);
 
-    assert!(responses_binding.runtime_support.prompt);
-    assert!(responses_binding.runtime_support.conversation);
-    assert!(!responses_binding.runtime_support.tool_loop);
-    assert!(!responses_binding.runtime_support.streaming);
+    assert_eq!(
+        responses_binding.execution_profile.execution_class,
+        RuntimeExecutionClass::SingleShotGeneration
+    );
+    assert!(!responses_binding.execution_profile.tool_loop);
+    assert!(!responses_binding.execution_profile.upstream_streaming);
 
-    assert!(!vendor_native_binding.runtime_support.prompt);
-    assert!(!vendor_native_binding.runtime_support.conversation);
-    assert!(!vendor_native_binding.runtime_support.tool_loop);
-    assert!(!vendor_native_binding.runtime_support.streaming);
+    assert_eq!(
+        vendor_native_binding.execution_profile.execution_class,
+        RuntimeExecutionClass::Unsupported
+    );
+    assert!(!vendor_native_binding.execution_profile.tool_loop);
+    assert!(!vendor_native_binding.execution_profile.upstream_streaming);
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

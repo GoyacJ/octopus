@@ -3,28 +3,21 @@ use octopus_core::{AppError, ResolvedExecutionTarget, ResolvedRequestPolicy};
 use serde_json::{json, Value};
 
 use super::{apply_request_policy, target_max_output_tokens};
-use crate::model_runtime::driver::{
-    ModelExecutionResult, ProtocolDriver, ProtocolDriverCapability,
+use crate::model_runtime::{
+    GenerationModelDriver, GenerationModelDriverCapability, ModelExecutionResult,
 };
 
 #[derive(Debug)]
 pub(crate) struct GeminiNativeDriver;
 
 #[async_trait]
-impl ProtocolDriver for GeminiNativeDriver {
+impl GenerationModelDriver for GeminiNativeDriver {
     fn protocol_family(&self) -> &'static str {
         "gemini_native"
     }
 
-    fn capability(&self) -> ProtocolDriverCapability {
-        ProtocolDriverCapability {
-            prompt: true,
-            conversation: true,
-            tool_loop: false,
-            streaming: false,
-            conversation_execution: false,
-            simple_completion: true,
-        }
+    fn capability(&self) -> GenerationModelDriverCapability {
+        GenerationModelDriverCapability { prompt: true }
     }
 
     async fn execute_prompt(
@@ -127,7 +120,10 @@ fn build_gemini_native_request_body(
 #[cfg(test)]
 mod tests {
     use super::build_gemini_native_request_body;
-    use octopus_core::{CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput};
+    use octopus_core::{
+        CapabilityDescriptor, ResolvedExecutionTarget, ResolvedRequestPolicyInput,
+        RuntimeExecutionClass, RuntimeExecutionProfile,
+    };
 
     fn target(max_output_tokens: Option<u32>) -> ResolvedExecutionTarget {
         ResolvedExecutionTarget {
@@ -138,6 +134,11 @@ mod tests {
             model_id: "gemini-2.5-pro".into(),
             surface: "conversation".into(),
             protocol_family: "gemini_native".into(),
+            execution_profile: RuntimeExecutionProfile {
+                execution_class: RuntimeExecutionClass::SingleShotGeneration,
+                tool_loop: false,
+                upstream_streaming: false,
+            },
             credential_ref: Some("env:GEMINI_API_KEY".into()),
             credential_source: "provider_inherited".into(),
             request_policy: ResolvedRequestPolicyInput {

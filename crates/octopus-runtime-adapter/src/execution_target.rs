@@ -1,5 +1,6 @@
 use super::*;
 use octopus_core::normalize_runtime_permission_mode_label;
+use octopus_core::RuntimeExecutionClass;
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn requires_approval(permission_mode: &str) -> Result<bool, AppError> {
@@ -24,6 +25,37 @@ fn configured_model_from_registry(
 }
 
 impl RuntimeAdapter {
+    pub(super) fn validate_session_creation_execution(
+        &self,
+        session_policy: &session_policy::CompiledSessionPolicy,
+    ) -> Result<(), AppError> {
+        let effective_config = self.config_snapshot_value(&session_policy.config_snapshot_id)?;
+        let registry = self.effective_registry_from_json(&effective_config)?;
+        let Some(configured_model_id) = session_policy
+            .selected_configured_model_id
+            .clone()
+            .or_else(|| {
+                registry
+                    .default_configured_model_id("conversation")
+                    .map(ToOwned::to_owned)
+            })
+        else {
+            return Ok(());
+        };
+        if registry
+            .configured_model(&configured_model_id)
+            .is_some_and(|configured_model| !configured_model.enabled)
+        {
+            return Ok(());
+        }
+        registry.resolve_target(
+            &configured_model_id,
+            None,
+            Some(RuntimeExecutionClass::AgentConversation),
+        )?;
+        Ok(())
+    }
+
     pub(super) fn resolve_execution_target(
         &self,
         config_snapshot_id: &str,
@@ -31,7 +63,11 @@ impl RuntimeAdapter {
     ) -> Result<(EffectiveModelRegistry, ResolvedExecutionTarget), AppError> {
         let effective_config = self.config_snapshot_value(config_snapshot_id)?;
         let registry = self.effective_registry_from_json(&effective_config)?;
-        let target = registry.resolve_target(configured_model_id, None)?;
+        let target = registry.resolve_target(
+            configured_model_id,
+            None,
+            Some(RuntimeExecutionClass::AgentConversation),
+        )?;
         Ok((registry, target))
     }
 
@@ -54,7 +90,11 @@ impl RuntimeAdapter {
                     "session-selected configured model is required when no conversation default is configured",
                 )
             })?;
-        let target = registry.resolve_target(&configured_model_id, None)?;
+        let target = registry.resolve_target(
+            &configured_model_id,
+            None,
+            Some(RuntimeExecutionClass::AgentConversation),
+        )?;
         Ok((registry, configured_model_id, target))
     }
 
@@ -66,7 +106,6 @@ impl RuntimeAdapter {
         let (registry, configured_model_id, resolved_target) =
             self.resolve_execution_target_from_session_policy(session_policy)?;
         let configured_model = configured_model_from_registry(&registry, &configured_model_id)?;
-        self.ensure_configured_model_quota_available(&configured_model)?;
         Ok((resolved_target, configured_model))
     }
 
@@ -79,7 +118,24 @@ impl RuntimeAdapter {
             self.resolve_execution_target(config_snapshot_id, configured_model_id)?;
         let configured_model =
             configured_model_from_registry(&registry, &resolved_target.configured_model_id)?;
-        self.ensure_configured_model_quota_available(&configured_model)?;
+        Ok((resolved_target, configured_model))
+    }
+
+    pub(super) fn resolve_generation_execution(
+        &self,
+        project_id: Option<&str>,
+        user_id: &str,
+        input: &RunRuntimeGenerationInput,
+    ) -> Result<(ResolvedExecutionTarget, ConfiguredModelRecord), AppError> {
+        let documents = self.resolve_documents(project_id, Some(user_id))?;
+        let registry = self.effective_registry(&documents)?;
+        let resolved_target = registry.resolve_target(
+            &input.configured_model_id,
+            None,
+            Some(RuntimeExecutionClass::SingleShotGeneration),
+        )?;
+        let configured_model =
+            configured_model_from_registry(&registry, &resolved_target.configured_model_id)?;
         Ok((resolved_target, configured_model))
     }
 

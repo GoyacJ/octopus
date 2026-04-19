@@ -80,6 +80,7 @@ import type {
   ResolveRuntimeApprovalInput,
   ResolveRuntimeAuthChallengeInput,
   ResolveRuntimeMemoryProposalInput,
+  RunRuntimeGenerationInput,
   ResourcePolicyRecord,
   ResourcePolicyUpsertRequest,
   RoleBindingRecord,
@@ -93,6 +94,7 @@ import type {
   RuntimeConfiguredModelProbeResult,
   RuntimeEventEnvelope,
   RuntimeEffectiveConfig,
+  RuntimeGenerationResult,
   RuntimeRunSnapshot,
   RuntimeSessionDetail,
   RuntimeSessionSummary,
@@ -407,6 +409,7 @@ export interface WorkspaceClient {
     getUserConfig: () => Promise<RuntimeEffectiveConfig>
     validateUserConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
     saveUserConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
+    runGeneration: (input: RunRuntimeGenerationInput) => Promise<RuntimeGenerationResult>
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>

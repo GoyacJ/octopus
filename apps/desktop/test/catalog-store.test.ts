@@ -38,6 +38,71 @@ describe('useCatalogStore', () => {
     expect(catalog.defaultSelectionRows.some(row => row.configuredModelId === 'anthropic-primary')).toBe(true)
   })
 
+  it('keeps generation-only model rows runtime-truthful while filtering them out of conversation-facing catalog options', async () => {
+    const { catalog } = await prepareCatalogStore({
+      stateTransform(state, connection) {
+        if (connection.workspaceConnectionId !== 'conn-local') {
+          return
+        }
+
+        state.catalog.models.push({
+          modelId: 'gpt-4o-generate',
+          label: 'GPT-4o Generate',
+          providerId: 'openai',
+          description: 'Prompt-only generation model.',
+          family: 'gpt-4o',
+          track: 'generation',
+          enabled: true,
+          recommendedFor: 'Single shot generation',
+          availability: 'configured',
+          defaultPermission: 'auto',
+          surfaceBindings: [
+            {
+              surface: 'conversation',
+              protocolFamily: 'openai_responses',
+              enabled: true,
+              executionProfile: {
+                executionClass: 'single_shot_generation',
+                toolLoop: false,
+                upstreamStreaming: true,
+              },
+            },
+          ],
+          capabilities: [],
+          metadata: {},
+        })
+
+        state.catalog.configuredModels.push({
+          configuredModelId: 'openai-generate',
+          name: 'OpenAI Generate',
+          providerId: 'openai',
+          modelId: 'gpt-4o-generate',
+          credentialRef: 'env:OPENAI_API_KEY',
+          budgetPolicy: {
+            totalBudgetTokens: 4096,
+            reservationStrategy: 'fixed',
+          },
+          tokenUsage: {
+            usedTokens: 128,
+            exhausted: false,
+          },
+          enabled: true,
+          source: 'workspace',
+          status: 'configured',
+          configured: true,
+        })
+      },
+    })
+
+    expect(catalog.configuredModelRows.find(row => row.configuredModelId === 'openai-generate')).toMatchObject({
+      surfaces: ['conversation'],
+      conversationSurfaces: [],
+      executionClass: 'single_shot_generation',
+      supportsConversationExecution: false,
+    })
+    expect(catalog.configuredModelOptions.some(option => option.value === 'openai-generate')).toBe(false)
+  })
+
   it('keeps management entries in sync when disabling a builtin tool', async () => {
     const { catalog } = await prepareCatalogStore()
 

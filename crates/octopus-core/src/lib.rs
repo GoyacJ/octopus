@@ -1060,17 +1060,53 @@ pub struct CapabilityDescriptor {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeExecutionSupport {
-    pub prompt: bool,
-    pub conversation: bool,
-    pub tool_loop: bool,
-    pub streaming: bool,
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeExecutionClass {
+    #[default]
+    Unsupported,
+    SingleShotGeneration,
+    AgentConversation,
 }
 
-impl RuntimeExecutionSupport {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetAccountingMode {
+    #[default]
+    ProviderReported,
+    Estimated,
+    NonBillable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetReservationStrategy {
+    #[default]
+    None,
+    Fixed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeExecutionProfile {
+    #[serde(default)]
+    pub execution_class: RuntimeExecutionClass,
+    pub tool_loop: bool,
+    pub upstream_streaming: bool,
+}
+
+impl RuntimeExecutionProfile {
     pub fn executable(self) -> bool {
-        self.prompt || self.conversation || self.tool_loop || self.streaming
+        self.execution_class != RuntimeExecutionClass::Unsupported
+    }
+
+    pub fn supports(self, execution_class: RuntimeExecutionClass) -> bool {
+        self.execution_class == execution_class
+    }
+
+    pub fn supports_agent_conversation(self) -> bool {
+        self.execution_class == RuntimeExecutionClass::AgentConversation
+            && self.tool_loop
+            && self.upstream_streaming
     }
 }
 
@@ -1086,7 +1122,7 @@ pub struct SurfaceDescriptor {
     pub enabled: bool,
     pub capabilities: Vec<CapabilityDescriptor>,
     #[serde(default)]
-    pub runtime_support: RuntimeExecutionSupport,
+    pub execution_profile: RuntimeExecutionProfile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1106,7 +1142,7 @@ pub struct ModelSurfaceBinding {
     pub protocol_family: String,
     pub enabled: bool,
     #[serde(default)]
-    pub runtime_support: RuntimeExecutionSupport,
+    pub execution_profile: RuntimeExecutionProfile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1152,8 +1188,17 @@ pub struct DefaultSelection {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfiguredModelTokenQuota {
-    pub total_tokens: Option<u64>,
+pub struct ConfiguredModelBudgetPolicy {
+    #[serde(default)]
+    pub accounting_mode: BudgetAccountingMode,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traffic_classes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_budget_tokens: Option<u64>,
+    #[serde(default)]
+    pub reservation_strategy: BudgetReservationStrategy,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warning_threshold_percentages: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1173,7 +1218,7 @@ pub struct ConfiguredModelRecord {
     pub model_id: String,
     pub credential_ref: Option<String>,
     pub base_url: Option<String>,
-    pub token_quota: Option<ConfiguredModelTokenQuota>,
+    pub budget_policy: Option<ConfiguredModelBudgetPolicy>,
     pub token_usage: ConfiguredModelTokenUsage,
     pub enabled: bool,
     pub source: String,
@@ -2118,6 +2163,29 @@ pub struct RuntimeConfiguredModelProbeResult {
     pub consumed_tokens: Option<u32>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RunRuntimeGenerationInput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    pub configured_model_id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeGenerationResult {
+    pub configured_model_id: String,
+    pub configured_model_name: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumed_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3179,6 +3247,8 @@ pub struct ResolvedExecutionTarget {
     pub model_id: String,
     pub surface: String,
     pub protocol_family: String,
+    #[serde(default)]
+    pub execution_profile: RuntimeExecutionProfile,
     pub credential_ref: Option<String>,
     pub credential_source: String,
     #[serde(default)]

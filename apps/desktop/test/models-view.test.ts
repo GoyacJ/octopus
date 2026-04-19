@@ -161,8 +161,8 @@ describe('Models view', () => {
           providerId: 'openai',
           modelId: 'gpt-4o',
           credentialRef: `env:OPENAI_KEY_${index + 1}`,
-          tokenQuota: {
-            totalTokens: 1000 + index,
+          budgetPolicy: {
+            totalBudgetTokens: 1000 + index,
           },
           enabled: true,
           source: 'workspace',
@@ -179,7 +179,7 @@ describe('Models view', () => {
 
     expect(mounted.container.querySelector('[data-testid="models-pagination"]')?.textContent).toContain('1 / 2')
     expect(mounted.container.textContent).toContain('已消耗 Token')
-    expect(mounted.container.textContent).toContain('Token 总量')
+    expect(mounted.container.textContent).toContain('预算总量')
     expect(mounted.container.textContent).toContain('0')
     expect(mounted.container.textContent).toContain('1,000')
 
@@ -222,6 +222,8 @@ describe('Models view', () => {
     expect(document.body.querySelector('[data-testid="models-detail-dialog"]')).toBeNull()
     modelRows(mounted.container)[0]?.click()
     await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
+    expect(mounted.container.textContent).toContain('执行画像')
+    expect(mounted.container.textContent).toContain('会话运行时')
     expect(mounted.container.textContent).toContain('鉴权')
     expect(mounted.container.textContent).toContain('校验')
 
@@ -273,16 +275,15 @@ describe('Models view', () => {
                     surface: 'conversation',
                     protocolFamily: 'openai_chat',
                     transport: ['request_response', 'sse'],
-                    authStrategy: 'bearer',
+                  authStrategy: 'bearer',
                   baseUrl: 'http://127.0.0.1:11434/v1',
                   baseUrlPolicy: 'allow_override',
                   enabled: true,
                   capabilities: [],
-                  runtimeSupport: {
-                    prompt: false,
-                    conversation: false,
+                  executionProfile: {
+                    executionClass: 'unsupported',
                     toolLoop: false,
-                    streaming: false,
+                    upstreamStreaming: false,
                   },
                 },
               ],
@@ -364,6 +365,10 @@ describe('Models view', () => {
     setInputValue(document.body, 'models-create-upstream-model-input', 'gateway-chat')
     setInputValue(document.body, 'models-create-base-url-input', 'https://gateway.example.test/v1')
     setInputValue(document.body, 'models-create-total-tokens-input', '2048')
+    setSelectValue(document.body, 'models-create-budget-accounting-mode-select', 'provider_reported')
+    setInputValue(document.body, 'models-create-budget-traffic-classes-input', 'interactive_turn, probe')
+    setInputValue(document.body, 'models-create-budget-warning-thresholds-input', '60, 85, 95')
+    setSelectValue(document.body, 'models-create-budget-reservation-strategy-select', 'fixed')
 
     const confirmButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).at(-1)
     expect(confirmButton).not.toBeUndefined()
@@ -384,8 +389,12 @@ describe('Models view', () => {
       providerId: expect.stringMatching(/^custom-/),
       modelId: expect.stringMatching(/^custom-.*::gateway-chat$/),
       baseUrl: 'https://gateway.example.test/v1',
-      tokenQuota: {
-        totalTokens: 2048,
+      budgetPolicy: {
+        accountingMode: 'provider_reported',
+        trafficClasses: ['interactive_turn', 'probe'],
+        totalBudgetTokens: 2048,
+        reservationStrategy: 'fixed',
+        warningThresholdPercentages: [60, 85, 95],
       },
       source: 'workspace',
     })
@@ -401,6 +410,78 @@ describe('Models view', () => {
     const modelEntry = Object.values(modelPatch)[0]
     expect(modelEntry).toMatchObject({
       label: 'gateway-chat',
+    })
+
+    mounted.destroy()
+  })
+
+  it('saves detail edits as a full configured-model budget policy patch', async () => {
+    overrideWorkspaceRuntimeConfig({
+      configuredModels: {
+        'anthropic-primary': {
+          configuredModelId: 'anthropic-primary',
+          name: 'Claude Primary',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-5',
+          credentialRef: 'env:ANTHROPIC_API_KEY',
+          budgetPolicy: {
+            accountingMode: 'provider_reported',
+            trafficClasses: ['interactive_turn'],
+            totalBudgetTokens: 1200,
+            reservationStrategy: 'fixed',
+            warningThresholdPercentages: [75, 90],
+          },
+          enabled: true,
+          source: 'workspace',
+        },
+      },
+    })
+
+    const saveSpy = vi.fn()
+
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async saveConfig(patch) {
+          saveSpy(patch)
+          return await client.runtime.saveConfig(patch)
+        },
+      },
+    }))
+
+    const mounted = await mountView()
+
+    await waitForText(mounted.container, 'Claude Primary')
+    modelRows(mounted.container)[0]?.click()
+    await waitFor(() => detailPane(mounted.container) !== null, 2000, 'detail pane')
+
+    setInputValue(mounted.container, 'models-detail-total-tokens', '4096')
+    setSelectValue(mounted.container, 'models-detail-budget-accounting-mode', 'estimated')
+    setInputValue(mounted.container, 'models-detail-budget-traffic-classes', 'interactive_turn, background, probe')
+    setInputValue(mounted.container, 'models-detail-budget-warning-thresholds', '50, 80, 95')
+    setSelectValue(mounted.container, 'models-detail-budget-reservation-strategy', 'none')
+
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="models-save-button"]')
+    expect(saveButton).not.toBeNull()
+    saveButton?.click()
+
+    await waitFor(() => saveSpy.mock.calls.length === 1, 2000, 'save config call')
+    expect(saveSpy.mock.calls[0]?.[0]).toMatchObject({
+      scope: 'workspace',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            budgetPolicy: {
+              accountingMode: 'estimated',
+              trafficClasses: ['interactive_turn', 'background', 'probe'],
+              totalBudgetTokens: 4096,
+              reservationStrategy: 'none',
+              warningThresholdPercentages: [50, 80, 95],
+            },
+          },
+        },
+      },
     })
 
     mounted.destroy()

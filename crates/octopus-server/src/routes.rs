@@ -516,6 +516,7 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             "/config/configured-models/probe",
             post(probe_runtime_configured_model_route),
         )
+        .route("/generations", post(run_runtime_generation))
         .route("/config/scopes/:scope", patch(save_runtime_config_route))
         .route(
             "/sessions",

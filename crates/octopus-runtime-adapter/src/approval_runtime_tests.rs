@@ -2610,6 +2610,1194 @@ async fn team_worker_subrun_auth_resume_survives_restart_and_respects_scheduler_
 }
 
 #[tokio::test]
+async fn team_worker_subrun_approval_resume_persists_failed_checkpoint_on_disconnect_and_releases_scheduler_queue(
+) {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_json(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        json!({
+            "configuredModels": {
+                "scheduler-model": {
+                    "configuredModelId": "scheduler-model",
+                    "name": "Scheduler Model",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let output_path = root.join("team-subrun-approval-interrupted-output.txt");
+    let output_path_string = output_path.display().to_string();
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-subrun-scheduler-interrupted-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Team Scheduler Interrupted Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the queued workers.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for interrupted queued subrun approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team scheduler leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![
+                "agent-team-subrun-scheduler-worker-approval-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Queued Approval Interrupted Worker",
+                Option::<String>::None,
+                "Writer",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Write the delegated file after approval.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker that blocks on capability approval and disconnects on replay.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert interrupted approval worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-subrun-scheduler-worker-queued-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Queued Interrupted Second Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Finish after the approval worker resumes.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Second queued worker for interrupted approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert queued worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, permission_envelope_json, delegation_policy_json, approval_preference_json, leader_ref, member_refs, worker_concurrency_limit, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "team-subrun-scheduler-approval-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Subrun Scheduler Approval Interrupted Team",
+                Option::<String>::None,
+                "Queue aware team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Run workers through the runtime scheduler.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({
+                    "mode": "leader-orchestrated",
+                    "allowBackgroundRuns": true,
+                    "allowParallelWorkers": true,
+                    "maxWorkerCount": 2
+                }))
+                .expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "agent:agent-team-subrun-scheduler-interrupted-leader",
+                serde_json::to_string(&vec![
+                    "agent:agent-team-subrun-scheduler-worker-approval-interrupted",
+                    "agent:agent-team-subrun-scheduler-worker-queued-interrupted"
+                ])
+                .expect("member refs"),
+                1_i64,
+                "Team for interrupted queued subrun approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert queued approval team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 4,
+                output_tokens: 3,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-team-subrun-write-interrupted".into(),
+                name: "bash".into(),
+                input: serde_json::json!({
+                    "command": format!(
+                        "printf 'team subrun interrupted approval content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Approval worker partial completion before disconnect.".into(),
+            ),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Queued worker completed after interrupted slot release.".into(),
+            ),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 4,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-subrun-scheduler-approval-interrupted",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Queued Subrun Approval Interrupted Session",
+                "team:team-subrun-scheduler-approval-interrupted",
+                Some("scheduler-model"),
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input(
+                "Queue the workers and interrupt the resumed approval worker",
+                None,
+            ),
+        )
+        .await
+        .expect("pending queued subrun approval");
+
+    assert_eq!(pending_run.status, "waiting_approval");
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+    let blocked_subrun_run_id = detail
+        .subruns
+        .iter()
+        .find(|subrun| {
+            subrun.actor_ref == "agent:agent-team-subrun-scheduler-worker-approval-interrupted"
+        })
+        .map(|subrun| subrun.run_id.clone())
+        .expect("blocked subrun run id");
+
+    let replay_after = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("initial events")
+        .last()
+        .map(|event| event.id.clone())
+        .expect("initial event id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("approval resolution should project failed subrun state on disconnect");
+
+    assert_eq!(resolved.status, "failed");
+    assert_eq!(executor.request_count(), 4);
+    for _ in 0..20 {
+        if fs::read_to_string(&output_path)
+            .map(|content| content == "team subrun interrupted approval content\n")
+            .unwrap_or(false)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("written output"),
+        "team subrun interrupted approval content\n"
+    );
+
+    let resolved_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved detail");
+    assert!(resolved_detail.pending_approval.is_none());
+    assert!(resolved_detail.run.auth_target.is_none());
+    assert!(resolved_detail
+        .subruns
+        .iter()
+        .any(|subrun| { subrun.run_id == blocked_subrun_run_id && subrun.status == "failed" }));
+    assert!(resolved_detail.subruns.iter().any(|subrun| {
+        subrun.actor_ref == "agent:agent-team-subrun-scheduler-worker-queued-interrupted"
+            && subrun.status == "completed"
+    }));
+
+    let blocked_state_path = infra
+        .paths
+        .runtime_state_dir
+        .join("subruns")
+        .join(format!("{}.json", blocked_subrun_run_id));
+    let blocked_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&blocked_state_path).expect("subrun state bytes"))
+            .expect("subrun state json");
+    let checkpoint_ref = blocked_state["run"]["checkpoint"]["checkpointArtifactRef"]
+        .as_str()
+        .expect("checkpoint ref");
+    let checkpoint_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(root.join(checkpoint_ref)).expect("checkpoint artifact"),
+    )
+    .expect("checkpoint json");
+    assert_eq!(
+        checkpoint_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("partialOutput"))
+            .and_then(|value| value.get("content"))
+            .and_then(serde_json::Value::as_str),
+        Some("Approval worker partial completion before disconnect.")
+    );
+
+    let resolved_events = adapter
+        .list_events(&session.summary.id, Some(&replay_after))
+        .await
+        .expect("resolved events");
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("approval.resolved")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("runtime.error")));
+    assert!(resolved_events.iter().any(|event| {
+        event.kind.as_deref() == Some("subrun.failed")
+            && event.actor_ref.as_deref()
+                == Some("agent:agent-team-subrun-scheduler-worker-approval-interrupted")
+    }));
+    assert!(resolved_events.iter().any(|event| {
+        event.kind.as_deref() == Some("subrun.completed")
+            && event.actor_ref.as_deref()
+                == Some("agent:agent-team-subrun-scheduler-worker-queued-interrupted")
+    }));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.failed")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("background.failed")));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_worker_subrun_auth_resume_persists_failed_checkpoint_on_disconnect_and_releases_scheduler_queue(
+) {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_json(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        json!({
+            "configuredModels": {
+                "scheduler-model": {
+                    "configuredModelId": "scheduler-model",
+                    "name": "Scheduler Model",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": TEST_ANTHROPIC_CREDENTIAL_REF,
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let output_path = root.join("team-subrun-auth-interrupted-output.txt");
+    let output_path_string = output_path.display().to_string();
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-subrun-scheduler-auth-interrupted-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Team Scheduler Auth Interrupted Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the queued workers.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for interrupted queued subrun auth tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team scheduler auth leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![
+                "agent-team-subrun-scheduler-worker-auth-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Queued Auth Interrupted Worker",
+                Option::<String>::None,
+                "Writer",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Write the delegated file after mediation resumes.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker that will be rewritten into an auth-blocked subrun and disconnect on replay.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert auth worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-subrun-scheduler-worker-auth-queued-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Queued Auth Interrupted Second Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Finish after the auth-blocked worker resumes.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Second queued worker for interrupted auth tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert queued auth worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, permission_envelope_json, delegation_policy_json, approval_preference_json, leader_ref, member_refs, worker_concurrency_limit, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "team-subrun-scheduler-auth-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Subrun Scheduler Auth Interrupted Team",
+                Option::<String>::None,
+                "Queue aware team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Run workers through the runtime scheduler.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                serde_json::to_string(&json!({
+                    "mode": "leader-orchestrated",
+                    "allowBackgroundRuns": true,
+                    "allowParallelWorkers": true,
+                    "maxWorkerCount": 2
+                }))
+                .expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "auto",
+                    "mcpAuth": "auto",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "agent:agent-team-subrun-scheduler-auth-interrupted-leader",
+                serde_json::to_string(&vec![
+                    "agent:agent-team-subrun-scheduler-worker-auth-interrupted",
+                    "agent:agent-team-subrun-scheduler-worker-auth-queued-interrupted"
+                ])
+                .expect("member refs"),
+                1_i64,
+                "Team for interrupted queued subrun auth tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert queued auth team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 4,
+                output_tokens: 3,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Writing the queued worker file.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-team-subrun-auth-write-interrupted".into(),
+                name: "bash".into(),
+                input: serde_json::json!({
+                    "command": format!(
+                        "printf 'team subrun interrupted auth content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Auth worker partial completion before disconnect.".into(),
+            ),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Queued worker completed after interrupted auth slot release.".into(),
+            ),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 4,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-subrun-scheduler-auth-interrupted",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Queued Subrun Auth Interrupted Session",
+                "team:team-subrun-scheduler-auth-interrupted",
+                Some("scheduler-model"),
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Queue the workers and pause the first on approval", None),
+        )
+        .await
+        .expect("pending queued subrun approval");
+
+    assert_eq!(pending_run.status, "waiting_approval");
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let blocked_subrun = detail
+        .subruns
+        .iter()
+        .find(|subrun| {
+            subrun.actor_ref == "agent:agent-team-subrun-scheduler-worker-auth-interrupted"
+        })
+        .expect("blocked subrun")
+        .clone();
+
+    let blocked_state_path = infra
+        .paths
+        .runtime_state_dir
+        .join("subruns")
+        .join(format!("{}.json", blocked_subrun.run_id));
+    let mut blocked_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&blocked_state_path).expect("subrun state bytes"))
+            .expect("subrun state json");
+    let capability_state_ref = blocked_state["run"]["capabilityStateRef"]
+        .as_str()
+        .expect("capability state ref")
+        .to_string();
+    let capability_store = adapter
+        .load_capability_store(Some(&capability_state_ref))
+        .expect("capability store");
+    capability_store.approve_tool("bash");
+    adapter
+        .persist_capability_store(&capability_state_ref, &capability_store)
+        .expect("persist capability store");
+
+    let auth_challenge_id = format!("auth-{}", blocked_subrun.run_id);
+    let auth_challenge = json!({
+        "approvalLayer": "provider",
+        "capabilityId": blocked_state["run"]["checkpoint"]["capabilityId"],
+        "checkpointRef": blocked_state["run"]["checkpoint"]["checkpointArtifactRef"],
+        "conversationId": session.summary.conversation_id,
+        "createdAt": blocked_subrun.updated_at + 9,
+        "detail": "Worker requires provider authentication before replay.",
+        "escalationReason": "provider authentication is required for the delegated tool",
+        "id": auth_challenge_id,
+        "dispatchKind": "capability-call",
+        "providerKey": "delegated-provider",
+        "concurrencyPolicy": "serialized",
+        "input": {
+            "command": format!(
+                "printf 'team subrun interrupted auth content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
+        },
+        "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+        "requiresApproval": false,
+        "requiresAuth": true,
+        "runId": blocked_subrun.run_id,
+        "sessionId": session.summary.id,
+        "status": "pending",
+        "summary": "Complete provider authentication for the delegated worker.",
+        "targetKind": "capability-call",
+        "targetRef": "bash",
+        "toolName": "bash"
+    });
+    let pending_mediation = json!({
+        "approvalLayer": "provider",
+        "authChallengeId": auth_challenge_id,
+        "capabilityId": blocked_state["run"]["checkpoint"]["capabilityId"],
+        "checkpointRef": blocked_state["run"]["checkpoint"]["checkpointArtifactRef"],
+        "detail": "Worker requires provider authentication before replay.",
+        "escalationReason": "provider authentication is required for the delegated tool",
+        "mediationId": format!("mediation-{}", blocked_subrun.run_id),
+        "mediationKind": "auth",
+        "dispatchKind": "capability-call",
+        "providerKey": "delegated-provider",
+        "concurrencyPolicy": "serialized",
+        "input": {
+            "command": format!(
+                "printf 'team subrun interrupted auth content\\n' > '{}'",
+                output_path_string
+            ),
+            "run_in_background": true
+        },
+        "reason": "provider authentication required",
+        "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+        "requiresApproval": false,
+        "requiresAuth": true,
+        "state": "pending",
+        "summary": "Complete provider authentication for the delegated worker.",
+        "targetKind": "capability-call",
+        "targetRef": "bash",
+        "toolName": "bash"
+    });
+
+    blocked_state["run"]["status"] = json!("auth-required");
+    blocked_state["run"]["currentStep"] = json!("awaiting_auth");
+    blocked_state["run"]["updatedAt"] = json!(blocked_subrun.updated_at + 11);
+    blocked_state["run"]["nextAction"] = json!("auth");
+    blocked_state["run"]["approvalState"] = json!("auth-required");
+    blocked_state["run"]["approvalTarget"] = serde_json::Value::Null;
+    blocked_state["run"]["authTarget"] = auth_challenge.clone();
+    blocked_state["run"]["pendingMediation"] = pending_mediation.clone();
+    blocked_state["dispatch"]["workerInput"]["content"] = json!("");
+    blocked_state["run"]["checkpoint"]["pendingApproval"] = serde_json::Value::Null;
+    blocked_state["run"]["checkpoint"]["pendingAuthChallenge"] = auth_challenge;
+    blocked_state["run"]["checkpoint"]["pendingMediation"] = pending_mediation;
+    fs::write(
+        &blocked_state_path,
+        serde_json::to_vec_pretty(&blocked_state).expect("mutated subrun state bytes"),
+    )
+    .expect("overwrite subrun state");
+
+    let reloaded = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+    let replay_after = reloaded
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("initial auth events")
+        .last()
+        .map(|event| event.id.clone())
+        .expect("initial auth event id");
+
+    let resolved = reloaded
+        .resolve_auth_challenge(
+            &session.summary.id,
+            &auth_challenge_id,
+            ResolveRuntimeAuthChallengeInput {
+                resolution: "resolved".into(),
+                note: Some("provider linked".into()),
+            },
+        )
+        .await
+        .expect("auth resolution should project failed subrun state on disconnect");
+
+    assert_eq!(resolved.status, "failed");
+    assert_eq!(executor.request_count(), 4);
+    for _ in 0..20 {
+        if fs::read_to_string(&output_path)
+            .map(|content| content == "team subrun interrupted auth content\n")
+            .unwrap_or(false)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("written output"),
+        "team subrun interrupted auth content\n"
+    );
+
+    let resolved_detail = reloaded
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved detail");
+    assert!(resolved_detail.pending_approval.is_none());
+    assert!(resolved_detail.run.auth_target.is_none());
+    assert!(resolved_detail
+        .subruns
+        .iter()
+        .any(|subrun| { subrun.run_id == blocked_subrun.run_id && subrun.status == "failed" }));
+    assert!(resolved_detail.subruns.iter().any(|subrun| {
+        subrun.actor_ref == "agent:agent-team-subrun-scheduler-worker-auth-queued-interrupted"
+            && subrun.status == "completed"
+    }));
+
+    let failed_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&blocked_state_path).expect("subrun state bytes"))
+            .expect("subrun state json");
+    let checkpoint_ref = failed_state["run"]["checkpoint"]["checkpointArtifactRef"]
+        .as_str()
+        .expect("checkpoint ref");
+    let checkpoint_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(root.join(checkpoint_ref)).expect("checkpoint artifact"),
+    )
+    .expect("checkpoint json");
+    assert_eq!(
+        checkpoint_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("partialOutput"))
+            .and_then(|value| value.get("content"))
+            .and_then(serde_json::Value::as_str),
+        Some("Auth worker partial completion before disconnect.")
+    );
+
+    let resolved_events = reloaded
+        .list_events(&session.summary.id, Some(&replay_after))
+        .await
+        .expect("resolved auth events");
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("auth.resolved")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("runtime.error")));
+    assert!(resolved_events.iter().any(|event| {
+        event.kind.as_deref() == Some("subrun.failed")
+            && event.actor_ref.as_deref()
+                == Some("agent:agent-team-subrun-scheduler-worker-auth-interrupted")
+    }));
+    assert!(resolved_events.iter().any(|event| {
+        event.kind.as_deref() == Some("subrun.completed")
+            && event.actor_ref.as_deref()
+                == Some("agent:agent-team-subrun-scheduler-worker-auth-queued-interrupted")
+    }));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.failed")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("background.failed")));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn auth_resume_persists_failed_checkpoint_on_disconnect() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let output_path = root.join("auth-resume-interrupted-output.txt");
+    let output_path_string = output_path.display().to_string();
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "agent-auth-resume-interrupted",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Auth Resume Interrupted Agent",
+                Option::<String>::None,
+                "Writer",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Resume the blocked tool call after auth is resolved.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for interrupted auth resume tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert interrupted auth agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelDriver::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Writing the approved file.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-auth-resume-write".into(),
+                name: "bash".into(),
+                input: serde_json::json!({
+                    "command": format!(
+                        "printf 'auth resume content\\n' > '{}'",
+                        output_path_string
+                    ),
+                    "run_in_background": true
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Auth resume partial completion before disconnect.".into(),
+            ),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-auth-resume-interrupted",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Auth Resume Interrupted Session",
+                "agent:agent-auth-resume-interrupted",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Write the file after approval", None),
+        )
+        .await
+        .expect("pending auth resume approval");
+
+    assert_eq!(pending_run.status, "waiting_approval");
+    assert_eq!(executor.request_count(), 1);
+
+    let capability_state_ref = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .expect("runtime sessions mutex");
+        let aggregate = sessions
+            .get(&session.summary.id)
+            .expect("runtime session aggregate");
+        aggregate
+            .detail
+            .run
+            .capability_state_ref
+            .clone()
+            .expect("capability state ref")
+    };
+    let capability_store = adapter
+        .load_capability_store(Some(&capability_state_ref))
+        .expect("capability store");
+    capability_store.approve_tool("bash");
+    adapter
+        .persist_capability_store(&capability_state_ref, &capability_store)
+        .expect("persist capability store");
+
+    {
+        let mut sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .expect("runtime sessions mutex");
+        let aggregate = sessions
+            .get_mut(&session.summary.id)
+            .expect("runtime session aggregate");
+        let auth_challenge: RuntimeAuthChallengeSummary = serde_json::from_value(json!({
+            "approvalLayer": "provider",
+            "capabilityId": aggregate.detail.run.checkpoint.capability_id,
+            "checkpointRef": aggregate.detail.run.checkpoint.checkpoint_artifact_ref,
+            "conversationId": session.summary.conversation_id,
+            "createdAt": aggregate.detail.run.updated_at + 9,
+            "detail": "Provider authentication is required before replay.",
+            "escalationReason": "provider authentication is required for the delegated tool",
+            "id": format!("auth-{}", aggregate.detail.run.id),
+            "dispatchKind": "capability-call",
+            "providerKey": "resume-provider",
+            "concurrencyPolicy": "serialized",
+            "input": {
+                "command": format!(
+                    "printf 'auth resume interrupted content\\n' > '{}'",
+                    output_path_string
+                ),
+                "run_in_background": true
+            },
+            "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+            "requiresApproval": false,
+            "requiresAuth": true,
+            "runId": aggregate.detail.run.id,
+            "sessionId": session.summary.id,
+            "status": "pending",
+            "summary": "Complete provider authentication for the resumed tool.",
+            "targetKind": "capability-call",
+            "targetRef": "bash",
+            "toolName": "bash"
+        }))
+        .expect("auth challenge");
+        let pending_mediation: RuntimePendingMediationSummary = serde_json::from_value(json!({
+            "approvalLayer": "provider",
+            "authChallengeId": auth_challenge.id,
+            "capabilityId": aggregate.detail.run.checkpoint.capability_id,
+            "checkpointRef": aggregate.detail.run.checkpoint.checkpoint_artifact_ref,
+            "detail": "Provider authentication is required before replay.",
+            "escalationReason": "provider authentication is required for the delegated tool",
+            "mediationId": format!("mediation-{}", aggregate.detail.run.id),
+            "mediationKind": "auth",
+            "dispatchKind": "capability-call",
+            "providerKey": "resume-provider",
+            "concurrencyPolicy": "serialized",
+            "input": {
+                "command": format!(
+                    "printf 'auth resume interrupted content\\n' > '{}'",
+                    output_path_string
+                ),
+                "run_in_background": true
+            },
+            "reason": "provider authentication required",
+            "requiredPermission": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+            "requiresApproval": false,
+            "requiresAuth": true,
+            "state": "pending",
+            "summary": "Complete provider authentication for the resumed tool.",
+            "targetKind": "capability-call",
+            "targetRef": "bash",
+            "toolName": "bash"
+        }))
+        .expect("pending mediation");
+
+        aggregate.detail.pending_approval = None;
+        aggregate.detail.run.status = "auth-required".into();
+        aggregate.detail.run.current_step = "awaiting_auth".into();
+        aggregate.detail.run.next_action = Some("auth".into());
+        aggregate.detail.run.approval_state = "auth-required".into();
+        aggregate.detail.run.approval_target = None;
+        aggregate.detail.run.auth_target = Some(auth_challenge.clone());
+        aggregate.detail.run.pending_mediation = Some(pending_mediation.clone());
+        aggregate.detail.run.checkpoint.pending_approval = None;
+        aggregate.detail.run.checkpoint.pending_auth_challenge = Some(auth_challenge);
+        aggregate.detail.run.checkpoint.pending_mediation = Some(pending_mediation);
+        adapter
+            .persist_runtime_projections(aggregate)
+            .expect("persist mutated aggregate");
+    }
+
+    let replay_after = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("initial auth events")
+        .last()
+        .map(|event| event.id.clone())
+        .expect("initial auth event id");
+
+    let resolved = adapter
+        .resolve_auth_challenge(
+            &session.summary.id,
+            &format!("auth-{}", pending_run.id),
+            ResolveRuntimeAuthChallengeInput {
+                resolution: "resolved".into(),
+                note: Some("provider linked".into()),
+            },
+        )
+        .await
+        .expect("resolved auth should still project a failed run snapshot on disconnect");
+
+    assert_eq!(resolved.status, "failed");
+    assert_eq!(resolved.current_step, "failed");
+    assert_eq!(resolved.next_action.as_deref(), Some("idle"));
+    assert_eq!(resolved.checkpoint.current_iteration_index, 2);
+    assert_eq!(resolved.checkpoint.usage_summary.total_tokens, 21);
+    assert_eq!(executor.request_count(), 2);
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("written output"),
+        "auth resume content\n"
+    );
+
+    let resolved_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved detail");
+    assert!(resolved_detail.run.auth_target.is_none());
+    assert!(resolved_detail.pending_approval.is_none());
+    assert_eq!(
+        resolved_detail
+            .messages
+            .iter()
+            .filter(|message| message.sender_type == "assistant")
+            .count(),
+        1
+    );
+    assert!(
+        resolved_detail.messages.iter().all(|message| {
+            !message
+                .content
+                .contains("Auth resume partial completion before disconnect.")
+        }),
+        "interrupted auth resume output must not be committed as an assistant message"
+    );
+    let checkpoint_ref = resolved
+        .checkpoint
+        .checkpoint_artifact_ref
+        .clone()
+        .expect("checkpoint ref");
+    let checkpoint_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(root.join(&checkpoint_ref)).expect("checkpoint artifact"),
+    )
+    .expect("checkpoint json");
+    assert_eq!(
+        checkpoint_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("partialOutput"))
+            .and_then(|value| value.get("content"))
+            .and_then(serde_json::Value::as_str),
+        Some("Auth resume partial completion before disconnect.")
+    );
+
+    let resolved_events = adapter
+        .list_events(&session.summary.id, Some(&replay_after))
+        .await
+        .expect("resolved auth interruption events");
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("auth.resolved")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("model.started")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("model.delta")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("model.usage")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("runtime.error")));
+    assert_eq!(
+        resolved_events
+            .iter()
+            .filter(|event| event.kind.as_deref() == Some("model.completed"))
+            .count(),
+        0,
+        "interrupted auth resume must not emit model.completed"
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn team_worker_subrun_auth_cancellation_releases_scheduler_queue_and_emits_cancelled_state() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");

@@ -3,10 +3,11 @@ use octopus_core::{
     AppError, CancelRuntimeSubrunInput, CreateDeliverableVersionInput, CreateRuntimeSessionInput,
     DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
     PromoteDeliverableInput, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
-    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    ResolveRuntimeMemoryProposalInput, RunRuntimeGenerationInput, RuntimeBootstrap,
+    RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
-    RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, SubmitRuntimeTurnInput,
+    RuntimeGenerationResult, RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary,
+    SubmitRuntimeTurnInput,
 };
 
 #[async_trait]
@@ -61,6 +62,11 @@ pub trait RuntimeSessionService: Send + Sync {
 
 #[async_trait]
 pub trait RuntimeExecutionService: Send + Sync {
+    async fn run_generation(
+        &self,
+        input: RunRuntimeGenerationInput,
+        user_id: &str,
+    ) -> Result<RuntimeGenerationResult, AppError>;
     async fn submit_turn(
         &self,
         session_id: &str,
@@ -563,6 +569,20 @@ mod tests {
 
     #[async_trait]
     impl RuntimeExecutionService for RuntimeHarness {
+        async fn run_generation(
+            &self,
+            input: RunRuntimeGenerationInput,
+            _user_id: &str,
+        ) -> Result<RuntimeGenerationResult, AppError> {
+            Ok(RuntimeGenerationResult {
+                configured_model_id: input.configured_model_id,
+                configured_model_name: "Harness Model".into(),
+                content: input.content,
+                request_id: Some("generation-1".into()),
+                consumed_tokens: Some(12),
+            })
+        }
+
         async fn submit_turn(
             &self,
             _session_id: &str,

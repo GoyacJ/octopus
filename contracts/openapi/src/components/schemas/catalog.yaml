@@ -1262,22 +1262,36 @@ ModelCatalogSnapshot:
     - defaultSelections
     - diagnostics
   type: object
-RuntimeExecutionSupport:
+RuntimeExecutionClass:
+  enum:
+    - unsupported
+    - single_shot_generation
+    - agent_conversation
+  type: string
+BudgetAccountingMode:
+  enum:
+    - provider_reported
+    - estimated
+    - non_billable
+  type: string
+BudgetReservationStrategy:
+  enum:
+    - none
+    - fixed
+  type: string
+RuntimeExecutionProfile:
   additionalProperties: false
   properties:
-    prompt:
-      type: boolean
-    conversation:
-      type: boolean
+    executionClass:
+      $ref: "#/components/schemas/RuntimeExecutionClass"
     toolLoop:
       type: boolean
-    streaming:
+    upstreamStreaming:
       type: boolean
   required:
-    - prompt
-    - conversation
+    - executionClass
     - toolLoop
-    - streaming
+    - upstreamStreaming
   type: object
 SurfaceDescriptor:
   additionalProperties: false
@@ -1302,8 +1316,8 @@ SurfaceDescriptor:
       items:
         $ref: "#/components/schemas/CapabilityDescriptor"
       type: array
-    runtimeSupport:
-      $ref: "#/components/schemas/RuntimeExecutionSupport"
+    executionProfile:
+      $ref: "#/components/schemas/RuntimeExecutionProfile"
   required:
     - surface
     - protocolFamily
@@ -1313,7 +1327,7 @@ SurfaceDescriptor:
     - baseUrlPolicy
     - enabled
     - capabilities
-    - runtimeSupport
+    - executionProfile
   type: object
 ProviderRegistryRecord:
   additionalProperties: false
@@ -1347,13 +1361,13 @@ ModelSurfaceBinding:
       type: string
     enabled:
       type: boolean
-    runtimeSupport:
-      $ref: "#/components/schemas/RuntimeExecutionSupport"
+    executionProfile:
+      $ref: "#/components/schemas/RuntimeExecutionProfile"
   required:
     - surface
     - protocolFamily
     - enabled
-    - runtimeSupport
+    - executionProfile
   type: object
 ModelRegistryRecord:
   additionalProperties: false
@@ -1424,11 +1438,23 @@ DefaultSelection:
     - modelId
     - surface
   type: object
-ConfiguredModelTokenQuota:
+ConfiguredModelBudgetPolicy:
   additionalProperties: false
   properties:
-    totalTokens:
+    accountingMode:
+      $ref: "#/components/schemas/BudgetAccountingMode"
+    trafficClasses:
+      items:
+        type: string
+      type: array
+    totalBudgetTokens:
       type: integer
+    reservationStrategy:
+      $ref: "#/components/schemas/BudgetReservationStrategy"
+    warningThresholdPercentages:
+      items:
+        type: integer
+      type: array
   type: object
 ConfiguredModelTokenUsage:
   additionalProperties: false
@@ -1458,8 +1484,8 @@ ConfiguredModelRecord:
       type: string
     baseUrl:
       type: string
-    tokenQuota:
-      $ref: "#/components/schemas/ConfiguredModelTokenQuota"
+    budgetPolicy:
+      $ref: "#/components/schemas/ConfiguredModelBudgetPolicy"
     tokenUsage:
       $ref: "#/components/schemas/ConfiguredModelTokenUsage"
     enabled:

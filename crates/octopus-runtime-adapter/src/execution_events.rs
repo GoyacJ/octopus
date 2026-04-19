@@ -38,10 +38,6 @@ fn base_run_event(
     }
 }
 
-fn model_streamed(message: &RuntimeMessage) -> bool {
-    !message.content.trim().is_empty()
-}
-
 fn capability_family(record: &agent_runtime_core::RuntimeLoopCapabilityEvent) -> &'static str {
     let Some(capability) = record.capability.as_ref() else {
         return "tool";
@@ -109,13 +105,15 @@ fn append_runtime_loop_events(
     model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
     capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
     subruns: &[RuntimeSubrunSummary],
+    runtime_error: Option<&str>,
 ) {
     let fallback_iterations = if model_iterations.is_empty()
         && (assistant_message.is_some() || execution_trace.is_some())
     {
         vec![agent_runtime_core::RuntimeLoopModelIteration {
             iteration: run.checkpoint.current_iteration_index.max(1),
-            streamed: assistant_message.is_some_and(model_streamed),
+            completed: true,
+            events: Vec::new(),
         }]
     } else {
         Vec::new()
@@ -141,41 +139,83 @@ fn append_runtime_loop_events(
         started.run = Some(run.clone());
         events.push(started);
 
-        if iteration.streamed {
-            let mut streaming = base_run_event(
+        for model_event in &iteration.events {
+            let (event_type, outcome) = match &model_event.kind {
+                agent_runtime_core::RuntimeLoopModelEventKind::Delta => ("model.delta", "delta"),
+                agent_runtime_core::RuntimeLoopModelEventKind::ToolUse { .. } => {
+                    ("model.tool_use", "tool_use")
+                }
+                agent_runtime_core::RuntimeLoopModelEventKind::Usage => ("model.usage", "usage"),
+            };
+            let mut event = base_run_event(
                 adapter,
                 session_id,
                 project_id,
                 conversation_id,
                 run,
                 now,
-                "model.streaming",
+                event_type,
             );
-            streaming.iteration = Some(iteration.iteration);
-            streaming.outcome = Some("streaming".into());
-            if let Some(message) = assistant_message.cloned() {
-                streaming.message = Some(message);
+            event.iteration = Some(iteration.iteration);
+            event.outcome = Some(outcome.into());
+            event.message = Some(model_event.message.clone());
+            if let agent_runtime_core::RuntimeLoopModelEventKind::ToolUse { tool_use_id, .. } =
+                &model_event.kind
+            {
+                event.tool_use_id = Some(tool_use_id.clone());
             }
-            events.push(streaming);
+            events.push(event);
         }
 
-        let mut completed = base_run_event(
+        if iteration.completed {
+            let mut completed = base_run_event(
+                adapter,
+                session_id,
+                project_id,
+                conversation_id,
+                run,
+                now,
+                "model.completed",
+            );
+            completed.iteration = Some(iteration.iteration);
+            completed.outcome = Some("completed".into());
+            completed.message = iteration
+                .events
+                .last()
+                .map(|event| event.message.clone())
+                .or_else(|| {
+                    (Some(iteration.iteration) == iterations.last().map(|item| item.iteration))
+                        .then(|| assistant_message.cloned())
+                        .flatten()
+                });
+            if Some(iteration.iteration) == iterations.last().map(|item| item.iteration)
+                && execution_trace.is_some()
+            {
+                completed.trace = execution_trace.cloned();
+            }
+            events.push(completed);
+        }
+    }
+
+    if let Some(error) = runtime_error {
+        let mut failure_event = base_run_event(
             adapter,
             session_id,
             project_id,
             conversation_id,
             run,
             now,
-            "model.completed",
+            "runtime.error",
         );
-        completed.iteration = Some(iteration.iteration);
-        completed.outcome = Some("completed".into());
-        if Some(iteration.iteration) == iterations.last().map(|item| item.iteration)
-            && execution_trace.is_some()
-        {
-            completed.trace = execution_trace.cloned();
-        }
-        events.push(completed);
+        failure_event.iteration = iterations.last().map(|iteration| iteration.iteration);
+        failure_event.outcome = Some("failed".into());
+        failure_event.error = Some(error.to_string());
+        failure_event.message = iterations
+            .last()
+            .and_then(|iteration| iteration.events.last())
+            .map(|event| event.message.clone());
+        failure_event.run = Some(run.clone());
+        events.push(failure_event);
     }
 
     if let Some(trace) = execution_trace.cloned() {
@@ -601,7 +641,7 @@ pub(super) async fn record_submit_turn_activity(
     submitted_trace: &RuntimeTraceItem,
     execution_trace: Option<&RuntimeTraceItem>,
     execution: Option<&ModelExecutionResult>,
-    consumed_tokens: Option<u32>,
+    _consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter
         .state
@@ -669,14 +709,6 @@ pub(super) async fn record_submit_turn_activity(
         })
         .await?;
 
-    if let Some(consumed_tokens) = consumed_tokens {
-        adapter.increment_configured_model_usage(
-            &resolved_target.configured_model_id,
-            consumed_tokens,
-            now,
-        )?;
-    }
-
     Ok(())
 }
 
@@ -696,6 +728,7 @@ pub(super) async fn emit_submit_turn_events(
     planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
     model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
     capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
+    runtime_error: Option<&str>,
 ) -> Result<(), AppError> {
     let mut events = vec![
         RuntimeEventEnvelope {
@@ -829,6 +862,7 @@ pub(super) async fn emit_submit_turn_events(
         model_iterations,
         capability_events,
         &subruns,
+        runtime_error,
     );
 
     if let Some(message) = assistant_message {
@@ -1138,6 +1172,7 @@ pub(super) async fn emit_subrun_cancellation_events(
         &[],
         &[],
         &subruns,
+        None,
     );
     append_workflow_background_events(
         &mut events,
@@ -1312,7 +1347,7 @@ pub(super) async fn record_approval_resolution_activity(
     decision: &str,
     execution_trace: Option<&RuntimeTraceItem>,
     execution: Option<&ModelExecutionResult>,
-    consumed_tokens: Option<u32>,
+    _consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter
         .state
@@ -1384,16 +1419,6 @@ pub(super) async fn record_approval_resolution_activity(
             .await?;
     }
 
-    if let (Some(consumed_tokens), Some(resolved_target)) =
-        (consumed_tokens, run.resolved_target.as_ref())
-    {
-        adapter.increment_configured_model_usage(
-            &resolved_target.configured_model_id,
-            consumed_tokens,
-            now,
-        )?;
-    }
-
     Ok(())
 }
 
@@ -1407,7 +1432,7 @@ pub(super) async fn record_auth_challenge_resolution_activity(
     resolution: &str,
     execution_trace: Option<&RuntimeTraceItem>,
     execution: Option<&ModelExecutionResult>,
-    consumed_tokens: Option<u32>,
+    _consumed_tokens: Option<u32>,
 ) -> Result<(), AppError> {
     adapter
         .state
@@ -1479,16 +1504,6 @@ pub(super) async fn record_auth_challenge_resolution_activity(
             .await?;
     }
 
-    if let (Some(consumed_tokens), Some(resolved_target)) =
-        (consumed_tokens, run.resolved_target.as_ref())
-    {
-        adapter.increment_configured_model_usage(
-            &resolved_target.configured_model_id,
-            consumed_tokens,
-            now,
-        )?;
-    }
-
     Ok(())
 }
 
@@ -1506,6 +1521,7 @@ pub(super) async fn emit_approval_resolution_events(
     planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
     model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
     capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
+    runtime_error: Option<&str>,
 ) -> Result<(), AppError> {
     let mut events = vec![RuntimeEventEnvelope {
         id: format!("evt-{}", Uuid::new_v4()),
@@ -1558,6 +1574,7 @@ pub(super) async fn emit_approval_resolution_events(
         model_iterations,
         capability_events,
         &subruns,
+        runtime_error,
     );
 
     if let Some(message) = assistant_message {
@@ -1693,6 +1710,7 @@ pub(super) async fn emit_auth_resolution_events(
     planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
     model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
     capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
+    runtime_error: Option<&str>,
 ) -> Result<(), AppError> {
     let auth_event_type = if resolution == "resolved" {
         "auth.resolved"
@@ -1747,6 +1765,7 @@ pub(super) async fn emit_auth_resolution_events(
         model_iterations,
         capability_events,
         &subruns,
+        runtime_error,
     );
     append_workflow_background_events(
         &mut events,

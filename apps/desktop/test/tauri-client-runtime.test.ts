@@ -732,6 +732,55 @@ describe('runtime client transport', () => {
     })
   })
 
+  it('posts dedicated runtime generation requests through the workspace runtime adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        configuredModelId: 'generation-only-model',
+        configuredModelName: 'Generation Only Model',
+        content: 'Generated summary',
+        requestId: 'generation-request-1',
+        consumedTokens: 32,
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const result = await workspaceClient.runtime.runGeneration({
+      projectId: 'proj-redesign',
+      configuredModelId: 'generation-only-model',
+      content: 'Summarize the current runtime architecture.',
+      systemPrompt: 'Return one sentence.',
+    } as any)
+
+    expect(result.requestId).toBe('generation-request-1')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/generations',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      projectId: 'proj-redesign',
+      configuredModelId: 'generation-only-model',
+      content: 'Summarize the current runtime architecture.',
+      systemPrompt: 'Return one sentence.',
+    })
+  })
+
   it('patches runtime config scopes through the workspace API with the workspace session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({

@@ -52,6 +52,28 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/runtime/generations:
+  post:
+    operationId: runRuntimeGeneration
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RunRuntimeGenerationInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeGenerationResult"
+        description: Runtime generation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/runtime/config/scopes/{scope}:
   patch:
     operationId: saveRuntimeConfigScope

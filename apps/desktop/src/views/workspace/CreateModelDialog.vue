@@ -15,7 +15,13 @@ defineProps<{
   createUpstreamModelOptions: CatalogFilterOption[]
   createApiKey: string
   createBaseUrl: string
-  createTotalTokens: string
+  createBudgetTotal: string
+  createBudgetAccountingMode: string
+  createBudgetTrafficClasses: string
+  createBudgetWarningThresholds: string
+  createBudgetReservationStrategy: string
+  budgetAccountingModeOptions: CatalogFilterOption[]
+  budgetReservationStrategyOptions: CatalogFilterOption[]
   createEnabled: boolean
   createFormError: string
   runtimeConfigSaving: boolean
@@ -31,7 +37,11 @@ const emit = defineEmits<{
   'update:create-model-id': [value: string]
   'update:create-api-key': [value: string]
   'update:create-base-url': [value: string]
-  'update:create-total-tokens': [value: string]
+  'update:create-budget-total': [value: string]
+  'update:create-budget-accounting-mode': [value: string]
+  'update:create-budget-traffic-classes': [value: string]
+  'update:create-budget-warning-thresholds': [value: string]
+  'update:create-budget-reservation-strategy': [value: string]
   'update:create-enabled': [value: boolean]
   submit: []
 }>()
@@ -119,14 +129,58 @@ const emit = defineEmits<{
       </div>
 
       <div class="space-y-1">
-        <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.totalTokens') }}</p>
+        <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.budgetTotal') }}</p>
         <UiInput
-          :model-value="createTotalTokens"
+          :model-value="createBudgetTotal"
           data-testid="models-create-total-tokens-input"
           type="number"
-          :placeholder="t('models.create.placeholders.totalTokens')"
-          @update:model-value="emit('update:create-total-tokens', String($event))"
+          :placeholder="t('models.create.placeholders.budgetTotal')"
+          @update:model-value="emit('update:create-budget-total', String($event))"
         />
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.budgetAccountingMode') }}</p>
+          <UiSelect
+            :model-value="createBudgetAccountingMode"
+            data-testid="models-create-budget-accounting-mode-select"
+            :options="budgetAccountingModeOptions"
+            @update:model-value="emit('update:create-budget-accounting-mode', String($event))"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.budgetReservationStrategy') }}</p>
+          <UiSelect
+            :model-value="createBudgetReservationStrategy"
+            data-testid="models-create-budget-reservation-strategy-select"
+            :options="budgetReservationStrategyOptions"
+            @update:model-value="emit('update:create-budget-reservation-strategy', String($event))"
+          />
+        </div>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.budgetTrafficClasses') }}</p>
+          <UiInput
+            :model-value="createBudgetTrafficClasses"
+            data-testid="models-create-budget-traffic-classes-input"
+            :placeholder="t('models.create.placeholders.budgetTrafficClasses')"
+            @update:model-value="emit('update:create-budget-traffic-classes', String($event))"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-text-secondary">{{ t('models.create.fields.budgetWarningThresholds') }}</p>
+          <UiInput
+            :model-value="createBudgetWarningThresholds"
+            data-testid="models-create-budget-warning-thresholds-input"
+            :placeholder="t('models.create.placeholders.budgetWarningThresholds')"
+            @update:model-value="emit('update:create-budget-warning-thresholds', String($event))"
+          />
+        </div>
       </div>
 
       <UiCheckbox

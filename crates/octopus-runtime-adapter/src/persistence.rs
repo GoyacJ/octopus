@@ -420,6 +420,15 @@ impl RuntimeAdapter {
             .join(format!("{mediation_id}.json"))
     }
 
+    pub(super) fn runtime_failed_checkpoint_path(&self, session_id: &str, run_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .runtime_checkpoints_dir
+            .join("runs")
+            .join(session_id)
+            .join(format!("{run_id}.json"))
+    }
+
     pub(super) fn runtime_mediation_checkpoint_ref(
         &self,
         session_id: &str,
@@ -442,6 +451,18 @@ impl RuntimeAdapter {
     ) -> Result<(String, String), AppError> {
         self.persist_runtime_artifact(
             self.runtime_mediation_checkpoint_path(session_id, run_id, mediation_id),
+            checkpoint,
+        )
+    }
+
+    pub(super) fn persist_runtime_failed_checkpoint(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        checkpoint: &PersistedRuntimeCheckpointArtifact,
+    ) -> Result<(String, String), AppError> {
+        self.persist_runtime_artifact(
+            self.runtime_failed_checkpoint_path(session_id, run_id),
             checkpoint,
         )
     }

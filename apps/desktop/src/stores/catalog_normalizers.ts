@@ -1,11 +1,13 @@
 import type {
+  ConfiguredModelBudgetPolicy,
   CapabilityDescriptor,
   ConfiguredModelRecord,
   CredentialBinding,
   DefaultSelection,
   ModelCatalogSnapshot,
   ModelRegistryRecord,
-  RuntimeExecutionSupport,
+  RuntimeExecutionClass,
+  RuntimeExecutionProfile,
 } from '@octopus/schema'
 
 export interface CatalogFilterOption {
@@ -62,20 +64,28 @@ export interface CatalogConfiguredModelRow extends Record<string, unknown> {
   enabled: boolean
   source: string
   surfaces: string[]
+  conversationSurfaces: string[]
   capabilities: string[]
   defaultSurfaces: string[]
   contextWindow?: number
   maxOutputTokens?: number
+  executionClass: RuntimeExecutionClass
+  upstreamStreaming: boolean
+  toolLoop: boolean
+  supportsConversationExecution: boolean
   credentialRef?: string
   credentialStatus: CredentialBinding['status'] | 'missing'
   credentialConfigured: boolean
   credentialDisplayLabel?: string
   credentialHealthLabel?: string
   baseUrl?: string
+  budgetAccountingMode?: ConfiguredModelBudgetPolicy['accountingMode']
+  budgetReservationStrategy?: ConfiguredModelBudgetPolicy['reservationStrategy']
+  budgetTrafficClasses: string[]
   totalTokens?: number
   usedTokens: number
   remainingTokens?: number
-  quotaExhausted: boolean
+  budgetExhausted: boolean
   hasDiagnostics: boolean
 }
 
@@ -129,34 +139,77 @@ export const EMPTY_SNAPSHOT: ModelCatalogSnapshot = {
   },
 }
 
-function normalizeRuntimeExecutionSupport(
-  runtimeSupport?: Partial<RuntimeExecutionSupport> | null,
-): RuntimeExecutionSupport {
+function normalizeExecutionProfile(
+  executionProfile?: Partial<RuntimeExecutionProfile> | null,
+): RuntimeExecutionProfile {
   return {
-    prompt: Boolean(runtimeSupport?.prompt),
-    conversation: Boolean(runtimeSupport?.conversation),
-    toolLoop: Boolean(runtimeSupport?.toolLoop),
-    streaming: Boolean(runtimeSupport?.streaming),
+    executionClass: (executionProfile?.executionClass ?? 'unsupported') as RuntimeExecutionClass,
+    toolLoop: Boolean(executionProfile?.toolLoop),
+    upstreamStreaming: Boolean(executionProfile?.upstreamStreaming),
   }
 }
 
-function isRuntimeExecutable(runtimeSupport: RuntimeExecutionSupport): boolean {
-  return runtimeSupport.prompt
-    || runtimeSupport.conversation
-    || runtimeSupport.toolLoop
-    || runtimeSupport.streaming
+function isConversationExecutable(executionProfile: RuntimeExecutionProfile): boolean {
+  return executionProfile.executionClass === 'agent_conversation'
+}
+
+export interface CatalogModelExecutionSummary {
+  executionClass: RuntimeExecutionClass
+  upstreamStreaming: boolean
+  toolLoop: boolean
+  supportsConversationExecution: boolean
+  enabledSurfaces: string[]
+  conversationSurfaces: string[]
+}
+
+export function summarizeModelExecution(
+  model?: Pick<ModelRegistryRecord, 'surfaceBindings'> | null,
+): CatalogModelExecutionSummary {
+  const enabledBindings = (model?.surfaceBindings ?? []).filter(binding => binding.enabled)
+  const conversationBindings = enabledBindings.filter(binding =>
+    isConversationExecutable(normalizeExecutionProfile(binding.executionProfile)))
+  const generationBindings = enabledBindings.filter(binding =>
+    normalizeExecutionProfile(binding.executionProfile).executionClass === 'single_shot_generation')
+  const primaryBinding = conversationBindings[0] ?? generationBindings[0] ?? enabledBindings[0]
+  const primaryProfile = normalizeExecutionProfile(primaryBinding?.executionProfile)
+
+  return {
+    executionClass: primaryProfile.executionClass,
+    upstreamStreaming: primaryProfile.upstreamStreaming,
+    toolLoop: primaryProfile.toolLoop,
+    supportsConversationExecution: conversationBindings.length > 0,
+    enabledSurfaces: enabledBindings.map(binding => binding.surface),
+    conversationSurfaces: conversationBindings.map(binding => binding.surface),
+  }
+}
+
+function normalizeBudgetPolicy(
+  budgetPolicy?: ConfiguredModelBudgetPolicy | null,
+): ConfiguredModelBudgetPolicy | undefined {
+  const totalBudgetTokens = budgetPolicy?.totalBudgetTokens
+  if (!budgetPolicy || !totalBudgetTokens || totalBudgetTokens <= 0) {
+    return budgetPolicy
+      ? {
+          ...budgetPolicy,
+          totalBudgetTokens: undefined,
+        }
+      : undefined
+  }
+
+  return {
+    ...budgetPolicy,
+    totalBudgetTokens,
+  }
 }
 
 function normalizeConfiguredModel(record: ConfiguredModelRecord): ConfiguredModelRecord {
-  const totalTokens = record.tokenQuota?.totalTokens
+  const totalTokens = record.budgetPolicy?.totalBudgetTokens
   const usedTokens = Number.isFinite(record.tokenUsage?.usedTokens)
     ? Math.max(0, record.tokenUsage.usedTokens)
     : 0
   return {
     ...record,
-    tokenQuota: totalTokens && totalTokens > 0
-      ? { totalTokens }
-      : undefined,
+    budgetPolicy: normalizeBudgetPolicy(record.budgetPolicy),
     tokenUsage: {
       usedTokens,
       remainingTokens: totalTokens && totalTokens > 0
@@ -173,14 +226,14 @@ export function normalizeSnapshot(snapshot?: Partial<ModelCatalogSnapshot> | nul
       ...provider,
       surfaces: provider.surfaces.map(surface => ({
         ...surface,
-        runtimeSupport: normalizeRuntimeExecutionSupport(surface.runtimeSupport),
+        executionProfile: normalizeExecutionProfile(surface.executionProfile),
       })),
     })),
     models: (snapshot?.models ?? []).map(model => ({
       ...model,
       surfaceBindings: model.surfaceBindings.map(binding => ({
         ...binding,
-        runtimeSupport: normalizeRuntimeExecutionSupport(binding.runtimeSupport),
+        executionProfile: normalizeExecutionProfile(binding.executionProfile),
       })),
     })),
     configuredModels: (snapshot?.configuredModels ?? []).map(normalizeConfiguredModel),
@@ -227,7 +280,7 @@ export function toModelRow(
     defaultPermission: model.defaultPermission,
     recommendedFor: model.recommendedFor,
     surfaces: model.surfaceBindings
-      .filter(binding => binding.enabled && isRuntimeExecutable(binding.runtimeSupport))
+      .filter(binding => binding.enabled && isConversationExecutable(binding.executionProfile))
       .map(binding => binding.surface),
     capabilities: model.capabilities.map(capability => capability.capabilityId),
     defaultSurfaces,
@@ -248,6 +301,7 @@ export function toConfiguredModelRow(
   defaultSelections: Record<string, DefaultSelection>,
   hasDiagnostics = false,
 ): CatalogConfiguredModelRow {
+  const runtime = summarizeModelExecution(model)
   const defaultSurfaces = Object.values(defaultSelections)
     .filter(selection => selection.configuredModelId === configuredModel.configuredModelId)
     .map(selection => selection.surface)
@@ -264,21 +318,27 @@ export function toConfiguredModelRow(
     track: model?.track ?? '',
     enabled: configuredModel.enabled && (model?.enabled ?? true),
     source: configuredModel.source,
-    surfaces: model?.surfaceBindings
-      .filter(binding => binding.enabled && isRuntimeExecutable(binding.runtimeSupport))
-      .map(binding => binding.surface) ?? [],
+    surfaces: runtime.enabledSurfaces,
+    conversationSurfaces: runtime.conversationSurfaces,
     capabilities: model?.capabilities.map(capability => capability.capabilityId) ?? [],
     defaultSurfaces,
     contextWindow: model?.contextWindow,
     maxOutputTokens: model?.maxOutputTokens,
+    executionClass: runtime.executionClass,
+    upstreamStreaming: runtime.upstreamStreaming,
+    toolLoop: runtime.toolLoop,
+    supportsConversationExecution: runtime.supportsConversationExecution,
     credentialRef: configuredModel.credentialRef,
     credentialStatus: configuredModel.status,
     credentialConfigured: configuredModel.configured,
     baseUrl: configuredModel.baseUrl,
-    totalTokens: configuredModel.tokenQuota?.totalTokens,
+    budgetAccountingMode: configuredModel.budgetPolicy?.accountingMode,
+    budgetReservationStrategy: configuredModel.budgetPolicy?.reservationStrategy,
+    budgetTrafficClasses: configuredModel.budgetPolicy?.trafficClasses ?? [],
+    totalTokens: configuredModel.budgetPolicy?.totalBudgetTokens,
     usedTokens: configuredModel.tokenUsage.usedTokens,
     remainingTokens: configuredModel.tokenUsage.remainingTokens,
-    quotaExhausted: configuredModel.tokenUsage.exhausted,
+    budgetExhausted: configuredModel.tokenUsage.exhausted,
     hasDiagnostics,
   }
 }
