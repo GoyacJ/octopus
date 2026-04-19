@@ -13,10 +13,11 @@ use runtime::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::builtin_catalog::{builtin_capability_catalog, BuiltinCapabilityCatalog};
 use crate::builtin_exec::execute_tool_with_enforcer;
 use crate::tool_registry::{
-    mvp_tool_specs, normalize_tool_search_query, search_tool_specs, RuntimeToolDefinition,
-    SearchableToolSpec, ToolSearchOutput, ToolSpec,
+    normalize_tool_search_query, search_tool_specs, RuntimeToolDefinition, SearchableToolSpec,
+    ToolSearchOutput,
 };
 
 use super::events::{
@@ -846,7 +847,7 @@ fn render_mcp_prompt_messages(messages: &[runtime::McpPromptMessage]) -> String 
 
 #[derive(Debug, Clone)]
 pub struct CapabilityProvider {
-    builtin_specs: Vec<ToolSpec>,
+    builtin_catalog: BuiltinCapabilityCatalog,
     runtime_tools: Vec<RuntimeToolDefinition>,
     plugin_tools: Vec<PluginTool>,
     provided_capabilities: Vec<CapabilitySpec>,
@@ -856,7 +857,13 @@ pub struct CapabilityProvider {
 impl CapabilityProvider {
     #[must_use]
     pub fn builtin() -> Self {
-        Self::new(mvp_tool_specs(), Vec::new(), Vec::new(), Vec::new(), None)
+        Self::new(
+            builtin_capability_catalog(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            None,
+        )
     }
 
     pub fn from_sources_checked(
@@ -865,10 +872,8 @@ impl CapabilityProvider {
         provided_capabilities: Vec<CapabilitySpec>,
         enforcer: Option<PermissionEnforcer>,
     ) -> Result<Self, String> {
-        let builtin_names = mvp_tool_specs()
-            .into_iter()
-            .map(|spec| spec.name.to_string())
-            .collect::<BTreeSet<_>>();
+        let builtin_catalog = builtin_capability_catalog();
+        let builtin_names = builtin_catalog.builtin_names();
         let mut seen_plugin_names = BTreeSet::new();
 
         for tool in &plugin_tools {
@@ -932,7 +937,7 @@ impl CapabilityProvider {
         }
 
         Ok(Self::new(
-            mvp_tool_specs(),
+            builtin_catalog,
             runtime_tools,
             plugin_tools,
             provided_capabilities,
@@ -942,14 +947,14 @@ impl CapabilityProvider {
 
     #[must_use]
     pub fn new(
-        builtin_specs: Vec<ToolSpec>,
+        builtin_catalog: BuiltinCapabilityCatalog,
         runtime_tools: Vec<RuntimeToolDefinition>,
         plugin_tools: Vec<PluginTool>,
         provided_capabilities: Vec<CapabilitySpec>,
         enforcer: Option<PermissionEnforcer>,
     ) -> Self {
         Self {
-            builtin_specs,
+            builtin_catalog,
             runtime_tools,
             plugin_tools,
             provided_capabilities,
@@ -959,7 +964,7 @@ impl CapabilityProvider {
 
     fn compilation_input(&self, current_dir: Option<&Path>) -> CapabilityCompilationInput {
         CapabilityCompilationInput {
-            builtin_specs: self.builtin_specs.clone(),
+            builtin_capabilities: self.builtin_catalog.entries().to_vec(),
             runtime_tools: self.runtime_tools.clone(),
             plugin_tools: self.plugin_tools.clone(),
             provided_capabilities: self.provided_capabilities.clone(),
@@ -977,9 +982,10 @@ impl CapabilityProvider {
         }
 
         let canonical_names = self
-            .builtin_specs
+            .builtin_catalog
+            .entries()
             .iter()
-            .map(|spec| spec.name.to_string())
+            .map(|builtin| builtin.name.to_string())
             .chain(
                 self.plugin_tools
                     .iter()
@@ -1029,7 +1035,7 @@ impl CapabilityProvider {
     }
 
     fn execute_local_tool(&self, tool_name: &str, input: &Value) -> Result<String, ToolError> {
-        if self.builtin_specs.iter().any(|spec| spec.name == tool_name) {
+        if self.builtin_catalog.resolve(tool_name).is_some() {
             return execute_tool_with_enforcer(self.enforcer.as_ref(), tool_name, input)
                 .map_err(ToolError::new);
         }
@@ -1212,7 +1218,9 @@ impl CapabilityRuntime {
             discoverable_skills: surface.discoverable_skills.clone(),
             available_resources: surface.available_resources.clone(),
             hidden_capabilities: surface.hidden_capabilities.clone(),
+            discovered_tools: session_state.discovered_tools().iter().cloned().collect(),
             activated_tools: session_state.activated_tools().iter().cloned().collect(),
+            exposed_tools: session_state.exposed_tools().iter().cloned().collect(),
             granted_tools: session_state.granted_tools().iter().cloned().collect(),
             pending_tools: session_state.pending_tools().iter().cloned().collect(),
             approved_tools: session_state.approved_tools().iter().cloned().collect(),
@@ -1333,13 +1341,19 @@ impl CapabilityRuntime {
     ) -> ToolSearchOutput {
         let query = query.trim().to_string();
         let normalized_query = normalize_tool_search_query(&query);
+        let session_state = planner_input.session_state.cloned().unwrap_or_default();
         let searchable = self
             .surface_projection(planner_input)
             .map(|surface| {
                 surface
                     .deferred_tools
                     .into_iter()
-                    .map(SearchableToolSpec::from)
+                    .chain(surface.visible_tools.into_iter().filter(|capability| {
+                        capability.visibility == CapabilityVisibility::Deferred
+                    }))
+                    .map(|capability| {
+                        SearchableToolSpec::from_capability(capability, &session_state)
+                    })
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();

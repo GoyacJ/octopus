@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 7741464a637d33bf2e7806d3b51435c452c5baca4cd62eadf94de31887ede941
+// Source hash: 9c9be7044af624bace58e466397fd0a1f3b1a484583ae4c71538c5ea87184fbe
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "7741464a637d33bf2e7806d3b51435c452c5baca4cd62eadf94de31887ede941"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "9c9be7044af624bace58e466397fd0a1f3b1a484583ae4c71538c5ea87184fbe"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1871,6 +1871,8 @@ export interface RuntimeCapabilityPlanSummary {
   availableResources: string[]
   deferredTools: string[]
   discoverableSkills: string[]
+  discoveredTools: string[]
+  exposedTools: string[]
   grantedTools: string[]
   hiddenCapabilities: string[]
   pendingTools: string[]
@@ -1889,7 +1891,9 @@ export interface RuntimeCapabilityStateSnapshot {
   activatedTools: string[]
   approvedTools: string[]
   authResolvedTools: string[]
+  discoveredTools: string[]
   effortOverride?: string
+  exposedTools: string[]
   grantedToolCount: number
   grantedTools: string[]
   hiddenTools: string[]
@@ -1905,6 +1909,8 @@ export interface RuntimeCapabilitySummary {
   availableResources: string[]
   deferredTools: string[]
   discoverableSkills: string[]
+  discoveredTools: string[]
+  exposedTools: string[]
   grantedTools: string[]
   hiddenCapabilities: string[]
   pendingTools: string[]

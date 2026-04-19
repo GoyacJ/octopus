@@ -9769,6 +9769,14 @@ components:
           items:
             type: string
           type: array
+        discoveredTools:
+          items:
+            type: string
+          type: array
+        exposedTools:
+          items:
+            type: string
+          type: array
         grantedTools:
           items:
             type: string
@@ -9795,7 +9803,9 @@ components:
         - discoverableSkills
         - availableResources
         - hiddenCapabilities
+        - discoveredTools
         - activatedTools
+        - exposedTools
         - grantedTools
         - pendingTools
         - approvedTools
@@ -9833,8 +9843,16 @@ components:
           items:
             type: string
           type: array
+        discoveredTools:
+          items:
+            type: string
+          type: array
         effortOverride:
           type: string
+        exposedTools:
+          items:
+            type: string
+          type: array
         grantedToolCount:
           type: integer
         grantedTools:
@@ -9854,7 +9872,9 @@ components:
             type: string
           type: array
       required:
+        - discoveredTools
         - activatedTools
+        - exposedTools
         - grantedTools
         - pendingTools
         - approvedTools
@@ -9890,6 +9910,14 @@ components:
           items:
             type: string
           type: array
+        discoveredTools:
+          items:
+            type: string
+          type: array
+        exposedTools:
+          items:
+            type: string
+          type: array
         grantedTools:
           items:
             type: string
@@ -9916,7 +9944,9 @@ components:
         - discoverableSkills
         - availableResources
         - hiddenCapabilities
+        - discoveredTools
         - activatedTools
+        - exposedTools
         - grantedTools
         - pendingTools
         - approvedTools

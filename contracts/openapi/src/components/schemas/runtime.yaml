@@ -418,7 +418,15 @@ RuntimeCapabilityPlanSummary:
       items:
         type: string
       type: array
+    discoveredTools:
+      items:
+        type: string
+      type: array
     activatedTools:
+      items:
+        type: string
+      type: array
+    exposedTools:
       items:
         type: string
       type: array
@@ -452,7 +460,9 @@ RuntimeCapabilityPlanSummary:
     - discoverableSkills
     - availableResources
     - hiddenCapabilities
+    - discoveredTools
     - activatedTools
+    - exposedTools
     - grantedTools
     - pendingTools
     - approvedTools
@@ -478,7 +488,15 @@ RuntimeCapabilitySummary:
       items:
         type: string
       type: array
+    discoveredTools:
+      items:
+        type: string
+      type: array
     activatedTools:
+      items:
+        type: string
+      type: array
+    exposedTools:
       items:
         type: string
       type: array
@@ -512,7 +530,9 @@ RuntimeCapabilitySummary:
     - discoverableSkills
     - availableResources
     - hiddenCapabilities
+    - discoveredTools
     - activatedTools
+    - exposedTools
     - grantedTools
     - pendingTools
     - approvedTools
@@ -552,7 +572,15 @@ RuntimeCapabilitySurface:
 RuntimeCapabilityStateSnapshot:
   additionalProperties: false
   properties:
+    discoveredTools:
+      items:
+        type: string
+      type: array
     activatedTools:
+      items:
+        type: string
+      type: array
+    exposedTools:
       items:
         type: string
       type: array
@@ -585,7 +613,9 @@ RuntimeCapabilityStateSnapshot:
     effortOverride:
       type: string
   required:
+    - discoveredTools
     - activatedTools
+    - exposedTools
     - grantedTools
     - pendingTools
     - approvedTools

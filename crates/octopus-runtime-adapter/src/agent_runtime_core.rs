@@ -4232,6 +4232,11 @@ fn load_pending_checkpoint(
     } else {
         (persisted_checkpoint, primary_run_serialized_session)
     };
+    let capability_state_ref = checkpoint
+        .capability_state_ref
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(capability_state_ref);
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
@@ -4335,6 +4340,11 @@ fn load_pending_auth_checkpoint(
     } else {
         (persisted_checkpoint, primary_run_serialized_session)
     };
+    let capability_state_ref = checkpoint
+        .capability_state_ref
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(capability_state_ref);
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;

@@ -19,6 +19,42 @@ fn write_workspace_config_with_generation_model(path: &std::path::Path) {
     );
 }
 
+#[test]
+fn runtime_capability_transport_defaults_exposure_fields_for_legacy_payloads() {
+    let plan: RuntimeCapabilityPlanSummary = serde_json::from_value(json!({
+        "visibleTools": ["ToolSearch"],
+        "deferredTools": ["WebSearch"],
+        "discoverableSkills": [],
+        "availableResources": [],
+        "hiddenCapabilities": [],
+        "activatedTools": [],
+        "grantedTools": [],
+        "pendingTools": [],
+        "approvedTools": [],
+        "authResolvedTools": [],
+        "providerFallbacks": []
+    }))
+    .expect("legacy capability plan summary should deserialize");
+    assert!(plan.discovered_tools.is_empty());
+    assert!(plan.exposed_tools.is_empty());
+
+    let snapshot: RuntimeCapabilityStateSnapshot = serde_json::from_value(json!({
+        "activatedTools": ["WebSearch"],
+        "grantedTools": [],
+        "pendingTools": [],
+        "approvedTools": [],
+        "authResolvedTools": [],
+        "hiddenTools": [],
+        "injectedSkillMessageCount": 0,
+        "grantedToolCount": 0,
+        "modelOverride": null,
+        "effortOverride": null
+    }))
+    .expect("legacy capability state snapshot should deserialize");
+    assert!(snapshot.discovered_tools.is_empty());
+    assert!(snapshot.exposed_tools.is_empty());
+}
+
 #[tokio::test]
 async fn startup_leaves_unsupported_runtime_projection_rows_intact() {
     let root = test_root();
