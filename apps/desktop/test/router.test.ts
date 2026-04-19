@@ -26,6 +26,7 @@ describe('desktop router contract', () => {
 
     expect(routePaths).toContain('/workspaces/:workspaceId/overview')
     expect(routePaths).toContain('/workspaces/:workspaceId/console')
+    expect(routePaths).toContain('/workspaces/:workspaceId/console/settings')
     expect(routePaths).toContain('/workspaces/:workspaceId/console/projects')
     expect(routePaths).toContain('/workspaces/:workspaceId/console/knowledge')
     expect(routePaths).toContain('/workspaces/:workspaceId/console/resources')
@@ -90,7 +91,7 @@ describe('desktop router contract', () => {
 
     await router.push('/workspaces/ws-local/console')
 
-    expect(router.currentRoute.value.name).toBe('workspace-console-projects')
+    expect(router.currentRoute.value.name).toBe('workspace-console-settings')
   })
 
   it('redirects unauthorized console routes back to workspace overview', async () => {
@@ -131,7 +132,35 @@ describe('desktop router contract', () => {
     expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })
 
-  it('redirects non-members away from project routes', async () => {
+  it('redirects non-members away from member-scoped project routes', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner']
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/resources')
+
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+  })
+
+  it('allows governance reviewers into project settings even when they are not project members', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
@@ -155,8 +184,9 @@ describe('desktop router contract', () => {
 
     await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
 
-    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(router.currentRoute.value.name).toBe('project-settings')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })
 
   it('redirects removed project runtime deep links through the existing fallback route', async () => {

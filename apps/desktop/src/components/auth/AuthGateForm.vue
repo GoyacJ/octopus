@@ -17,13 +17,22 @@ const confirmPassword = ref('')
 const avatarFileName = ref('')
 const avatarPreview = ref('')
 const avatarPayload = ref<Awaited<ReturnType<typeof tauriClient.pickAvatarImage>>>(null)
+const mappedDirectory = ref('')
 const localError = ref('')
 
 const isRegister = computed(() => auth.mode === 'register')
+const isLoopbackBootstrap = computed(() =>
+  isRegister.value && auth.bootstrapStatus?.transportSecurity === 'loopback',
+)
+const defaultMappedDirectory = computed(() =>
+  auth.bootstrapStatus?.workspace?.mappedDirectoryDefault
+  || auth.bootstrapStatus?.workspace?.mappedDirectory
+  || '',
+)
 const activeError = computed(() => localError.value || auth.error)
 
 watch(
-  () => auth.mode,
+  () => [auth.mode, defaultMappedDirectory.value] as const,
   () => {
     localError.value = ''
     password.value = ''
@@ -33,7 +42,11 @@ watch(
       avatarFileName.value = ''
       avatarPreview.value = ''
       avatarPayload.value = null
+      mappedDirectory.value = ''
+      return
     }
+
+    mappedDirectory.value = defaultMappedDirectory.value
   },
   { immediate: true },
 )
@@ -55,6 +68,16 @@ async function pickAvatar() {
   avatarPayload.value = picked
   avatarFileName.value = picked.fileName
   avatarPreview.value = avatarDataUrl()
+  localError.value = ''
+}
+
+async function pickMappedDirectory() {
+  const picked = await tauriClient.pickResourceDirectory()
+  if (!picked) {
+    return
+  }
+
+  mappedDirectory.value = picked
   localError.value = ''
 }
 
@@ -84,6 +107,10 @@ function validate(): boolean {
       localError.value = t('authGate.validation.passwordMismatch')
       return false
     }
+    if (isLoopbackBootstrap.value && !mappedDirectory.value.trim()) {
+      localError.value = t('authGate.validation.mappedDirectoryRequired')
+      return false
+    }
   }
 
   localError.value = ''
@@ -102,6 +129,7 @@ async function submit() {
       password: password.value,
       confirmPassword: confirmPassword.value,
       avatar: avatarPayload.value,
+      ...(isLoopbackBootstrap.value ? { mappedDirectory: mappedDirectory.value.trim() } : {}),
     })
     return
   }
@@ -123,11 +151,11 @@ async function submit() {
 
     <div class="grid gap-4">
       <UiField :label="t('authGate.fields.username')">
-        <UiInput v-model="username" autocomplete="username" />
+        <UiInput v-model="username" autocomplete="username" data-testid="auth-gate-username-input" />
       </UiField>
 
       <UiField v-if="isRegister" :label="t('authGate.fields.displayName')">
-        <UiInput v-model="displayName" autocomplete="nickname" />
+        <UiInput v-model="displayName" autocomplete="nickname" data-testid="auth-gate-display-name-input" />
       </UiField>
 
       <UiField v-if="isRegister" :label="t('authGate.fields.avatar')" :hint="t('authGate.fields.avatarHint')">
@@ -137,19 +165,48 @@ async function submit() {
             <span v-else>{{ displayName.slice(0, 1) || username.slice(0, 1) || 'A' }}</span>
           </div>
           <div class="min-w-0 flex-1">
-            <UiButton type="button" variant="ghost" class="w-full justify-center" @click="pickAvatar">
+            <UiButton type="button" variant="ghost" class="w-full justify-center" data-testid="auth-gate-avatar-pick" @click="pickAvatar">
               {{ avatarFileName || t('authGate.actions.pickAvatar') }}
             </UiButton>
           </div>
         </div>
       </UiField>
 
+      <UiField
+        v-if="isLoopbackBootstrap"
+        :label="t('authGate.fields.mappedDirectory')"
+        :hint="t('authGate.fields.mappedDirectoryHint')"
+      >
+        <div class="flex items-stretch gap-3">
+          <UiInput
+            v-model="mappedDirectory"
+            readonly
+            class="flex-1 font-mono"
+            data-testid="auth-gate-mapped-directory-input"
+            :placeholder="t('workspaceSettings.placeholders.mappedDirectory')"
+          />
+          <UiButton
+            type="button"
+            variant="outline"
+            data-testid="auth-gate-mapped-directory-pick"
+            @click="pickMappedDirectory"
+          >
+            {{ t('authGate.actions.pickMappedDirectory') }}
+          </UiButton>
+        </div>
+      </UiField>
+
       <UiField :label="t('authGate.fields.password')">
-        <UiInput v-model="password" type="password" autocomplete="current-password" />
+        <UiInput v-model="password" type="password" autocomplete="current-password" data-testid="auth-gate-password-input" />
       </UiField>
 
       <UiField v-if="isRegister" :label="t('authGate.fields.confirmPassword')">
-        <UiInput v-model="confirmPassword" type="password" autocomplete="new-password" />
+        <UiInput
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          data-testid="auth-gate-confirm-password-input"
+        />
       </UiField>
     </div>
 

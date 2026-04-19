@@ -32,10 +32,10 @@ import ConnectWorkspaceDialog from '@/components/layout/ConnectWorkspaceDialog.v
 import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
 import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
 import {
+  canAccessProjectSettings,
+  canShowProjectInShell,
   isProjectMember,
   isProjectModuleAllowed,
-  isProjectOwner,
-  isProjectOwnerOnlyRoute,
   projectModuleForRouteName,
   resolveProjectActorUserId,
 } from '@/composables/project-governance'
@@ -90,6 +90,10 @@ const workspaceLabel = computed(() =>
     t,
   ),
 )
+const workspaceAvatar = computed(() => workspaceStore.activeWorkspace?.avatar ?? '')
+const workspaceAvatarFallback = computed(() =>
+  (workspaceStore.activeWorkspace?.name ?? workspaceLabel.value ?? 'W').trim().slice(0, 1).toUpperCase() || 'W',
+)
 
 type NavigationItem = {
   id: string
@@ -138,6 +142,24 @@ const currentProjectActorUserId = computed(() =>
     workspaceAccessControlStore.loading ? undefined : shell.activeWorkspaceSession?.session.userId,
   ),
 )
+function canAccessProjectSettingsForActor(project: ProjectRecord, actorUserId: string) {
+  return canAccessProjectSettings(
+    project,
+    actorUserId,
+    workspaceAccessControlStore.currentEffectivePermissionCodes,
+    workspaceAccessControlStore.currentEffectiveRoleCodes,
+  )
+}
+
+function shouldShowProjectInShell(project: ProjectRecord, actorUserId: string) {
+  return canShowProjectInShell(
+    project,
+    actorUserId,
+    workspaceAccessControlStore.currentEffectivePermissionCodes,
+    workspaceAccessControlStore.currentEffectiveRoleCodes,
+  )
+}
+
 const activeProjects = computed(() =>
   workspaceStore.projects.filter((item) => {
     if (item.status !== 'active') {
@@ -146,7 +168,7 @@ const activeProjects = computed(() =>
     if (!currentProjectActorUserId.value) {
       return false
     }
-    return isProjectMember(item, currentProjectActorUserId.value)
+    return shouldShowProjectInShell(item, currentProjectActorUserId.value)
   }),
 )
 const deleteTargetProject = computed(() =>
@@ -187,6 +209,7 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       label: t('sidebar.navigation.console'),
       routeNames: [
         'workspace-console',
+        'workspace-console-settings',
         'workspace-console-projects',
         'workspace-console-knowledge',
         'workspace-console-resources',
@@ -254,6 +277,9 @@ function projectModules(projectId: string): NavigationItem[] {
   if (!workspaceId || !project || !actorUserId) {
     return []
   }
+
+  const isMember = isProjectMember(project, actorUserId)
+  const canAccessSettings = canAccessProjectSettingsForActor(project, actorUserId)
 
   return [
     {
@@ -329,12 +355,26 @@ function projectModules(projectId: string): NavigationItem[] {
     },
   ].filter((item) => {
     const routeName = item.routeNames[0]
-    if (isProjectOwnerOnlyRoute(routeName)) {
-      return isProjectOwner(project, actorUserId)
+    if (routeName === 'project-settings') {
+      return canAccessSettings
     }
+
+    if (!isMember) {
+      return false
+    }
+
     const module = projectModuleForRouteName(routeName)
     return !module || isProjectModuleAllowed(workspaceStore.activeWorkspace, project, module)
   })
+}
+
+function canDeleteProjectFromSidebar(project: ProjectRecord) {
+  const actorUserId = currentProjectActorUserId.value
+  if (!actorUserId) {
+    return false
+  }
+
+  return isProjectMember(project, actorUserId)
 }
 
 function isRouteActive(routeNames: string[]) {
@@ -394,7 +434,13 @@ function closeWorkspaceMenu() {
 }
 
 function getWorkspaceConnectionLabel(connection: WorkspaceConnectionRecord) {
-  return resolveWorkspaceLabel(connection, connection.label, t)
+  return resolveWorkspaceLabel(
+    connection,
+    connection.workspaceConnectionId === shell.activeWorkspaceConnectionId
+      ? workspaceStore.activeWorkspace?.name
+      : connection.label,
+    t,
+  )
 }
 
 function getWorkspaceConnectionStatusDotClass(status: WorkspaceConnectionRecord['status']) {
@@ -456,8 +502,8 @@ async function submitQuickCreateProject() {
       name: quickCreateForm.name,
       description: quickCreateForm.description,
       resourceDirectory: quickCreateForm.resourceDirectory,
+      presetCode: quickCreateForm.preset === 'general' ? undefined : quickCreateForm.preset,
       leaderAgentId: quickCreateForm.leaderAgentId || undefined,
-      assignments: presetSeed.assignments,
     })
     if (!created) {
       return
@@ -482,8 +528,17 @@ async function openProject(projectId: string) {
   if (!workspaceId) {
     return
   }
+  const actorUserId = currentProjectActorUserId.value
+  const project = activeProjects.value.find(item => item.id === projectId)
+  if (!actorUserId || !project) {
+    return
+  }
 
-  await router.push(createProjectDashboardTarget(workspaceId, projectId))
+  const target = isProjectMember(project, actorUserId)
+    ? createProjectDashboardTarget(workspaceId, projectId)
+    : createProjectSurfaceTarget('project-settings', workspaceId, projectId)
+
+  await router.push(target)
 }
 
 function handleProjectSummaryClick(projectId: string) {
@@ -694,7 +749,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
             </button>
 
             <UiButton
-              v-if="!isProjectExpanded(project.id)"
+              v-if="!isProjectExpanded(project.id) && canDeleteProjectFromSidebar(project)"
               :data-testid="`sidebar-project-delete-trigger-${project.id}`"
               type="button"
               variant="ghost"
@@ -741,7 +796,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               data-testid="sidebar-workspace-menu-trigger-icon"
               :class="workspaceTriggerIconClasses()"
             >
-              <LayoutDashboard :size="18" />
+              <img v-if="workspaceAvatar" :src="workspaceAvatar" alt="" class="h-full w-full rounded-[var(--radius-m)] object-cover">
+              <span v-else class="text-sm font-bold uppercase">{{ workspaceAvatarFallback }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col">
               <div class="truncate text-sm font-bold text-text-primary leading-tight">
@@ -760,11 +816,19 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
             data-testid="sidebar-workspace-menu-intro"
             class="border-b border-border bg-subtle px-3 py-3"
           >
-            <div class="truncate text-sm font-semibold text-text-primary">
-              {{ workspaceLabel }}
-            </div>
-            <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
-              {{ t('sidebar.workspaceMenu.title') }}
+            <div class="flex items-center gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-m)] bg-primary/10 text-sm font-bold uppercase text-primary">
+                <img v-if="workspaceAvatar" :src="workspaceAvatar" alt="" class="h-full w-full object-cover">
+                <span v-else>{{ workspaceAvatarFallback }}</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-semibold text-text-primary">
+                  {{ workspaceLabel }}
+                </div>
+                <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
+                  {{ t('sidebar.workspaceMenu.title') }}
+                </div>
+              </div>
             </div>
           </div>
           <div class="flex flex-col gap-3 px-2 py-2">

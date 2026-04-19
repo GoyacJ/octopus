@@ -3,28 +3,34 @@ use octopus_core::{
     AgentRecord, AppError, ArtifactRecord, BindPetConversationInput, CapabilityAssetDisablePatch,
     CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
     ChangeCurrentUserPasswordResponse, CopyWorkspaceSkillToManagedInput,
-    CreateProjectPromotionRequestInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
-    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ImportWorkspaceAgentBundleInput,
-    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
-    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
-    ImportWorkspaceSkillFolderInput, KnowledgeRecord, ModelCatalogRecord, PetConversationBinding,
-    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
-    ProjectPromotionRequest, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
-    PromoteWorkspaceResourceInput, ProviderCredentialRecord, ReviewProjectPromotionRequestInput,
-    SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
-    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
-    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
-    UpsertWorkspaceMcpServerInput, UserRecordSummary, WorkspaceDirectoryBrowserResponse,
-    WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
-    WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
-    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
+    CreateProjectDeletionRequestInput, CreateProjectPromotionRequestInput, CreateProjectRequest,
+    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
+    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
+    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
+    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
+    ModelCatalogRecord, PetConversationBinding, PetPresenceState, PetWorkspaceSnapshot,
+    ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDeletionRequest, ProjectPromotionRequest,
+    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, PromoteWorkspaceResourceInput,
+    ProviderCredentialRecord, ReviewProjectDeletionRequestInput,
+    ReviewProjectPromotionRequestInput, SavePetPresenceInput, SystemBootstrapStatus, TeamRecord,
+    ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceRequest,
+    UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
+    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserRecordSummary,
+    WorkspaceDirectoryBrowserResponse, WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord,
+    WorkspaceResourceContentDocument, WorkspaceResourceImportInput, WorkspaceResourceRecord,
+    WorkspaceSkillDocument, WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument,
+    WorkspaceSummary,
 };
 
 #[async_trait]
 pub trait WorkspaceService: Send + Sync {
     async fn system_bootstrap(&self) -> Result<SystemBootstrapStatus, AppError>;
     async fn workspace_summary(&self) -> Result<WorkspaceSummary, AppError>;
+    async fn update_workspace(
+        &self,
+        request: UpdateWorkspaceRequest,
+    ) -> Result<WorkspaceSummary, AppError>;
     async fn list_projects(&self) -> Result<Vec<ProjectRecord>, AppError>;
     async fn create_project(
         &self,
@@ -42,6 +48,10 @@ pub trait WorkspaceService: Send + Sync {
     async fn list_workspace_promotion_requests(
         &self,
     ) -> Result<Vec<ProjectPromotionRequest>, AppError>;
+    async fn list_project_deletion_requests(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectDeletionRequest>, AppError>;
     async fn list_project_deliverables(
         &self,
         project_id: &str,
@@ -52,12 +62,26 @@ pub trait WorkspaceService: Send + Sync {
         requested_by_user_id: &str,
         input: CreateProjectPromotionRequestInput,
     ) -> Result<ProjectPromotionRequest, AppError>;
+    async fn create_project_deletion_request(
+        &self,
+        project_id: &str,
+        requested_by_user_id: &str,
+        input: CreateProjectDeletionRequestInput,
+    ) -> Result<ProjectDeletionRequest, AppError>;
     async fn review_project_promotion_request(
         &self,
         request_id: &str,
         reviewed_by_user_id: &str,
         input: ReviewProjectPromotionRequestInput,
     ) -> Result<ProjectPromotionRequest, AppError>;
+    async fn review_project_deletion_request(
+        &self,
+        request_id: &str,
+        reviewed_by_user_id: &str,
+        approved: bool,
+        input: ReviewProjectDeletionRequestInput,
+    ) -> Result<ProjectDeletionRequest, AppError>;
+    async fn delete_project(&self, project_id: &str) -> Result<(), AppError>;
     async fn list_workspace_resources(&self) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
     async fn list_project_resources(
         &self,
@@ -322,6 +346,7 @@ pub trait WorkspaceService: Send + Sync {
     async fn create_tool(&self, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn update_tool(&self, tool_id: &str, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn delete_tool(&self, tool_id: &str) -> Result<(), AppError>;
+    async fn current_user_profile(&self, user_id: &str) -> Result<UserRecordSummary, AppError>;
     async fn update_current_user_profile(
         &self,
         user_id: &str,

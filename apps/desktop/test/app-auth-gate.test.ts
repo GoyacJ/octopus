@@ -8,6 +8,8 @@ import { vi } from 'vitest'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { useWorkspaceStore } from '@/stores/workspace'
+import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -51,6 +53,16 @@ async function flushUi() {
   await nextTick()
 }
 
+async function waitFor(predicate: () => boolean, timeoutMs = 3000) {
+  const startedAt = Date.now()
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Timed out waiting for auth gate state')
+    }
+    await flushUi()
+  }
+}
+
 describe('App auth gate', () => {
   beforeEach(async () => {
     vi.unstubAllEnvs()
@@ -75,6 +87,69 @@ describe('App auth gate', () => {
     expect(document.body.textContent).toContain(String(i18n.global.t('authGate.fields.username')))
 
     mounted.destroy()
+  })
+
+  it('prefills the bootstrap mapped directory and persists the selected directory into the canonical workspace summary', async () => {
+    installWorkspaceApiFixture({
+      localOwnerReady: false,
+      localSetupRequired: true,
+      preloadWorkspaceSessions: false,
+    })
+    vi.spyOn(tauriClient as unknown as { pickAvatarImage: () => Promise<any> }, 'pickAvatarImage')
+      .mockResolvedValue({
+        fileName: 'owner-avatar.png',
+        contentType: 'image/png',
+        dataBase64: 'b3duZXI=',
+        byteSize: 5,
+      })
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('/Users/goya/Workspace Launchpad')
+
+    const mounted = mountApp()
+
+    try {
+      await waitFor(() => document.body.textContent?.includes(String(i18n.global.t('authGate.register.title'))) ?? false)
+
+      const mappedDirectoryInput = document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-mapped-directory-input"]')
+      expect(mappedDirectoryInput).not.toBeNull()
+      expect(mappedDirectoryInput?.value).toBe('/Users/goya/Octopus')
+
+      document.body.querySelector<HTMLButtonElement>('[data-testid="auth-gate-avatar-pick"]')?.click()
+      await waitFor(() => (document.body.textContent?.includes('owner-avatar.png') ?? false))
+
+      document.body.querySelector<HTMLButtonElement>('[data-testid="auth-gate-mapped-directory-pick"]')?.click()
+      await waitFor(() =>
+        document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-mapped-directory-input"]')?.value === '/Users/goya/Workspace Launchpad',
+      )
+
+      const usernameInput = document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-username-input"]')
+      const displayNameInput = document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-display-name-input"]')
+      const passwordInput = document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-password-input"]')
+      const confirmPasswordInput = document.body.querySelector<HTMLInputElement>('[data-testid="auth-gate-confirm-password-input"]')
+
+      expect(usernameInput).not.toBeNull()
+      expect(displayNameInput).not.toBeNull()
+      expect(passwordInput).not.toBeNull()
+      expect(confirmPasswordInput).not.toBeNull()
+
+      usernameInput!.value = 'owner'
+      usernameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+      displayNameInput!.value = 'Workspace Owner'
+      displayNameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+      passwordInput!.value = 'secret-123'
+      passwordInput!.dispatchEvent(new Event('input', { bubbles: true }))
+      confirmPasswordInput!.value = 'secret-123'
+      confirmPasswordInput!.dispatchEvent(new Event('input', { bubbles: true }))
+
+      document.body.querySelector<HTMLButtonElement>('[data-testid="auth-gate-submit"]')?.click()
+
+      await waitFor(() => !document.body.textContent?.includes(String(i18n.global.t('authGate.register.title'))))
+      const workspaceStore = useWorkspaceStore()
+      await workspaceStore.ensureWorkspaceBootstrap('conn-local', { force: true })
+      expect(workspaceStore.activeWorkspace?.mappedDirectory).toBe('/Users/goya/Workspace Launchpad')
+    } finally {
+      mounted.destroy()
+    }
   })
 
   it('shows the login gate after a persisted session expires', async () => {

@@ -226,14 +226,12 @@ ForkDeliverableInput:
 CreateProjectRequest:
   additionalProperties: false
   properties:
-    assignments:
-      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
     description:
       type: string
     leaderAgentId:
       type: string
-    linkedWorkspaceAssets:
-      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    managerUserId:
+      type: string
     memberUserIds:
       items:
         type: string
@@ -244,6 +242,8 @@ CreateProjectRequest:
       type: string
     permissionOverrides:
       $ref: "#/components/schemas/ProjectPermissionOverrides"
+    presetCode:
+      type: string
     resourceDirectory:
       type: string
   required:
@@ -748,19 +748,69 @@ ProjectPromotionRequestStatus:
     - approved
     - rejected
   type: string
+ProjectDeletionRequestStatus:
+  enum:
+    - pending
+    - approved
+    - rejected
+  type: string
+ProjectDeletionRequest:
+  additionalProperties: false
+  properties:
+    createdAt:
+      type: integer
+    id:
+      type: string
+    projectId:
+      type: string
+    reason:
+      type: string
+    requestedByUserId:
+      type: string
+    reviewComment:
+      type: string
+    reviewedAt:
+      type: integer
+    reviewedByUserId:
+      type: string
+    status:
+      $ref: "#/components/schemas/ProjectDeletionRequestStatus"
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - projectId
+    - requestedByUserId
+    - status
+    - createdAt
+    - updatedAt
+  type: object
+CreateProjectDeletionRequestInput:
+  additionalProperties: false
+  properties:
+    reason:
+      type: string
+  type: object
+ReviewProjectDeletionRequestInput:
+  additionalProperties: false
+  properties:
+    reviewComment:
+      type: string
+  type: object
 ProjectRecord:
   additionalProperties: false
   properties:
-    assignments:
-      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
     description:
       type: string
     id:
       type: string
     leaderAgentId:
       type: string
-    linkedWorkspaceAssets:
-      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    managerUserId:
+      type: string
     memberUserIds:
       items:
         type: string
@@ -771,6 +821,8 @@ ProjectRecord:
       type: string
     permissionOverrides:
       $ref: "#/components/schemas/ProjectPermissionOverrides"
+    presetCode:
+      type: string
     resourceDirectory:
       type: string
     status:
@@ -790,7 +842,6 @@ ProjectRecord:
     - ownerUserId
     - memberUserIds
     - permissionOverrides
-    - linkedWorkspaceAssets
   type: object
 ProjectResourceKind:
   enum:
@@ -860,12 +911,10 @@ ProjectWorkspaceAssignments:
 UpdateProjectRequest:
   additionalProperties: false
   properties:
-    assignments:
-      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
     leaderAgentId:
       type: string
-    linkedWorkspaceAssets:
-      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    managerUserId:
+      type: string
     memberUserIds:
       items:
         type: string
@@ -878,6 +927,8 @@ UpdateProjectRequest:
       type: string
     permissionOverrides:
       $ref: "#/components/schemas/ProjectPermissionOverrides"
+    presetCode:
+      type: string
     resourceDirectory:
       type: string
     status:

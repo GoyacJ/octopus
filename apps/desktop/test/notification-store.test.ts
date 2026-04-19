@@ -128,6 +128,8 @@ describe('useNotificationStore', () => {
       scopeKind: 'user',
       level: 'success',
       toastVisibleUntil: Date.now() + 30_000,
+      routeTo: '/workspaces/ws-local/console/settings',
+      actionLabel: 'Open settings',
     })
     createNotificationMock.mockResolvedValue(created)
     subscribeToNotificationsMock.mockReturnValue(() => {})
@@ -144,6 +146,8 @@ describe('useNotificationStore', () => {
       body: 'Profile details were updated.',
       source: 'personal-center',
       toastDurationMs: 30_000,
+      routeTo: '/workspaces/ws-local/console/settings',
+      actionLabel: 'Open settings',
     }
 
     const result = await store.notify(input)
@@ -151,6 +155,8 @@ describe('useNotificationStore', () => {
     expect(result.id).toBe('notif-created')
     expect(createNotificationMock).toHaveBeenCalledWith(input)
     expect(store.notifications[0]?.id).toBe('notif-created')
+    expect(store.notifications[0]?.routeTo).toBe('/workspaces/ws-local/console/settings')
+    expect(store.notifications[0]?.actionLabel).toBe('Open settings')
     expect(store.unreadSummary.total).toBe(1)
     expect(store.unreadSummary.byScope.user).toBe(1)
     expect(store.activeToasts[0]?.id).toBe('notif-created')

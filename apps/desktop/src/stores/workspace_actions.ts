@@ -1,12 +1,16 @@
 import type { ComputedRef, Ref } from 'vue'
 
 import type {
+  CreateProjectDeletionRequestInput,
   CreateProjectRequest,
   ProjectDashboardSnapshot,
+  ProjectDeletionRequest,
   ProjectRecord,
+  ReviewProjectDeletionRequestInput,
   RuntimeConfigValidationResult,
   RuntimeEffectiveConfig,
   UpdateProjectRequest,
+  UpdateWorkspaceRequest,
   WorkspaceOverviewSnapshot,
 } from '@octopus/schema'
 
@@ -23,6 +27,7 @@ interface WorkspaceActionContext {
   summaries: Ref<Record<string, WorkspaceOverviewSnapshot['workspace']>>
   overviews: Ref<Record<string, WorkspaceOverviewSnapshot>>
   projectsByConnection: Ref<Record<string, ProjectRecord[]>>
+  projectDeletionRequestsByKey: Ref<Record<string, ProjectDeletionRequest[]>>
   dashboards: Ref<Record<string, ProjectDashboardSnapshot>>
   projectRuntimeConfigs: Ref<Record<string, RuntimeEffectiveConfig>>
   projectRuntimeDrafts: Ref<Record<string, string>>
@@ -65,6 +70,44 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     context.projectsByConnection.value = {
       ...context.projectsByConnection.value,
       [connectionId]: projects,
+    }
+  }
+
+  function deletionRequestKey(connectionId: string, projectId: string) {
+    return `${connectionId}:${projectId}`
+  }
+
+  function setProjectDeletionRequests(
+    connectionId: string,
+    projectId: string,
+    requests: ProjectDeletionRequest[],
+  ) {
+    context.projectDeletionRequestsByKey.value = {
+      ...context.projectDeletionRequestsByKey.value,
+      [deletionRequestKey(connectionId, projectId)]: requests,
+    }
+  }
+
+  function setWorkspaceForConnection(
+    connectionId: string,
+    workspace: WorkspaceOverviewSnapshot['workspace'],
+  ) {
+    context.summaries.value = {
+      ...context.summaries.value,
+      [connectionId]: workspace,
+    }
+
+    const overview = context.overviews.value[connectionId]
+    if (!overview) {
+      return
+    }
+
+    context.overviews.value = {
+      ...context.overviews.value,
+      [connectionId]: {
+        ...overview,
+        workspace,
+      },
     }
   }
 
@@ -337,6 +380,11 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     context.errors.value = nextErrors
     context.requestTokens.value = nextTokens
     context.bootstrapLoadedAtByConnection.value = nextBootstrapLoadedAt
+    Object.keys(context.projectDeletionRequestsByKey.value)
+      .filter(key => key.startsWith(`${workspaceConnectionId}:`))
+      .forEach((key) => {
+        delete context.projectDeletionRequestsByKey.value[key]
+      })
     delete bootstrapInflightByConnection[workspaceConnectionId]
     Object.keys(context.dashboards.value)
       .filter(key => key.startsWith(`${workspaceConnectionId}:`))
@@ -378,6 +426,27 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     }
   }
 
+  async function updateWorkspace(input: UpdateWorkspaceRequest, workspaceConnectionId?: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return null
+    }
+    const { client, connectionId } = resolvedClient
+
+    try {
+      const workspace = await client.workspace.update(input)
+      setWorkspaceForConnection(connectionId, workspace)
+      if (!context.currentWorkspaceId.value) {
+        context.currentWorkspaceId.value = workspace.id
+      }
+      setConnectionError(connectionId, '')
+      return workspace
+    } catch (cause) {
+      setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to update workspace')
+      return null
+    }
+  }
+
   async function updateProject(projectId: string, input: UpdateProjectRequest, workspaceConnectionId?: string) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
     if (!resolvedClient) {
@@ -396,6 +465,143 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     } catch (cause) {
       setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to update project')
       return null
+    }
+  }
+
+  function getProjectDeletionRequests(projectId: string, workspaceConnectionId?: string) {
+    const connectionId = workspaceConnectionId ?? context.activeConnectionId.value
+    if (!connectionId || !projectId) {
+      return []
+    }
+    return context.projectDeletionRequestsByKey.value[deletionRequestKey(connectionId, projectId)] ?? []
+  }
+
+  async function loadProjectDeletionRequests(projectId: string, workspaceConnectionId?: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return []
+    }
+    const { client, connectionId } = resolvedClient
+
+    try {
+      const requests = await client.projects.listDeletionRequests(projectId)
+      setProjectDeletionRequests(connectionId, projectId, requests)
+      return requests
+    } catch (cause) {
+      setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to load project deletion requests')
+      return []
+    }
+  }
+
+  async function createProjectDeletionRequest(
+    projectId: string,
+    input: CreateProjectDeletionRequestInput,
+    workspaceConnectionId?: string,
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return null
+    }
+    const { client, connectionId } = resolvedClient
+
+    try {
+      const created = await client.projects.createDeletionRequest(projectId, input)
+      const current = context.projectDeletionRequestsByKey.value[deletionRequestKey(connectionId, projectId)] ?? []
+      setProjectDeletionRequests(
+        connectionId,
+        projectId,
+        [created, ...current.filter(request => request.id !== created.id)],
+      )
+      return created
+    } catch (cause) {
+      setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to create project deletion request')
+      return null
+    }
+  }
+
+  async function reviewProjectDeletionRequest(
+    projectId: string,
+    requestId: string,
+    input: ReviewProjectDeletionRequestInput,
+    approved: boolean,
+    workspaceConnectionId?: string,
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return null
+    }
+    const { client, connectionId } = resolvedClient
+
+    try {
+      const reviewed = approved
+        ? await client.projects.approveDeletionRequest(projectId, requestId, input)
+        : await client.projects.rejectDeletionRequest(projectId, requestId, input)
+      const current = context.projectDeletionRequestsByKey.value[deletionRequestKey(connectionId, projectId)] ?? []
+      setProjectDeletionRequests(
+        connectionId,
+        projectId,
+        [reviewed, ...current.filter(request => request.id !== reviewed.id)],
+      )
+      return reviewed
+    } catch (cause) {
+      setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to review project deletion request')
+      return null
+    }
+  }
+
+  async function approveProjectDeletionRequest(
+    projectId: string,
+    requestId: string,
+    input: ReviewProjectDeletionRequestInput,
+    workspaceConnectionId?: string,
+  ) {
+    return await reviewProjectDeletionRequest(projectId, requestId, input, true, workspaceConnectionId)
+  }
+
+  async function rejectProjectDeletionRequest(
+    projectId: string,
+    requestId: string,
+    input: ReviewProjectDeletionRequestInput,
+    workspaceConnectionId?: string,
+  ) {
+    return await reviewProjectDeletionRequest(projectId, requestId, input, false, workspaceConnectionId)
+  }
+
+  async function deleteProject(projectId: string, workspaceConnectionId?: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return false
+    }
+    const { client, connectionId } = resolvedClient
+    const remainingProjects = (context.projectsByConnection.value[connectionId] ?? [])
+      .filter(project => project.id !== projectId)
+
+    try {
+      await client.projects.delete(projectId)
+      setProjectsForConnection(connectionId, remainingProjects)
+      delete context.projectDeletionRequestsByKey.value[deletionRequestKey(connectionId, projectId)]
+      delete context.dashboards.value[`${connectionId}:${projectId}`]
+      delete context.dashboardLoadedAtByKey.value[`${connectionId}:${projectId}`]
+      delete dashboardInflightByKey[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeConfigs.value[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeDrafts.value[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeValidations.value[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeLoading.value[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeSaving.value[`${connectionId}:${projectId}`]
+      delete context.projectRuntimeValidating.value[`${connectionId}:${projectId}`]
+
+      const nextActiveProject = remainingProjects.find(project => project.status === 'active')
+      if (context.currentProjectId.value === projectId) {
+        context.currentProjectId.value = nextActiveProject?.id ?? remainingProjects[0]?.id ?? ''
+      }
+      if (nextActiveProject) {
+        setDefaultProjectIdForConnection(connectionId, nextActiveProject.id)
+      }
+      setConnectionError(connectionId, '')
+      return true
+    } catch (cause) {
+      setConnectionError(connectionId, cause instanceof Error ? cause.message : 'Failed to delete project')
+      return false
     }
   }
 
@@ -426,7 +632,6 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
       description: target.description,
       resourceDirectory: target.resourceDirectory,
       status: 'archived',
-      assignments: target.assignments,
     }, connectionId)
     if (!updated) {
       return null
@@ -458,7 +663,6 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
       description: target.description,
       resourceDirectory: target.resourceDirectory,
       status: 'active',
-      assignments: target.assignments,
     }, connectionId)
     if (!updated) {
       return null
@@ -483,7 +687,14 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     getProjectDashboard,
     clearWorkspaceScope,
     createProject,
+    updateWorkspace,
     updateProject,
+    getProjectDeletionRequests,
+    loadProjectDeletionRequests,
+    createProjectDeletionRequest,
+    approveProjectDeletionRequest,
+    rejectProjectDeletionRequest,
+    deleteProject,
     archiveProject,
     restoreProject,
   }

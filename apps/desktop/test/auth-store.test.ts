@@ -7,6 +7,7 @@ import { createDefaultShellPreferences } from '@octopus/schema'
 
 import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
+import { useUserProfileStore } from '@/stores/user-profile'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -72,6 +73,26 @@ describe('useAuthStore', () => {
 
     expect(auth.dialogOpen).toBe(false)
     expect(auth.isAuthenticated).toBe(true)
+  })
+
+  it('hydrates the current user profile after restoring a persisted session', async () => {
+    installWorkspaceApiFixture({
+      localOwnerReady: true,
+      localSetupRequired: false,
+      preloadWorkspaceSessions: true,
+      localSessionValid: true,
+    })
+
+    await bootstrapShell()
+    const auth = useAuthStore()
+    const profile = useUserProfileStore()
+
+    await auth.bootstrapAuth()
+
+    expect(auth.isAuthenticated).toBe(true)
+    expect(profile.currentUser).not.toBeNull()
+    expect(profile.currentUser?.id).toBe('user-owner')
+    expect(profile.currentUser?.avatar).toBe('data:image/png;base64,iVBORw0KGgo=')
   })
 
   it('clears an invalid persisted session and falls back to login', async () => {
@@ -167,6 +188,19 @@ describe('useAuthStore', () => {
             },
           }),
         },
+        profile: {
+          getCurrentUserProfile: async () => ({
+            id: 'user-owner',
+            username: 'owner',
+            displayName: 'Workspace Owner',
+            avatar: 'data:image/png;base64,b3duZXI=',
+            status: 'active',
+            passwordState: 'set',
+          }),
+        },
+        inbox: {
+          list: async () => [],
+        },
       } as ReturnType<typeof tauriClient.createWorkspaceClient>
     })
 
@@ -231,5 +265,62 @@ describe('useAuthStore', () => {
     expect(revokeCurrentSession).toHaveBeenCalledTimes(1)
     expect(shell.activeWorkspaceSession).toBeNull()
     expect(auth.isAuthenticated).toBe(false)
+  })
+
+  it('hydrates the current user profile after first-owner registration completes', async () => {
+    installWorkspaceApiFixture({
+      localOwnerReady: false,
+      localSetupRequired: true,
+      preloadWorkspaceSessions: false,
+    })
+
+    await bootstrapShell()
+    const auth = useAuthStore()
+    const profile = useUserProfileStore()
+
+    await auth.registerOwner({
+      username: 'owner',
+      displayName: 'Workspace Owner',
+      password: 'secret-123',
+      confirmPassword: 'secret-123',
+      avatar: {
+        fileName: 'owner-avatar.png',
+        contentType: 'image/png',
+        dataBase64: 'b3duZXI=',
+        byteSize: 5,
+      },
+    })
+
+    expect(auth.isAuthenticated).toBe(true)
+    expect(profile.currentUser).not.toBeNull()
+    expect(profile.currentUser?.id).toBe('user-owner')
+    expect(profile.currentUser?.avatar).toBe('data:image/png;base64,b3duZXI=')
+  })
+
+  it('stores the selected mapped directory during first-owner registration', async () => {
+    installWorkspaceApiFixture({
+      localOwnerReady: false,
+      localSetupRequired: true,
+      preloadWorkspaceSessions: false,
+    })
+
+    await bootstrapShell()
+    const auth = useAuthStore()
+
+    await auth.registerOwner({
+      username: 'owner',
+      displayName: 'Workspace Owner',
+      password: 'secret-123',
+      confirmPassword: 'secret-123',
+      avatar: {
+        fileName: 'owner-avatar.png',
+        contentType: 'image/png',
+        dataBase64: 'b3duZXI=',
+        byteSize: 5,
+      },
+      mappedDirectory: '/Users/goya/Workspace Launchpad',
+    } as any)
+
+    expect(auth.bootstrapStatus?.workspace.mappedDirectory).toBe('/Users/goya/Workspace Launchpad')
   })
 })

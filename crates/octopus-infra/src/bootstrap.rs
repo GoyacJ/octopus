@@ -47,10 +47,14 @@ pub fn build_infra_bundle(root: impl Into<PathBuf>) -> Result<InfraBundle, AppEr
 pub(super) fn save_workspace_config_file(
     path: &Path,
     workspace: &WorkspaceSummary,
+    avatar_path: Option<&str>,
+    avatar_content_type: Option<&str>,
 ) -> Result<(), AppError> {
     let config = WorkspaceConfigFile {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
+        avatar_path: avatar_path.map(str::to_string),
+        avatar_content_type: avatar_content_type.map(str::to_string),
         slug: workspace.slug.clone(),
         deployment: workspace.deployment.clone(),
         bootstrap_status: workspace.bootstrap_status.clone(),
@@ -58,6 +62,7 @@ pub(super) fn save_workspace_config_file(
         host: workspace.host.clone(),
         listen_address: workspace.listen_address.clone(),
         default_project_id: workspace.default_project_id.clone(),
+        mapped_directory: workspace.mapped_directory.clone(),
         project_default_permissions: workspace.project_default_permissions.clone(),
     };
     fs::write(path, toml::to_string_pretty(&config)?)?;

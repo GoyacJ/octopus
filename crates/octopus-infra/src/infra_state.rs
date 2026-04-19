@@ -21,6 +21,10 @@ const PERSONAL_PET_SPECIES_REGISTRY: &[&str] = &[
 pub(super) struct WorkspaceConfigFile {
     pub(super) id: String,
     pub(super) name: String,
+    #[serde(default)]
+    pub(super) avatar_path: Option<String>,
+    #[serde(default)]
+    pub(super) avatar_content_type: Option<String>,
     pub(super) slug: String,
     pub(super) deployment: String,
     pub(super) bootstrap_status: String,
@@ -28,6 +32,8 @@ pub(super) struct WorkspaceConfigFile {
     pub(super) host: String,
     pub(super) listen_address: String,
     pub(super) default_project_id: String,
+    #[serde(default)]
+    pub(super) mapped_directory: Option<String>,
     #[serde(default = "default_project_default_permissions")]
     pub(super) project_default_permissions: ProjectDefaultPermissions,
 }
@@ -134,11 +140,14 @@ pub(super) struct PetAgentExtensionRecord {
 pub(super) struct InfraState {
     pub(super) paths: WorkspacePaths,
     pub(super) workspace: Mutex<WorkspaceSummary>,
+    pub(super) workspace_avatar_path: Mutex<Option<String>>,
+    pub(super) workspace_avatar_content_type: Mutex<Option<String>>,
     pub(super) users: Mutex<Vec<StoredUser>>,
     pub(super) apps: Mutex<Vec<ClientAppRecord>>,
     pub(super) sessions: Mutex<Vec<SessionRecord>>,
     pub(super) projects: Mutex<Vec<ProjectRecord>>,
     pub(super) project_promotion_requests: Mutex<Vec<ProjectPromotionRequest>>,
+    pub(super) project_deletion_requests: Mutex<Vec<ProjectDeletionRequest>>,
     pub(super) resources: Mutex<Vec<WorkspaceResourceRecord>>,
     pub(super) knowledge_records: Mutex<Vec<KnowledgeRecord>>,
     #[allow(dead_code)]
@@ -184,7 +193,22 @@ impl InfraState {
 
     pub(super) fn save_workspace_config(&self) -> Result<(), AppError> {
         let workspace = self.workspace_snapshot()?;
-        bootstrap::save_workspace_config_file(&self.paths.workspace_config, &workspace)
+        let avatar_path = self
+            .workspace_avatar_path
+            .lock()
+            .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+            .clone();
+        let avatar_content_type = self
+            .workspace_avatar_content_type
+            .lock()
+            .map_err(|_| AppError::runtime("workspace avatar mutex poisoned"))?
+            .clone();
+        bootstrap::save_workspace_config_file(
+            &self.paths.workspace_config,
+            &workspace,
+            avatar_path.as_deref(),
+            avatar_content_type.as_deref(),
+        )
     }
 }
 
@@ -196,6 +220,8 @@ pub(super) fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), 
     let config = WorkspaceConfigFile {
         id: DEFAULT_WORKSPACE_ID.into(),
         name: "Octopus Local Workspace".into(),
+        avatar_path: None,
+        avatar_content_type: None,
         slug: "local-workspace".into(),
         deployment: "local".into(),
         bootstrap_status: "setup_required".into(),
@@ -203,6 +229,7 @@ pub(super) fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), 
         host: "127.0.0.1".into(),
         listen_address: "127.0.0.1".into(),
         default_project_id: DEFAULT_PROJECT_ID.into(),
+        mapped_directory: None,
         project_default_permissions: ProjectDefaultPermissions {
             agents: "allow".into(),
             resources: "allow".into(),
@@ -282,6 +309,8 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               description TEXT NOT NULL,
               resource_directory TEXT NOT NULL,
               leader_agent_id TEXT,
+              manager_user_id TEXT,
+              preset_code TEXT,
               assignments_json TEXT,
               owner_user_id TEXT,
               member_user_ids_json TEXT,
@@ -298,6 +327,19 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               submitted_by_owner_user_id TEXT NOT NULL,
               required_workspace_capability TEXT NOT NULL,
               status TEXT NOT NULL,
+              reviewed_by_user_id TEXT,
+              review_comment TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              reviewed_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS project_deletion_requests (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              requested_by_user_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              reason TEXT,
               reviewed_by_user_id TEXT,
               review_comment TEXT,
               created_at INTEGER NOT NULL,
@@ -1031,6 +1073,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_bundle_asset_descriptor_columns(&connection)?;
     ensure_project_assignment_columns(&connection)?;
     ensure_project_promotion_request_table(&connection)?;
+    ensure_project_deletion_request_table(&connection)?;
     ensure_project_agent_link_table(&connection)?;
     ensure_project_team_link_table(&connection)?;
     ensure_project_task_run_columns(&connection)?;
@@ -1834,6 +1877,8 @@ pub(super) fn ensure_project_assignment_columns(connection: &Connection) -> Resu
         "projects",
         &[
             ("leader_agent_id", "TEXT"),
+            ("manager_user_id", "TEXT"),
+            ("preset_code", "TEXT"),
             ("assignments_json", "TEXT"),
             ("resource_directory", "TEXT"),
             ("owner_user_id", "TEXT"),
@@ -1859,6 +1904,30 @@ pub(super) fn ensure_project_promotion_request_table(
               submitted_by_owner_user_id TEXT NOT NULL,
               required_workspace_capability TEXT NOT NULL,
               status TEXT NOT NULL,
+              reviewed_by_user_id TEXT,
+              review_comment TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              reviewed_at INTEGER
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
+}
+
+pub(super) fn ensure_project_deletion_request_table(
+    connection: &Connection,
+) -> Result<(), AppError> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS project_deletion_requests (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              requested_by_user_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              reason TEXT,
               reviewed_by_user_id TEXT,
               review_comment TEXT,
               created_at INTEGER NOT NULL,
@@ -3117,9 +3186,16 @@ fn backfill_default_project_assignments(connection: &Connection) -> Result<(), A
 pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let workspace_file: WorkspaceConfigFile =
         toml::from_str(&fs::read_to_string(&paths.workspace_config)?)?;
+    let workspace_avatar_path = workspace_file.avatar_path.clone();
+    let workspace_avatar_content_type = workspace_file.avatar_content_type.clone();
     let mut workspace = WorkspaceSummary {
         id: workspace_file.id,
         name: workspace_file.name,
+        avatar: stored_avatar_data_url(
+            &paths,
+            workspace_file.avatar_path.as_deref(),
+            workspace_file.avatar_content_type.as_deref(),
+        ),
         slug: workspace_file.slug,
         deployment: workspace_file.deployment,
         bootstrap_status: workspace_file.bootstrap_status,
@@ -3127,6 +3203,11 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         host: workspace_file.host,
         listen_address: workspace_file.listen_address,
         default_project_id: workspace_file.default_project_id,
+        mapped_directory: stored_mapped_directory(
+            &paths,
+            workspace_file.mapped_directory.as_deref(),
+        ),
+        mapped_directory_default: Some(workspace_root_display_path(&paths)),
         project_default_permissions: workspace_file.project_default_permissions,
     };
 
@@ -3160,7 +3241,12 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     if workspace_needs_normalize {
         workspace.bootstrap_status = expected_bootstrap_status.into();
         workspace.owner_user_id = owner_user_id;
-        bootstrap::save_workspace_config_file(&paths.workspace_config, &workspace)?;
+        bootstrap::save_workspace_config_file(
+            &paths.workspace_config,
+            &workspace,
+            workspace_avatar_path.as_deref(),
+            workspace_avatar_content_type.as_deref(),
+        )?;
     }
     backfill_project_governance(&connection, workspace.owner_user_id.as_deref())?;
     for user in &users {
@@ -3168,6 +3254,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     }
     let projects = load_projects(&connection)?;
     let project_promotion_requests = load_project_promotion_requests(&connection)?;
+    let project_deletion_requests = load_project_deletion_requests(&connection)?;
     let sessions = load_sessions(&connection)?;
     let resources = load_resources(&connection)?;
     let knowledge_records = load_knowledge_records(&connection)?;
@@ -3193,11 +3280,14 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     Ok(InfraState {
         paths,
         workspace: Mutex::new(workspace),
+        workspace_avatar_path: Mutex::new(workspace_avatar_path),
+        workspace_avatar_content_type: Mutex::new(workspace_avatar_content_type),
         users: Mutex::new(users),
         apps: Mutex::new(app_registry.apps),
         sessions: Mutex::new(sessions),
         projects: Mutex::new(projects),
         project_promotion_requests: Mutex::new(project_promotion_requests),
+        project_deletion_requests: Mutex::new(project_deletion_requests),
         resources: Mutex::new(resources),
         knowledge_records: Mutex::new(knowledge_records),
         project_tasks: Mutex::new(project_tasks),
@@ -3309,13 +3399,15 @@ fn reset_legacy_sessions_table(connection: &Connection) -> Result<(), AppError> 
 pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, name, status, description, resource_directory, leader_agent_id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
+            "SELECT id, workspace_id, name, status, description, resource_directory, leader_agent_id, manager_user_id, preset_code, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
             let leader_agent_id: Option<String> = row.get(6)?;
-            let assignments_json: Option<String> = row.get(7)?;
+            let manager_user_id: Option<String> = row.get(7)?;
+            let preset_code: Option<String> = row.get(8)?;
+            let assignments_json: Option<String> = row.get(9)?;
             let assignments = assignments_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3323,13 +3415,13 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        7,
+                        9,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?;
-            let owner_user_id: Option<String> = row.get(8)?;
-            let member_user_ids_json: Option<String> = row.get(9)?;
+            let owner_user_id: Option<String> = row.get(10)?;
+            let member_user_ids_json: Option<String> = row.get(11)?;
             let member_user_ids = member_user_ids_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3337,13 +3429,13 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        9,
+                        11,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?
                 .unwrap_or_default();
-            let permission_overrides_json: Option<String> = row.get(10)?;
+            let permission_overrides_json: Option<String> = row.get(12)?;
             let permission_overrides = permission_overrides_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3351,13 +3443,13 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        10,
+                        12,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?
                 .unwrap_or_else(default_project_permission_overrides);
-            let linked_workspace_assets_json: Option<String> = row.get(11)?;
+            let linked_workspace_assets_json: Option<String> = row.get(13)?;
             let linked_workspace_assets = linked_workspace_assets_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -3365,7 +3457,7 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        11,
+                        13,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
@@ -3380,6 +3472,8 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 description: row.get(4)?,
                 resource_directory: row.get(5)?,
                 leader_agent_id,
+                manager_user_id,
+                preset_code,
                 owner_user_id: owner_user_id.clone(),
                 member_user_ids: normalized_project_member_user_ids(
                     &owner_user_id,
@@ -3422,6 +3516,37 @@ pub(super) fn load_project_promotion_requests(
                 created_at: row.get::<_, i64>(11)? as u64,
                 updated_at: row.get::<_, i64>(12)? as u64,
                 reviewed_at: row.get::<_, Option<i64>>(13)?.map(|value| value as u64),
+            })
+        })
+        .map_err(|error| AppError::database(error.to_string()))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+pub(super) fn load_project_deletion_requests(
+    connection: &Connection,
+) -> Result<Vec<ProjectDeletionRequest>, AppError> {
+    let mut stmt = connection
+        .prepare(
+            "SELECT id, workspace_id, project_id, requested_by_user_id, status, reason, reviewed_by_user_id, review_comment, created_at, updated_at, reviewed_at
+             FROM project_deletion_requests
+             ORDER BY created_at DESC, id DESC",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProjectDeletionRequest {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                project_id: row.get(2)?,
+                requested_by_user_id: row.get(3)?,
+                status: row.get(4)?,
+                reason: row.get(5)?,
+                reviewed_by_user_id: row.get(6)?,
+                review_comment: row.get(7)?,
+                created_at: row.get::<_, i64>(8)? as u64,
+                updated_at: row.get::<_, i64>(9)? as u64,
+                reviewed_at: row.get::<_, Option<i64>>(10)?.map(|value| value as u64),
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -4694,12 +4819,24 @@ pub(super) fn default_tool_records() -> Vec<ToolRecord> {
 }
 
 pub(super) fn avatar_data_url(paths: &WorkspacePaths, user: &StoredUser) -> Option<String> {
-    let avatar_path = user.record.avatar_path.as_ref()?;
-    let Some(content_type) = user.record.avatar_content_type.as_deref() else {
-        return Some(avatar_path.clone());
+    stored_avatar_data_url(
+        paths,
+        user.record.avatar_path.as_deref(),
+        user.record.avatar_content_type.as_deref(),
+    )
+}
+
+pub(super) fn stored_avatar_data_url(
+    paths: &WorkspacePaths,
+    avatar_path: Option<&str>,
+    content_type: Option<&str>,
+) -> Option<String> {
+    let avatar_path = avatar_path?;
+    let Some(content_type) = content_type else {
+        return Some(avatar_path.to_string());
     };
     let Ok(bytes) = fs::read(paths.root.join(avatar_path)) else {
-        return Some(avatar_path.clone());
+        return Some(avatar_path.to_string());
     };
     Some(format!(
         "data:{content_type};base64,{}",

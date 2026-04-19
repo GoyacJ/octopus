@@ -18,6 +18,7 @@ export function createWorkspaceConsoleTarget(workspaceId: string) {
 
 export function createWorkspaceConsoleSurfaceTarget(
   routeName:
+    | 'workspace-console-settings'
     | 'workspace-console-projects'
     | 'workspace-console-knowledge'
     | 'workspace-console-resources'
@@ -91,6 +92,7 @@ export function createProjectSurfaceTarget(
     | 'project-settings',
   workspaceId: string,
   projectId: string,
+  query?: Record<string, string | undefined>,
 ): RouteLocationNamedRaw {
   return {
     name: routeName,
@@ -98,5 +100,6 @@ export function createProjectSurfaceTarget(
       workspaceId,
       projectId,
     },
+    query,
   }
 }

@@ -26,7 +26,11 @@ import { useArtifactStore } from '@/stores/artifact'
 import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
+import {
+  resolveProjectAgentSettings,
+  resolveProjectGrantedModelIds,
+  resolveProjectModelSettings,
+} from '@/stores/project_settings'
 import {
   resolveProjectGrantedAgents,
   resolveProjectGrantedTeams,
@@ -101,16 +105,18 @@ const projectSettings = computed(() =>
 const project = computed(() =>
   workspaceStore.projects.find(item => item.id === projectId.value) ?? null,
 )
-const projectAssignments = computed(() => project.value?.assignments)
 const assignedConfiguredModelOptions = computed(() => {
-  const assignedIds = projectAssignments.value?.models?.configuredModelIds ?? []
+  const assignedIds = resolveProjectGrantedModelIds(
+    projectSettings.value,
+    catalogStore.configuredModelOptions.map(item => item.value),
+  )
   return catalogStore.configuredModelOptions.filter(item => assignedIds.includes(item.value))
 })
 const resolvedModelSettings = computed(() =>
   resolveProjectModelSettings(
     projectSettings.value,
     assignedConfiguredModelOptions.value.map(item => item.value),
-    projectAssignments.value?.models?.defaultConfiguredModelId ?? '',
+    projectSettings.value.models?.defaultConfiguredModelId ?? '',
   ),
 )
 const projectOwnedAgents = computed(() =>
@@ -124,6 +130,7 @@ const grantedAgents = computed(() =>
     project.value,
     agentStore.workspaceAgents,
     projectOwnedAgents.value,
+    projectSettings.value,
   ),
 )
 const grantedTeams = computed(() =>
@@ -131,6 +138,7 @@ const grantedTeams = computed(() =>
     project.value,
     teamStore.workspaceTeams,
     projectOwnedTeams.value,
+    projectSettings.value,
   ),
 )
 const resolvedAgentSettings = computed(() =>

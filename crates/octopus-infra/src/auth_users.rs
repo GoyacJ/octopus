@@ -824,6 +824,10 @@ impl AuthService for InfraAuthService {
         if workspace.bootstrap_status != "setup_required" && workspace.owner_user_id.is_some() {
             return Err(AppError::conflict("workspace owner already exists"));
         }
+        let mapped_directory = normalize_mapped_directory_input(
+            &self.state.paths,
+            request.mapped_directory.as_deref(),
+        )?;
 
         {
             let users = self
@@ -909,6 +913,9 @@ impl AuthService for InfraAuthService {
                 .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
             workspace_state.bootstrap_status = "ready".into();
             workspace_state.owner_user_id = Some(user_id.clone());
+            workspace_state.mapped_directory = mapped_directory;
+            workspace_state.mapped_directory_default =
+                Some(workspace_root_display_path(&self.state.paths));
         }
         self.state.save_workspace_config()?;
 
@@ -1346,6 +1353,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin")
@@ -1511,6 +1519,63 @@ mod tests {
             assert_eq!(project.owner_user_id, session.user_id);
             assert_eq!(project.member_user_ids, vec![session.user_id.clone()]);
         });
+    }
+
+    #[test]
+    fn bootstrap_admin_persists_requested_mapped_directory_in_workspace_summary() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let mapped_root = temp.path().to_string_lossy().to_string();
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let response = runtime
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                        mapped_directory: Some(mapped_root.clone()),
+                    }),
+            )
+            .expect("bootstrap admin");
+
+        assert_eq!(
+            response.workspace.mapped_directory.as_deref(),
+            Some(mapped_root.as_str())
+        );
+        assert_eq!(
+            response.workspace.mapped_directory_default.as_deref(),
+            Some(mapped_root.as_str())
+        );
+
+        let saved = fs::read_to_string(temp.path().join("config").join("workspace.toml"))
+            .expect("workspace config");
+        assert!(saved.contains("mapped_directory"));
+        assert!(saved.contains(mapped_root.as_str()));
+    }
+
+    #[test]
+    fn current_user_profile_returns_stored_avatar_summary() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let session = bootstrap_admin(&bundle);
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let profile = runtime
+            .block_on(bundle.workspace.current_user_profile(&session.user_id))
+            .expect("current profile");
+
+        assert_eq!(profile.id, session.user_id);
+        assert_eq!(
+            profile.avatar.as_deref(),
+            Some("data:image/png;base64,iVBORw0KGgo=")
+        );
     }
 
     #[test]

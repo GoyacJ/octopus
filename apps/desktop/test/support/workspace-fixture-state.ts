@@ -19,8 +19,10 @@ import type {
   ProtectedResourceDescriptor,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
+  ProjectDeletionRequest,
   ProjectPromotionRequest,
   ProjectRecord,
+  ProjectSettingsConfig,
   ProjectTeamLinkRecord,
   TaskDetail,
   TaskInterventionRecord,
@@ -92,6 +94,7 @@ export interface WorkspaceFixtureState {
   workspace: WorkspaceOverviewSnapshot['workspace']
   overview: WorkspaceOverviewSnapshot
   projects: ProjectRecord[]
+  projectDeletionRequests: ProjectDeletionRequest[]
   projectPromotionRequests: ProjectPromotionRequest[]
   dashboards: Record<string, ProjectDashboardSnapshot>
   taskIdSequence: number
@@ -148,9 +151,86 @@ export interface WorkspaceFixtureState {
   projectPetBindings: Record<string, PetConversationBinding>
 }
 
+function createFixtureProjectSettings(input: {
+  projectId: string
+  workspaceConfiguredModelIds: string[]
+  workspaceToolSourceKeys: string[]
+  workspaceAgentIds: string[]
+  workspaceTeamIds: string[]
+}): ProjectSettingsConfig {
+  const {
+    projectId,
+    workspaceConfiguredModelIds,
+    workspaceToolSourceKeys,
+    workspaceAgentIds,
+    workspaceTeamIds,
+  } = input
+
+  if (projectId === 'proj-redesign') {
+    const grantedConfiguredModelIds = ['anthropic-primary', 'anthropic-alt']
+    const grantExcludedToolSourceKeys = new Set([
+      'builtin:read_file',
+      'builtin:write_file',
+      'builtin:rg',
+      'builtin:apply_patch',
+      'builtin:web_search',
+      'builtin:image_query',
+      'skill:data/skills/help/SKILL.md',
+      'skill:.claude/skills/external-help/SKILL.md',
+      'skill:.codex/skills/external-checks/SKILL.md',
+      'skill:builtin-assets/skills/financial-calculator/SKILL.md',
+      'mcp:finance-ops',
+    ])
+    const grantExcludedAgentIds = new Set(['agent-template-finance'])
+    const grantExcludedTeamIds = new Set(['team-template-finance'])
+
+    return {
+      models: {
+        allowedConfiguredModelIds: ['anthropic-primary'],
+        defaultConfiguredModelId: 'anthropic-primary',
+        disabledConfiguredModelIds: workspaceConfiguredModelIds
+          .filter(modelId => !grantedConfiguredModelIds.includes(modelId)),
+      },
+      tools: {
+        disabledSourceKeys: [
+          ...workspaceToolSourceKeys
+            .filter(sourceKey => grantExcludedToolSourceKeys.has(sourceKey)),
+          'mcp:ops',
+          'skill:data/projects/proj-redesign/skills/redesign-review/SKILL.md',
+          'mcp:redesign-ops',
+        ],
+        overrides: {
+          'builtin:bash': {
+            permissionMode: 'readonly',
+          },
+          'mcp:ops': {
+            permissionMode: 'deny',
+          },
+        },
+      },
+      agents: {
+        disabledAgentIds: [
+          ...workspaceAgentIds
+            .filter(agentId => grantExcludedAgentIds.has(agentId)),
+          'agent-coder',
+          'agent-redesign',
+        ],
+        disabledTeamIds: [
+          ...workspaceTeamIds
+            .filter(teamId => grantExcludedTeamIds.has(teamId)),
+          'team-redesign',
+        ],
+      },
+    } as ProjectSettingsConfig
+  }
+
+  return {}
+}
+
 const RBAC_MENU_IDS = [
   'menu-workspace-overview',
   'menu-workspace-console',
+  'menu-workspace-console-settings',
   'menu-workspace-console-projects',
   'menu-workspace-console-knowledge',
   'menu-workspace-console-resources',
@@ -163,6 +243,7 @@ const RBAC_MENU_IDS = [
 const OPERATOR_MENU_IDS = [
   'menu-workspace-overview',
   'menu-workspace-console',
+  'menu-workspace-console-settings',
   'menu-workspace-console-projects',
   'menu-workspace-access-control',
 ] as const
@@ -225,10 +306,13 @@ export function createWorkspaceFixtureState(
   const workspace = {
     id: connection.workspaceId,
     name: local ? 'Local Workspace' : 'Enterprise Workspace',
+    avatar: 'data:image/png;base64,d29ya3NwYWNl',
     slug: local ? 'local-workspace' : 'enterprise-workspace',
     deployment: local ? 'local' : 'remote',
     bootstrapStatus: setupRequired ? 'setup_required' : 'ready',
     ownerUserId: ownerReady ? 'user-owner' : undefined,
+    mappedDirectory: local ? '/Users/goya/Octopus' : '/Volumes/Enterprise Workspace',
+    mappedDirectoryDefault: local ? '/Users/goya/Octopus' : '/Volumes/Enterprise Workspace',
     projectDefaultPermissions: {
       agents: 'allow',
       resources: 'allow',
@@ -249,6 +333,8 @@ export function createWorkspaceFixtureState(
           name: 'Desktop Redesign',
           status: 'active',
           leaderAgentId: 'agent-architect',
+          managerUserId: 'user-owner',
+          presetCode: 'delivery',
           description: 'Real workspace API migration for the desktop surface.',
           resourceDirectory: 'data/projects/proj-redesign/resources',
           ownerUserId: 'user-owner',
@@ -260,46 +346,14 @@ export function createWorkspaceFixtureState(
             knowledge: 'inherit',
             tasks: 'inherit',
           },
-          linkedWorkspaceAssets: {
-            agentIds: ['agent-architect'],
-            resourceIds: [`${workspace.id}-res-workspace-1`],
-            toolSourceKeys: ['builtin:bash', 'mcp:ops'],
-            knowledgeIds: ['knowledge-workspace-1'],
-          },
-          assignments: {
-            models: {
-              configuredModelIds: ['anthropic-primary', 'anthropic-alt'],
-              defaultConfiguredModelId: 'anthropic-primary',
-            },
-            tools: {
-              sourceKeys: [],
-              excludedSourceKeys: [
-                'builtin:read_file',
-                'builtin:write_file',
-                'builtin:rg',
-                'builtin:apply_patch',
-                'builtin:web_search',
-                'builtin:image_query',
-                'skill:data/skills/help/SKILL.md',
-                'skill:.claude/skills/external-help/SKILL.md',
-                'skill:.codex/skills/external-checks/SKILL.md',
-                'skill:builtin-assets/skills/financial-calculator/SKILL.md',
-                'mcp:finance-ops',
-              ],
-            },
-            agents: {
-              agentIds: [],
-              teamIds: [],
-              excludedAgentIds: ['agent-template-finance'],
-              excludedTeamIds: ['team-template-finance'],
-            },
-          },
         },
         {
           id: 'proj-governance',
           workspaceId: workspace.id,
           name: 'Workspace Governance',
           status: 'active',
+          managerUserId: 'user-owner',
+          presetCode: 'operations',
           description: 'RBAC, menu policies, and audit automation.',
           resourceDirectory: 'data/projects/proj-governance/resources',
           ownerUserId: 'user-owner',
@@ -311,12 +365,6 @@ export function createWorkspaceFixtureState(
             knowledge: 'inherit',
             tasks: 'inherit',
           },
-          linkedWorkspaceAssets: {
-            agentIds: [],
-            resourceIds: [],
-            toolSourceKeys: [],
-            knowledgeIds: [],
-          },
         },
       ]
     : [
@@ -325,6 +373,8 @@ export function createWorkspaceFixtureState(
           workspaceId: workspace.id,
           name: 'Launch Readiness',
           status: 'active',
+          managerUserId: 'user-owner',
+          presetCode: 'operations',
           description: 'Enterprise launch planning and cutover execution.',
           resourceDirectory: '/remote/projects/launch-readiness/resources',
           ownerUserId: 'user-owner',
@@ -335,12 +385,6 @@ export function createWorkspaceFixtureState(
             tools: 'inherit',
             knowledge: 'inherit',
             tasks: 'inherit',
-          },
-          linkedWorkspaceAssets: {
-            agentIds: [],
-            resourceIds: [],
-            toolSourceKeys: [],
-            knowledgeIds: [],
           },
         },
       ]
@@ -1226,6 +1270,7 @@ export function createWorkspaceFixtureState(
           description: 'A runtime command is waiting for approval before execution can continue.',
           status: 'pending',
           priority: 'high',
+          targetUserId: 'user-owner',
           actionable: true,
           routeTo: `/workspaces/${workspace.id}/projects/proj-redesign/settings`,
           actionLabel: 'Review approval',
@@ -1240,6 +1285,7 @@ export function createWorkspaceFixtureState(
           description: 'The latest governance review has been recorded for audit reference.',
           status: 'completed',
           priority: 'medium',
+          targetUserId: 'user-owner',
           actionable: false,
           createdAt: 99,
         },
@@ -1254,6 +1300,7 @@ export function createWorkspaceFixtureState(
           description: 'The launch checklist needs operator approval.',
           status: 'pending',
           priority: 'high',
+          targetUserId: 'user-owner',
           actionable: true,
           routeTo: `/workspaces/${workspace.id}/projects/proj-launch/dashboard`,
           actionLabel: 'Open checklist',
@@ -2519,37 +2566,30 @@ export function createWorkspaceFixtureState(
       effectiveConfigHash: `${workspace.id}-${project.id}-project-cfg-hash-1`,
       sources: (() => {
         const projectSource = createRuntimeConfigSource('project', workspace.id, project.id)
-        if (project.id === 'proj-redesign') {
-            projectSource.document = {
-              approvals: {
-                defaultMode: 'manual',
-              },
-              projectSettings: {
-              models: {
-                allowedConfiguredModelIds: ['anthropic-primary'],
-                defaultConfiguredModelId: 'anthropic-primary',
-              },
-              tools: {
-                disabledSourceKeys: [
-                  'mcp:ops',
-                  'skill:data/projects/proj-redesign/skills/redesign-review/SKILL.md',
-                  'mcp:redesign-ops',
-                ],
-                overrides: {
-                  'builtin:bash': {
-                    permissionMode: 'readonly',
-                  },
-                  'mcp:ops': {
-                    permissionMode: 'deny',
-                  },
-                },
-              },
-              agents: {
-                disabledAgentIds: ['agent-coder', 'agent-redesign'],
-                disabledTeamIds: ['team-redesign'],
-              },
-            },
-          }
+        const workspaceConfiguredModelIds = catalog.configuredModels
+          .filter(model => model.enabled)
+          .map(model => model.configuredModelId)
+        const workspaceToolSourceKeys = managementProjection.assets
+          .filter(entry => entry.enabled && entry.ownerScope !== 'project')
+          .map(entry => entry.sourceKey)
+        const workspaceAgentIds = agents
+          .filter(agent => !agent.projectId && agent.status === 'active')
+          .map(agent => agent.id)
+        const workspaceTeamIds = teams
+          .filter(team => !team.projectId && team.status === 'active')
+          .map(team => team.id)
+
+        projectSource.document = {
+          approvals: {
+            defaultMode: 'manual',
+          },
+          projectSettings: createFixtureProjectSettings({
+            projectId: project.id,
+            workspaceConfiguredModelIds,
+            workspaceToolSourceKeys,
+            workspaceAgentIds,
+            workspaceTeamIds,
+          }),
         }
 
         return [
@@ -2611,6 +2651,7 @@ export function createWorkspaceFixtureState(
     workspace,
     overview,
     projects,
+    projectDeletionRequests: [],
     projectPromotionRequests,
     dashboards,
     taskIdSequence: 0,

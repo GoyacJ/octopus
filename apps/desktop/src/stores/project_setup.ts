@@ -4,13 +4,16 @@ import type {
   ProjectModelSettings,
   ProjectRecord,
   ProjectSettingsConfig,
-  ProjectWorkspaceAssignments,
   TeamRecord,
   WorkspaceToolPermissionMode,
 } from '@octopus/schema'
 
 import type { CatalogConfiguredModelOption } from './catalog'
 import {
+  resolveProjectGrantedAgentIds,
+  resolveProjectGrantedModelIds,
+  resolveProjectGrantedTeamIds,
+  resolveProjectGrantedToolSourceKeys,
   resolveProjectAgentSettings,
   resolveProjectModelSettings,
   resolveProjectToolSettings,
@@ -52,7 +55,6 @@ export interface ProjectCapabilitySummary {
 }
 
 export interface ProjectSetupPresetSeed {
-  assignments?: ProjectWorkspaceAssignments
   modelSettings?: ProjectModelSettings
 }
 
@@ -105,17 +107,39 @@ export function inferWorkspaceToolPermission(
 export function resolveProjectGrantedToolEntries(
   project: ProjectRecord | null,
   toolEntries: CapabilityAssetManifest[],
+  projectSettings: ProjectSettingsConfig,
 ) {
-  const projectId = project?.id ?? ''
-  const excludedSourceKeys = new Set(project?.assignments?.tools?.excludedSourceKeys ?? [])
+  const workspaceSourceKeys = resolveProjectGrantedToolSourceKeys(
+    projectSettings,
+    toolEntries
+      .filter(entry => entry.enabled && entry.ownerScope !== 'project')
+      .map(entry => entry.sourceKey),
+  )
+
+  return resolveGrantedToolEntriesWithExclusions({
+    projectId: project?.id ?? '',
+    toolEntries,
+    excludedSourceKeys: toolEntries
+      .filter(entry => entry.enabled && entry.ownerScope !== 'project')
+      .map(entry => entry.sourceKey)
+      .filter(sourceKey => !workspaceSourceKeys.includes(sourceKey)),
+  })
+}
+
+export function resolveGrantedToolEntriesWithExclusions(input: {
+  projectId: string
+  toolEntries: CapabilityAssetManifest[]
+  excludedSourceKeys?: string[]
+}) {
+  const excludedSourceKeys = new Set(input.excludedSourceKeys ?? [])
 
   return uniqueBy(
-    toolEntries.filter((entry) => {
+    input.toolEntries.filter((entry) => {
       if (!entry.enabled) {
         return false
       }
 
-      const isProjectOwned = entry.ownerScope === 'project' && entry.ownerId === projectId
+      const isProjectOwned = entry.ownerScope === 'project' && entry.ownerId === input.projectId
       if (isProjectOwned) {
         return true
       }
@@ -130,9 +154,30 @@ export function resolveProjectGrantedAgents(
   project: ProjectRecord | null,
   workspaceAgents: AgentRecord[],
   projectOwnedAgents: AgentRecord[],
+  projectSettings: ProjectSettingsConfig,
 ) {
-  const excludedAgentIds = new Set(project?.assignments?.agents?.excludedAgentIds ?? [])
-  const inheritedAgents = workspaceAgents.filter(agent =>
+  const grantedWorkspaceAgentIds = resolveProjectGrantedAgentIds(
+    projectSettings,
+    workspaceAgents.filter(agent => !agent.projectId && agent.status === 'active').map(agent => agent.id),
+  )
+
+  return resolveGrantedAgentsWithExclusions({
+    workspaceAgents,
+    projectOwnedAgents,
+    excludedAgentIds: workspaceAgents
+      .filter(agent => !agent.projectId && agent.status === 'active')
+      .map(agent => agent.id)
+      .filter(agentId => !grantedWorkspaceAgentIds.includes(agentId)),
+  })
+}
+
+export function resolveGrantedAgentsWithExclusions(input: {
+  workspaceAgents: AgentRecord[]
+  projectOwnedAgents: AgentRecord[]
+  excludedAgentIds?: string[]
+}) {
+  const excludedAgentIds = new Set(input.excludedAgentIds ?? [])
+  const inheritedAgents = input.workspaceAgents.filter(agent =>
     !agent.projectId
     && agent.status === 'active'
     && !excludedAgentIds.has(agent.id),
@@ -140,7 +185,7 @@ export function resolveProjectGrantedAgents(
 
   return uniqueBy(
     [
-      ...projectOwnedAgents.filter(agent => agent.status === 'active'),
+      ...input.projectOwnedAgents.filter(agent => agent.status === 'active'),
       ...inheritedAgents,
     ],
     agent => agent.id,
@@ -151,9 +196,30 @@ export function resolveProjectGrantedTeams(
   project: ProjectRecord | null,
   workspaceTeams: TeamRecord[],
   projectOwnedTeams: TeamRecord[],
+  projectSettings: ProjectSettingsConfig,
 ) {
-  const excludedTeamIds = new Set(project?.assignments?.agents?.excludedTeamIds ?? [])
-  const inheritedTeams = workspaceTeams.filter(team =>
+  const grantedWorkspaceTeamIds = resolveProjectGrantedTeamIds(
+    projectSettings,
+    workspaceTeams.filter(team => !team.projectId && team.status === 'active').map(team => team.id),
+  )
+
+  return resolveGrantedTeamsWithExclusions({
+    workspaceTeams,
+    projectOwnedTeams,
+    excludedTeamIds: workspaceTeams
+      .filter(team => !team.projectId && team.status === 'active')
+      .map(team => team.id)
+      .filter(teamId => !grantedWorkspaceTeamIds.includes(teamId)),
+  })
+}
+
+export function resolveGrantedTeamsWithExclusions(input: {
+  workspaceTeams: TeamRecord[]
+  projectOwnedTeams: TeamRecord[]
+  excludedTeamIds?: string[]
+}) {
+  const excludedTeamIds = new Set(input.excludedTeamIds ?? [])
+  const inheritedTeams = input.workspaceTeams.filter(team =>
     !team.projectId
     && team.status === 'active'
     && !excludedTeamIds.has(team.id),
@@ -161,7 +227,7 @@ export function resolveProjectGrantedTeams(
 
   return uniqueBy(
     [
-      ...projectOwnedTeams.filter(team => team.status === 'active'),
+      ...input.projectOwnedTeams.filter(team => team.status === 'active'),
       ...inheritedTeams,
     ],
     team => team.id,
@@ -235,16 +301,50 @@ export function buildToolPermissionDraft(
   ) as Record<string, ToolPermissionSelection>
 }
 
-export function buildProjectGrantState(project: ProjectRecord | null): ProjectGrantState {
-  const assignments = project?.assignments
+export function buildProjectGrantState(input: {
+  project: ProjectRecord | null
+  projectSettings: ProjectSettingsConfig
+  workspaceConfiguredModels: CatalogConfiguredModelOption[]
+  workspaceToolEntries: CapabilityAssetManifest[]
+  workspaceAgents: AgentRecord[]
+  projectOwnedAgents: AgentRecord[]
+  workspaceTeams: TeamRecord[]
+  projectOwnedTeams: TeamRecord[]
+}): ProjectGrantState {
+  const assignedConfiguredModelIds = resolveProjectGrantedModelIds(
+    input.projectSettings,
+    input.workspaceConfiguredModels.map(item => item.value),
+  )
+  const defaultConfiguredModelId = resolveProjectModelSettings(
+    input.projectSettings,
+    assignedConfiguredModelIds,
+    input.projectSettings.models?.defaultConfiguredModelId ?? '',
+  ).defaultConfiguredModelId
+  const assignedToolSourceKeys = resolveProjectGrantedToolEntries(
+    input.project,
+    input.workspaceToolEntries,
+    input.projectSettings,
+  ).map(entry => entry.sourceKey)
+  const assignedAgentIds = resolveProjectGrantedAgents(
+    input.project,
+    input.workspaceAgents,
+    input.projectOwnedAgents,
+    input.projectSettings,
+  ).map(agent => agent.id)
+  const assignedTeamIds = resolveProjectGrantedTeams(
+    input.project,
+    input.workspaceTeams,
+    input.projectOwnedTeams,
+    input.projectSettings,
+  ).map(team => team.id)
 
   return {
-    assignedConfiguredModelIds: unique(assignments?.models?.configuredModelIds ?? []),
-    defaultConfiguredModelId: assignments?.models?.defaultConfiguredModelId ?? '',
-    assignedToolSourceKeys: unique(assignments?.tools?.sourceKeys ?? []),
-    assignedAgentIds: unique(assignments?.agents?.agentIds ?? []),
-    assignedTeamIds: unique(assignments?.agents?.teamIds ?? []),
-    memberUserIds: unique([...(project?.memberUserIds ?? []), project?.ownerUserId ?? '']),
+    assignedConfiguredModelIds,
+    defaultConfiguredModelId,
+    assignedToolSourceKeys,
+    assignedAgentIds,
+    assignedTeamIds,
+    memberUserIds: unique([...(input.project?.memberUserIds ?? []), input.project?.ownerUserId ?? '']),
   }
 }
 
@@ -296,11 +396,11 @@ export function buildProjectCapabilitySummary(input: {
   grantedAgentIds: string[]
   grantedTeamIds: string[]
 }): ProjectCapabilitySummary {
-  const grantState = buildProjectGrantState(input.project)
+  const memberUserIds = unique([...(input.project?.memberUserIds ?? []), input.project?.ownerUserId ?? ''])
   const runtimeState = buildProjectRuntimeRefinementState({
     projectSettings: input.projectSettings,
     assignedConfiguredModels: input.grantedConfiguredModels,
-    assignmentDefaultConfiguredModelId: grantState.defaultConfiguredModelId,
+    assignmentDefaultConfiguredModelId: input.projectSettings.models?.defaultConfiguredModelId ?? '',
     grantedToolEntries: input.grantedToolEntries,
     workspaceTools: input.workspaceTools,
     grantedAgentIds: input.grantedAgentIds,
@@ -321,45 +421,13 @@ export function buildProjectCapabilitySummary(input: {
     enabledActors: input.grantedAgentIds.length + input.grantedTeamIds.length
       - runtimeState.disabledAgentIds.length
       - runtimeState.disabledTeamIds.length,
-    memberCount: grantState.memberUserIds.length,
+    memberCount: memberUserIds.length,
     editableMemberCount: input.project?.ownerUserId ? 1 : 0,
   }
 }
 
 function choosePrimaryModel(models: CatalogConfiguredModelOption[]) {
   return models.find(model => model.value.includes('primary')) ?? models[0]
-}
-
-function buildAssignmentsFromSeed(input: {
-  configuredModelIds: string[]
-  defaultConfiguredModelId: string
-  toolSourceKeys: string[]
-  agentIds: string[]
-  teamIds: string[]
-}): ProjectWorkspaceAssignments | undefined {
-  const configuredModelIds = unique(input.configuredModelIds)
-  const toolSourceKeys = unique(input.toolSourceKeys)
-  const agentIds = unique(input.agentIds)
-  const teamIds = unique(input.teamIds)
-
-  if (!configuredModelIds.length && !toolSourceKeys.length && !agentIds.length && !teamIds.length) {
-    return undefined
-  }
-
-  return {
-    models: configuredModelIds.length
-      ? {
-          configuredModelIds,
-          defaultConfiguredModelId: configuredModelIds.includes(input.defaultConfiguredModelId)
-            ? input.defaultConfiguredModelId
-            : configuredModelIds[0] ?? '',
-        }
-      : undefined,
-    tools: toolSourceKeys.length ? { sourceKeys: toolSourceKeys, excludedSourceKeys: [] } : undefined,
-    agents: agentIds.length || teamIds.length
-      ? { agentIds, teamIds, excludedAgentIds: [], excludedTeamIds: [] }
-      : undefined,
-  }
 }
 
 export function buildProjectSetupPresetSeed(
@@ -371,13 +439,6 @@ export function buildProjectSetupPresetSeed(
 
   if (preset === 'engineering') {
     return {
-      assignments: buildAssignmentsFromSeed({
-        configuredModelIds: engineeringModels,
-        defaultConfiguredModelId: primaryModel?.value ?? engineeringModels[0] ?? '',
-        toolSourceKeys: [],
-        agentIds: [],
-        teamIds: [],
-      }),
       modelSettings: engineeringModels.length
         ? {
             allowedConfiguredModelIds: engineeringModels,
@@ -391,13 +452,6 @@ export function buildProjectSetupPresetSeed(
     const documentationModels = unique(primaryModel ? [primaryModel.value] : [])
 
     return {
-      assignments: buildAssignmentsFromSeed({
-        configuredModelIds: documentationModels,
-        defaultConfiguredModelId: documentationModels[0] ?? '',
-        toolSourceKeys: [],
-        agentIds: [],
-        teamIds: [],
-      }),
       modelSettings: documentationModels.length
         ? {
             allowedConfiguredModelIds: documentationModels,

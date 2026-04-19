@@ -12,6 +12,7 @@ import * as tauriClient from '@/tauri/client'
 
 import { isWorkspaceApiError } from '@/tauri/shared'
 import { useArtifactStore } from './artifact'
+import { useInboxStore } from './inbox'
 import { useKnowledgeStore } from './knowledge'
 import { usePetStore } from './pet'
 import { useResourceStore } from './resource'
@@ -163,6 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearWorkspaceStores(workspaceConnectionId: string) {
     useWorkspaceAccessControlStore().clearWorkspaceScope(workspaceConnectionId)
     useUserProfileStore().clearWorkspaceScope(workspaceConnectionId)
+    useInboxStore().reset()
     useRuntimeStore().clearWorkspaceScope(workspaceConnectionId)
     useWorkspaceStore().clearWorkspaceScope(workspaceConnectionId)
     useResourceStore().clearWorkspaceScope(workspaceConnectionId)
@@ -198,6 +200,11 @@ export const useAuthStore = defineStore('auth', () => {
     setAuthenticated(workspaceConnectionId, false)
     markReady(workspaceConnectionId, true)
     openAuthDialog(resolveMode(status), nextReason, workspaceConnectionId)
+  }
+
+  async function hydrateAuthenticatedWorkspaceScope(workspaceConnectionId: string) {
+    await useUserProfileStore().load(workspaceConnectionId, { force: true })
+    await useInboxStore().bootstrap(workspaceConnectionId, true)
   }
 
   async function bootstrapAuth(workspaceConnectionId?: string) {
@@ -243,6 +250,7 @@ export const useAuthStore = defineStore('auth', () => {
       )
       setAuthenticated(connectionId, true)
       markReady(connectionId, true)
+      await hydrateAuthenticatedWorkspaceScope(connectionId)
       closeAuthDialog(connectionId)
     } catch (cause) {
       if (isWorkspaceApiError(cause) && (cause.code === 'UNAUTHENTICATED' || cause.code === 'SESSION_EXPIRED')) {
@@ -319,6 +327,7 @@ export const useAuthStore = defineStore('auth', () => {
           ownerReady: true,
         }),
       )
+      await hydrateAuthenticatedWorkspaceScope(connection.workspaceConnectionId)
       closeAuthDialog(connection.workspaceConnectionId)
       return response
     } catch (cause) {
@@ -336,6 +345,7 @@ export const useAuthStore = defineStore('auth', () => {
       password: string
       confirmPassword: string
       avatar: NonNullable<Awaited<ReturnType<typeof tauriClient.pickAvatarImage>>>
+      mappedDirectory?: string
     },
     workspaceConnectionId?: string,
   ) {
@@ -356,6 +366,7 @@ export const useAuthStore = defineStore('auth', () => {
         password: input.password,
         confirmPassword: input.confirmPassword,
         avatar: input.avatar,
+        ...(input.mappedDirectory ? { mappedDirectory: input.mappedDirectory.trim() } : {}),
       })
       shell.setWorkspaceSession(
         toSessionEnvelope(
@@ -390,6 +401,7 @@ export const useAuthStore = defineStore('auth', () => {
           ownerReady: true,
         }),
       )
+      await hydrateAuthenticatedWorkspaceScope(connection.workspaceConnectionId)
       closeAuthDialog(connection.workspaceConnectionId)
       return response
     } catch (cause) {
@@ -495,6 +507,7 @@ export const useAuthStore = defineStore('auth', () => {
           ownerReady: true,
         }),
       )
+      await hydrateAuthenticatedWorkspaceScope(persistedConnection.workspaceConnectionId)
       await shell.activateWorkspaceConnection(persistedConnection.workspaceConnectionId)
       return persistedConnection
     } catch (cause) {

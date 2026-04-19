@@ -12,6 +12,7 @@ import type {
   CapabilityAssetDisablePatch,
   CapabilityManagementProjection,
   ChangeCurrentUserPasswordResponse,
+  CreateProjectDeletionRequestInput,
   CreateProjectPromotionRequestInput,
   CreateTaskInterventionRequest,
   CreateTaskRequest,
@@ -32,11 +33,13 @@ import type {
   PermissionDefinition,
   PositionRecord,
   ProjectAgentLinkRecord,
+  ProjectDeletionRequest,
   ProjectPromotionRequest,
   ProjectTeamLinkRecord,
   ProtectedResourceDescriptor,
   ProtectedResourceMetadataUpsertRequest,
   ResourcePolicyRecord,
+  ReviewProjectDeletionRequestInput,
   ReviewProjectPromotionRequestInput,
   RerunTaskRequest,
   RoleBindingRecord,
@@ -47,6 +50,7 @@ import type {
   TaskSummary,
   ToolRecord,
   UpdateTaskRequest,
+  UpdateWorkspaceRequest,
   UserGroupRecord,
   UserOrgAssignmentRecord,
   WorkspaceMcpServerDocument,
@@ -135,6 +139,12 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           session: assertWorkspaceRequestReady(context),
         })
       },
+      async update(input) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(input satisfies UpdateWorkspaceRequest),
+        })
+      },
       async getOverview() {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/overview', 'get', {
           session: assertWorkspaceRequestReady(context),
@@ -191,6 +201,76 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           context.connection,
           '/api/v1/projects/{projectId}/dashboard',
           'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
+          },
+        )
+      },
+      async listDeletionRequests(projectId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/deletion-requests',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as ProjectDeletionRequest[]
+      },
+      async createDeletionRequest(projectId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/deletion-requests',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies CreateProjectDeletionRequestInput),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as ProjectDeletionRequest
+      },
+      async approveDeletionRequest(projectId, requestId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/deletion-requests/{requestId}/approve',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies ReviewProjectDeletionRequestInput),
+            pathParams: {
+              projectId,
+              requestId,
+            },
+          },
+        ) as ProjectDeletionRequest
+      },
+      async rejectDeletionRequest(projectId, requestId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/deletion-requests/{requestId}/reject',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies ReviewProjectDeletionRequestInput),
+            pathParams: {
+              projectId,
+              requestId,
+            },
+          },
+        ) as ProjectDeletionRequest
+      },
+      async delete(projectId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}',
+          'delete',
           {
             session: assertWorkspaceRequestReady(context),
             pathParams: {
@@ -1120,6 +1200,11 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
       },
     },
     profile: {
+      async getCurrentUserProfile() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        })
+      },
       async updateCurrentUserProfile(input) {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile', 'patch', {
           session: assertWorkspaceRequestReady(context),

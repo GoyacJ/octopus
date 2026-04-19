@@ -12,6 +12,7 @@ import { useNotificationStore } from '@/stores/notifications'
 import { useTeamStore } from '@/stores/team'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
+import { updateFixtureProjectSettings } from './support/workspace-fixture-project-settings'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -169,12 +170,17 @@ describe('workspace and project agents pages', () => {
         }
 
         const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments?.agents) {
-          throw new Error('Expected proj-redesign agent assignments')
+        if (!project) {
+          throw new Error('Expected proj-redesign project')
         }
 
-        project.assignments.agents.excludedAgentIds = []
-        project.assignments.agents.excludedTeamIds = []
+        updateFixtureProjectSettings(state, 'proj-redesign', current => ({
+          ...current,
+          agents: {
+            disabledAgentIds: [],
+            disabledTeamIds: [],
+          },
+        }))
         state.projectAgentLinks['proj-redesign'] = []
         state.projectTeamLinks['proj-redesign'] = []
       },
@@ -477,12 +483,17 @@ describe('workspace and project agents pages', () => {
         }
 
         const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments?.agents) {
-          throw new Error('Expected proj-redesign agent assignments')
+        if (!project) {
+          throw new Error('Expected proj-redesign project')
         }
 
-        project.assignments.agents.excludedAgentIds = []
-        project.assignments.agents.excludedTeamIds = []
+        updateFixtureProjectSettings(state, 'proj-redesign', current => ({
+          ...current,
+          agents: {
+            disabledAgentIds: [],
+            disabledTeamIds: [],
+          },
+        }))
       },
     })
 

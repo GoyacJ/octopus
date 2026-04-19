@@ -1,7 +1,9 @@
 import type {
   CreateProjectPromotionRequestInput as OpenApiCreateProjectPromotionRequestInput,
   CreateProjectRequest as OpenApiCreateProjectRequest,
+  CreateProjectDeletionRequestInput as OpenApiCreateProjectDeletionRequestInput,
   ProjectAgentAssignments as OpenApiProjectAgentAssignments,
+  ProjectDeletionRequest as OpenApiProjectDeletionRequest,
   ProjectDefaultPermissions as OpenApiProjectDefaultPermissions,
   ProjectLinkedWorkspaceAssets as OpenApiProjectLinkedWorkspaceAssets,
   ProjectModelAssignments as OpenApiProjectModelAssignments,
@@ -10,7 +12,9 @@ import type {
   ProjectRecord as OpenApiProjectRecord,
   ProjectToolAssignments as OpenApiProjectToolAssignments,
   ReviewProjectPromotionRequestInput as OpenApiReviewProjectPromotionRequestInput,
+  ReviewProjectDeletionRequestInput as OpenApiReviewProjectDeletionRequestInput,
   UpdateProjectRequest as OpenApiUpdateProjectRequest,
+  UpdateWorkspaceRequest as OpenApiUpdateWorkspaceRequest,
   ProjectWorkspaceAssignments as OpenApiProjectWorkspaceAssignments,
   SystemBootstrapStatus as OpenApiSystemBootstrapStatus,
   WorkspaceSummary as OpenApiWorkspaceSummary,
@@ -25,10 +29,14 @@ export type ProjectDefaultPermissions = OpenApiProjectDefaultPermissions
 export type ProjectLinkedWorkspaceAssets = OpenApiProjectLinkedWorkspaceAssets
 export type ProjectPermissionOverrides = OpenApiProjectPermissionOverrides
 export type ProjectPromotionRequest = OpenApiProjectPromotionRequest
+export type ProjectDeletionRequest = OpenApiProjectDeletionRequest
 export type ProjectRecord = OpenApiProjectRecord
 export type CreateProjectRequest = OpenApiCreateProjectRequest
 export type UpdateProjectRequest = OpenApiUpdateProjectRequest
 export type CreateProjectPromotionRequestInput = OpenApiCreateProjectPromotionRequestInput
 export type ReviewProjectPromotionRequestInput = OpenApiReviewProjectPromotionRequestInput
+export type CreateProjectDeletionRequestInput = OpenApiCreateProjectDeletionRequestInput
+export type ReviewProjectDeletionRequestInput = OpenApiReviewProjectDeletionRequestInput
 
 export type SystemBootstrapStatus = OpenApiSystemBootstrapStatus
+export type UpdateWorkspaceRequest = OpenApiUpdateWorkspaceRequest

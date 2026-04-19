@@ -167,12 +167,15 @@ export function useAgentCenter(scope: CenterScope) {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
   )
+  const currentProjectSettings = computed(() =>
+    projectId.value ? workspaceStore.getProjectSettings(projectId.value) : {},
+  )
   const workspaceEnabledToolEntries = computed(() =>
     catalogStore.managementProjection.assets.filter(entry => entry.enabled),
   )
   const grantedProjectToolSourceKeys = computed(() =>
     new Set(
-      resolveProjectGrantedToolEntries(currentProject.value, workspaceEnabledToolEntries.value)
+      resolveProjectGrantedToolEntries(currentProject.value, workspaceEnabledToolEntries.value, currentProjectSettings.value)
         .map(entry => entry.sourceKey),
     ),
   )
@@ -386,24 +389,36 @@ export function useAgentCenter(scope: CenterScope) {
       : null,
   )
   const effectiveBuiltinToolKeys = computed(() => {
-    const targetAgents = effectiveProjectAgents.value
-    const targetTeams = effectiveProjectTeams.value
+    const targetAgents = isProjectScope.value
+      ? effectiveProjectAgents.value.filter(agent => isProjectOwnedRecord(agent))
+      : effectiveProjectAgents.value
+    const targetTeams = isProjectScope.value
+      ? effectiveProjectTeams.value.filter(team => isProjectOwnedRecord(team))
+      : effectiveProjectTeams.value
     return new Set([
       ...targetAgents.flatMap(agent => agent.builtinToolKeys),
       ...targetTeams.flatMap(team => team.builtinToolKeys),
     ])
   })
   const effectiveSkillIds = computed(() => {
-    const targetAgents = effectiveProjectAgents.value
-    const targetTeams = effectiveProjectTeams.value
+    const targetAgents = isProjectScope.value
+      ? effectiveProjectAgents.value.filter(agent => isProjectOwnedRecord(agent))
+      : effectiveProjectAgents.value
+    const targetTeams = isProjectScope.value
+      ? effectiveProjectTeams.value.filter(team => isProjectOwnedRecord(team))
+      : effectiveProjectTeams.value
     return new Set([
       ...targetAgents.flatMap(agent => agent.skillIds),
       ...targetTeams.flatMap(team => team.skillIds),
     ])
   })
   const effectiveMcpServerNames = computed(() => {
-    const targetAgents = effectiveProjectAgents.value
-    const targetTeams = effectiveProjectTeams.value
+    const targetAgents = isProjectScope.value
+      ? effectiveProjectAgents.value.filter(agent => isProjectOwnedRecord(agent))
+      : effectiveProjectAgents.value
+    const targetTeams = isProjectScope.value
+      ? effectiveProjectTeams.value.filter(team => isProjectOwnedRecord(team))
+      : effectiveProjectTeams.value
     return new Set([
       ...targetAgents.flatMap(agent => agent.mcpServerNames),
       ...targetTeams.flatMap(team => team.mcpServerNames),
@@ -411,8 +426,14 @@ export function useAgentCenter(scope: CenterScope) {
   })
   const effectiveResourceConsumerIds = computed(() =>
     new Set([
-      ...effectiveProjectAgents.value.map(agent => agent.id),
-      ...effectiveProjectTeams.value.map(team => team.id),
+      ...(isProjectScope.value
+        ? effectiveProjectAgents.value.filter(agent => isProjectOwnedRecord(agent))
+        : effectiveProjectAgents.value)
+        .map(agent => agent.id),
+      ...(isProjectScope.value
+        ? effectiveProjectTeams.value.filter(team => isProjectOwnedRecord(team))
+        : effectiveProjectTeams.value)
+        .map(team => team.id),
     ]),
   )
   const resourceCatalogEntries = computed(() => {

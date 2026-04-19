@@ -777,6 +777,115 @@ pub(super) fn resolve_effective_permission_codes(
     Ok((permission_codes, bindings))
 }
 
+fn project_delete_data_policy_matches(policy: &DataPolicyRecord, project_id: &str) -> bool {
+    match policy.scope_type.as_str() {
+        "all" | "all-projects" => true,
+        "selected-projects" => policy
+            .project_ids
+            .iter()
+            .any(|candidate| candidate == project_id),
+        _ => false,
+    }
+}
+
+fn resource_policy_action_matches(
+    policy_action: &str,
+    requested_action: &str,
+    capability: &str,
+) -> bool {
+    policy_action == "*" || policy_action == requested_action || policy_action == capability
+}
+
+pub(crate) fn resolve_project_deletion_approver_user_ids(
+    connection: &Connection,
+    project_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let users = load_users(connection)?;
+    let all_resource_policies = load_resource_policies(connection)?;
+    let mut approver_ids = BTreeSet::new();
+
+    for user in users
+        .into_iter()
+        .filter(|user| user.record.status.trim() == "active")
+    {
+        let user_id = user.record.id;
+        let (role_ids, _) = resolve_effective_role_ids(connection, &user_id)?;
+        if role_ids
+            .iter()
+            .any(|role_id| role_id == SYSTEM_OWNER_ROLE_ID || role_id == SYSTEM_ADMIN_ROLE_ID)
+        {
+            approver_ids.insert(user_id);
+            continue;
+        }
+
+        let (permission_codes, _) = resolve_effective_permission_codes(connection, &user_id)?;
+        if !permission_codes
+            .iter()
+            .any(|permission| permission == "project.manage")
+        {
+            continue;
+        }
+
+        let data_policies = resolve_subject_data_policies(connection, &user_id)?;
+        let relevant_data_policies = data_policies
+            .iter()
+            .filter(|policy| policy.resource_type == "project")
+            .collect::<Vec<_>>();
+        let matched_data_policies = relevant_data_policies
+            .iter()
+            .filter(|policy| project_delete_data_policy_matches(policy, project_id))
+            .collect::<Vec<_>>();
+        if matched_data_policies
+            .iter()
+            .any(|policy| policy.effect == "deny")
+        {
+            continue;
+        }
+        if !relevant_data_policies.is_empty()
+            && !matched_data_policies
+                .iter()
+                .any(|policy| policy.effect == "allow")
+        {
+            continue;
+        }
+
+        let subject_resource_policies = resolve_subject_resource_policies(connection, &user_id)?;
+        let relevant_resource_policies = all_resource_policies
+            .iter()
+            .filter(|policy| {
+                policy.resource_type == "project"
+                    && policy.resource_id == project_id
+                    && resource_policy_action_matches(&policy.action, "manage", "project.manage")
+            })
+            .collect::<Vec<_>>();
+        let matching_resource_policies = subject_resource_policies
+            .iter()
+            .filter(|policy| {
+                policy.resource_type == "project"
+                    && policy.resource_id == project_id
+                    && resource_policy_action_matches(&policy.action, "manage", "project.manage")
+            })
+            .collect::<Vec<_>>();
+        if matching_resource_policies
+            .iter()
+            .any(|policy| policy.effect == "deny")
+        {
+            continue;
+        }
+        if !relevant_resource_policies.is_empty()
+            && !matching_resource_policies
+                .iter()
+                .any(|policy| policy.effect == "allow")
+        {
+            continue;
+        }
+
+        approver_ids.insert(user_id);
+    }
+
+    Ok(approver_ids.into_iter().collect())
+}
+
 pub(super) fn ensure_default_owner_role_permissions(
     connection: &Connection,
 ) -> Result<(), AppError> {
@@ -2158,15 +2267,18 @@ impl AccessControlService for InfraAccessControlService {
 
 #[cfg(test)]
 mod tests {
-    use super::default_owner_permission_codes;
+    use super::{
+        default_owner_permission_codes, resolve_project_deletion_approver_user_ids,
+        SYSTEM_ADMIN_ROLE_ID,
+    };
     use crate::build_infra_bundle;
     use octopus_core::{
         AccessUserPresetUpdateRequest, AccessUserUpsertRequest, AvatarUploadPayload,
-        DataPolicyUpsertRequest, OrgUnitUpsertRequest, RegisterBootstrapAdminRequest,
-        ResourcePolicyUpsertRequest, RoleBindingUpsertRequest, RoleUpsertRequest,
-        UserOrgAssignmentUpsertRequest,
+        CreateProjectRequest, DataPolicyUpsertRequest, OrgUnitUpsertRequest,
+        RegisterBootstrapAdminRequest, ResourcePolicyUpsertRequest, RoleBindingUpsertRequest,
+        RoleUpsertRequest, UserOrgAssignmentUpsertRequest,
     };
-    use octopus_platform::{AccessControlService, AuthService};
+    use octopus_platform::{AccessControlService, AuthService, WorkspaceService};
 
     fn avatar_payload() -> AvatarUploadPayload {
         AvatarUploadPayload {
@@ -2259,6 +2371,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin")
@@ -2377,6 +2490,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin")
@@ -2451,6 +2565,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin")
@@ -2501,6 +2616,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin");
@@ -2582,6 +2698,7 @@ mod tests {
                         confirm_password: "password123".into(),
                         avatar: avatar_payload(),
                         workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
                     }),
             )
             .expect("bootstrap admin");
@@ -2712,6 +2829,155 @@ mod tests {
                     && binding.role_id == "system.auditor"
             }),
             "inherited org-unit role binding should be preserved",
+        );
+    }
+
+    #[test]
+    fn access_control_resolves_project_deletion_approvers_from_project_admins_and_system_roles() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let owner_session = runtime
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                        mapped_directory: None,
+                    }),
+            )
+            .expect("bootstrap admin")
+            .session;
+
+        let project = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Governed Delete Project".into(),
+                description: "Project deletion approver resolution.".into(),
+                resource_directory: "data/projects/governed-delete-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: None,
+            }))
+            .expect("create project");
+
+        let project_admin = runtime
+            .block_on(bundle.access_control.create_user(AccessUserUpsertRequest {
+                username: "project-admin".into(),
+                display_name: "Project Admin".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            }))
+            .expect("create project admin");
+        let system_admin = runtime
+            .block_on(bundle.access_control.create_user(AccessUserUpsertRequest {
+                username: "system-admin".into(),
+                display_name: "System Admin".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            }))
+            .expect("create system admin");
+        let outsider = runtime
+            .block_on(bundle.access_control.create_user(AccessUserUpsertRequest {
+                username: "outsider".into(),
+                display_name: "Outsider".into(),
+                status: "active".into(),
+                password: Some("password123".into()),
+                confirm_password: Some("password123".into()),
+                reset_password: Some(false),
+            }))
+            .expect("create outsider");
+
+        let project_admin_role = runtime
+            .block_on(bundle.access_control.create_role(RoleUpsertRequest {
+                code: "custom.project-delete-admin".into(),
+                name: "Project Delete Admin".into(),
+                description: "Can manage scoped projects.".into(),
+                status: "active".into(),
+                permission_codes: vec!["project.manage".into()],
+            }))
+            .expect("create project admin role");
+        runtime
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: project_admin_role.id.clone(),
+                        subject_type: "user".into(),
+                        subject_id: project_admin.id.clone(),
+                        effect: "allow".into(),
+                    }),
+            )
+            .expect("bind project admin role");
+        runtime
+            .block_on(
+                bundle
+                    .access_control
+                    .create_role_binding(RoleBindingUpsertRequest {
+                        role_id: SYSTEM_ADMIN_ROLE_ID.into(),
+                        subject_type: "user".into(),
+                        subject_id: system_admin.id.clone(),
+                        effect: "allow".into(),
+                    }),
+            )
+            .expect("bind system admin role");
+        runtime
+            .block_on(
+                bundle
+                    .access_control
+                    .create_data_policy(DataPolicyUpsertRequest {
+                        name: "project admin scoped policy".into(),
+                        subject_type: "user".into(),
+                        subject_id: project_admin.id.clone(),
+                        resource_type: "project".into(),
+                        scope_type: "selected-projects".into(),
+                        project_ids: vec![project.id.clone()],
+                        tags: Vec::new(),
+                        classifications: Vec::new(),
+                        effect: "allow".into(),
+                    }),
+            )
+            .expect("create project admin data policy");
+
+        let connection = bundle.access_control.state.open_db().expect("db");
+        let approver_ids =
+            resolve_project_deletion_approver_user_ids(&connection, &project.id).expect("ids");
+
+        assert!(
+            approver_ids
+                .iter()
+                .any(|user_id| user_id == &owner_session.user_id),
+            "workspace owner should remain an approver"
+        );
+        assert!(
+            approver_ids
+                .iter()
+                .any(|user_id| user_id == &project_admin.id),
+            "scoped project manager should be resolved as an approver"
+        );
+        assert!(
+            approver_ids
+                .iter()
+                .any(|user_id| user_id == &system_admin.id),
+            "system admin should be resolved as an approver"
+        );
+        assert!(
+            !approver_ids.iter().any(|user_id| user_id == &outsider.id),
+            "user without project manage permission should not be treated as an approver"
         );
     }
 }

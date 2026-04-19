@@ -1761,6 +1761,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+    delete:
+      operationId: deleteProject
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/projects/{projectId}/agent-links:
     get:
       operationId: listProjectAgentLinks
@@ -1962,6 +1979,123 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectDashboardSnapshot"
           description: Project dashboard payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/deletion-requests:
+    get:
+      operationId: listProjectDeletionRequests
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectDeletionRequest"
+                type: array
+          description: Project deletion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectDeletionRequest
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectDeletionRequestInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDeletionRequest"
+          description: Created project deletion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/deletion-requests/{requestId}/approve:
+    post:
+      operationId: approveProjectDeletionRequest
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewProjectDeletionRequestInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDeletionRequest"
+          description: Approved project deletion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/deletion-requests/{requestId}/reject:
+    post:
+      operationId: rejectProjectDeletionRequest
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewProjectDeletionRequestInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDeletionRequest"
+          description: Rejected project deletion request payload.
         default:
           content:
             application/json:
@@ -3341,6 +3475,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+    patch:
+      operationId: updateWorkspace
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSummary"
+          description: Updated workspace summary payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/agents:
     get:
       operationId: listWorkspaceAgents
@@ -4095,6 +4250,21 @@ paths:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
   /api/v1/workspace/personal-center/profile:
+    get:
+      operationId: getCurrentUserProfile
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRecordSummary"
+          description: Current personal profile payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
     patch:
       operationId: updateCurrentUserProfile
       requestBody:
@@ -6177,6 +6347,12 @@ components:
       required:
         - scopeKind
       type: object
+    CreateProjectDeletionRequestInput:
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+      type: object
     CreateProjectPromotionRequestInput:
       additionalProperties: false
       properties:
@@ -6191,14 +6367,12 @@ components:
     CreateProjectRequest:
       additionalProperties: false
       properties:
-        assignments:
-          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
         leaderAgentId:
           type: string
-        linkedWorkspaceAssets:
-          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        managerUserId:
+          type: string
         memberUserIds:
           items:
             type: string
@@ -6209,6 +6383,8 @@ components:
           type: string
         permissionOverrides:
           $ref: "#/components/schemas/ProjectPermissionOverrides"
+        presetCode:
+          type: string
         resourceDirectory:
           type: string
       required:
@@ -7506,6 +7682,8 @@ components:
           type: string
         status:
           type: string
+        targetUserId:
+          type: string
         title:
           type: string
         workspaceId:
@@ -7519,6 +7697,7 @@ components:
         - status
         - priority
         - actionable
+        - targetUserId
         - createdAt
       type: object
     KnowledgeEntryRecord:
@@ -8864,6 +9043,46 @@ components:
         - allow
         - deny
       type: string
+    ProjectDeletionRequest:
+      additionalProperties: false
+      properties:
+        createdAt:
+          type: integer
+        id:
+          type: string
+        projectId:
+          type: string
+        reason:
+          type: string
+        requestedByUserId:
+          type: string
+        reviewComment:
+          type: string
+        reviewedAt:
+          type: integer
+        reviewedByUserId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProjectDeletionRequestStatus"
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - requestedByUserId
+        - status
+        - createdAt
+        - updatedAt
+      type: object
+    ProjectDeletionRequestStatus:
+      enum:
+        - pending
+        - approved
+        - rejected
+      type: string
     ProjectLinkedWorkspaceAssets:
       additionalProperties: false
       properties:
@@ -8981,16 +9200,14 @@ components:
     ProjectRecord:
       additionalProperties: false
       properties:
-        assignments:
-          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
         id:
           type: string
         leaderAgentId:
           type: string
-        linkedWorkspaceAssets:
-          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        managerUserId:
+          type: string
         memberUserIds:
           items:
             type: string
@@ -9001,6 +9218,8 @@ components:
           type: string
         permissionOverrides:
           $ref: "#/components/schemas/ProjectPermissionOverrides"
+        presetCode:
+          type: string
         resourceDirectory:
           type: string
         status:
@@ -9020,7 +9239,6 @@ components:
         - ownerUserId
         - memberUserIds
         - permissionOverrides
-        - linkedWorkspaceAssets
       type: object
     ProjectResourceKind:
       enum:
@@ -9223,6 +9441,8 @@ components:
           type: string
         displayName:
           type: string
+        mappedDirectory:
+          type: string
         password:
           type: string
         username:
@@ -9415,6 +9635,12 @@ components:
         - binary
         - url
       type: string
+    ReviewProjectDeletionRequestInput:
+      additionalProperties: false
+      properties:
+        reviewComment:
+          type: string
+      type: object
     ReviewProjectPromotionRequestInput:
       additionalProperties: false
       properties:
@@ -12379,14 +12605,12 @@ components:
     UpdateProjectRequest:
       additionalProperties: false
       properties:
-        assignments:
-          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
         leaderAgentId:
           type: string
-        linkedWorkspaceAssets:
-          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        managerUserId:
+          type: string
         memberUserIds:
           items:
             type: string
@@ -12397,6 +12621,8 @@ components:
           type: string
         permissionOverrides:
           $ref: "#/components/schemas/ProjectPermissionOverrides"
+        presetCode:
+          type: string
         resourceDirectory:
           type: string
         status:
@@ -12426,6 +12652,18 @@ components:
           type: string
         title:
           type: string
+      type: object
+    UpdateWorkspaceRequest:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        mappedDirectory:
+          type: string
+        name:
+          type: string
+        removeAvatar:
+          type: boolean
       type: object
     UpdateWorkspaceResourceInput:
       additionalProperties: false
@@ -13487,6 +13725,8 @@ components:
     WorkspaceSummary:
       additionalProperties: false
       properties:
+        avatar:
+          type: string
         bootstrapStatus:
           enum:
             - setup_required
@@ -13504,6 +13744,10 @@ components:
         id:
           type: string
         listenAddress:
+          type: string
+        mappedDirectory:
+          type: string
+        mappedDirectoryDefault:
           type: string
         name:
           type: string

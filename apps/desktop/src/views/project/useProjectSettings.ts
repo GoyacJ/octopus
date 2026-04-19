@@ -1,32 +1,40 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import type {
   AccessUserRecord,
   AgentRecord,
   CapabilityAssetManifest,
+  ProjectDeletionRequest,
   ProjectRecord,
   TeamRecord,
   WorkspaceToolKind,
   WorkspaceToolPermissionMode,
 } from '@octopus/schema'
 
+import { canReviewProjectDeletion } from '@/composables/project-governance'
+import { useWorkspaceProjectNotifications } from '@/composables/useWorkspaceProjectNotifications'
+import { createWorkspaceConsoleSurfaceTarget } from '@/i18n/navigation'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
+import { useInboxStore } from '@/stores/inbox'
 import {
   buildProjectCapabilitySummary,
   buildProjectGrantState,
   buildProjectRuntimeRefinementState,
   inferWorkspaceToolPermission,
+  resolveGrantedAgentsWithExclusions,
+  resolveGrantedTeamsWithExclusions,
   resolveProjectGrantedAgents,
   resolveProjectGrantedTeams,
   resolveProjectGrantedToolEntries,
   type ProjectGrantState,
+  type ProjectSetupPreset,
   type ProjectRuntimeRefinementState,
   type ToolPermissionSelection,
 } from '@/stores/project_setup'
-import { resolveProjectAgentSettings } from '@/stores/project_settings'
+import { resolveProjectAgentSettings, resolveProjectModelSettings } from '@/stores/project_settings'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -40,19 +48,24 @@ export interface ToolSection {
 }
 
 export type ActorDialogTab = 'agents' | 'teams'
+export type ProjectCapabilityCardId = 'models' | 'tools' | 'agents' | 'teams'
+export type CapabilityDialogScope = 'workspace' | 'project'
 
 type DialogKey =
   | 'leader'
-  | 'grantModels'
-  | 'grantTools'
-  | 'grantActors'
-  | 'runtimeModels'
-  | 'runtimeTools'
-  | 'runtimeActors'
+  | 'models'
+  | 'tools'
+  | 'actors'
   | 'members'
 
 const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
 const TOOL_PERMISSION_VALUES: ToolPermissionSelection[] = ['inherit', 'allow', 'ask', 'readonly', 'deny']
+const PROJECT_METADATA_PRESET_VALUES: Array<ProjectSetupPreset | 'general'> = [
+  'general',
+  'engineering',
+  'documentation',
+  'advanced',
+]
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
@@ -73,6 +86,9 @@ function isProjectOwnedTool(entry: CapabilityAssetManifest, projectId: string) {
 export function useProjectSettings() {
   const { t } = useI18n()
   const route = useRoute()
+  const router = useRouter()
+  const notifications = useWorkspaceProjectNotifications()
+  const inboxStore = useInboxStore()
   const workspaceStore = useWorkspaceStore()
   const agentStore = useAgentStore()
   const catalogStore = useCatalogStore()
@@ -80,8 +96,23 @@ export function useProjectSettings() {
   const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 
   const loadingDependencies = ref(false)
+  const deletionRequestsReady = ref(false)
+  const basicsError = ref('')
+  const lifecycleError = ref('')
+  const savingBasics = ref(false)
+  const creatingDeletionRequest = ref(false)
+  const reviewingDeletionRequest = ref<'approve' | 'reject' | null>(null)
+  const deletingProject = ref(false)
   const leaderDraft = ref('')
   const memberDraft = ref<string[]>([])
+
+  const basicsForm = reactive({
+    name: '',
+    description: '',
+    resourceDirectory: '',
+    managerUserId: '',
+    presetCode: 'general' as string,
+  })
 
   const grantToolTab = ref<WorkspaceToolKind>('builtin')
   const runtimeToolTab = ref<WorkspaceToolKind>('builtin')
@@ -91,15 +122,15 @@ export function useProjectSettings() {
   const runtimeToolSearchQuery = ref('')
   const grantActorSearchQuery = ref('')
   const runtimeActorSearchQuery = ref('')
+  const modelDialogScope = ref<CapabilityDialogScope>('workspace')
+  const toolDialogScope = ref<CapabilityDialogScope>('workspace')
+  const actorDialogScope = ref<CapabilityDialogScope>('workspace')
 
   const dialogOpen = reactive<Record<DialogKey, boolean>>({
     leader: false,
-    grantModels: false,
-    grantTools: false,
-    grantActors: false,
-    runtimeModels: false,
-    runtimeTools: false,
-    runtimeActors: false,
+    models: false,
+    tools: false,
+    actors: false,
     members: false,
   })
   const saving = reactive<Record<DialogKey, boolean>>({
@@ -151,6 +182,24 @@ export function useProjectSettings() {
   const projectSettings = computed(() =>
     projectId.value ? workspaceStore.getProjectSettings(projectId.value) : {},
   )
+  const deletionRequests = computed<ProjectDeletionRequest[]>(() =>
+    projectId.value ? workspaceStore.getProjectDeletionRequests(projectId.value) : [],
+  )
+  const latestDeletionRequest = computed(() => deletionRequests.value[0] ?? null)
+  const canReviewDeletion = computed(() =>
+    canReviewProjectDeletion(
+      workspaceAccessControlStore.currentEffectivePermissionCodes,
+      workspaceAccessControlStore.currentEffectiveRoleCodes,
+    ),
+  )
+  const lifecycleReviewMode = computed(() =>
+    typeof route.query.review === 'string' ? route.query.review : '',
+  )
+  const lifecycleReviewCallout = computed(() =>
+    lifecycleReviewMode.value === 'deletion-request'
+      ? t('projectSettings.sections.lifecycle.reviewCallout')
+      : '',
+  )
 
   const workspaceConfiguredModels = computed(() => catalogStore.configuredModelOptions)
   const workspaceEnabledToolEntries = computed<CapabilityAssetManifest[]>(() =>
@@ -191,19 +240,56 @@ export function useProjectSettings() {
       (left.displayName || left.username).localeCompare(right.displayName || right.username),
     )
   })
+  const managerOptions = computed(() =>
+    workspaceUsers.value.map(user => ({
+      value: user.id,
+      label: user.displayName || user.username,
+    })),
+  )
+  const presetOptions = computed(() => {
+    const values = new Set(PROJECT_METADATA_PRESET_VALUES)
+    const currentPreset = project.value?.presetCode?.trim()
+    if (currentPreset) {
+      values.add(currentPreset as ProjectSetupPreset | 'general')
+    }
 
-  const grantState = computed(() => buildProjectGrantState(project.value))
+    return [...values].map((value) => {
+      if (PROJECT_METADATA_PRESET_VALUES.includes(value as ProjectSetupPreset | 'general')) {
+        return {
+          value,
+          label: t(`projects.presets.options.${value}.label`),
+        }
+      }
+
+      return {
+        value,
+        label: t('projectSettings.basics.customPresetLabel', { code: value }),
+      }
+    })
+  })
+
+  const grantState = computed(() => buildProjectGrantState({
+    project: project.value,
+    projectSettings: projectSettings.value,
+    workspaceConfiguredModels: workspaceConfiguredModels.value,
+    workspaceToolEntries: workspaceEnabledToolEntries.value,
+    workspaceAgents: workspaceActiveAgents.value,
+    projectOwnedAgents: projectOwnedAgents.value,
+    workspaceTeams: workspaceActiveTeams.value,
+    projectOwnedTeams: projectOwnedTeams.value,
+  }))
   const grantedConfiguredModels = computed(() =>
     workspaceConfiguredModels.value.filter(item => grantState.value.assignedConfiguredModelIds.includes(item.value)),
   )
   const grantedToolEntries = computed(() =>
-    resolveProjectGrantedToolEntries(project.value, workspaceEnabledToolEntries.value),
+    resolveProjectGrantedToolEntries(project.value, workspaceEnabledToolEntries.value, projectSettings.value),
   )
   const grantedAgents = computed<AgentRecord[]>(() =>
     resolveProjectGrantedAgents(
       project.value,
       workspaceActiveAgents.value,
       projectOwnedAgents.value,
+      projectSettings.value,
     ),
   )
   const grantedTeams = computed<TeamRecord[]>(() =>
@@ -211,6 +297,7 @@ export function useProjectSettings() {
       project.value,
       workspaceActiveTeams.value,
       projectOwnedTeams.value,
+      projectSettings.value,
     ),
   )
   const grantedWorkspaceAgents = computed<AgentRecord[]>(() =>
@@ -272,6 +359,16 @@ export function useProjectSettings() {
       label: t(`projectSettings.tools.groups.${kind}`),
     })),
   )
+  const capabilityScopeTabs = computed(() => ([
+    {
+      value: 'workspace',
+      label: t('projectSettings.labels.workspaceBaseline'),
+    },
+    {
+      value: 'project',
+      label: t('projectSettings.labels.projectRules'),
+    },
+  ]))
   const actorTabs = computed(() => ([
     {
       value: 'agents',
@@ -314,6 +411,55 @@ export function useProjectSettings() {
     grantedTeams.value.filter(team =>
       matchesQuery([team.name, team.description, team.id], runtimeActorSearchQuery.value),
     ),
+  )
+  const activeToolTab = computed<WorkspaceToolKind>({
+    get: () => toolDialogScope.value === 'workspace' ? grantToolTab.value : runtimeToolTab.value,
+    set: (value) => {
+      if (toolDialogScope.value === 'workspace') {
+        grantToolTab.value = value
+        return
+      }
+      runtimeToolTab.value = value
+    },
+  })
+  const activeActorTab = computed<ActorDialogTab>({
+    get: () => actorDialogScope.value === 'workspace' ? grantActorTab.value : runtimeActorTab.value,
+    set: (value) => {
+      if (actorDialogScope.value === 'workspace') {
+        grantActorTab.value = value
+        return
+      }
+      runtimeActorTab.value = value
+    },
+  })
+  const activeToolSearchQuery = computed({
+    get: () => toolDialogScope.value === 'workspace' ? grantToolSearchQuery.value : runtimeToolSearchQuery.value,
+    set: (value: string) => {
+      if (toolDialogScope.value === 'workspace') {
+        grantToolSearchQuery.value = value
+        return
+      }
+      runtimeToolSearchQuery.value = value
+    },
+  })
+  const activeActorSearchQuery = computed({
+    get: () => actorDialogScope.value === 'workspace' ? grantActorSearchQuery.value : runtimeActorSearchQuery.value,
+    set: (value: string) => {
+      if (actorDialogScope.value === 'workspace') {
+        grantActorSearchQuery.value = value
+        return
+      }
+      runtimeActorSearchQuery.value = value
+    },
+  })
+  const activeToolEntries = computed(() =>
+    toolDialogScope.value === 'workspace' ? filteredGrantToolEntries.value : filteredRuntimeToolEntries.value,
+  )
+  const activeActorEntries = computed(() =>
+    actorDialogScope.value === 'workspace' ? filteredGrantAgents.value : filteredRuntimeAgents.value,
+  )
+  const activeTeamEntries = computed(() =>
+    actorDialogScope.value === 'workspace' ? filteredGrantTeams.value : filteredRuntimeTeams.value,
   )
 
   const projectUsedTokens = computed(() => workspaceStore.getProjectDashboard(projectId.value)?.usedTokens ?? 0)
@@ -363,6 +509,54 @@ export function useProjectSettings() {
       enabled: capabilitySummary.value.enabledActors,
     }),
   }))
+  const capabilityCards = computed(() => {
+    const enabledAgentCount = grantedAgents.value.length - runtimeState.value.disabledAgentIds.length
+    const enabledTeamCount = grantedTeams.value.length - runtimeState.value.disabledTeamIds.length
+
+    return [
+      {
+        id: 'models' as ProjectCapabilityCardId,
+        title: t('projectSettings.sections.capabilities.modelsTitle'),
+        summary: t('projectSettings.sections.capabilities.modelsValue', {
+          workspaceGranted: grantedConfiguredModels.value.length,
+          enabled: runtimeState.value.allowedConfiguredModelIds.length,
+          disabled: Math.max(grantedConfiguredModels.value.length - runtimeState.value.allowedConfiguredModelIds.length, 0),
+          defaultModel: capabilitySummary.value.defaultModelLabel || t('common.na'),
+        }),
+      },
+      {
+        id: 'tools' as ProjectCapabilityCardId,
+        title: t('projectSettings.sections.capabilities.toolsTitle'),
+        summary: t('projectSettings.sections.capabilities.toolsValue', {
+          workspaceGranted: grantedWorkspaceTools.value.length,
+          projectOwned: grantedProjectOwnedTools.value.length,
+          enabled: capabilitySummary.value.enabledTools,
+          disabled: runtimeState.value.disabledToolSourceKeys.length,
+          overrides: capabilitySummary.value.toolOverrideCount,
+        }),
+      },
+      {
+        id: 'agents' as ProjectCapabilityCardId,
+        title: t('projectSettings.sections.capabilities.agentsTitle'),
+        summary: t('projectSettings.sections.capabilities.actorsValue', {
+          workspaceGranted: grantedWorkspaceAgents.value.length,
+          projectOwned: projectOwnedAgents.value.length,
+          enabled: enabledAgentCount,
+          disabled: runtimeState.value.disabledAgentIds.length,
+        }),
+      },
+      {
+        id: 'teams' as ProjectCapabilityCardId,
+        title: t('projectSettings.sections.capabilities.teamsTitle'),
+        summary: t('projectSettings.sections.capabilities.actorsValue', {
+          workspaceGranted: grantedWorkspaceTeams.value.length,
+          projectOwned: projectOwnedTeams.value.length,
+          enabled: enabledTeamCount,
+          disabled: runtimeState.value.disabledTeamIds.length,
+        }),
+      },
+    ]
+  })
   const memberSummary = computed(() =>
     t('projectSettings.sections.members.membersValue', {
       members: capabilitySummary.value.memberCount,
@@ -418,10 +612,12 @@ export function useProjectSettings() {
       }
 
       loadingDependencies.value = true
+      deletionRequestsReady.value = false
       try {
         await Promise.all([
           workspaceStore.loadProjectDashboard(nextProjectId, nextConnectionId),
           workspaceStore.loadProjectRuntimeConfig(nextProjectId, false, nextConnectionId),
+          workspaceStore.loadProjectDeletionRequests(nextProjectId, nextConnectionId),
           agentStore.load(nextConnectionId),
           catalogStore.load(nextConnectionId),
           teamStore.load(nextConnectionId),
@@ -429,27 +625,24 @@ export function useProjectSettings() {
         ])
       } finally {
         loadingDependencies.value = false
+        deletionRequestsReady.value = true
       }
     },
     { immediate: true },
   )
 
-  function buildAssignmentsOverride(next: {
-    models?: NonNullable<ProjectRecord['assignments']>['models']
-    tools?: NonNullable<ProjectRecord['assignments']>['tools']
-    agents?: NonNullable<ProjectRecord['assignments']>['agents']
-  }) {
-    return {
-      ...(project.value?.assignments ?? {}),
-      ...(next.models !== undefined ? { models: next.models } : {}),
-      ...(next.tools !== undefined ? { tools: next.tools } : {}),
-      ...(next.agents !== undefined ? { agents: next.agents } : {}),
-    }
-  }
-
   function resetLeader() {
     leaderDraft.value = currentLeaderAgentId.value
     dialogErrors.leader = ''
+  }
+
+  function resetBasics() {
+    basicsForm.name = project.value?.name ?? ''
+    basicsForm.description = project.value?.description ?? ''
+    basicsForm.resourceDirectory = project.value?.resourceDirectory ?? ''
+    basicsForm.managerUserId = project.value?.managerUserId ?? ''
+    basicsForm.presetCode = project.value?.presetCode?.trim() || 'general'
+    basicsError.value = ''
   }
 
   function resetGrantModels() {
@@ -459,10 +652,7 @@ export function useProjectSettings() {
   }
 
   function resetGrantTools() {
-    const excluded = new Set(project.value?.assignments?.tools?.excludedSourceKeys ?? [])
-    grantForm.assignedToolSourceKeys = workspaceToolEntries.value
-      .filter(entry => !excluded.has(entry.sourceKey))
-      .map(entry => entry.sourceKey)
+    grantForm.assignedToolSourceKeys = [...grantState.value.assignedToolSourceKeys]
     grantToolSearchQuery.value = ''
     grantToolTab.value = TOOL_GROUP_ORDER.find(kind =>
       workspaceToolEntries.value.some(entry => entry.kind === kind),
@@ -471,14 +661,8 @@ export function useProjectSettings() {
   }
 
   function resetGrantActors() {
-    const excludedAgentIds = new Set(project.value?.assignments?.agents?.excludedAgentIds ?? [])
-    const excludedTeamIds = new Set(project.value?.assignments?.agents?.excludedTeamIds ?? [])
-    grantForm.assignedAgentIds = workspaceActiveAgents.value
-      .filter(agent => !excludedAgentIds.has(agent.id))
-      .map(agent => agent.id)
-    grantForm.assignedTeamIds = workspaceActiveTeams.value
-      .filter(team => !excludedTeamIds.has(team.id))
-      .map(team => team.id)
+    grantForm.assignedAgentIds = [...grantState.value.assignedAgentIds]
+    grantForm.assignedTeamIds = [...grantState.value.assignedTeamIds]
     grantActorSearchQuery.value = ''
     grantActorTab.value = 'agents'
     dialogErrors.grantActors = ''
@@ -517,14 +701,31 @@ export function useProjectSettings() {
   watch(
     () => [
       projectId.value,
+      project.value?.name ?? '',
+      project.value?.description ?? '',
+      project.value?.resourceDirectory ?? '',
+      project.value?.managerUserId ?? '',
+      project.value?.presetCode ?? '',
+    ].join('|'),
+    () => {
+      resetBasics()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => [
+      projectId.value,
       currentLeaderAgentId.value,
       leaderOptions.value.map(option => option.value).join(','),
       grantState.value.assignedConfiguredModelIds.join(','),
       grantState.value.defaultConfiguredModelId,
+      grantState.value.assignedToolSourceKeys.join(','),
+      grantState.value.assignedAgentIds.join(','),
+      grantState.value.assignedTeamIds.join(','),
       workspaceToolEntries.value.map(entry => `${entry.kind}:${entry.sourceKey}`).join(','),
       workspaceActiveAgents.value.map(agent => agent.id).join(','),
       workspaceActiveTeams.value.map(team => team.id).join(','),
-      JSON.stringify(project.value?.assignments ?? {}),
     ].join('|'),
     () => {
       resetLeader()
@@ -558,6 +759,19 @@ export function useProjectSettings() {
     () => `${projectId.value}|${(project.value?.memberUserIds ?? []).join(',')}`,
     () => {
       resetMembers()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => [
+      projectId.value,
+      project.value?.status ?? '',
+      latestDeletionRequest.value?.id ?? '',
+      latestDeletionRequest.value?.status ?? '',
+    ].join('|'),
+    () => {
+      lifecycleError.value = ''
     },
     { immediate: true },
   )
@@ -856,11 +1070,24 @@ export function useProjectSettings() {
       resourceDirectory: overrides.resourceDirectory ?? project.value.resourceDirectory,
       status: overrides.status ?? project.value.status,
       leaderAgentId: overrides.leaderAgentId ?? project.value.leaderAgentId,
+      managerUserId: overrides.managerUserId ?? project.value.managerUserId,
+      presetCode: overrides.presetCode ?? project.value.presetCode,
       ownerUserId: overrides.ownerUserId ?? project.value.ownerUserId,
       memberUserIds: overrides.memberUserIds ?? project.value.memberUserIds,
       permissionOverrides: overrides.permissionOverrides ?? project.value.permissionOverrides,
-      linkedWorkspaceAssets: overrides.linkedWorkspaceAssets ?? project.value.linkedWorkspaceAssets,
-      assignments: overrides.assignments ?? project.value.assignments,
+    }
+  }
+
+  function deletionRequestStatusLabel(status?: 'pending' | 'approved' | 'rejected' | null) {
+    switch (status) {
+      case 'approved':
+        return t('common.approved')
+      case 'rejected':
+        return t('common.rejected')
+      case 'pending':
+        return t('common.pending')
+      default:
+        return t('projects.deletionRequest.none')
     }
   }
 
@@ -869,39 +1096,174 @@ export function useProjectSettings() {
     dialogOpen.leader = true
   }
 
-  function openGrantModelsDialog() {
+  function openModelsDialog(scope: CapabilityDialogScope = 'workspace') {
     resetGrantModels()
-    dialogOpen.grantModels = true
-  }
-
-  function openGrantToolsDialog() {
-    resetGrantTools()
-    dialogOpen.grantTools = true
-  }
-
-  function openGrantActorsDialog() {
-    resetGrantActors()
-    dialogOpen.grantActors = true
-  }
-
-  function openRuntimeModelsDialog() {
     resetRuntimeModels()
-    dialogOpen.runtimeModels = true
+    modelDialogScope.value = scope
+    dialogOpen.models = true
   }
 
-  function openRuntimeToolsDialog() {
+  function openToolsDialog(scope: CapabilityDialogScope = 'workspace') {
+    resetGrantTools()
     resetRuntimeTools()
-    dialogOpen.runtimeTools = true
+    toolDialogScope.value = scope
+    dialogOpen.tools = true
   }
 
-  function openRuntimeActorsDialog() {
-    resetRuntimeActors()
-    dialogOpen.runtimeActors = true
+  function openActorsDialog(actorTab: ActorDialogTab = 'agents', scope: CapabilityDialogScope = 'workspace') {
+    resetGrantActors()
+    resetRuntimeModels()
+    actorDialogScope.value = scope
+    if (scope === 'workspace') {
+      grantActorTab.value = actorTab
+    } else {
+      runtimeActorTab.value = actorTab
+    }
+    dialogOpen.actors = true
   }
 
   function openMembersDialog() {
     resetMembers()
     dialogOpen.members = true
+  }
+
+  async function archiveProject() {
+    if (!project.value) {
+      return
+    }
+
+    const currentProject = project.value
+    lifecycleError.value = ''
+    const updated = await workspaceStore.archiveProject(currentProject.id)
+    if (!updated) {
+      lifecycleError.value = workspaceStore.error || t('projectSettings.sections.lifecycle.archiveError')
+      return
+    }
+    await notifications.notifyProjectArchived(updated.name, updated.id)
+  }
+
+  async function restoreProject() {
+    if (!project.value) {
+      return
+    }
+
+    const currentProject = project.value
+    lifecycleError.value = ''
+    const updated = await workspaceStore.restoreProject(currentProject.id)
+    if (!updated) {
+      lifecycleError.value = workspaceStore.error || t('projectSettings.sections.lifecycle.restoreError')
+      return
+    }
+    await notifications.notifyProjectRestored(updated.name, updated.id)
+  }
+
+  async function createDeletionRequest() {
+    if (!project.value || project.value.status !== 'archived' || creatingDeletionRequest.value) {
+      return
+    }
+
+    const currentProject = project.value
+    lifecycleError.value = ''
+    creatingDeletionRequest.value = true
+
+    try {
+      const created = await workspaceStore.createProjectDeletionRequest(currentProject.id, {})
+      if (!created) {
+        lifecycleError.value = workspaceStore.error || t('projects.deletionRequest.createError')
+        return
+      }
+      await Promise.all([
+        inboxStore.bootstrap(undefined, true),
+        notifications.notifyProjectDeletionRequested(currentProject.name, currentProject.id),
+      ])
+    } finally {
+      creatingDeletionRequest.value = false
+    }
+  }
+
+  async function reviewDeletionRequest(approved: boolean) {
+    if (
+      !project.value
+      || project.value.status !== 'archived'
+      || !latestDeletionRequest.value
+      || latestDeletionRequest.value.status !== 'pending'
+      || reviewingDeletionRequest.value
+    ) {
+      return
+    }
+
+    const currentProject = project.value
+    const requestId = latestDeletionRequest.value.id
+    lifecycleError.value = ''
+    reviewingDeletionRequest.value = approved ? 'approve' : 'reject'
+
+    try {
+      const reviewed = approved
+        ? await workspaceStore.approveProjectDeletionRequest(currentProject.id, requestId, {})
+        : await workspaceStore.rejectProjectDeletionRequest(currentProject.id, requestId, {})
+      if (!reviewed) {
+        lifecycleError.value = workspaceStore.error || t('projects.deletionRequest.reviewError')
+        return
+      }
+      await Promise.all([
+        inboxStore.bootstrap(undefined, true),
+        approved
+          ? notifications.notifyProjectDeletionApproved(currentProject.name, currentProject.id)
+          : notifications.notifyProjectDeletionRejected(currentProject.name, currentProject.id),
+      ])
+    } finally {
+      reviewingDeletionRequest.value = null
+    }
+  }
+
+  async function deleteProject() {
+    if (!project.value || project.value.status !== 'archived' || deletingProject.value) {
+      return
+    }
+
+    const currentProject = project.value
+    lifecycleError.value = ''
+    deletingProject.value = true
+
+    try {
+      const deleted = await workspaceStore.deleteProject(currentProject.id)
+      if (!deleted) {
+        lifecycleError.value = workspaceStore.error || t('projects.deletionRequest.deleteError')
+        return
+      }
+
+      const workspaceId = workspaceStore.currentWorkspaceId
+      if (workspaceId) {
+        await router.push(createWorkspaceConsoleSurfaceTarget('workspace-console-projects', workspaceId))
+      }
+      await notifications.notifyProjectDeleted(currentProject.name)
+    } finally {
+      deletingProject.value = false
+    }
+  }
+
+  async function saveModelsDialog() {
+    if (modelDialogScope.value === 'workspace') {
+      await saveGrantModels()
+      return
+    }
+    await saveRuntimeModels()
+  }
+
+  async function saveToolsDialog() {
+    if (toolDialogScope.value === 'workspace') {
+      await saveGrantTools()
+      return
+    }
+    await saveRuntimeTools()
+  }
+
+  async function saveActorsDialog() {
+    if (actorDialogScope.value === 'workspace') {
+      await saveGrantActors()
+      return
+    }
+    await saveRuntimeActors()
   }
 
   async function saveLeader() {
@@ -929,8 +1291,42 @@ export function useProjectSettings() {
         return
       }
       dialogOpen.leader = false
+      await notifications.notifyProjectLeaderSaved(updated.name, updated.id)
     } finally {
       saving.leader = false
+    }
+  }
+
+  async function saveBasics() {
+    if (!project.value || savingBasics.value) {
+      return
+    }
+    if (!basicsForm.name.trim() || !basicsForm.resourceDirectory.trim()) {
+      basicsError.value = t('projectSettings.basics.validation.required')
+      return
+    }
+
+    basicsError.value = ''
+    savingBasics.value = true
+
+    try {
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({
+          name: basicsForm.name.trim(),
+          description: basicsForm.description.trim(),
+          resourceDirectory: basicsForm.resourceDirectory.trim(),
+          managerUserId: basicsForm.managerUserId || undefined,
+          presetCode: basicsForm.presetCode === 'general' ? undefined : basicsForm.presetCode,
+        })!,
+      )
+      if (!updated) {
+        basicsError.value = workspaceStore.error || t('projectSettings.basics.saveError')
+        return
+      }
+      await notifications.notifyProjectBasicsSaved(updated.name, updated.id)
+    } finally {
+      savingBasics.value = false
     }
   }
 
@@ -949,23 +1345,37 @@ export function useProjectSettings() {
     saving.grantModels = true
 
     try {
-      const assignments = buildAssignmentsOverride({
-        models: {
-          configuredModelIds: assignedConfiguredModelIds,
-          defaultConfiguredModelId: assignedConfiguredModelIds.length
-            ? (grantForm.defaultConfiguredModelId || assignedConfiguredModelIds[0] || '')
-            : '',
+      const disabledConfiguredModelIds = workspaceConfiguredModels.value
+        .map(item => item.value)
+        .filter(modelId => !assignedConfiguredModelIds.includes(modelId))
+      const nextResolvedModels = resolveProjectModelSettings(
+        {
+          models: {
+            allowedConfiguredModelIds: runtimeState.value.allowedConfiguredModelIds
+              .filter(modelId => assignedConfiguredModelIds.includes(modelId)),
+            defaultConfiguredModelId: assignedConfiguredModelIds.length
+              ? (grantForm.defaultConfiguredModelId || assignedConfiguredModelIds[0] || '')
+              : '',
+            disabledConfiguredModelIds,
+            totalTokens: runtimeState.value.totalTokens ? Number(runtimeState.value.totalTokens) : undefined,
+          },
         },
-      })
-      const updated = await workspaceStore.updateProject(
-        project.value.id,
-        buildProjectUpdateInput({ assignments })!,
+        assignedConfiguredModelIds,
+        grantForm.defaultConfiguredModelId || assignedConfiguredModelIds[0] || '',
       )
-      if (!updated) {
+      const saved = await workspaceStore.saveProjectModelSettings(
+        project.value.id,
+        {
+          ...nextResolvedModels,
+          disabledConfiguredModelIds,
+        },
+      )
+      if (!saved) {
         dialogErrors.grantModels = workspaceStore.error || t('projectSettings.sections.grants.saveError')
         return
       }
-      dialogOpen.grantModels = false
+      dialogOpen.models = false
+      await notifications.notifyProjectGrantScopeSaved(project.value.name, project.value.id)
     } finally {
       saving.grantModels = false
     }
@@ -981,22 +1391,27 @@ export function useProjectSettings() {
 
     try {
       const enabledWorkspaceSourceKeys = unique(grantForm.assignedToolSourceKeys)
-      const excludedSourceKeys = workspaceToolEntries.value
+      const disabledWorkspaceSourceKeys = workspaceToolEntries.value
         .map(entry => entry.sourceKey)
         .filter(sourceKey => !enabledWorkspaceSourceKeys.includes(sourceKey))
-      const sourceKeys = unique(grantState.value.assignedToolSourceKeys)
-      const assignments = buildAssignmentsOverride({
-        tools: { sourceKeys, excludedSourceKeys },
-      })
-      const updated = await workspaceStore.updateProject(
+      const disabledProjectOwnedSourceKeys = runtimeState.value.disabledToolSourceKeys
+        .filter(sourceKey => projectOwnedToolEntries.value.some(entry => entry.sourceKey === sourceKey))
+      const saved = await workspaceStore.saveProjectToolSettings(
         project.value.id,
-        buildProjectUpdateInput({ assignments })!,
+        {
+          disabledSourceKeys: unique([
+            ...disabledWorkspaceSourceKeys,
+            ...disabledProjectOwnedSourceKeys,
+          ]),
+          overrides: projectSettings.value.tools?.overrides ?? {},
+        },
       )
-      if (!updated) {
+      if (!saved) {
         dialogErrors.grantTools = workspaceStore.error || t('projectSettings.sections.grants.saveError')
         return
       }
-      dialogOpen.grantTools = false
+      dialogOpen.tools = false
+      await notifications.notifyProjectGrantScopeSaved(project.value.name, project.value.id)
     } finally {
       saving.grantTools = false
     }
@@ -1013,46 +1428,22 @@ export function useProjectSettings() {
     try {
       const enabledWorkspaceAgentIds = unique(grantForm.assignedAgentIds)
       const enabledWorkspaceTeamIds = unique(grantForm.assignedTeamIds)
-      const assignedAgentIds = unique(grantState.value.assignedAgentIds)
-      const assignedTeamIds = unique(grantState.value.assignedTeamIds)
       const excludedAgentIds = workspaceActiveAgents.value
         .map(agent => agent.id)
         .filter(agentId => !enabledWorkspaceAgentIds.includes(agentId))
       const excludedTeamIds = workspaceActiveTeams.value
         .map(team => team.id)
         .filter(teamId => !enabledWorkspaceTeamIds.includes(teamId))
-      const nextGrantedAgents = resolveProjectGrantedAgents(
-        {
-          ...(project.value ?? {}),
-          assignments: {
-            ...(project.value.assignments ?? {}),
-            agents: {
-              agentIds: assignedAgentIds,
-              teamIds: assignedTeamIds,
-              excludedAgentIds,
-              excludedTeamIds,
-            },
-          },
-        } as ProjectRecord,
-        workspaceActiveAgents.value,
-        projectOwnedAgents.value,
-      )
-      const nextGrantedTeams = resolveProjectGrantedTeams(
-        {
-          ...(project.value ?? {}),
-          assignments: {
-            ...(project.value.assignments ?? {}),
-            agents: {
-              agentIds: assignedAgentIds,
-              teamIds: assignedTeamIds,
-              excludedAgentIds,
-              excludedTeamIds,
-            },
-          },
-        } as ProjectRecord,
-        workspaceActiveTeams.value,
-        projectOwnedTeams.value,
-      )
+      const nextGrantedAgents = resolveGrantedAgentsWithExclusions({
+        workspaceAgents: workspaceActiveAgents.value,
+        projectOwnedAgents: projectOwnedAgents.value,
+        excludedAgentIds,
+      })
+      const nextGrantedTeams = resolveGrantedTeamsWithExclusions({
+        workspaceTeams: workspaceActiveTeams.value,
+        projectOwnedTeams: projectOwnedTeams.value,
+        excludedTeamIds,
+      })
       const nextRuntimeActors = resolveProjectAgentSettings(
         projectSettings.value,
         nextGrantedAgents.map(agent => agent.id),
@@ -1062,23 +1453,37 @@ export function useProjectSettings() {
         return
       }
 
-      const assignments = buildAssignmentsOverride({
-        agents: {
-          agentIds: assignedAgentIds,
-          teamIds: assignedTeamIds,
-          excludedAgentIds,
-          excludedTeamIds,
-        },
-      })
-      const updated = await workspaceStore.updateProject(
+      const disabledWorkspaceAgentIds = workspaceActiveAgents.value
+        .filter(agent => !agent.projectId)
+        .map(agent => agent.id)
+        .filter(agentId => !enabledWorkspaceAgentIds.includes(agentId))
+      const disabledWorkspaceTeamIds = workspaceActiveTeams.value
+        .filter(team => !team.projectId)
+        .map(team => team.id)
+        .filter(teamId => !enabledWorkspaceTeamIds.includes(teamId))
+      const disabledProjectOwnedAgentIds = runtimeState.value.disabledAgentIds
+        .filter(agentId => projectOwnedAgents.value.some(agent => agent.id === agentId))
+      const disabledProjectOwnedTeamIds = runtimeState.value.disabledTeamIds
+        .filter(teamId => projectOwnedTeams.value.some(team => team.id === teamId))
+      const saved = await workspaceStore.saveProjectAgentSettings(
         project.value.id,
-        buildProjectUpdateInput({ assignments })!,
+        {
+          disabledAgentIds: unique([
+            ...disabledWorkspaceAgentIds,
+            ...disabledProjectOwnedAgentIds,
+          ]),
+          disabledTeamIds: unique([
+            ...disabledWorkspaceTeamIds,
+            ...disabledProjectOwnedTeamIds,
+          ]),
+        },
       )
-      if (!updated) {
+      if (!saved) {
         dialogErrors.grantActors = workspaceStore.error || t('projectSettings.sections.grants.saveError')
         return
       }
-      dialogOpen.grantActors = false
+      dialogOpen.actors = false
+      await notifications.notifyProjectGrantScopeSaved(project.value.name, project.value.id)
     } finally {
       saving.grantActors = false
     }
@@ -1120,7 +1525,8 @@ export function useProjectSettings() {
           || t('projectSettings.models.saveError')
         return
       }
-      dialogOpen.runtimeModels = false
+      dialogOpen.models = false
+      await notifications.notifyProjectRuntimeSaved(project.value.name, project.value.id)
     } finally {
       saving.runtimeModels = false
     }
@@ -1135,6 +1541,8 @@ export function useProjectSettings() {
     saving.runtimeTools = true
 
     try {
+      const hiddenDisabledSourceKeys = (projectSettings.value.tools?.disabledSourceKeys ?? [])
+        .filter(sourceKey => !grantedToolEntries.value.some(entry => entry.sourceKey === sourceKey))
       const disabledSourceKeys = grantedToolEntries.value
         .map(entry => entry.sourceKey)
         .filter(sourceKey => resolveRuntimeToolSelection(sourceKey) === 'deny')
@@ -1151,14 +1559,21 @@ export function useProjectSettings() {
           return [[entry.sourceKey, { permissionMode: selection }]]
         }),
       )
-      const saved = await workspaceStore.saveProjectToolSettings(project.value.id, { disabledSourceKeys, overrides })
+      const saved = await workspaceStore.saveProjectToolSettings(project.value.id, {
+        disabledSourceKeys: unique([
+          ...hiddenDisabledSourceKeys,
+          ...disabledSourceKeys,
+        ]),
+        overrides,
+      })
       if (!saved) {
         dialogErrors.runtimeTools = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
           || workspaceStore.error
           || t('projectSettings.tools.saveError')
         return
       }
-      dialogOpen.runtimeTools = false
+      dialogOpen.tools = false
+      await notifications.notifyProjectRuntimeSaved(project.value.name, project.value.id)
     } finally {
       saving.runtimeTools = false
     }
@@ -1173,8 +1588,18 @@ export function useProjectSettings() {
     saving.runtimeActors = true
 
     try {
-      const disabledAgentIds = unique(runtimeForm.disabledAgentIds)
-      const disabledTeamIds = unique(runtimeForm.disabledTeamIds)
+      const hiddenDisabledAgentIds = (projectSettings.value.agents?.disabledAgentIds ?? [])
+        .filter(agentId => !grantedAgents.value.some(agent => agent.id === agentId))
+      const hiddenDisabledTeamIds = (projectSettings.value.agents?.disabledTeamIds ?? [])
+        .filter(teamId => !grantedTeams.value.some(team => team.id === teamId))
+      const disabledAgentIds = unique([
+        ...hiddenDisabledAgentIds,
+        ...runtimeForm.disabledAgentIds,
+      ])
+      const disabledTeamIds = unique([
+        ...hiddenDisabledTeamIds,
+        ...runtimeForm.disabledTeamIds,
+      ])
       if (!validateCurrentLeaderForSave('runtimeActors', grantedWorkspaceAgents.value, disabledAgentIds)) {
         return
       }
@@ -1188,7 +1613,8 @@ export function useProjectSettings() {
           || t('projectSettings.agents.saveError')
         return
       }
-      dialogOpen.runtimeActors = false
+      dialogOpen.actors = false
+      await notifications.notifyProjectRuntimeSaved(project.value.name, project.value.id)
     } finally {
       saving.runtimeActors = false
     }
@@ -1214,6 +1640,7 @@ export function useProjectSettings() {
         return
       }
       dialogOpen.members = false
+      await notifications.notifyProjectMembersSaved(updated.name, updated.id)
     } finally {
       saving.members = false
     }
@@ -1230,20 +1657,33 @@ export function useProjectSettings() {
     workspaceStore,
     project,
     loadingDependencies,
+    basicsForm,
+    basicsError,
+    savingBasics,
     leaderDraft,
     leaderOptions,
     currentLeader,
     currentLeaderLabel,
+    managerOptions,
+    presetOptions,
     toolTabs,
+    capabilityScopeTabs,
     actorTabs,
+    modelDialogScope,
+    toolDialogScope,
+    actorDialogScope,
     grantToolTab,
     runtimeToolTab,
     grantActorTab,
     runtimeActorTab,
+    activeToolTab,
+    activeActorTab,
     grantToolSearchQuery,
     runtimeToolSearchQuery,
     grantActorSearchQuery,
     runtimeActorSearchQuery,
+    activeToolSearchQuery,
+    activeActorSearchQuery,
     dialogOpen,
     dialogErrors,
     saving,
@@ -1260,6 +1700,9 @@ export function useProjectSettings() {
     filteredGrantTeams,
     filteredRuntimeAgents,
     filteredRuntimeTeams,
+    activeToolEntries,
+    activeActorEntries,
+    activeTeamEntries,
     workspaceActiveAgents,
     workspaceActiveTeams,
     grantedAgents,
@@ -1270,11 +1713,20 @@ export function useProjectSettings() {
     workspaceUsers,
     toolPermissionOptions,
     capabilitySummary,
+    capabilityCards,
     grantSummary,
     runtimeSummary,
     memberSummary,
     accessSummary,
     permissionOverrideCount,
+    deletionRequestsReady,
+    latestDeletionRequest,
+    canReviewDeletion,
+    lifecycleReviewCallout,
+    lifecycleError,
+    creatingDeletionRequest,
+    reviewingDeletionRequest,
+    deletingProject,
     completionItems,
     completionProgress,
     projectUsedTokens,
@@ -1299,18 +1751,16 @@ export function useProjectSettings() {
     setRuntimeAgentEnabled,
     setRuntimeTeamEnabled,
     openLeaderDialog,
-    openGrantModelsDialog,
-    openGrantToolsDialog,
-    openGrantActorsDialog,
+    resetBasics,
+    openModelsDialog,
+    openToolsDialog,
+    openActorsDialog,
     selectAllGrantModels,
     clearGrantModels,
     selectAllGrantTools,
     clearGrantTools,
     selectAllGrantActors,
     clearGrantActors,
-    openRuntimeModelsDialog,
-    openRuntimeToolsDialog,
-    openRuntimeActorsDialog,
     selectAllRuntimeTools,
     clearAllRuntimeTools,
     selectAllRuntimeActors,
@@ -1319,6 +1769,13 @@ export function useProjectSettings() {
     resolveRuntimeToolSelection,
     runtimeToolPermissionSummaryLabel,
     updateRuntimeToolPermission,
+    deletionRequestStatusLabel,
+    archiveProject,
+    restoreProject,
+    createDeletionRequest,
+    reviewDeletionRequest,
+    deleteProject,
+    saveBasics,
     saveLeader,
     saveGrantModels,
     saveGrantTools,
@@ -1326,6 +1783,9 @@ export function useProjectSettings() {
     saveRuntimeModels,
     saveRuntimeTools,
     saveRuntimeActors,
+    saveModelsDialog,
+    saveToolsDialog,
+    saveActorsDialog,
     saveMembers,
   }
 }

@@ -192,7 +192,10 @@ pub fn build_router(state: ServerState) -> Router {
             put(upsert_access_protected_resource),
         )
         .route("/api/v1/apps", get(list_apps).post(register_app))
-        .route("/api/v1/workspace", get(workspace))
+        .route(
+            "/api/v1/workspace",
+            get(workspace).patch(update_workspace_route),
+        )
         .route("/api/v1/workspace/overview", get(workspace_overview))
         .route(
             "/api/v1/workspace/resources",
@@ -348,17 +351,32 @@ pub fn build_router(state: ServerState) -> Router {
         )
         .route(
             "/api/v1/workspace/personal-center/profile",
-            patch(update_current_user_profile_route),
+            get(current_user_profile_route).patch(update_current_user_profile_route),
         )
         .route(
             "/api/v1/workspace/personal-center/profile/password",
             post(change_current_user_password_route),
         )
         .route("/api/v1/projects", get(projects).post(create_project))
-        .route("/api/v1/projects/:project_id", patch(update_project))
+        .route(
+            "/api/v1/projects/:project_id",
+            patch(update_project).delete(delete_project),
+        )
         .route(
             "/api/v1/projects/:project_id/promotion-requests",
             get(list_project_promotion_requests).post(create_project_promotion_request),
+        )
+        .route(
+            "/api/v1/projects/:project_id/deletion-requests",
+            get(list_project_deletion_requests).post(create_project_deletion_request),
+        )
+        .route(
+            "/api/v1/projects/:project_id/deletion-requests/:request_id/approve",
+            post(approve_project_deletion_request),
+        )
+        .route(
+            "/api/v1/projects/:project_id/deletion-requests/:request_id/reject",
+            post(reject_project_deletion_request),
         )
         .route(
             "/api/v1/projects/:project_id/dashboard",

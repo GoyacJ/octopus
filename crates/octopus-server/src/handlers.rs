@@ -61,6 +61,7 @@ pub(crate) struct RegisterBootstrapAdminRequestPayload {
     confirm_password: String,
     avatar: AvatarUploadPayload,
     workspace_id: Option<String>,
+    mapped_directory: Option<String>,
 }
 
 pub(crate) async fn healthcheck(
@@ -2762,6 +2763,7 @@ pub(crate) async fn system_auth_bootstrap_admin(
             confirm_password: request.confirm_password,
             avatar: request.avatar,
             workspace_id: request.workspace_id,
+            mapped_directory: request.mapped_directory,
         })
         .await
     {
@@ -3823,6 +3825,7 @@ mod tests {
                 confirm_password: "password123".into(),
                 avatar: avatar_payload(),
                 workspace_id: Some(DEFAULT_WORKSPACE_ID.into()),
+                mapped_directory: None,
             })
             .await
             .expect("bootstrap admin")

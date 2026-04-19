@@ -18,9 +18,11 @@ import {
   UiPageShell,
   UiSelect,
   UiStatusCallout,
+  UiTabs,
   UiTextarea,
 } from '@octopus/ui'
 
+import { useWorkspaceProjectNotifications } from '@/composables/useWorkspaceProjectNotifications'
 import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
 import { createProjectSurfaceTarget } from '@/i18n/navigation'
 import { useAgentStore } from '@/stores/agent'
@@ -34,8 +36,10 @@ import {
   type ProjectCapabilitySummary,
   type ProjectSetupPreset,
 } from '@/stores/project_setup'
+import { resolveProjectGrantedModelIds } from '@/stores/project_settings'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const props = withDefaults(defineProps<{
@@ -48,11 +52,15 @@ const { t } = useI18n()
 const router = useRouter()
 const agentStore = useAgentStore()
 const catalogStore = useCatalogStore()
+const notifications = useWorkspaceProjectNotifications()
 const shell = useShellStore()
 const teamStore = useTeamStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
 
 const selectedProjectId = ref('')
+const registryTab = ref<'active' | 'archived'>('active')
+const createMode = ref(false)
 const detailsError = ref('')
 
 const form = reactive({
@@ -64,6 +72,19 @@ const form = reactive({
 })
 
 const projects = computed(() => workspaceStore.projects)
+const registryTabs = computed(() => ([
+  {
+    value: 'active',
+    label: `${String(t('projects.metrics.active'))} (${projects.value.filter(project => project.status === 'active').length})`,
+  },
+  {
+    value: 'archived',
+    label: `${String(t('projects.metrics.archived'))} (${projects.value.filter(project => project.status === 'archived').length})`,
+  },
+]))
+const visibleProjects = computed(() =>
+  projects.value.filter(project => project.status === registryTab.value),
+)
 const workspaceConfiguredModels = computed(() => catalogStore.configuredModelOptions)
 const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets)
 const workspaceActiveAgents = computed<AgentRecord[]>(() =>
@@ -72,6 +93,27 @@ const workspaceActiveAgents = computed<AgentRecord[]>(() =>
 const workspaceActiveTeams = computed<TeamRecord[]>(() =>
   teamStore.workspaceTeams.filter(team => team.status === 'active'),
 )
+const workspaceUsers = computed(() => {
+  const records = new Map(
+    workspaceAccessControlStore.members.map(member => [member.user.id, member.user] as const),
+  )
+
+  return [...records.values()].sort((left, right) =>
+    (left.displayName || left.username).localeCompare(right.displayName || right.username),
+  )
+})
+const selectedManagerLabel = computed(() =>
+  workspaceUsers.value.find(user => user.id === selectedProject.value?.managerUserId)?.displayName
+  || workspaceUsers.value.find(user => user.id === selectedProject.value?.managerUserId)?.username
+  || t('projects.manager.none'),
+)
+const selectedPresetLabel = computed(() => {
+  const presetCode = selectedProject.value?.presetCode?.trim() || 'general'
+  if (['general', 'engineering', 'documentation', 'advanced'].includes(presetCode)) {
+    return t(`projects.presets.options.${presetCode}.label`)
+  }
+  return presetCode
+})
 const leaderOptions = computed(() => [
   {
     value: '',
@@ -95,8 +137,12 @@ const selectedProjectSettings = computed(() =>
 const selectedProjectDashboard = computed(() =>
   selectedProjectId.value ? workspaceStore.getProjectDashboard(selectedProjectId.value) : null,
 )
+const selectedProjectDeletionRequests = computed(() =>
+  selectedProjectId.value ? workspaceStore.getProjectDeletionRequests(selectedProjectId.value) : [],
+)
+const latestDeletionRequest = computed(() => selectedProjectDeletionRequests.value[0] ?? null)
 const usedTokens = computed(() => selectedProjectDashboard.value?.usedTokens ?? 0)
-const isCreateMode = computed(() => !selectedProject.value)
+const isCreateMode = computed(() => createMode.value)
 
 const presetOptions = computed(() => ([
   { value: 'general', label: String(t('projects.presets.options.general.label')) },
@@ -112,13 +158,17 @@ const presetSeed = computed(() => buildProjectSetupPresetSeed(form.preset, {
   teams: workspaceActiveTeams.value,
 }))
 
-const selectedAssignedConfiguredModels = computed(() => {
-  const configuredIds = selectedProject.value?.assignments?.models?.configuredModelIds ?? []
-  return workspaceConfiguredModels.value.filter(item => configuredIds.includes(item.value))
+const selectedGrantedConfiguredModels = computed(() => {
+  const grantedModelIds = resolveProjectGrantedModelIds(
+    selectedProjectSettings.value,
+    workspaceConfiguredModels.value.map(item => item.value),
+  )
+
+  return workspaceConfiguredModels.value.filter(item => grantedModelIds.includes(item.value))
 })
 
 const selectedGrantedToolEntries = computed(() =>
-  resolveProjectGrantedToolEntries(selectedProject.value, workspaceToolEntries.value),
+  resolveProjectGrantedToolEntries(selectedProject.value, workspaceToolEntries.value, selectedProjectSettings.value),
 )
 const selectedProjectOwnedAgents = computed(() =>
   agentStore.agents.filter(agent => agent.projectId === selectedProjectId.value),
@@ -131,6 +181,7 @@ const selectedGrantedAgents = computed(() =>
     selectedProject.value,
     workspaceActiveAgents.value,
     selectedProjectOwnedAgents.value,
+    selectedProjectSettings.value,
   ),
 )
 const selectedGrantedTeams = computed(() =>
@@ -138,27 +189,25 @@ const selectedGrantedTeams = computed(() =>
     selectedProject.value,
     workspaceActiveTeams.value,
     selectedProjectOwnedTeams.value,
+    selectedProjectSettings.value,
   ),
 )
-const draftGrantedConfiguredModels = computed(() => {
-  const configuredIds = presetSeed.value.assignments?.models?.configuredModelIds ?? []
-  return workspaceConfiguredModels.value.filter(item => configuredIds.includes(item.value))
-})
+const draftGrantedConfiguredModels = computed(() => workspaceConfiguredModels.value)
 const draftGrantedToolEntries = computed(() =>
-  resolveProjectGrantedToolEntries(null, workspaceToolEntries.value),
+  resolveProjectGrantedToolEntries(null, workspaceToolEntries.value, {}),
 )
 const draftGrantedAgents = computed(() =>
-  resolveProjectGrantedAgents(null, workspaceActiveAgents.value, []),
+  resolveProjectGrantedAgents(null, workspaceActiveAgents.value, [], {}),
 )
 const draftGrantedTeams = computed(() =>
-  resolveProjectGrantedTeams(null, workspaceActiveTeams.value, []),
+  resolveProjectGrantedTeams(null, workspaceActiveTeams.value, [], {}),
 )
 
 const selectedSummary = computed(() =>
   buildProjectCapabilitySummary({
     project: selectedProject.value,
     projectSettings: selectedProjectSettings.value,
-    grantedConfiguredModels: selectedAssignedConfiguredModels.value,
+    grantedConfiguredModels: selectedGrantedConfiguredModels.value,
     grantedToolEntries: selectedGrantedToolEntries.value,
     workspaceTools: catalogStore.tools,
     grantedAgentIds: selectedGrantedAgents.value.map(agent => agent.id),
@@ -214,26 +263,41 @@ watch(
       catalogStore.load(connectionId),
       agentStore.load(connectionId),
       teamStore.load(connectionId),
+      workspaceAccessControlStore.loadMembersData(connectionId),
     ])
   },
   { immediate: true },
 )
 
 watch(
-  () => projects.value.map(project => `${project.id}:${project.status}:${project.name}:${project.description}:${JSON.stringify(project.assignments ?? {})}:${(project.memberUserIds ?? []).join(',')}`).join('|'),
+  () => [
+    projects.value.map(project => `${project.id}:${project.status}:${project.name}:${project.description}:${project.resourceDirectory}:${project.leaderAgentId ?? ''}:${(project.memberUserIds ?? []).join(',')}`).join('|'),
+    registryTab.value,
+    createMode.value ? 'create' : 'browse',
+  ].join('|'),
   () => {
+    if (createMode.value) {
+      return
+    }
+
     if (!selectedProjectId.value) {
-      const fallbackProjectId = projects.value.find(project => project.id === workspaceStore.currentProjectId)?.id
-        ?? projects.value[0]?.id
+      const fallbackProjectId = visibleProjects.value.find(project => project.id === workspaceStore.currentProjectId)?.id
+        ?? visibleProjects.value[0]?.id
       if (fallbackProjectId) {
         applyProject(fallbackProjectId)
       }
       return
     }
 
-    const current = projects.value.find(project => project.id === selectedProjectId.value)
+    const current = visibleProjects.value.find(project => project.id === selectedProjectId.value)
     if (!current) {
-      applyProject()
+      const fallbackProjectId = visibleProjects.value.find(project => project.id === workspaceStore.currentProjectId)?.id
+        ?? visibleProjects.value[0]?.id
+      if (fallbackProjectId) {
+        applyProject(fallbackProjectId)
+        return
+      }
+      selectedProjectId.value = ''
       return
     }
     applyProject(current.id)
@@ -250,6 +314,7 @@ watch(
     await Promise.all([
       workspaceStore.loadProjectDashboard(projectId, connectionId),
       workspaceStore.loadProjectRuntimeConfig(projectId, false, connectionId),
+      workspaceStore.loadProjectDeletionRequests(projectId, connectionId),
     ])
   },
   { immediate: true },
@@ -257,6 +322,7 @@ watch(
 
 function applyProject(projectId?: string) {
   const project = projects.value.find(item => item.id === projectId)
+  createMode.value = false
   selectedProjectId.value = project?.id ?? ''
   workspaceStore.syncRouteScope(undefined, project?.id ?? '')
   form.name = project?.name ?? ''
@@ -267,6 +333,17 @@ function applyProject(projectId?: string) {
   detailsError.value = ''
 }
 
+function openCreateMode() {
+  createMode.value = true
+  selectedProjectId.value = ''
+  form.name = ''
+  form.description = ''
+  form.resourceDirectory = ''
+  form.preset = 'general'
+  form.leaderAgentId = ''
+  detailsError.value = ''
+}
+
 async function submitProject() {
   if (!form.name.trim() || !form.resourceDirectory.trim()) {
     return
@@ -274,32 +351,13 @@ async function submitProject() {
 
   detailsError.value = ''
 
-  if (selectedProject.value) {
-    const updated = await workspaceStore.updateProject(selectedProject.value.id, {
-      name: form.name,
-      description: form.description,
-      resourceDirectory: form.resourceDirectory,
-      status: selectedProject.value.status,
-      assignments: selectedProject.value.assignments,
-      ownerUserId: selectedProject.value.ownerUserId,
-      memberUserIds: selectedProject.value.memberUserIds,
-      permissionOverrides: selectedProject.value.permissionOverrides,
-      linkedWorkspaceAssets: selectedProject.value.linkedWorkspaceAssets,
-    })
-    if (!updated) {
-      detailsError.value = workspaceStore.error || String(t('projects.errors.saveMetadata'))
-      return
-    }
-    applyProject(updated.id)
-    return
-  }
-
+  const presetModelSettings = presetSeed.value.modelSettings
   const created = await workspaceStore.createProject({
     name: form.name,
     description: form.description,
     resourceDirectory: form.resourceDirectory,
+    presetCode: form.preset === 'general' ? undefined : form.preset,
     leaderAgentId: form.leaderAgentId || undefined,
-    assignments: presetSeed.value.assignments,
   })
   if (!created) {
     detailsError.value = workspaceStore.error || String(t('projects.errors.create'))
@@ -307,18 +365,19 @@ async function submitProject() {
   }
 
   const [savedModels] = await Promise.all([
-    presetSeed.value.modelSettings
-      ? workspaceStore.saveProjectModelSettings(created.id, presetSeed.value.modelSettings)
+    presetModelSettings
+      ? workspaceStore.saveProjectModelSettings(created.id, presetModelSettings)
       : Promise.resolve(null),
   ])
 
-  if (presetSeed.value.modelSettings && !savedModels) {
+  if (presetModelSettings && !savedModels) {
     detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
       || workspaceStore.error
       || String(t('projects.errors.seedRuntime'))
   }
 
   applyProject(created.id)
+  await notifications.notifyProjectCreated(created.name, created.id)
 }
 
 async function openSelectedProjectSettings() {
@@ -327,29 +386,10 @@ async function openSelectedProjectSettings() {
     return
   }
 
-  await router.push(createProjectSurfaceTarget('project-settings', workspaceId, selectedProject.value.id))
-}
-
-async function archiveSelectedProject() {
-  if (!selectedProject.value) {
-    return
-  }
-
-  const updated = await workspaceStore.archiveProject(selectedProject.value.id)
-  if (updated) {
-    applyProject(workspaceStore.currentProjectId || updated.id)
-  }
-}
-
-async function restoreSelectedProject() {
-  if (!selectedProject.value) {
-    return
-  }
-
-  const updated = await workspaceStore.restoreProject(selectedProject.value.id)
-  if (updated) {
-    applyProject(workspaceStore.currentProjectId || updated.id)
-  }
+  const reviewQuery = selectedProject.value.status === 'archived' && latestDeletionRequest.value?.status === 'pending'
+    ? { review: 'deletion-request' }
+    : undefined
+  await router.push(createProjectSurfaceTarget('project-settings', workspaceId, selectedProject.value.id, reviewQuery))
 }
 
 function statusLabel(status: ProjectRecord['status']) {
@@ -415,14 +455,14 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
       :description="errorMessage || t('projects.header.subtitle')"
     >
       <template #actions>
-        <UiButton data-testid="projects-create-header-button" @click="applyProject()">
+        <UiButton data-testid="projects-create-header-button" @click="openCreateMode()">
           {{ t('projects.actions.create') }}
         </UiButton>
       </template>
     </UiPageHeader>
 
     <div v-else class="flex justify-end">
-      <UiButton data-testid="projects-create-header-button" @click="applyProject()">
+      <UiButton data-testid="projects-create-header-button" @click="openCreateMode()">
         {{ t('projects.actions.create') }}
       </UiButton>
     </div>
@@ -443,8 +483,14 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
     <UiListDetailShell list-class="p-3" detail-class="p-3">
       <template #list>
         <section class="space-y-3">
+          <UiTabs
+            v-model="registryTab"
+            :tabs="registryTabs"
+            data-testid="projects-registry-tabs"
+            variant="segmented"
+          />
           <UiListRow
-            v-for="project in projects"
+            v-for="project in visibleProjects"
             :key="project.id"
             :data-testid="`projects-select-${project.id}`"
             :title="project.name"
@@ -462,16 +508,16 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
             </template>
           </UiListRow>
           <UiEmptyState
-            v-if="!projects.length"
+            v-if="!visibleProjects.length"
             :title="t('projects.empty.title')"
             :description="t('projects.empty.description')"
           />
         </section>
       </template>
 
-      <UiInspectorPanel :title="isCreateMode ? t('projects.actions.create') : t('projects.actions.edit')">
+      <UiInspectorPanel :title="isCreateMode ? t('projects.actions.create') : (selectedProject?.name || t('sidebar.navigation.projects'))">
         <div class="space-y-6">
-          <section class="space-y-4">
+          <section v-if="isCreateMode" class="space-y-4">
             <div class="grid gap-4 md:grid-cols-2">
               <UiField :label="t('projects.fields.name')">
                 <UiInput v-model="form.name" data-testid="projects-name-input" />
@@ -524,7 +570,79 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
             </UiField>
           </section>
 
-          <section class="space-y-3 border-t border-border pt-4">
+          <section v-else-if="selectedProject" class="space-y-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-1">
+                <div class="text-sm font-semibold text-text-primary">
+                  {{ selectedProject.name }}
+                </div>
+                <div class="text-sm leading-6 text-text-secondary">
+                  {{ selectedProject.description || selectedProject.resourceDirectory || t('common.na') }}
+                </div>
+              </div>
+              <UiBadge :label="statusLabel(selectedProject.status)" subtle />
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-2">
+              <div
+                data-testid="projects-registry-resource-directory"
+                class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+              >
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                  {{ t('projects.fields.resourceDirectory') }}
+                </div>
+                <div class="mt-1 text-sm leading-6 text-text-primary">
+                  {{ selectedProject.resourceDirectory }}
+                </div>
+              </div>
+              <div
+                data-testid="projects-registry-used-tokens"
+                class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+              >
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                  {{ t('projects.fields.usedTokens') }}
+                </div>
+                <div class="mt-1 text-sm leading-6 text-text-primary">
+                  {{ usedTokens }}
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-4">
+              <div class="space-y-3">
+                <div class="space-y-1">
+                  <div class="text-sm font-semibold text-text-primary">
+                    {{ t('projects.manager.title') }}
+                  </div>
+                  <div class="text-sm leading-6 text-text-secondary">
+                    {{ t('projects.manager.description') }}
+                  </div>
+                </div>
+
+                <div class="grid gap-3 md:grid-cols-2">
+                  <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                      {{ t('projects.manager.label') }}
+                    </div>
+                    <div class="mt-1 text-sm leading-6 text-text-primary">
+                      {{ selectedManagerLabel }}
+                    </div>
+                  </div>
+                  <div class="rounded-[var(--radius-l)] border border-border bg-surface-muted px-4 py-3">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+                      {{ t('projects.fields.preset') }}
+                    </div>
+                    <div class="mt-1 text-sm leading-6 text-text-primary">
+                      {{ selectedPresetLabel }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </section>
+
+          <section v-if="isCreateMode || selectedProject" class="space-y-3 border-t border-border pt-4">
             <div class="space-y-1">
               <div class="text-sm font-semibold text-text-primary">
                 {{ t('projects.summary.title') }}
@@ -614,32 +732,17 @@ function memberSummaryLabel(summary: ProjectCapabilitySummary) {
             </UiButton>
           </section>
 
-          <div class="flex flex-wrap gap-3">
+          <div v-if="isCreateMode || selectedProject" class="flex flex-wrap gap-3">
             <UiButton
-              :data-testid="isCreateMode ? 'projects-create-button' : 'projects-save-button'"
+              v-if="isCreateMode"
+              data-testid="projects-create-button"
               :disabled="!form.name.trim() || !form.resourceDirectory.trim()"
               @click="submitProject"
             >
-              {{ isCreateMode ? t('projects.actions.create') : t('common.save') }}
+              {{ t('projects.actions.create') }}
             </UiButton>
-            <UiButton variant="ghost" @click="applyProject(selectedProject?.id)">
-              {{ t('common.reset') }}
-            </UiButton>
-            <UiButton
-              v-if="selectedProject && selectedProject.status === 'active'"
-              data-testid="projects-archive-button"
-              variant="ghost"
-              @click="archiveSelectedProject"
-            >
-              {{ t('projects.actions.archive') }}
-            </UiButton>
-            <UiButton
-              v-if="selectedProject && selectedProject.status === 'archived'"
-              data-testid="projects-restore-button"
-              variant="ghost"
-              @click="restoreSelectedProject"
-            >
-              {{ t('projects.actions.restore') }}
+            <UiButton v-if="isCreateMode" variant="ghost" @click="applyProject(visibleProjects[0]?.id)">
+              {{ t('common.cancel') }}
             </UiButton>
           </div>
 

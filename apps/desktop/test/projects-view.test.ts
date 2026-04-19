@@ -9,6 +9,7 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import * as tauriClient from '@/tauri/client'
 import ProjectsView from '@/views/workspace/ProjectsView.vue'
+import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
@@ -108,11 +109,12 @@ describe('Workspace project management view', () => {
 
     expect(mounted.container.querySelector('[data-testid="workspace-console-view"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="workspace-projects-embedded"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-registry-tabs"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.textContent).toContain('Workspace Governance')
-    expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-description-input"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="projects-preset-select"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-description-input"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-preset-select"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-tools"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-default-model-select"]')).toBeNull()
@@ -126,6 +128,8 @@ describe('Workspace project management view', () => {
 
     await waitFor(() => mounted.container.querySelector('[data-testid="workspace-projects-embedded"]') !== null)
 
+    expect(mounted.container.querySelector('[data-testid="projects-manager-select"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-manager-save-button"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-models"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-tools"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="projects-summary-actors"]')).not.toBeNull()
@@ -174,6 +178,7 @@ describe('Workspace project management view', () => {
       .mockResolvedValue('/workspace/projects/agent-studio/resources')
 
     const mounted = mountApp()
+    const notificationStore = useNotificationStore()
     const workspaceStore = useWorkspaceStore()
 
     await waitFor(() => mounted.container.querySelector('[data-testid="projects-create-header-button"]') !== null)
@@ -199,8 +204,21 @@ describe('Workspace project management view', () => {
 
     const created = workspaceStore.projects.find(project => project.name === 'Agent Studio')
     expect(created).toBeTruthy()
+    await waitFor(() =>
+      notificationStore.notificationsState.some(notification =>
+        notification.source === 'workspace-project-governance'
+        && notification.routeTo === `/workspaces/ws-local/projects/${created?.id}/settings`
+        && notification.body?.includes('Agent Studio'),
+      ),
+    )
     expect(created?.description).toBe('')
     expect(created?.assignments).toBeUndefined()
+    expect(notificationStore.notificationsState.some(notification =>
+      notification.source === 'workspace-project-governance'
+      && notification.routeTo === `/workspaces/ws-local/projects/${created?.id}/settings`
+      && notification.actionLabel
+      && notification.body?.includes('Agent Studio'),
+    )).toBe(true)
     expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
 
     mounted.destroy()
@@ -238,15 +256,63 @@ describe('Workspace project management view', () => {
         === '/workspace/projects/docs-workbench/resources',
     )
 
+    const createProjectSpy = vi.spyOn(workspaceStore, 'createProject')
+    const saveProjectModelSettingsSpy = vi.spyOn(workspaceStore, 'saveProjectModelSettings')
+
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
 
     await waitFor(() => workspaceStore.projects.some(project => project.name === 'Docs Workbench'))
+    await waitFor(() => saveProjectModelSettingsSpy.mock.calls.length > 0)
 
     const created = workspaceStore.projects.find(project => project.name === 'Docs Workbench')
-    expect(created?.assignments?.models?.configuredModelIds).toHaveLength(1)
-    expect(created?.assignments?.models?.defaultConfiguredModelId).toBe(
-      created?.assignments?.models?.configuredModelIds[0],
+    expect(createProjectSpy).toHaveBeenCalledWith(expect.not.objectContaining({
+      assignments: expect.anything(),
+    }))
+    expect(created?.assignments).toBeUndefined()
+    expect(created?.presetCode).toBe('documentation')
+    expect(saveProjectModelSettingsSpy).toHaveBeenCalledWith(
+      created?.id,
+      expect.objectContaining({
+        allowedConfiguredModelIds: expect.arrayContaining(['openai-primary']),
+        defaultConfiguredModelId: 'openai-primary',
+      }),
     )
+
+    mounted.destroy()
+  })
+
+  it('separates active and archived projects into registry tabs while keeping selected project details read-only', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+      },
+    })
+
+    const mounted = await mountProjectsView()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-registry-tabs"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-save-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-select-proj-governance"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-archived"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-restore-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
 
     mounted.destroy()
   })
@@ -265,26 +331,151 @@ describe('Workspace project management view', () => {
     mounted.destroy()
   })
 
-  it('archives and restores the selected project without changing the registry flow', async () => {
+  it('keeps project metadata editing out of the registry and routes operators to project settings instead', async () => {
     const mounted = await mountProjectsView()
-    const workspaceStore = useWorkspaceStore()
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-archive-button"]') !== null)
+    expect(mounted.container.querySelector('[data-testid="projects-manager-select"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-manager-save-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
+    mounted.destroy()
+  })
 
-    await waitFor(() =>
-      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'archived',
-    )
+  it('keeps lifecycle actions out of the registry detail and routes archived project governance to project settings', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
 
-    mounted.container.querySelector<HTMLElement>('[data-testid="projects-select-proj-redesign"]')?.click()
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-restore-button"]') !== null)
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-restore-button"]')?.click()
+        governance.status = 'archived'
+      },
+    })
 
-    await waitFor(() =>
-      workspaceStore.projects.find(project => project.id === 'proj-redesign')?.status === 'active',
-    )
+    const mounted = await mountProjectsView()
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-restore-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-project-button"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-archived"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-restore-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-status"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('routes pending deletion review from the registry into project settings review mode', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+        state.projectDeletionRequests = [{
+          id: 'delete-req-pending',
+          workspaceId: state.workspace.id,
+          projectId: governance.id,
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: undefined,
+          status: 'pending',
+          reviewComment: undefined,
+          createdAt: 1,
+          updatedAt: 1,
+          reviewedAt: undefined,
+        }]
+      },
+    })
+
+    const mounted = await mountProjectsView()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-archived"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-approve-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-reject-button"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-open-settings-button"]')?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-settings')
+    expect(router.currentRoute.value.fullPath).toContain('/workspaces/ws-local/projects/proj-governance/settings')
+    expect(router.currentRoute.value.fullPath).toContain('review=deletion-request')
+
+    mounted.destroy()
+  })
+
+  it('keeps final delete execution out of the registry even when a deletion request is approved', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const governance = state.projects.find(project => project.id === 'proj-governance')
+        if (!governance) {
+          throw new Error('Expected governance project in local workspace fixture')
+        }
+
+        governance.status = 'archived'
+        state.projectDeletionRequests = [{
+          id: 'delete-req-approved',
+          workspaceId: state.workspace.id,
+          projectId: governance.id,
+          requestedByUserId: 'user-owner',
+          reviewedByUserId: 'user-owner',
+          status: 'approved',
+          reviewComment: 'Approved for cleanup',
+          createdAt: 1,
+          updatedAt: 2,
+          reviewedAt: 2,
+        }]
+      },
+    })
+
+    const mounted = await mountProjectsView()
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-archived"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-governance"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-delete-project-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-delete-request-status"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-open-settings-button"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('keeps archive and restore operations out of the registry flow', async () => {
+    const mounted = await mountProjectsView()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="projects-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-restore-button"]')).toBeNull()
 
     mounted.destroy()
   })
@@ -309,13 +500,10 @@ describe('Workspace project management view', () => {
 
     const mounted = await mountProjectsView()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-archive-button"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-open-settings-button"]') !== null)
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
-
-    await waitFor(() => mounted.container.querySelector('[data-testid="projects-error"]') !== null)
-
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projects.errors.lastActiveProject')))
+    expect(mounted.container.querySelector('[data-testid="projects-archive-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-error"]')).toBeNull()
 
     mounted.destroy()
   })

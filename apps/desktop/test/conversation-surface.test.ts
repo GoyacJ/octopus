@@ -13,6 +13,7 @@ import * as tauriClient from '@/tauri/client'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
+import { updateFixtureProjectSettings } from './support/workspace-fixture-project-settings'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -258,65 +259,22 @@ describe('Conversation surfaces', () => {
         state.agents = state.agents.filter(agent => agent.projectId !== 'proj-redesign')
         state.teams = state.teams.filter(team => team.projectId !== 'proj-redesign')
 
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments) {
-          throw new Error('Expected proj-redesign assignments')
-        }
-
-        project.assignments = {
-          ...project.assignments,
+        state.agents = state.agents.filter(agent => agent.projectId !== 'proj-redesign')
+        state.teams = state.teams.filter(team => team.projectId !== 'proj-redesign')
+        updateFixtureProjectSettings(state, 'proj-redesign', current => ({
+          ...current,
           models: {
-            configuredModelIds: [],
+            allowedConfiguredModelIds: [],
             defaultConfiguredModelId: '',
+            disabledConfiguredModelIds: state.catalog.configuredModels
+              .filter(model => model.enabled)
+              .map(model => model.configuredModelId),
           },
           agents: {
-            agentIds: [],
-            teamIds: [],
-            excludedAgentIds,
-            excludedTeamIds,
+            disabledAgentIds: excludedAgentIds,
+            disabledTeamIds: excludedTeamIds,
           },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        if (!projectConfig) {
-          throw new Error('Expected proj-redesign runtime config')
-        }
-
-        state.runtimeProjectConfigs['proj-redesign'] = {
-          ...projectConfig,
-          effectiveConfig: {
-            ...((projectConfig.effectiveConfig as Record<string, any>) ?? {}),
-            projectSettings: {
-              ...(((projectConfig.effectiveConfig as Record<string, any>)?.projectSettings as Record<string, any>) ?? {}),
-              agents: {
-                disabledAgentIds: [],
-                disabledTeamIds: [],
-              },
-            },
-          },
-          sources: projectConfig.sources.map((source) => (
-            source.scope === 'project'
-              ? {
-                  ...source,
-                  document: {
-                    approvals: {
-                      defaultMode: 'manual',
-                    },
-                    projectSettings: {
-                      models: {
-                        allowedConfiguredModelIds: [],
-                        defaultConfiguredModelId: '',
-                      },
-                      agents: {
-                        disabledAgentIds: [],
-                        disabledTeamIds: [],
-                      },
-                    },
-                  },
-                }
-              : source
-          )),
-        }
+        }))
       },
     })
 
@@ -365,48 +323,24 @@ describe('Conversation surfaces', () => {
         }
 
         const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments) {
-          throw new Error('Expected proj-redesign assignments')
+        if (!project) {
+          throw new Error('Expected proj-redesign project')
         }
 
-        project.assignments = {
-          ...project.assignments,
+        updateFixtureProjectSettings(state, 'proj-redesign', current => ({
+          ...current,
           models: {
-            configuredModelIds: [],
+            allowedConfiguredModelIds: [],
             defaultConfiguredModelId: '',
+            disabledConfiguredModelIds: state.catalog.configuredModels
+              .filter(model => model.enabled)
+              .map(model => model.configuredModelId),
           },
-        }
-
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        if (!projectConfig) {
-          throw new Error('Expected proj-redesign runtime config')
-        }
-
-        state.runtimeProjectConfigs['proj-redesign'] = {
-          ...projectConfig,
-          sources: projectConfig.sources.map((source) => (
-            source.scope === 'project'
-              ? {
-                  ...source,
-                  document: {
-                    approvals: {
-                      defaultMode: 'manual',
-                    },
-                    projectSettings: {
-                      models: {
-                        allowedConfiguredModelIds: [],
-                        defaultConfiguredModelId: '',
-                      },
-                      agents: {
-                        disabledAgentIds: [],
-                        disabledTeamIds: [],
-                      },
-                    },
-                  },
-                }
-              : source
-          )),
-        }
+          agents: {
+            disabledAgentIds: [],
+            disabledTeamIds: [],
+          },
+        }))
       },
     })
 
@@ -1177,50 +1111,21 @@ describe('Conversation surfaces', () => {
         }
 
         const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments?.agents) {
-          throw new Error('Expected proj-redesign agent assignments')
-        }
-
         const visibleAgentIds = new Set(['agent-architect', 'agent-template-finance'])
         const visibleTeamIds = new Set(['team-studio', 'team-template-finance'])
-        project.assignments.agents.excludedAgentIds = state.agents
+        const disabledAgentIds = state.agents
           .filter(agent => !agent.projectId && !visibleAgentIds.has(agent.id))
           .map(agent => agent.id)
-        project.assignments.agents.excludedTeamIds = state.teams
+        const disabledTeamIds = state.teams
           .filter(team => !team.projectId && !visibleTeamIds.has(team.id))
           .map(team => team.id)
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
-        if (
-          projectSource
-          && projectSource.document
-          && typeof projectSource.document === 'object'
-          && !Array.isArray(projectSource.document)
-        ) {
-          ;(projectSource.document as Record<string, any>).projectSettings = {
-            ...((projectSource.document as Record<string, any>).projectSettings ?? {}),
-            agents: {
-              disabledAgentIds: [],
-              disabledTeamIds: [],
-            },
-          }
-        }
-        if (projectConfig) {
-          const effectiveConfig = projectConfig.effectiveConfig as Record<string, any>
-          state.runtimeProjectConfigs['proj-redesign'] = {
-            ...projectConfig,
-            effectiveConfig: {
-              ...effectiveConfig,
-              projectSettings: {
-                ...(effectiveConfig.projectSettings ?? {}),
-                agents: {
-                  disabledAgentIds: [],
-                  disabledTeamIds: [],
-                },
-              },
-            },
-          }
-        }
+        updateFixtureProjectSettings(state, 'proj-redesign', current => ({
+          ...current,
+          agents: {
+            disabledAgentIds,
+            disabledTeamIds,
+          },
+        }))
         state.projectAgentLinks['proj-redesign'] = []
         state.projectTeamLinks['proj-redesign'] = []
       },
@@ -1302,7 +1207,7 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('falls back to assigned seeded models when project settings are absent', async () => {
+  it('falls back to seeded catalog models when project model settings are absent', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       preloadConversationMessages: true,
@@ -1310,14 +1215,6 @@ describe('Conversation surfaces', () => {
         if (connection.workspaceId !== 'ws-local') {
           return
         }
-
-        const project = state.projects.find(item => item.id === 'proj-redesign')
-        if (!project?.assignments?.models) {
-          throw new Error('Expected proj-redesign model assignments')
-        }
-
-        project.assignments.models.configuredModelIds = ['claude-sonnet-4-5']
-        project.assignments.models.defaultConfiguredModelId = 'claude-sonnet-4-5'
 
         state.catalog.configuredModels = [
           {
@@ -1345,31 +1242,11 @@ describe('Conversation surfaces', () => {
           },
         }
 
-        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
-        if (!projectConfig) {
-          throw new Error('Expected proj-redesign runtime config')
-        }
-
-        state.runtimeProjectConfigs['proj-redesign'] = {
-          ...projectConfig,
-          effectiveConfig: {
-            approvals: {
-              defaultMode: 'manual',
-            },
-          },
-          sources: projectConfig.sources.map(source =>
-            source.scope === 'project'
-              ? {
-                  ...source,
-                  document: {
-                    approvals: {
-                      defaultMode: 'manual',
-                    },
-                  },
-                }
-              : source
-          ),
-        }
+        updateFixtureProjectSettings(state, 'proj-redesign', (current) => {
+          const next = { ...current }
+          delete next.models
+          return next
+        })
       },
     })
 
@@ -1441,7 +1318,7 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('keeps composer model and actor selects empty and disabled when the project has no assignments', async () => {
+  it('keeps composer model and actor selects empty and disabled when the project has no effective project capabilities', async () => {
     await router.push('/workspaces/ws-local/projects/proj-governance/conversations/conv-governance')
     await router.isReady()
 

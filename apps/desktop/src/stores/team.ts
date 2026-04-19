@@ -18,19 +18,6 @@ import {
 import { useWorkspaceStore } from './workspace'
 import { resolveProjectGrantedTeams } from './project_setup'
 
-function withIntegrationSource(
-  record: TeamRecord,
-  link: ProjectTeamLinkRecord,
-): TeamRecord {
-  return {
-    ...record,
-    integrationSource: {
-      kind: 'workspace-link',
-      sourceId: link.teamId,
-    },
-  }
-}
-
 export const useTeamStore = defineStore('team', () => {
   const teamsByConnection = ref<Record<string, TeamRecord[]>>({})
   const projectLinksByConnection = ref<Record<string, Record<string, ProjectTeamLinkRecord[]>>>({})
@@ -53,8 +40,8 @@ export const useTeamStore = defineStore('team', () => {
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
   )
-  const assignedProjectTeamIds = computed(() =>
-    currentProject.value?.assignments?.agents?.teamIds ?? [],
+  const currentProjectSettings = computed(() =>
+    workspaceStore.currentProjectId ? workspaceStore.getProjectSettings(workspaceStore.currentProjectId) : {},
   )
   const projectLinks = computed<Record<string, ProjectTeamLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
@@ -62,28 +49,12 @@ export const useTeamStore = defineStore('team', () => {
   const currentProjectLinks = computed<ProjectTeamLinkRecord[]>(
     () => projectLinks.value[workspaceStore.currentProjectId ?? ''] ?? [],
   )
-  const integratedProjectTeams = computed(() => {
-    const linkMap = new Map(currentProjectLinks.value.map(link => [link.teamId, link]))
-    return workspaceOwnedTeams.value
-      .filter(record => assignedProjectTeamIds.value.includes(record.id) || linkMap.has(record.id))
-      .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
-        workspaceId: record.workspaceId,
-        projectId: workspaceStore.currentProjectId,
-        teamId: record.id,
-        linkedAt: 0,
-      }))
-  })
-  const assignedWorkspaceTeams = computed(() =>
-    workspaceOwnedTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
-  )
-  const assignedBuiltinTeams = computed(() =>
-    builtinTemplateTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
-  )
   const effectiveProjectTeams = computed(() => {
     return resolveProjectGrantedTeams(
       currentProject.value,
       workspaceTeams.value,
       projectOwnedTeams.value,
+      currentProjectSettings.value,
     )
   })
   const projectTeams = computed(() => effectiveProjectTeams.value)
@@ -274,7 +245,6 @@ export const useTeamStore = defineStore('team', () => {
     workspaceOwnedTeams,
     builtinTemplateTeams,
     projectOwnedTeams,
-    integratedProjectTeams,
     effectiveProjectTeams,
     projectTeams,
     currentProjectLinks,

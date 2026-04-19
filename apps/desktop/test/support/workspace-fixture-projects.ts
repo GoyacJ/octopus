@@ -143,6 +143,9 @@ export function createProjectRecord(
     name: input.name.trim(),
     status: 'active',
     description: input.description.trim(),
+    leaderAgentId: input.leaderAgentId?.trim() || undefined,
+    managerUserId: input.managerUserId?.trim() || undefined,
+    presetCode: input.presetCode?.trim() || undefined,
     resourceDirectory: input.resourceDirectory.trim(),
     ownerUserId: input.ownerUserId?.trim() || 'user-owner',
     memberUserIds: [...new Set([input.ownerUserId?.trim() || 'user-owner', ...(input.memberUserIds ?? [])].filter(Boolean))],
@@ -153,13 +156,6 @@ export function createProjectRecord(
       knowledge: 'inherit',
       tasks: 'inherit',
     },
-    linkedWorkspaceAssets: input.linkedWorkspaceAssets ?? {
-      agentIds: [],
-      resourceIds: [],
-      toolSourceKeys: [],
-      knowledgeIds: [],
-    },
-    assignments: input.assignments ? clone(input.assignments) : undefined,
   }
 }
 
@@ -171,6 +167,9 @@ export function updateProjectRecord(
     ...current,
     name: input.name.trim(),
     description: input.description.trim(),
+    leaderAgentId: input.leaderAgentId?.trim() || current.leaderAgentId,
+    managerUserId: input.managerUserId?.trim() || current.managerUserId,
+    presetCode: input.presetCode?.trim() || current.presetCode,
     resourceDirectory: input.resourceDirectory.trim(),
     status: input.status,
     ownerUserId: input.ownerUserId?.trim() || current.ownerUserId,
@@ -181,7 +180,5 @@ export function updateProjectRecord(
       ].filter(Boolean),
     )],
     permissionOverrides: input.permissionOverrides ? clone(input.permissionOverrides) : current.permissionOverrides,
-    linkedWorkspaceAssets: input.linkedWorkspaceAssets ? clone(input.linkedWorkspaceAssets) : current.linkedWorkspaceAssets,
-    assignments: input.assignments ? clone(input.assignments) : undefined,
   }
 }

@@ -26,6 +26,8 @@
     "selectAll": "全选",
     "clearAll": "取消全选",
     "done": "已完成",
+    "approved": "已批准",
+    "rejected": "已拒绝",
     "pending": "待处理",
     "reset": "重置",
     "edit": "编辑",
@@ -175,18 +177,22 @@
       "displayName": "昵称",
       "avatar": "头像",
       "avatarHint": "支持 PNG、JPEG、WEBP，头像为必填。",
+      "mappedDirectory": "工作区目录",
+      "mappedDirectoryHint": "首次启动时选择真实的本地工作区根目录，后续会作为该工作区的数据与产物存储位置。",
       "password": "密码",
       "confirmPassword": "确认密码"
     },
     "actions": {
       "login": "登录",
       "register": "注册并进入工作区",
-      "pickAvatar": "选择头像"
+      "pickAvatar": "选择头像",
+      "pickMappedDirectory": "选择目录"
     },
     "validation": {
       "usernameRequired": "请输入用户名。",
       "displayNameRequired": "请输入昵称。",
       "avatarRequired": "请选择头像。",
+      "mappedDirectoryRequired": "请选择工作区目录。",
       "passwordRequired": "请输入密码。",
       "passwordMinLength": "密码长度至少 8 位。",
       "passwordMismatch": "两次输入的密码不一致。"
@@ -664,8 +670,13 @@
     "loading": "正在加载项目配置依赖…",
     "basics": {
       "title": "基础信息",
-      "description": "编辑当前项目的名称与描述，并同步到侧边栏与顶部导航。",
-      "saveError": "保存项目基础信息失败。"
+      "description": "在这里统一维护当前项目的元数据，让项目台账对既有项目保持轻量只读。",
+      "presetHint": "Preset 用于种下项目的基础治理形态，历史自定义 preset code 也会继续保留显示。",
+      "customPresetLabel": "自定义预设（{code}）",
+      "saveError": "保存项目基础信息失败。",
+      "validation": {
+        "required": "请填写项目名称和资源目录。"
+      }
     },
     "models": {
       "title": "模型配置",
@@ -729,6 +740,63 @@
       "emptyTitle": "当前工作区还没有可分配成员",
       "emptyDescription": "请先在权限中心创建用户，再把用户加入当前项目。"
     },
+    "notifications": {
+      "basicsSaved": {
+        "title": "项目基础信息已保存",
+        "body": "项目“{projectName}”的基础信息已更新。",
+        "actionLabel": "打开项目配置"
+      },
+      "leaderSaved": {
+        "title": "项目 Leader 已更新",
+        "body": "项目“{projectName}”的运行时 Leader 已更新。",
+        "actionLabel": "打开项目配置"
+      },
+      "grantScopeSaved": {
+        "title": "项目授权范围已更新",
+        "body": "项目“{projectName}”的工作区授权范围已保存。",
+        "actionLabel": "打开项目配置"
+      },
+      "runtimeSaved": {
+        "title": "项目启用规则已更新",
+        "body": "项目“{projectName}”的项目级启用规则已保存。",
+        "actionLabel": "打开项目配置"
+      },
+      "membersSaved": {
+        "title": "项目成员已更新",
+        "body": "项目“{projectName}”的成员名单已保存。",
+        "actionLabel": "打开项目配置"
+      },
+      "archived": {
+        "title": "项目已归档",
+        "body": "项目“{projectName}”现已归档。",
+        "actionLabel": "打开项目配置"
+      },
+      "restored": {
+        "title": "项目已恢复",
+        "body": "项目“{projectName}”已恢复为活跃状态。",
+        "actionLabel": "打开项目配置"
+      },
+      "deletionRequested": {
+        "title": "删除申请已提交",
+        "body": "项目“{projectName}”的删除申请已提交，等待审批。",
+        "actionLabel": "查看删除审批"
+      },
+      "deletionApproved": {
+        "title": "删除申请已批准",
+        "body": "项目“{projectName}”已满足最终删除条件。",
+        "actionLabel": "查看删除审批"
+      },
+      "deletionRejected": {
+        "title": "删除申请已驳回",
+        "body": "项目“{projectName}”的删除申请已被驳回。",
+        "actionLabel": "打开项目配置"
+      },
+      "deleted": {
+        "title": "项目已删除",
+        "body": "项目“{projectName}”已被永久删除。",
+        "actionLabel": "返回项目列表"
+      }
+    },
     "summary": {
       "title": "项目概览",
       "description": "查看当前项目的配置完成度和建议下一步。",
@@ -754,10 +822,12 @@
     },
     "labels": {
       "workspaceGrant": "工作区授予",
+      "workspaceBaseline": "工作区基线",
       "inherited": "继承工作区",
       "projectOwned": "项目自有",
       "projectEnablement": "项目启用",
       "projectOverride": "项目覆盖",
+      "projectRules": "项目规则",
       "members": "成员与访问"
     },
     "search": {
@@ -769,8 +839,26 @@
     "sections": {
       "overview": {
         "title": "配置概览",
-        "description": "这里展示项目台账信息。名称、说明和资源目录只在项目管理页编辑。",
-        "editHint": "如需修改项目名称、说明、资源目录或归档状态，请回到项目管理页处理。"
+        "description": "项目配置页现在负责维护可编辑元数据；工作区项目台账仅保留摘要、归档流转和跳转入口。",
+        "editHint": "当前 Leader：{leader}。项目生命周期与删除审批现在都在这里处理。"
+      },
+      "capabilities": {
+        "title": "能力配置",
+        "description": "在一个区块里查看每类能力的工作区授予范围、项目自有资产，以及项目级禁用状态。",
+        "modelsTitle": "模型",
+        "toolsTitle": "工具",
+        "agentsTitle": "数字员工",
+        "teamsTitle": "数字员工团队",
+        "modelsValue": "工作区已授予 {workspaceGranted} 个，项目已启用 {enabled} 个，项目已禁用 {disabled} 个，默认 {defaultModel}",
+        "toolsValue": "工作区已授予 {workspaceGranted} 个，项目自有 {projectOwned} 个，项目已启用 {enabled} 个，项目已禁用 {disabled} 个，{overrides} 个权限覆盖",
+        "actorsValue": "工作区已授予 {workspaceGranted} 个，项目自有 {projectOwned} 个，项目已启用 {enabled} 个，项目已禁用 {disabled} 个"
+      },
+      "lifecycle": {
+        "title": "生命周期与删除",
+        "description": "在项目配置页完成归档、恢复和删除审批，让项目台账保持只读摘要。",
+        "reviewCallout": "当前页面通过删除审批深链打开，请在这里检查申请状态并完成审批。",
+        "archiveError": "归档项目失败。",
+        "restoreError": "恢复项目失败。"
       },
       "grants": {
         "title": "可用于此项目",
@@ -806,6 +894,18 @@
       }
     },
     "dialogs": {
+      "models": {
+        "title": "编辑模型能力",
+        "description": "在一个对话框里维护模型的工作区基线与项目规则。"
+      },
+      "tools": {
+        "title": "编辑工具能力",
+        "description": "在一个对话框里维护工具的工作区基线与项目规则。"
+      },
+      "actors": {
+        "title": "编辑数字员工能力",
+        "description": "在一个对话框里维护数字员工与团队的工作区基线与项目规则。"
+      },
       "grantModels": {
         "title": "编辑模型授予",
         "description": "决定这个项目最多能看见哪些工作区模型。",
@@ -2204,6 +2304,7 @@
       "edit": "编辑项目",
       "archive": "归档项目",
       "restore": "恢复项目",
+      "requestDelete": "申请删除",
       "pickResourceDirectory": "选择目录",
       "openSettings": "打开项目配置"
     },
@@ -2294,6 +2395,28 @@
     "leader": {
       "hint": "可选。只允许选择当前工作区处于激活状态的数字员工，创建后也可在项目配置页调整。",
       "none": "暂未设置"
+    },
+    "manager": {
+      "title": "项目负责人",
+      "description": "为当前项目台账指派人类负责人。完整项目元数据仍统一在项目配置页维护。",
+      "label": "负责人",
+      "none": "暂未指派",
+      "saveError": "保存项目负责人失败。"
+    },
+    "deletionRequest": {
+      "title": "删除申请",
+      "description": "归档项目必须先完成删除审批申请，后续才能执行最终清理。",
+      "none": "暂无申请",
+      "createError": "创建项目删除申请失败。",
+      "reviewError": "审批项目删除申请失败。",
+      "deleteError": "删除项目失败。"
+    },
+    "notifications": {
+      "created": {
+        "title": "项目已创建",
+        "body": "项目“{projectName}”已创建，可以继续进入项目配置页完成高级设置。",
+        "actionLabel": "打开项目配置"
+      }
     }
   },
   "teams": {
@@ -3807,6 +3930,50 @@
     "empty": {
       "title": "暂无可进入的业务入口",
       "description": "当前账号还没有可用的控制台菜单。"
+    }
+  },
+  "workspaceSettings": {
+    "header": {
+      "eyebrow": "工作区设置",
+      "title": "工作区设置",
+      "description": "管理桌面工作台使用的工作区档案、头像与映射目录，保持工作区基础信息与规范契约一致。"
+    },
+    "general": {
+      "title": "工作区标识",
+      "subtitle": "维护共享工作区名称、头像与本地数据根目录，作为控制台与治理页面的统一来源。"
+    },
+    "avatar": {
+      "label": "工作区头像",
+      "currentLabel": "当前头像",
+      "actions": {
+        "pick": "选择头像"
+      }
+    },
+    "fields": {
+      "name": "工作区名称",
+      "nameHint": "该名称会复用于工作台 Shell、控制台入口和项目治理视图。",
+      "mappedDirectory": "映射目录",
+      "mappedDirectoryHint": "映射目录是当前工作区数据与产物的规范本地根目录。",
+      "mappedDirectoryReadonlyHint": "远端工作区当前只展示映射目录，暂不支持在桌面端直接改动。",
+      "pickMappedDirectory": "选择目录",
+      "mappedDirectoryDefault": "默认目录"
+    },
+    "placeholders": {
+      "name": "输入工作区名称",
+      "mappedDirectory": "选择工作区目录"
+    },
+    "feedback": {
+      "savedTitle": "工作区设置已保存",
+      "saved": "工作区设置已更新。",
+      "errorTitle": "工作区设置暂不可用",
+      "saveError": "工作区设置保存失败。"
+    },
+    "notifications": {
+      "saved": {
+        "title": "工作区设置已更新",
+        "body": "已保存工作区“{workspaceName}”的规范资料。",
+        "actionLabel": "打开工作区设置"
+      }
     }
   }
 }

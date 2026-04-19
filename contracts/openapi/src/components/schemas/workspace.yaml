@@ -644,6 +644,18 @@ TeamStatus:
     - active
     - archived
   type: string
+UpdateWorkspaceRequest:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    mappedDirectory:
+      type: string
+    name:
+      type: string
+    removeAvatar:
+      type: boolean
+  type: object
 UpdateCurrentUserProfileRequest:
   additionalProperties: false
   properties:
