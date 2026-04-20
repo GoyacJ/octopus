@@ -209,6 +209,12 @@ pub struct CacheBreakpoint {
 
 pub enum CacheTtl { FiveMinutes, OneHour }
 
+pub struct ToolSchema {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
 // 凭据抽象：定义在 contracts，以便 sdk-model / sdk-tools / 业务层共用
 #[async_trait]
 pub trait SecretVault: Send + Sync {
@@ -283,15 +289,42 @@ pub struct ProviderId(pub String);
 pub struct SurfaceId(pub String);
 pub struct ModelId(pub String);
 
-pub struct Provider { pub id: ProviderId, pub auth: AuthKind, pub surfaces: Vec<SurfaceId> }
-pub struct Surface { pub id: SurfaceId, pub protocol: ProtocolFamily, pub base_url: String }
-pub struct Model { pub id: ModelId, pub surface: SurfaceId, pub family: String, pub track: ModelTrack }
+pub struct Provider {
+    pub id: ProviderId,
+    pub display_name: String,
+    pub status: ProviderStatus,
+    pub auth: AuthKind,
+    pub surfaces: Vec<SurfaceId>,
+}
+pub enum ProviderStatus { Active, Deprecated, Experimental }
+pub struct Surface {
+    pub id: SurfaceId,
+    pub provider_id: ProviderId,
+    pub protocol: ProtocolFamily,
+    pub base_url: String,
+    pub auth: AuthKind,
+}
+pub struct Model {
+    pub id: ModelId,
+    pub surface: SurfaceId,
+    pub family: String,
+    pub track: ModelTrack,
+    pub context_window: ContextWindow,
+    pub aliases: Vec<String>,
+}
+pub struct ContextWindow {
+    pub max_input_tokens: u32,
+    pub max_output_tokens: u32,
+    pub supports_1m: bool,
+}
 
 pub enum ProtocolFamily {
     AnthropicMessages, OpenAiChat, OpenAiResponses, GeminiNative, VendorNative,
 }
 pub enum ModelTrack { Preview, Stable, LatestAlias, Deprecated, Sunset }
 pub enum AuthKind { ApiKey, XApiKey, OAuth, AwsSigV4, GcpAdc, AzureAd, None }
+// W2 执行层公共面暂不含 `Rerank`；见 `docs/sdk/README.md` 的 Fact-Fix 勘误。
+pub enum ModelRole { Main, Fast, Best, Plan, Compact, Vision, WebExtract, Embedding, Eval, SubagentDefault }
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
@@ -299,6 +332,11 @@ pub trait ModelProvider: Send + Sync {
     fn describe(&self) -> ProviderDescriptor;
 }
 
+pub struct ProviderDescriptor {
+    pub id: ProviderId,
+    pub supported_families: Vec<ProtocolFamily>,
+    pub catalog_version: String,
+}
 pub struct ModelRequest {
     pub model: ModelId,
     pub system_prompt: Vec<String>,
@@ -306,18 +344,62 @@ pub struct ModelRequest {
     pub tools: Vec<ToolSchema>,
     pub role: ModelRole,
     pub cache_breakpoints: Vec<CacheBreakpoint>,
+    pub response_format: Option<ResponseFormat>,
+    pub thinking: Option<ThinkingConfig>,
+    pub cache_control: CacheControlStrategy,
+    pub max_tokens: Option<u32>,
+    pub temperature: Option<f32>,
+    pub stream: bool,
+}
+pub enum ResponseFormat { Json { schema: serde_json::Value }, Text }
+pub struct ThinkingConfig { pub enabled: bool, pub budget_tokens: Option<u32> }
+pub enum CacheControlStrategy {
+    None,
+    PromptCaching { breakpoints: Vec<&'static str> },
+    ContextCacheObject { cache_id: String },
 }
 pub type ModelStream = Pin<Box<dyn Stream<Item = Result<AssistantEvent, ModelError>> + Send>>;
 
-pub enum ModelRole { Main, Fast, Best, Plan, Compact, Vision, WebExtract, Embedding, Eval, SubagentDefault }
+pub enum ModelError {
+    AuthUnsupported { kind: AuthKind },
+    AuthMissing { provider: ProviderId },
+    UpstreamStatus { status: u16, body_preview: String },
+    UpstreamTimeout,
+    Overloaded { retry_after_ms: Option<u64> },
+    PromptTooLong { estimated_tokens: u32, max: u32 },
+    AdapterNotImplemented { family: ProtocolFamily },
+    CapabilityUnsupported { capability: String, model: ModelId },
+    Serialization(serde_json::Error),
+    Transport(reqwest::Error),
+    ModelNotFound { id: ModelId },
+}
 
 pub struct RoleRouter { /* 静态映射 role → ModelId */ }
-pub struct FallbackPolicy { /* overloaded / 5xx / prompt_too_long */ }
+pub enum FallbackTrigger { Overloaded, Upstream5xx, PromptTooLong, ModelDeprecated }
+pub struct FallbackPolicy { /* chain + triggers */ }
+impl FallbackPolicy {
+    pub fn should_fallback(&self, err: &ModelError) -> Option<FallbackTrigger>;
+    pub fn next_model(&self, current: &ModelId) -> Option<&ModelId>;
+}
 
 pub trait ProtocolAdapter: Send + Sync {
     fn family(&self) -> ProtocolFamily;
     fn to_request(&self, req: &ModelRequest) -> Result<serde_json::Value, ModelError>;
     fn parse_stream(&self, raw: StreamBytes) -> Result<ModelStream, ModelError>;
+    async fn auth_headers(
+        &self,
+        vault: &dyn SecretVault,
+        provider: &Provider,
+    ) -> Result<Vec<(HeaderName, HeaderValue)>, ModelError>;
+}
+
+pub struct DefaultModelProvider { /* catalog + adapters + http_client + secret_vault */ }
+impl DefaultModelProvider {
+    pub async fn complete_with_fallback(
+        &self,
+        req: ModelRequest,
+        policy: &FallbackPolicy,
+    ) -> Result<ModelStream, ModelError>;
 }
 ```
 
@@ -834,3 +916,4 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 2026-04-20 | P0 架构修订：`sdk-permissions` 由 Level 3 下调到 Level 2，与 `tools/sandbox/ui-intent/hooks/plugin/mcp` 同层并明文同层协作规则；`SecretVault` trait 下沉到 Level 0 `octopus-sdk-contracts`，门面 crate 改为纯 re-export（去除 trait 定义） | Architect |
 | 2026-04-20 | P1 修订：§1 依赖图补充 "ui-intent → session" 事件回写箭头；§2.12 注明依赖；§8 `default-members` 补齐 `octopus-persistence`（共 5 业务 crate + Tauri app） | Architect |
 | 2026-04-21 | W1 执行回填：补齐 `RenderMeta`、ID `new_v4()`、`SecretValue::{new, as_bytes}` 公共面；登记 `SessionStarted` 首事件不变量与 W1↔OpenAPI 差异清单首批条目 | Codex |
+| 2026-04-21 | W2 计划审计回填：`ToolSchema` 下沉到 `§2.1`；`§2.3` 补齐 `ProviderStatus / ContextWindow / ProviderDescriptor / ResponseFormat / ThinkingConfig / CacheControlStrategy / ModelError / FallbackTrigger / DefaultModelProvider::complete_with_fallback` 与 `ModelRequest` 新字段；注明 `ModelRole` 暂不含 `rerank` 的 Fact-Fix 回链 | Codex |
