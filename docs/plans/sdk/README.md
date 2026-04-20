@@ -22,13 +22,14 @@
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `pending` |
 | `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `pending` |
 
-> 本索引随周计划产出逐步更新 `状态`。`pending → in_progress → done`。
+> 本索引随周计划产出逐步更新 `状态`。预登记周计划可保持 `pending` 且暂未建文件；文件创建后按 `draft → in_progress → blocked/done` 流转。
 
 ## 基础规约
 
 - **规范源**：`docs/sdk/01–14`（不改动 `docs/sdk/*` 除非发现与实现冲突）。
 - **治理源**：`/AGENTS.md`、`docs/AGENTS.md`、`docs/plans/AGENTS.md`、`docs/api-openapi-governance.md`、`contracts/openapi/AGENTS.md`。
 - **本目录本地覆盖**：`docs/plans/sdk/AGENTS.md` 定义命名约定（`NN-<topic>.md` 顺序编号，不使用日期前缀）、状态流转、模板要求与守护扫描。命名违规视为 `01-ai-execution-protocol.md §5` Stop Condition #11。
+- **W0 控制面**：`00 / 01 / 02 / 03` 是活的控制文档；执行期若发现控制面缺口，可直接修订并追加变更日志。只有 `docs/sdk/*` 规范层与实现冲突时，才通过 `docs/sdk/README.md` 的 `## Fact-Fix 勘误` 回流。
 - **推进模型**：所有子 Plan 使用 `docs/plans/PLAN_TEMPLATE.md`，执行/汇报使用 `docs/plans/EXECUTION_TEMPLATE.md`。
 - **checklist 入口**：`01-ai-execution-protocol.md` 定义"任务启动前 / 批次结束后 / 每周门禁"三类 checklist。
 - **禁止**：旁路 HTTP API、手改生成物（`contracts/openapi/octopus.openapi.yaml` / `packages/schema/src/generated.ts`）、跳过 schema 生成链条、把业务域塞入 SDK。

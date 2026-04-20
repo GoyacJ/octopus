@@ -24,8 +24,8 @@
 - **状态切换必须同批次落到索引**：
   - 新建子 Plan 的 PR → 把对应行从 `pending` 改为 `draft` 或 `in_progress`。
   - 子 Plan 进入执行 → 改为 `in_progress`。
-  - 子 Plan 满足 `00-overview.md §4` 的周出口状态 + Weekly Gate checklist → 改为 `done`。
-  - 任何 Stop Condition 触发（见 `01-ai-execution-protocol.md §4`） → 改为 `blocked`，并在该子 Plan 末尾登记阻塞原因。
+  - 子 Plan 满足 `00-overview.md §3` 的周出口状态 + `01-ai-execution-protocol.md §4` Weekly Gate checklist → 改为 `done`。
+  - 任何 Stop Condition 触发（见 `01-ai-execution-protocol.md §5`） → 改为 `blocked`，并在该子 Plan 末尾登记阻塞原因。
 - `00 / 01` 从 `draft` 切到 `done` 的条件：两份文档在 W8 收尾时一致审计通过；过程中若发生勘误，仍保持 `draft` 以示持续迭代中。
 
 ## 3. 模板与内容要求
@@ -33,17 +33,18 @@
 - 所有子 Plan **必须**基于 `docs/plans/PLAN_TEMPLATE.md` 起草；执行与汇报使用 `docs/plans/EXECUTION_TEMPLATE.md`。
 - 子 Plan 必须包含以下最小结构（模板已覆盖，此处为强提示）：
   1. `Goal / Non-goal / Scope`；
-  2. 任务矩阵（原子 Task，含 `Done when`、验证命令、依赖、stop conditions 链接回 `01-ai-execution-protocol.md §4`）；
+  2. 任务矩阵（原子 Task，含 `Done when`、验证命令、依赖、stop conditions 链接回 `01-ai-execution-protocol.md §5`）；
   3. 公共面变更登记（指向 `02-crate-topology.md` 的具体小节）；
   4. 退役登记（指向 `03-legacy-retirement.md` 的具体小节 + 旧符号 → 新位置）；
-  5. Weekly Gate 的出口状态（与 `00-overview.md §4` 的本周出口状态**逐条对齐**）；
+  5. Weekly Gate 的出口状态（与 `00-overview.md §3` 的本周出口状态**逐条对齐**）；
   6. 变更日志表。
 - 子 Plan **不得**重复复制 `00 / 01 / 02 / 03` 的内容；只允许引用（`docs/plans/sdk/02-crate-topology.md §2.4`）。
 
 ## 4. 与 `docs/sdk/*` 规范源的关系
 
 - 本目录**不修改** `docs/sdk/01–14`，除非发现与实现存在矛盾；此时按 `docs/sdk/README.md` 末尾的 `## Fact-Fix 勘误` 小节追加条目，并在对应子 Plan 的变更日志内引用该条目。
-- 新增/调整公共面时，必须回溯更新 `02-crate-topology.md` 的 `§2.*`、`§4 契约差异清单`、`§5 UI Intent IR 登记表`；禁止公共面在子 Plan 中"裸增"不登记。
+- `00 / 01 / 02 / 03` 是**活的控制文档**：默认保持稳定，但若执行暴露控制面缺口，可直接按本目录规则修订，并在各自变更日志记录。只有 `docs/sdk/*` 规范层与实现出现矛盾时，才走 `docs/sdk/README.md` 的 Fact-Fix 回流。
+- 新增/调整公共面时，必须回溯更新 `02-crate-topology.md` 的 `§2.*`、`§5 契约差异清单`、`§6 UI Intent IR 登记表`；禁止公共面在子 Plan 中"裸增"不登记。
 
 ## 5. 守护扫描
 
@@ -53,11 +54,14 @@
 # 5.1 命名约束：本目录不得出现日期前缀文件
 find docs/plans/sdk -type f -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md'
 
-# 5.2 索引完整性：本目录实际文件必须与 README.md 索引表一一对应
-ls docs/plans/sdk/*.md
+# 5.2 索引完整性：只核对编号 Plan 文件（README.md / AGENTS.md 不参与）
+find docs/plans/sdk -maxdepth 1 -type f -name '[0-9][0-9]-*.md' | sort
 rg '^\| `[0-9]{2}-' docs/plans/sdk/README.md
 
-# 5.3 AGENTS.md 本文件不计入 5.2 的索引表；索引只登记 Plan 文件
+# 5.3 判定规则：
+# - 每个已存在的 `NN-*.md` 文件必须在 README.md §文档索引有同名行
+# - README.md 中状态 != `pending` 的 `NN-*.md` 行必须已有对应文件
+# - `pending` 允许仅预登记文件名而暂时没有实体文件
 ```
 
 命中 5.1 或 5.2 不一致 → 视为 `01-ai-execution-protocol.md §5` 的 **Stop Condition #11**（命名/登记违规），阻断合入。
@@ -68,7 +72,7 @@ rg '^\| `[0-9]{2}-' docs/plans/sdk/README.md
 
 | 文档层 | 起稿时机 | 定稿要求 |
 |---|---|---|
-| W0 总控（`00 / 01 / 02 / 03`） | 2026-04-20 一次性定稿 | 后续只通过 `docs/sdk/README.md` 的 `## Fact-Fix 勘误` 小节回流修正，不重写 |
+| W0 总控（`00 / 01 / 02 / 03`） | 2026-04-20 一次性定稿 | 作为活的控制文档维护；默认保持稳定，但若执行暴露控制面缺口，可直接按本目录规则修订并写入各自变更日志。仅 `docs/sdk/*` 规范层矛盾走 `docs/sdk/README.md` 的 `## Fact-Fix 勘误` 回流 |
 | 本周 Plan（W<sub>n</sub>） | 本周**第一行生产代码提交前**必须**完整定稿** | 含 Goal / Scope / Risks / Task Ledger / Exit State 对齐表；违反 → Stop Condition #8 |
 | 下一周 Plan（W<sub>n+1</sub>） | 本周 Task 进度 ≥ 60%（按 Task 数计）时起稿 | 到本周 Weekly Gate 勾选前必须由 `pending` → `draft`；不要求 Task Ledger 完整，允许先写 Goal / Scope / Risks |
 | 再往后（W<sub>n+2</sub> 及以后） | **禁止提前起稿** | `README.md §文档索引` 仅保留文件名与一句描述 + `pending`；不得在任何文档出现 Task 级细节 |
@@ -78,7 +82,7 @@ rg '^\| `[0-9]{2}-' docs/plans/sdk/README.md
 当前周发现**必然影响 W<sub>n+2</sub> 以后的决策**（例如跨周的数据模型变动、契约断裂风险），按如下顺序处理，**不得私自起稿未来周 Plan**：
 
 1. 把决策与影响范围作为一行登记到 `README.md §关键不变量` 或 `00-overview.md §6 风险登记簿`；
-2. 如决策足以推翻 `00 §4 W<sub>n+2</sub> 出口状态` → 走 Fact-Fix，改 `00` 的对应小节，同步更新 `README.md §文档索引` 里相应周的状态/描述。
+2. 如决策足以推翻 `00-overview.md §3 W<sub>n+2</sub> 出口状态` → 直接修订 `00-overview.md` 的对应小节，同步更新 `README.md §文档索引` 里相应周的状态/描述。
 
 ### 守护扫描（加入 §5）
 

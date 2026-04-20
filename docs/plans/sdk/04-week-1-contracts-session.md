@@ -2,7 +2,7 @@
 
 > 本文档遵循 `docs/plans/sdk/AGENTS.md` 与 `docs/plans/PLAN_TEMPLATE.md`；执行规约见 `docs/plans/sdk/01-ai-execution-protocol.md`。
 >
-> 阅读顺序：**本文件 →** `02-crate-topology.md §2.1 / §2.2 / §4 / §5` → `03-legacy-retirement.md §0`。
+> 阅读顺序：**本文件 →** `02-crate-topology.md §2.1 / §2.2 / §5 / §6` → `03-legacy-retirement.md §0`。
 
 ## Goal
 
@@ -23,22 +23,22 @@
   - `02 §2.2` 全部符号：`SessionStore / EventRange / EventStream / SessionSnapshot / SessionError / SqliteJsonlSessionStore`。
   - `SessionStarted` 作为会话**首事件**的契约测试（含 `config_snapshot_id` + `effective_config_hash`）。
   - `SessionEvent` / `Usage` / `AssistantEvent` 的**序列化稳定性**（字段顺序、枚举 tagged 策略）守护测试。
-  - 与 `contracts/openapi/src/**` 的字段差异登记回 `02-crate-topology.md §4 契约差异清单`。
+  - 与 `contracts/openapi/src/**` 的字段差异登记回 `02-crate-topology.md §5 契约差异清单`。
 - Out of scope：
   - `octopus-sdk-model / sdk-tools / sdk-mcp / ...` 等 W2+ crate。
   - 任何业务域概念（Project / Workspace / Team / Task / Deliverable / User / Org）。
   - 旧 crate 的删除或符号迁移（W7 统一执行）。
   - `SqliteJsonlSessionStore::wake` 的 checkpoint 回放全语义（W6 再完整落地；本周仅支持"从头重放 + 最新 snapshot"的最小路径）。
-  - UI Intent IR 的 schema validator（`02 §5` 登记表由 W2 继续补齐；本周只落 `RenderBlock / RenderKind / AskPrompt / ArtifactRef / RenderLifecycle` 的 Rust 数据签名，不含 JSON Schema 校验器）。
+  - UI Intent IR 的 schema validator（`02 §6` 的 kind 登记表维持现状；本周只落 `RenderBlock / RenderKind / AskPrompt / ArtifactRef / RenderLifecycle` 的 Rust 数据签名，不含 JSON Schema 校验器与 `validate_render_block` 实现）。
 
 ## Risks Or Open Questions
 
 | # | 风险 / 问题 | 决策建议 | 触发 Stop Condition |
 |---|---|---|---|
-| R1 | `02 §2.1` 中 `AssistantEvent::PromptCache(PromptCacheEvent)` 引用了 `PromptCacheEvent`，但 `§2.1` 未给签名；`AssistantEvent` 要稳定序列化必须先确定该类型。 | W1 内在 contracts 新增 `PromptCacheEvent { cache_read_input_tokens: u32, cache_creation_input_tokens: u32 }` 与 `CacheBreakpoint { position: usize, ttl_ms: Option<u64> }` 的最小签名；同批次回填 `02 §2.1`。 | 若该签名需要与 OpenAPI 对齐 → #1 或 #3 |
-| R2 | OpenAPI `contracts/openapi/src/**` 已有 `Usage / Message / ContentBlock` 类似类型，与新 contracts 可能字段命名/可选性不一致。 | 本周**不改 OpenAPI**。差异逐项登记到 `02 §4 契约差异清单`，W2 随 `sdk-model` 一起决定 upstream / downstream。 | 若差异涉及 `cache_*` 字段语义分歧 → #1 |
+| R1 | `02 §2.1` 中 `AssistantEvent::PromptCache(PromptCacheEvent)` 引用了 `PromptCacheEvent`，但 `§2.1` 未给签名；`AssistantEvent` 要稳定序列化必须先确定该类型。 | W1 内在 contracts 新增 `PromptCacheEvent { cache_read_input_tokens: u32, cache_creation_input_tokens: u32, breakpoint_count: u32 }` 与 `CacheBreakpoint { position: usize, ttl: CacheTtl }`、`CacheTtl { FiveMinutes, OneHour }` 的最小签名；同批次回填 `02 §2.1`。 | 若该签名需要与 OpenAPI 对齐 → #1 或 #3 |
+| R2 | OpenAPI `contracts/openapi/src/**` 已有 `Usage / Message / ContentBlock` 类似类型，与新 contracts 可能字段命名/可选性不一致。 | 本周**不改 OpenAPI**。差异逐项登记到 `02 §5 契约差异清单`，W2 随 `sdk-model` 一起决定 upstream / downstream。 | 若差异涉及 `cache_*` 字段语义分歧 → #1 |
 | R3 | `SqliteJsonlSessionStore::wake` 与 W6 的 `Checkpoint` 回放契约未最终确定。 | W1 提供最小版：`wake` = 读取最新 `Checkpoint` 事件（若存在）再从其 `anchor_event_id` 顺序 replay 至末尾；若无 checkpoint 则从头顺序 replay。完整 wake 语义（含 context compaction replay）W6 再扩。 | 若上层 API 需要 "wake without replay" → #8 |
-| R4 | `runtime/events/*.jsonl` 的分片策略（按 session / 按天 / 按 run）未统一。 | 本周确定：每 `SessionId` 一个目录 `runtime/events/<session_id>/<run_id>.jsonl`；旋转策略交 W8（与 `octopus-persistence` 一并落地）。 | 若需要跨 session 全局事件索引 → 写入 `octopus-sdk-contracts §4` 待解决 |
+| R4 | `runtime/events/*.jsonl` 的分片策略（按 session / 按天 / 按 run）未统一。 | 本周确定：每 `SessionId` 一个文件 `<jsonl_root>/<session_id>.jsonl`；旋转策略与更细粒度分片交 W8（与 `octopus-persistence` 一并落地）。 | 若需要跨 session 全局事件索引 → 写入 `00-overview.md §6 风险登记簿` 并 Stop #8 |
 | R5 | contracts 是否需要 `feature-gated serde`？ | 不需要。contracts 默认启用 serde（它的核心价值就是序列化契约），不设 feature flag。 | — |
 
 ## Execution Rules
@@ -46,7 +46,7 @@
 - 遵循 `01-ai-execution-protocol.md`：三层 Checklist + Stop Conditions 1–11 全部生效。
 - 每个 Task 原子、单 PR ≤ 800 行；违反 → 拆 sub-Task。
 - 公共面（`pub` 符号）变动 → 同一 PR 必须更新 `02-crate-topology.md §2.1 / §2.2`；违反 → Stop Condition #1 或本目录 AGENTS.md §5 不一致。
-- 任何与 `contracts/openapi/src/**` 的字段差异 → 登记到 `02 §4`，**不**直接改 openapi。
+- 任何与 `contracts/openapi/src/**` 的字段差异 → 登记到 `02 §5`，**不**直接改 openapi。
 - `crates/runtime / crates/octopus-runtime-adapter` 的任何代码本周**禁止改动**。如发现依赖反向、只能改旧代码才能完成 W1 → Stop Condition #8。
 - `default-members` 在 W1 结束时追加 `crates/octopus-sdk-contracts` + `crates/octopus-sdk-session`（两者都不是 `02 §8` 的业务 crate，但为了 `cargo build` 能覆盖新 crate；正式的"5 业务 crate 收敛"在 W7/W8）。
 
@@ -107,7 +107,7 @@ Step 2：
 - Action：落地 `Usage { input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens }`（全 `u32`）；实现 `Default` + `impl Add<&Usage>`（用于后续累加）。
 - Done when：`Usage::default()` 四字段均为 0；`&u1 + &u2` 逐字段相加；字段序列化顺序固定。
 - Verify：`cargo test -p octopus-sdk-contracts usage::`
-- Stop if：OpenAPI 侧字段命名为 `cache_read` / `cache_creation`（无 `_input_tokens` 后缀）→ 以 SDK 命名为准，登记 `02 §4`。
+- Stop if：OpenAPI 侧字段命名为 `cache_read` / `cache_creation`（无 `_input_tokens` 后缀）→ 以 SDK 命名为准，登记 `02 §5`。
 
 Notes：
 - 字段序列化顺序通过 `struct` 声明顺序控制；禁止 `#[serde(flatten)]` 改变顺序。
@@ -178,8 +178,8 @@ Preconditions：Task 3 完成。
 
 Step 1：
 - Action：落地 `RenderBlock / RenderKind / AskPrompt / ArtifactRef / RenderLifecycle` 签名，字段与 `docs/sdk/14-ui-intent-ir.md` 一致（枚举变体用 snake_case JSON tag）。`RenderKind` 有 10 个变体；`RenderMeta` 先落最小字段：`id: EventId, parent: Option<EventId>, ts_ms: i64`。`AskPrompt / ArtifactRef` 内部字段若 `docs/sdk/14` 未锁 → 本 Plan §Risks 追加一行，在 Task 5 提前和 14 对齐（14 已产出终稿，应可直接复制）。
-- Done when：所有 IR 类型通过 rustc 类型检查并被 `SessionEvent::Render { block, lifecycle }` 正确嵌入；`02 §5 UI Intent IR 登记表`（若为空）登记 W1 落地的 5 个类型。
-- Verify：`cargo check -p octopus-sdk-contracts && rg '^\| `RenderBlock`' docs/plans/sdk/02-crate-topology.md`
+- Done when：所有 IR 类型通过 rustc 类型检查并被 `SessionEvent::Render { block, lifecycle }` 正确嵌入；`RenderKind` 的 10 个变体与 `02 §6 UI Intent IR 登记表` 的 10 个既有 kind 保持一致，W1 不额外新增 kind 行。
+- Verify：`cargo check -p octopus-sdk-contracts && rg -n '^\| 10 \| `raw`' docs/plans/sdk/02-crate-topology.md`
 - Stop if：`docs/sdk/14-ui-intent-ir.md` 与 `02 §2.1` 签名冲突 → 登记 Fact-Fix（`docs/sdk/README.md` 末尾的勘误小节）。
 
 Step 2：
@@ -234,10 +234,10 @@ Step 1：
 - Action：设计最小 SQLite schema（`sessions(session_id PK, config_snapshot_id, effective_config_hash, head_event_id, usage_json, created_at, updated_at)`、`events(event_id PK, session_id FK, seq INTEGER, kind TEXT, payload TEXT, created_at)`，对 `(session_id, seq)` 建唯一索引）。在 `schema.rs` 用 `CREATE TABLE IF NOT EXISTS` 幂等初始化。
 - Done when：首次 `SqliteJsonlSessionStore::open` 生成两张表；`cargo test -p octopus-sdk-session sqlite::schema::` 绿。
 - Verify：`cargo test -p octopus-sdk-session sqlite::schema::`
-- Stop if：schema 必须与 `crates/octopus-infra` 已有 sessions/events 表结构兼容 → 本周不兼容（并行路径，不共享表），登记 `00 §W1 备注` 并继续；若被要求共享 → Stop #8。
+- Stop if：schema 必须与 `crates/octopus-infra` 已有 sessions/events 表结构兼容 → 本周不兼容（并行路径，不共享表），登记 `00-overview.md §6 风险登记簿` 并继续；若被要求共享 → Stop #8。
 
 Step 2：
-- Action：实现 `append(&self, id, event)`：`BEGIN → 写 JSONL（fsync）→ UPSERT events 行（seq = max+1）→ UPDATE sessions.head_event_id → COMMIT`；失败时保证 SQLite 与 JSONL 一致（先写 JSONL 再写 DB；DB 写入失败时 JSONL 已落但 head 未更新，启动时用"JSONL 尾部 vs DB head" 一致性检查修复）。JSONL 路径为 `<jsonl_root>/<session_id>/events.jsonl`。
+- Action：实现 `append(&self, id, event)`：`BEGIN → 写 JSONL（fsync）→ UPSERT events 行（seq = max+1）→ UPDATE sessions.head_event_id → COMMIT`；失败时保证 SQLite 与 JSONL 一致（先写 JSONL 再写 DB；DB 写入失败时 JSONL 已落但 head 未更新，启动时用"JSONL 尾部 vs DB head" 一致性检查修复）。JSONL 路径为 `<jsonl_root>/<session_id>.jsonl`。
 - Done when：`tests/sqlite_jsonl.rs::test_append_roundtrip` 绿：10 个 `SessionEvent` append 后，`stream(id, EventRange::all())` 产出的序列与原序列严格相等。
 - Verify：`cargo test -p octopus-sdk-session --test sqlite_jsonl test_append_roundtrip`
 - Stop if：`rusqlite` 在 tokio 运行时下死锁（调度问题）→ 改 `tokio::task::spawn_blocking` 包装；若超过 Task 规模 → 拆 sub-Task。
@@ -249,7 +249,7 @@ Step 3：
 - Stop if：事件数超过 `i64::MAX` 的 `seq` 风险（不会触发，但需显式留 TODO）→ 忽略。
 
 Notes：
-- JSONL 文件旋转（大小 / 时间）**本周不做**；本周固定单 `events.jsonl`，登记 §Risks R4。
+- JSONL 文件旋转（大小 / 时间）**本周不做**；本周固定每 session 单文件 `<session_id>.jsonl`，登记 §Risks R4。
 - `append` 的 durability：JSONL 写入 + `fsync`；SQLite 走默认 journal；不引入 WAL 配置变更（留 W8 `octopus-persistence` 决定）。
 
 ---
@@ -287,7 +287,7 @@ Notes：
 Status: `pending`
 
 Files:
-- Modify: `docs/plans/sdk/02-crate-topology.md`（§2.1 / §2.2 / §4 / §5 / §10）
+- Modify: `docs/plans/sdk/02-crate-topology.md`（§2.1 / §2.2 / §5 / §6 / §10）
 - Modify: `docs/plans/sdk/03-legacy-retirement.md`（若本周动了 legacy 记录 → §7 登记，正常情况下为无改动）
 - Modify: `docs/plans/sdk/README.md`（W1 行状态 `draft` → `done`）
 - Modify: `docs/plans/sdk/04-week-1-contracts-session.md`（本文件；Task 全 `done`、追加 Checkpoint、变更日志）
@@ -301,13 +301,13 @@ Step 1：
 - Stop if：实际代码出现 `02` 未登记的 `pub` 符号 → 要么在 `02` 登记，要么收回 `pub`；二选一必须在本 Task 内闭环。
 
 Step 2：
-- Action：与 `contracts/openapi/src/**` 对齐——逐项列出 W1 新增 contracts 与 openapi 的字段差异（如 `Usage` 的 `cache_*_input_tokens` vs openapi 侧命名、`ContentBlock` 的 `tool_use_id` vs openapi 等），写入 `02-crate-topology.md §4 契约差异清单`（若该节不存在则同批次新增小节）。
-- Done when：§4 含至少一张表：`| SDK 类型 | OpenAPI 类型 | 差异 | 处理方针 | 决议周次 |`，覆盖所有 W1 新类型与 openapi 的交集。
-- Verify：`rg '^\|.*SDK 类型.*OpenAPI' docs/plans/sdk/02-crate-topology.md`
+- Action：与 `contracts/openapi/src/**` 对齐——逐项列出 W1 新增 contracts 与 openapi 的字段差异（如 `Usage` 的 `cache_*_input_tokens` vs openapi 侧命名、`ContentBlock` 的 `tool_use_id` vs openapi 等），按 `02-crate-topology.md §5` 既有列（`# / 日期 / 来源 / 目标 / 字段/枚举 / 差异描述 / 处理方式 / 状态`）逐行追加。
+- Done when：§5 至少新增一行非占位数据，覆盖所有 W1 新类型与 openapi 的交集，不另起第二套表头。
+- Verify：`rg -n 'align-openapi|align-sdk|dual-carry|no-op' docs/plans/sdk/02-crate-topology.md`
 - Stop if：openapi 侧根本无对应字段，但业务层前端/后端已使用它 → Stop #3。
 
 Step 3：
-- Action：执行 `01-ai-execution-protocol.md §4 Weekly Gate` 全部勾选；与 `00 §W1 出口状态` / `硬门禁` 逐条对齐；更新本文件"任务状态 + Checkpoint + 变更日志"；把 `README.md` 的 W1 行状态从 `draft` 改为 `done`。
+- Action：执行 `01-ai-execution-protocol.md §4 Weekly Gate` 全部勾选；与 `00-overview.md §3 W1` 的出口状态 / 硬门禁逐条对齐；更新本文件"任务状态 + Checkpoint + 变更日志"；把 `README.md` 的 W1 行状态从 `draft` 改为 `done`。
 - Done when：
   - `cargo test -p octopus-sdk-contracts -p octopus-sdk-session` 全绿；
   - `cargo clippy -p octopus-sdk-contracts -p octopus-sdk-session -- -D warnings` 全绿；
@@ -331,16 +331,16 @@ Notes：
 
 ---
 
-## Exit State 对齐表（与 `00-overview.md §W1`）
+## Exit State 对齐表（与 `00-overview.md §3 W1`）
 
-| 00 §W1 出口状态 | 本 Plan 对应 Task | 验证方式 |
+| `00-overview.md §3 W1` 出口状态 | 本 Plan 对应 Task | 验证方式 |
 |---|---|---|
 | `octopus-sdk-contracts` 导出全部 IR 类型 | T2 / T3 / T5 | `02 §2.1` 签名集 ⊆ `cargo doc` 生成的 `pub` 符号集 |
 | `octopus-sdk-session` 提供 `SessionStore` trait + `SqliteJsonlSessionStore` | T6 / T7 | `cargo test -p octopus-sdk-session` 绿 |
 | 单元测试验证 append / stream / snapshot | T7 Step 3 | `tests/sqlite_jsonl.rs` 三个核心用例 |
 | `config_snapshot_id` + `effective_config_hash` 首事件契约测试 | T8 Step 2 | `tests/contract_session_started.rs` |
 | 00 硬门禁 1（`cargo test -p ...` 全绿） | T9 Step 3 | 执行并记录 |
-| 00 硬门禁 2（与 OpenAPI 对齐并登记 §4） | T9 Step 2 | `02 §4` 契约差异表存在 |
+| 00 硬门禁 2（与 OpenAPI 对齐并登记 §5） | T9 Step 2 | `02 §5` 契约差异表存在 |
 
 ---
 
