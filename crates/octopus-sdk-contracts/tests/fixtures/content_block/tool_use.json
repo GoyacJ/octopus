@@ -1,0 +1,9 @@
+{
+  "id": "call-123",
+  "input": {
+    "encoding": "utf-8",
+    "path": "src/lib.rs"
+  },
+  "name": "read_file",
+  "type": "tool_use"
+}

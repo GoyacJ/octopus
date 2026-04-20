@@ -1,0 +1,11 @@
+{
+  "content": [
+    {
+      "text": "file contents",
+      "type": "text"
+    }
+  ],
+  "is_error": false,
+  "tool_use_id": "call-123",
+  "type": "tool_result"
+}

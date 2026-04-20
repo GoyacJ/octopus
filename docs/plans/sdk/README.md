@@ -13,7 +13,7 @@
 | `01-ai-execution-protocol.md` | AI 推进规约：checklist 机制、stop conditions、每周门禁、批次报告格式 | `draft` |
 | `02-crate-topology.md` | SDK crate 分包、对外 trait/struct 公共面、依赖方向、契约差异清单、UI IR 登记表 | `draft` |
 | `03-legacy-retirement.md` | 旧 crate 退役清单（逐文件/逐符号）+ 替代映射 + 守护扫描 | `draft` |
-| `04-week-1-contracts-session.md` | W1：`octopus-sdk-contracts` + `octopus-sdk-session` | `draft` |
+| `04-week-1-contracts-session.md` | W1：`octopus-sdk-contracts` + `octopus-sdk-session` | `done` |
 | `05-week-2-model.md` | W2：`octopus-sdk-model`（Provider / Surface / Model 三层） | `pending` |
 | `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `pending` |
 | `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `pending` |

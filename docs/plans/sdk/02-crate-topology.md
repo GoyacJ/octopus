@@ -95,6 +95,10 @@ pub struct SessionId(pub String);
 pub struct RunId(pub String);
 pub struct ToolCallId(pub String);
 pub struct EventId(pub String);
+impl SessionId { pub fn new_v4() -> Self; }
+impl RunId { pub fn new_v4() -> Self; }
+impl ToolCallId { pub fn new_v4() -> Self; }
+impl EventId { pub fn new_v4() -> Self; }
 
 pub enum Role { System, User, Assistant, Tool }
 
@@ -128,6 +132,11 @@ pub enum AssistantEvent {
 pub enum StopReason { EndTurn, ToolUse, MaxTokens, StopSequence }
 
 // UI Intent IR（完整 kind 登记见 §6）
+pub struct RenderMeta {
+    pub id: EventId,
+    pub parent: Option<EventId>,
+    pub ts_ms: i64,
+}
 pub struct RenderBlock {
     pub kind: RenderKind,
     pub payload: serde_json::Value,
@@ -137,9 +146,42 @@ pub enum RenderKind {
     Text, Markdown, Code, Diff, ListSummary, Progress,
     ArtifactRef, Record, Error, Raw,
 }
-pub struct AskPrompt { /* ... */ }
-pub struct ArtifactRef { /* ... */ }
-pub enum RenderLifecycle { Start, Update, End }
+pub struct AskPrompt {
+    pub kind: String,
+    pub questions: Vec<AskQuestion>,
+}
+pub struct AskQuestion {
+    pub id: String,
+    pub question: String,
+    pub header: String,
+    pub multi_select: bool,
+    pub options: Vec<AskOption>,
+}
+pub struct AskOption {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub preview: Option<String>,
+    pub preview_format: Option<String>,
+}
+pub struct ArtifactRef {
+    pub kind: String,
+    pub artifact_id: String,
+    pub artifact_kind: ArtifactKind,
+    pub title: Option<String>,
+    pub preview: Option<String>,
+    pub preview_format: Option<String>,
+    pub version: Option<u32>,
+    pub parent_version: Option<u32>,
+    pub status: Option<ArtifactStatus>,
+    pub content_type: Option<String>,
+    pub superseded_by_version: Option<u32>,
+}
+pub enum ArtifactKind { Markdown, Code, Html, Svg, Mermaid, React, Json, Binary }
+pub enum ArtifactStatus { Draft, Review, Approved, Published }
+pub enum RenderLifecycle {
+    OnToolUse, OnToolProgress, OnToolResult, OnToolRejected, OnToolError
+}
 
 // Session 事件
 pub enum SessionEvent {
@@ -154,6 +196,19 @@ pub enum SessionEvent {
 }
 pub enum EndReason { Completed, Interrupted, Error }
 
+pub struct PromptCacheEvent {
+    pub cache_read_input_tokens: u32,
+    pub cache_creation_input_tokens: u32,
+    pub breakpoint_count: u32,
+}
+
+pub struct CacheBreakpoint {
+    pub position: usize,
+    pub ttl: CacheTtl,
+}
+
+pub enum CacheTtl { FiveMinutes, OneHour }
+
 // 凭据抽象：定义在 contracts，以便 sdk-model / sdk-tools / 业务层共用
 #[async_trait]
 pub trait SecretVault: Send + Sync {
@@ -162,8 +217,14 @@ pub trait SecretVault: Send + Sync {
 }
 
 pub struct SecretValue(/* 内部零化；Drop 擦除；禁止 Debug 明文 */);
+impl SecretValue {
+    pub fn new(value: impl AsRef<[u8]>) -> Self;
+    pub fn as_bytes(&self) -> &[u8];
+}
 pub enum VaultError { NotFound, Backend(String), Redacted }
 ```
+
+> `RenderBlock` 在 W1 Rust contracts 中保持 `kind + payload + meta` 的事件载体形式，以适配 `SessionEvent::Render` 与后续 `sdk-ui-intent::RenderEmitter`。`docs/sdk/14-ui-intent-ir.md` 的 TypeScript 伪代码描述的是工具侧逻辑 IR；两者通过 `kind` 与 payload schema 对齐，而不是逐字段 1:1 同构。
 
 > `SecretVault` 定义于 Level 0 是刻意的：Level 1 `sdk-model`（HTTP 认证）、Level 2 `sdk-tools`（工具内请求）均需使用同一 trait，而 Level 5 门面 crate 不得承担 trait 定义职责（层内规则禁止其引入逻辑）。
 
@@ -192,13 +253,26 @@ pub struct SessionSnapshot {
     pub usage: Usage,
 }
 
-pub enum SessionError { /* ... */ }
+pub enum SessionError {
+    NotFound,
+    Corrupted { reason: String },
+    Io(std::io::Error),
+    Sqlite(rusqlite::Error),
+    Serde(serde_json::Error),
+}
 
 pub struct SqliteJsonlSessionStore { /* impl SessionStore */ }
 impl SqliteJsonlSessionStore {
     pub fn open(db: &Path, jsonl_root: &Path) -> Result<Self, SessionError>;
 }
 ```
+
+#### 契约不变量
+
+- 首事件必须为 `SessionStarted`；若对一个全新 `SessionId` 首次 append 非 `SessionStarted` 事件，`SessionStore::append` 必须返回 `SessionError::Corrupted { reason: "first_event_must_be_session_started" }`。
+- `SqliteJsonlSessionStore::open` 必须把 `runtime/events/*.jsonl` 视为 append-only 真相源；若启动时发现 `JSONL` 尾部领先于 SQLite `events/sessions` 投影，必须在 `open()` 内完成最小重建，使 `snapshot()/stream()` 重新看见 JSONL 已落盘的事件。
+- `SessionSnapshot.usage` 不是占位字段；默认实现必须从会话事件流投影出累计 `Usage`，至少覆盖 assistant usage 事件的累加。
+- `wake(id)` 虽然仍返回 `SessionSnapshot`，但若存在最新 `Checkpoint`，必须至少验证其 `anchor_event_id` 可解析到更早事件，并能为后续 replay 准备 `anchor_event_id` 之后的尾部事件；锚点缺失时返回 `SessionError::Corrupted`。
 
 ### 2.3 `octopus-sdk-model`（Level 1）
 
@@ -660,7 +734,10 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 
 | # | 日期 | 来源 | 目标 | 字段/枚举 | 差异描述 | 处理方式 | 状态 |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — | — |
+| 1 | 2026-04-21 | `octopus-sdk-contracts::Usage` | `contracts/openapi/src/components/schemas/runtime.yaml#MessageUsage` | `input_tokens / output_tokens / cache_*_input_tokens` vs `inputTokens / outputTokens / totalTokens` | SDK 侧保留四个细粒度 token 计数且使用 snake_case；OpenAPI 侧只暴露 camelCase 的三字段汇总，不承载 prompt cache 读/写计数。 | `dual-carry` | `open` |
+| 2 | 2026-04-21 | `octopus-sdk-contracts::{Message, ContentBlock}` | `contracts/openapi/src/components/schemas/runtime.yaml#RuntimeMessage` / `packages/schema/src/workbench.ts#Message` | block-based IR vs flattened message envelope | SDK 侧 `Message` 是 `role + Vec<ContentBlock>`，支持 `tool_use` / `tool_result` / `thinking` 的递归块结构；OpenAPI/workbench 侧仍是 `content: string` + `toolCalls/processEntries/attachments` 的扁平 envelope。 | `align-openapi` | `open` |
+| 3 | 2026-04-21 | `octopus-sdk-contracts::SessionEvent::SessionStarted` | `contracts/openapi/src/components/schemas/runtime.yaml` session/message shapes | `config_snapshot_id` / `effective_config_hash` 首事件缺口 | W1 SDK 会话流把 `SessionStarted { config_snapshot_id, effective_config_hash }` 作为首事件强制不变量，但现有 OpenAPI runtime/session schema 未公开等价的首事件载荷或字段。 | `align-openapi` | `open` |
+| 4 | 2026-04-21 | `octopus-sdk-contracts::PromptCacheEvent` | `contracts/openapi/src/components/schemas/runtime.yaml#MessageUsage` | prompt cache 事件缺失 | SDK 侧已有 `PromptCacheEvent` 与 `CacheBreakpoint/CacheTtl` 最小签名；OpenAPI runtime schema 目前没有对应事件或 message usage 扩展位。 | `align-openapi` | `open` |
 
 **处理方式取值**：`align-openapi`（优先调整 OpenAPI）/ `align-sdk`（调整 SDK）/ `dual-carry`（短期双写 + deadline）/ `no-op`（仅命名差异，文档标注即可）。
 
@@ -756,3 +833,4 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 2026-04-20 | 首稿：依赖图、15 crate 公共面草签、命名规约、差异清单/IR 登记表骨架、workspace 变更要点 | Architect |
 | 2026-04-20 | P0 架构修订：`sdk-permissions` 由 Level 3 下调到 Level 2，与 `tools/sandbox/ui-intent/hooks/plugin/mcp` 同层并明文同层协作规则；`SecretVault` trait 下沉到 Level 0 `octopus-sdk-contracts`，门面 crate 改为纯 re-export（去除 trait 定义） | Architect |
 | 2026-04-20 | P1 修订：§1 依赖图补充 "ui-intent → session" 事件回写箭头；§2.12 注明依赖；§8 `default-members` 补齐 `octopus-persistence`（共 5 业务 crate + Tauri app） | Architect |
+| 2026-04-21 | W1 执行回填：补齐 `RenderMeta`、ID `new_v4()`、`SecretValue::{new, as_bytes}` 公共面；登记 `SessionStarted` 首事件不变量与 W1↔OpenAPI 差异清单首批条目 | Codex |

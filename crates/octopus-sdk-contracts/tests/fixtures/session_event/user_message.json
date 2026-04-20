@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "text": "Summarize the workspace state.",
+      "type": "text"
+    }
+  ],
+  "kind": "user_message",
+  "role": "user"
+}

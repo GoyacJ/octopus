@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "text": "Need to inspect the latest checkpoint.",
+      "type": "thinking"
+    }
+  ],
+  "kind": "assistant_message",
+  "role": "assistant"
+}

@@ -52,11 +52,35 @@
 
 ---
 
+## Active Work
+
+- Current task: `W1 complete`
+- Current step: `startup reconcile + checkpoint-aware wake + usage projection 已补齐，准备同步回 main`
+- Execution mode: `continuous`
+
+### Pre-Task Checklist（Task 7）
+
+- [x] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
+- [x] 已阅读 `00-overview.md §1 10 项取舍`，且当前任务未违反。
+- [x] 已阅读 `docs/sdk/*` 中与本 Task 对应的规范章节。
+- [x] 已阅读 Task 段落的 `Files` / `Preconditions` / `Step*` 且无歧义。
+- [x] 已识别本 Task 涉及的 **SDK 对外公共面** 变更（是 / 否）。
+  - 当前判断：`是`，Task 7 将新增 `SqliteJsonlSessionStore` 默认实现与其测试面。
+- [x] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`。
+  - 当前判断：`否`。
+- [x] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（是 / 否）。
+  - 当前判断：`否`。
+- [x] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
+- [x] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
+- [x] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
+
+---
+
 ## Task Ledger
 
 ### Task 1：crate 骨架 + workspace 登记
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-contracts/Cargo.toml`
@@ -87,7 +111,7 @@ Notes：
 
 ### Task 2：contracts 基础 IR（Id / Role / Message / Usage）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-contracts/src/id.rs`
@@ -117,7 +141,7 @@ Notes：
 
 ### Task 3：contracts 事件类型（AssistantEvent / SessionEvent / StopReason / EndReason）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-contracts/src/event.rs`
@@ -145,7 +169,7 @@ Notes：
 
 ### Task 4：contracts 序列化稳定性与黄金测试
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-contracts/tests/serialization_golden.rs`
@@ -167,11 +191,14 @@ Notes：
 
 ### Task 5：contracts UI Intent IR 签名 + SecretVault
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-contracts/src/ui_intent.rs`
 - Create: `crates/octopus-sdk-contracts/src/secret.rs`
+- Modify: `Cargo.toml`
+- Modify: `crates/octopus-sdk-contracts/Cargo.toml`
+- Modify: `crates/octopus-sdk-contracts/src/event.rs`
 - Modify: `crates/octopus-sdk-contracts/src/lib.rs`
 
 Preconditions：Task 3 完成。
@@ -195,13 +222,14 @@ Notes：
 
 ### Task 6：session trait + 错误类型
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-session/src/store.rs`
 - Create: `crates/octopus-sdk-session/src/error.rs`
 - Create: `crates/octopus-sdk-session/src/snapshot.rs`
 - Modify: `crates/octopus-sdk-session/src/lib.rs`
+- Modify: `docs/plans/sdk/02-crate-topology.md`
 
 Preconditions：Task 2–3 完成（trait 依赖 `SessionId / SessionEvent / EventId / Usage`）。
 
@@ -218,7 +246,7 @@ Notes：
 
 ### Task 7：session SqliteJsonlSessionStore（append / stream / snapshot）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-session/src/sqlite/mod.rs`
@@ -256,7 +284,7 @@ Notes：
 
 ### Task 8：fork / wake 最小实现 + SessionStarted 契约测试
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-session/src/sqlite/mod.rs`（追加 fork / wake）
@@ -284,7 +312,7 @@ Notes：
 
 ### Task 9：公共面冻结 + 契约差异登记 + Weekly Gate 收尾
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/02-crate-topology.md`（§2.1 / §2.2 / §5 / §6 / §10）
@@ -327,7 +355,170 @@ Notes：
 
 ## Checkpoints
 
-（执行期间在此追加）
+## Checkpoint 2026-04-21 01:45
+
+- Week: `W1`
+- Batch: `Task 1 Step 1 → Step 2`
+- Completed:
+  - 创建 `octopus-sdk-contracts` / `octopus-sdk-session` 两个最小 crate 骨架。
+  - 更新 workspace `default-members`，纳入两个新 crate。
+  - 采用仓库既有 `pnpm prepare:desktop-backend:sidecar` 环境准备后，完成默认 `cargo build` 验证。
+- Files changed:
+  - `Cargo.toml`（modified）
+  - `crates/octopus-sdk-contracts/Cargo.toml`（created）
+  - `crates/octopus-sdk-contracts/src/lib.rs`（created）
+  - `crates/octopus-sdk-session/Cargo.toml`（created）
+  - `crates/octopus-sdk-session/src/lib.rs`（created）
+  - `docs/plans/sdk/README.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo build -p octopus-sdk-contracts -p octopus-sdk-session` → pass
+  - `wc -l crates/octopus-sdk-contracts/src/lib.rs crates/octopus-sdk-session/src/lib.rs` → `3 / 3`
+  - `pnpm prepare:desktop-backend:sidecar && cargo build` → pass
+  - `cargo metadata --format-version=1 --no-deps | jq -r '.workspace_default_members[]' | rg 'octopus-sdk-(contracts|session)'` → pass
+  - `rg -c 'fn ' crates/octopus-sdk-contracts/src/lib.rs crates/octopus-sdk-session/src/lib.rs` → `0 / 0`
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 2 Step 1`
+
+## Checkpoint 2026-04-21 02:05
+
+- Week: `W1`
+- Batch: `Task 2 Step 1 → Step 2`
+- Completed:
+  - 落地 `SessionId / RunId / ToolCallId / EventId` 四个 ID newtype 与 `new_v4()` 工厂。
+  - 落地 `Role / ContentBlock / Message / Usage` 基础 IR。
+  - 通过 TDD 方式补齐序列化顺序与 tagged enum 守护测试。
+- Files changed:
+  - `crates/octopus-sdk-contracts/src/lib.rs`（modified）
+  - `crates/octopus-sdk-contracts/src/id.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/src/message.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/src/usage.rs`（created, modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo test -p octopus-sdk-contracts message::` → pass
+  - `cargo test -p octopus-sdk-contracts usage::` → pass
+  - `cargo test -p octopus-sdk-contracts` → pass
+  - `cargo clippy -p octopus-sdk-contracts -- -D warnings` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 3 Step 1`
+
+## Checkpoint 2026-04-21 02:30
+
+- Week: `W1`
+- Batch: `Task 3 Step 1 → Step 2`
+- Completed:
+  - 落地 `PromptCacheEvent / CacheBreakpoint / CacheTtl` 最小签名并回填 `02-crate-topology.md §2.1`。
+  - 落地 `StopReason / EndReason / AssistantEvent / SessionEvent`。
+  - 用 helper 表示实现 `kind + fields` 的稳定序列化，同时保持公开 Rust enum 签名不变。
+  - 为 `SessionEvent::SessionStarted`、`AssistantEvent::ToolUse / Usage / MessageStop` 增加守护测试。
+- Files changed:
+  - `crates/octopus-sdk-contracts/src/lib.rs`（modified）
+  - `crates/octopus-sdk-contracts/src/prompt_cache.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/src/event.rs`（created, modified）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo check -p octopus-sdk-contracts` → pass
+  - `rg 'pub struct PromptCacheEvent|pub struct CacheBreakpoint|pub enum CacheTtl' docs/plans/sdk/02-crate-topology.md` → pass
+  - `cargo test -p octopus-sdk-contracts event::` → pass
+  - `cargo test -p octopus-sdk-contracts prompt_cache:: && cargo test -p octopus-sdk-contracts` → pass
+  - `cargo clippy -p octopus-sdk-contracts -- -D warnings` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 4 Step 1`
+
+## Checkpoint 2026-04-21 03:05
+
+- Week: `W1`
+- Batch: `Task 4 Step 1`
+- Completed:
+  - 新增 `serialization_golden.rs` integration test，覆盖 `Usage`、`AssistantEvent` 5 个变体、`SessionEvent` 8 个变体、`ContentBlock` 4 个变体与 `RenderBlock` 1 个样本。
+  - 按计划实现首次运行自动写入 fixture，随后以字节级 JSON 对比守护稳定序列化输出。
+  - 固化 `crates/octopus-sdk-contracts/tests/fixtures/` 下 19 个黄金样本。
+- Files changed:
+  - `crates/octopus-sdk-contracts/tests/serialization_golden.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/tests/fixtures/**/*.json`（created）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo test -p octopus-sdk-contracts --test serialization_golden` → pass
+  - `find crates/octopus-sdk-contracts/tests/fixtures -name '*.json' | wc -l` → `19`
+  - `cargo test -p octopus-sdk-contracts` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 5 Step 1`
+
+## Checkpoint 2026-04-21 04:10
+
+- Week: `W1`
+- Batch: `Task 5 Step 1 → Step 2`
+- Completed:
+  - 新建 `ui_intent.rs`，把 `RenderMeta / RenderKind / RenderBlock / RenderLifecycle / AskPrompt / ArtifactRef` 与其辅助类型从 `event.rs` 中正式抽离。
+  - 新建 `secret.rs`，落地 `SecretVault` trait、`SecretValue(Zeroizing<Vec<u8>>)` 与 `VaultError`，并补齐明文 redaction 测试。
+  - 将 `RenderLifecycle` 从旧的 `Start / Update / End` 调整为与 `docs/sdk/14` 五个 hook 对齐的 phase 枚举；同步更新 golden fixtures 与 `02-crate-topology.md` / `docs/sdk/README.md` 的勘误登记。
+- Files changed:
+  - `Cargo.toml`（modified）
+  - `crates/octopus-sdk-contracts/Cargo.toml`（modified）
+  - `crates/octopus-sdk-contracts/src/lib.rs`（modified）
+  - `crates/octopus-sdk-contracts/src/event.rs`（modified）
+  - `crates/octopus-sdk-contracts/src/ui_intent.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/src/secret.rs`（created, modified）
+  - `crates/octopus-sdk-contracts/tests/serialization_golden.rs`（modified）
+  - `crates/octopus-sdk-contracts/tests/fixtures/session_event/render.json`（modified）
+  - `crates/octopus-sdk-contracts/tests/fixtures/session_event/ask.json`（modified）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/sdk/README.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo check -p octopus-sdk-contracts` → pass
+  - `rg -n '^\\| 10 \\| \`raw\`' docs/plans/sdk/02-crate-topology.md` → pass
+  - `cargo test -p octopus-sdk-contracts secret::` → pass
+  - `cargo test -p octopus-sdk-contracts` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 6 Step 1`
+
+## Checkpoint 2026-04-21 04:35
+
+- Week: `W1`
+- Batch: `Task 6 Step 1`
+- Completed:
+  - 落地 `SessionStore` trait、`EventRange`、`EventStream`、`SessionSnapshot` 与 `SessionError`。
+  - 用 TDD 方式验证 trait 对象安全、`EventRange` / `SessionSnapshot` 字段形状，以及稳定错误文案。
+  - 回填 `02-crate-topology.md §2.2` 的 `SessionError` 具体主变体签名。
+- Files changed:
+  - `crates/octopus-sdk-session/src/lib.rs`（modified）
+  - `crates/octopus-sdk-session/src/store.rs`（created, modified）
+  - `crates/octopus-sdk-session/src/error.rs`（created, modified）
+  - `crates/octopus-sdk-session/src/snapshot.rs`（created, modified）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo check -p octopus-sdk-session` → pass
+  - `cargo test -p octopus-sdk-session store::trait_object` → pass
+  - `cargo test -p octopus-sdk-session` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 7 Step 1`
 
 ---
 
@@ -349,3 +540,126 @@ Notes：
 | 日期 | 变更 | 责任人 |
 |---|---|---|
 | 2026-04-20 | 首稿（9 个 Task、Exit State 对齐表、Risks R1–R5） | Architect |
+| 2026-04-21 | 执行 Task 1：crate 骨架、workspace `default-members` 登记、首次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 2：基础 IR、序列化守护测试、第二次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 3：Prompt Cache 签名、事件类型、自定义稳定序列化、第三次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 4：golden serialization 测试与 19 个 fixtures、第四次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 5：UI intent + SecretVault 公共签名、`zeroize` 依赖、Fact-Fix 勘误、第五次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 6：session trait + error/snapshot 类型、`02 §2.2` 回填、第六次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 7：`SqliteJsonlSessionStore` 默认实现、SQLite/JSONL roundtrip 测试、第七次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 8：fork/wake 最小实现、`SessionStarted` 首事件不变量、第二章契约不变量登记、第八次 checkpoint | Codex |
+| 2026-04-21 | 执行 Task 9：公共面补齐、OpenAPI 差异登记、Weekly Gate 验证、W1 状态切换为 `done` | Codex |
+| 2026-04-21 | 审计补修：startup reconcile、checkpoint-aware wake、usage 投影，并为同步回 `main` 追加 remediation checkpoint | Codex |
+
+## Checkpoint 2026-04-21 05:00
+
+- Week: `W1`
+- Batch: `Task 7 Step 1 → Step 3`
+- Completed:
+  - 实现 `SqliteJsonlSessionStore::open`、SQLite schema 初始化，以及 `sessions` / `events` 双表持久化骨架。
+  - 实现 JSONL append、SQLite event projection、`stream` 分页读取与 `snapshot` 读取。
+  - 将 `sqlite_jsonl` 测试中的 usage 期望收敛为 `Usage::default()`，避免对 `AssistantMessage` 文本内容做非契约化解析。
+- Files changed:
+  - `crates/octopus-sdk-session/src/lib.rs`（modified）
+  - `crates/octopus-sdk-session/src/jsonl.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/mod.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/schema.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/append.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/stream.rs`（modified）
+  - `crates/octopus-sdk-session/tests/sqlite_jsonl.rs`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo test -p octopus-sdk-session sqlite::schema::` → pass
+  - `cargo test -p octopus-sdk-session --test sqlite_jsonl test_append_roundtrip` → pass
+  - `cargo test -p octopus-sdk-session --test sqlite_jsonl` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 8 Step 1`
+
+## Checkpoint 2026-04-21 05:20
+
+- Week: `W1`
+- Batch: `Task 8 Step 1 → Step 2`
+- Completed:
+  - 实现 `fork(&self, id, from_event_id)` 的最小前缀复制：为新 session 复制 `seq <= from_event.seq` 的事件投影，并同步写入新的 per-session JSONL 文件。
+  - 将 `SessionError::Corrupted` 升级为带 `reason` 的结构化变体，显式固化 `"first_event_must_be_session_started"` 不变量。
+  - 新增 `fork_wake.rs` 与 `contract_session_started.rs`，并在 `02-crate-topology.md §2.2` 追加“首事件必须为 `SessionStarted`”契约不变量。
+- Files changed:
+  - `crates/octopus-sdk-session/src/error.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/append.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/stream.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/mod.rs`（modified）
+  - `crates/octopus-sdk-session/tests/fork_wake.rs`（created）
+  - `crates/octopus-sdk-session/tests/contract_session_started.rs`（created）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo test -p octopus-sdk-session --test fork_wake` → pass
+  - `cargo test -p octopus-sdk-session --test contract_session_started` → pass
+  - `rg '首事件必须为 \`SessionStarted\`' docs/plans/sdk/02-crate-topology.md` → pass
+  - `cargo test -p octopus-sdk-session` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `Task 9 Step 1`
+
+## Checkpoint 2026-04-21 05:45
+
+- Week: `W1`
+- Batch: `Task 9 Step 1 → Step 3`
+- Completed:
+  - 补齐 `02-crate-topology.md §2.1` 中遗漏的 `RenderMeta`、四个 ID 的 `new_v4()` 工厂，以及 `SecretValue::{new, as_bytes}` 公共面说明，完成 W1 `pub` 面冻结。
+  - 在 `02 §5` 登记 W1 contracts 与 OpenAPI/runtime schema 的 4 条首批差异，包括 usage cache 计数、block-based message IR、`SessionStarted` 首事件、`PromptCacheEvent` 缺口。
+  - 修复 `sqlite::stream` 的 clippy 告警，跑通 W1 Weekly Gate，并将 `docs/plans/sdk/README.md` 的 W1 状态切换为 `done`。
+- Files changed:
+  - `crates/octopus-sdk-session/src/sqlite/stream.rs`（modified）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/plans/sdk/README.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `rg -n 'pub (struct|enum|trait|fn|type|const) ' crates/octopus-sdk-contracts/src crates/octopus-sdk-session/src` → author self-check completed, `0` undocumented W1 `pub` symbols after syncing `02 §2.1 / §2.2`
+  - `rg -n 'align-openapi|align-sdk|dual-carry|no-op' docs/plans/sdk/02-crate-topology.md` → pass
+  - `find crates/octopus-sdk-contracts crates/octopus-sdk-session -type f -name '*.rs' -print0 | xargs -0 wc -l` → max `372` lines, all under 800-line limit
+  - `rg -n 'config_snapshot_id' crates/octopus-sdk-session/src/` → pass (`14` matches)
+  - `cargo test -p octopus-sdk-contracts -p octopus-sdk-session` → pass
+  - `cargo clippy -p octopus-sdk-contracts -p octopus-sdk-session -- -D warnings` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `W1 complete`
+
+## Checkpoint 2026-04-21 12:20
+
+- Week: `W1`
+- Batch: `Audit remediation for Task 7 / Task 8 / Task 9`
+- Completed:
+  - 在 `open()` 增加 JSONL→SQLite 启动修复：若 `runtime/events/*.jsonl` 尾部领先于 SQLite `events/sessions` 投影，则按 JSONL 真相源重建该 session 的最小投影。
+  - 将 `SessionSnapshot.usage` 从占位字段改为真实投影：从 `AssistantMessage` 内嵌的 `AssistantEvent::Usage` 累加 usage，并在 append 与 startup reconcile 两条路径保持一致。
+  - 将 `wake()` 升级为 checkpoint-aware 最小语义：检测最新 `Checkpoint`，验证 `anchor_event_id` 可解析且位于 checkpoint 之前，并确认 `anchor_event_id` 之后的 replay 尾段可读；缺锚点时返回 `SessionError::Corrupted`。
+  - 计划与契约文档回填上述语义，准备将 worktree 结果同步回 `main`。
+- Files changed:
+  - `crates/octopus-sdk-session/src/jsonl.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/mod.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/append.rs`（modified）
+  - `crates/octopus-sdk-session/src/sqlite/stream.rs`（modified）
+  - `crates/octopus-sdk-session/tests/sqlite_jsonl.rs`（modified）
+  - `crates/octopus-sdk-session/tests/fork_wake.rs`（modified）
+  - `docs/plans/sdk/02-crate-topology.md`（modified）
+  - `docs/plans/sdk/04-week-1-contracts-session.md`（modified）
+- Verification:
+  - `cargo test -p octopus-sdk-session --test sqlite_jsonl --test fork_wake` → pass
+  - `cargo test -p octopus-sdk-contracts -p octopus-sdk-session` → pass
+  - `cargo clippy -p octopus-sdk-contracts -p octopus-sdk-session --tests -- -D warnings` → pass
+- Exit state vs plan:
+  - `matches`
+- Blockers:
+  - `none`
+- Next:
+  - `sync to main`

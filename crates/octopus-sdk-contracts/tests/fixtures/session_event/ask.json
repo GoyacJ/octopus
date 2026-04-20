@@ -1,0 +1,30 @@
+{
+  "kind": "ask",
+  "prompt": {
+    "kind": "ask-user",
+    "questions": [
+      {
+        "header": "Path",
+        "id": "choose-path",
+        "multiSelect": false,
+        "options": [
+          {
+            "description": "Keep the existing typed contract.",
+            "id": "stable",
+            "label": "Stable",
+            "preview": "Preserve the current SDK surface.",
+            "previewFormat": "markdown"
+          },
+          {
+            "description": "Adopt the richer UI intent shape.",
+            "id": "expand",
+            "label": "Expand",
+            "preview": null,
+            "previewFormat": null
+          }
+        ],
+        "question": "Which path should the agent take?"
+      }
+    ]
+  }
+}

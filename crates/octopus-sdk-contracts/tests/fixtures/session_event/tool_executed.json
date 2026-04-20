@@ -1,0 +1,7 @@
+{
+  "call": "call-123",
+  "duration_ms": 287,
+  "is_error": false,
+  "kind": "tool_executed",
+  "name": "read_file"
+}

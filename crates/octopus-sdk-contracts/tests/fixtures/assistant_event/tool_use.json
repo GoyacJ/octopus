@@ -1,0 +1,9 @@
+{
+  "id": "call-123",
+  "input": {
+    "path": "docs/sdk/14-ui-intent-ir.md",
+    "start_line": 1
+  },
+  "kind": "tool_use",
+  "name": "read_file"
+}

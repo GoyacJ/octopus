@@ -11,6 +11,8 @@ default-members = [
   "crates/octopus-runtime-adapter",
   "crates/octopus-server",
   "crates/octopus-desktop-backend",
+  "crates/octopus-sdk-contracts",
+  "crates/octopus-sdk-session",
 ]
 resolver = "2"
 
@@ -41,6 +43,7 @@ toml = "0.8"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors"] }
 uuid = { version = "1", features = ["serde", "v4"] }
+zeroize = "1.8"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

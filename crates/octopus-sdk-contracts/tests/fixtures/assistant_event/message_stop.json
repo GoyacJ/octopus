@@ -1,0 +1,4 @@
+{
+  "kind": "message_stop",
+  "stop_reason": "tool_use"
+}
