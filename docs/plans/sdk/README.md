@@ -15,7 +15,7 @@
 | `03-legacy-retirement.md` | 旧 crate 退役清单（逐文件/逐符号）+ 替代映射 + 守护扫描 | `draft` |
 | `04-week-1-contracts-session.md` | W1：`octopus-sdk-contracts` + `octopus-sdk-session` | `done` |
 | `05-week-2-model.md` | W2：`octopus-sdk-model`（Provider / Surface / Model 三层） | `done` |
-| `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `pending` |
+| `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `draft` |
 | `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `pending` |
 | `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `pending` |
 | `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + 端到端最小链路 | `pending` |
@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-21
+**最后更新**：2026-04-21（W3 Plan 起稿，状态 `draft`）
