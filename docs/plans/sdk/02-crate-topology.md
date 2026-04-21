@@ -835,9 +835,16 @@ pub struct SandboxSpec {
 **职责**：生命周期钩子。
 
 ```rust
+pub struct HookToolResult {
+    pub content: Vec<ContentBlock>,
+    pub is_error: bool,
+    pub duration_ms: u64,
+    pub render: Option<RenderBlock>, // Level 0 镜像；与 sdk-tools::ToolResult 在 hooks/core 边界互转
+}
+
 pub enum HookEvent {
     PreToolUse { call: ToolCallRequest, category: ToolCategory },
-    PostToolUse { call: ToolCallRequest, result: ToolResult },
+    PostToolUse { call: ToolCallRequest, result: HookToolResult },
     Stop { session: SessionId },
     SessionStart { session: SessionId },
     SessionEnd { session: SessionId, reason: EndReason },
@@ -850,6 +857,13 @@ pub enum HookEvent {
 pub trait Hook: Send + Sync {
     fn name(&self) -> &str;
     async fn on_event(&self, event: &HookEvent) -> HookDecision;
+}
+
+pub enum RewritePayload {
+    ToolCall(ToolCallRequest),
+    ToolResult(HookToolResult),
+    UserPrompt(Message),
+    Compaction(CompactionCtx),
 }
 
 pub enum HookDecision {

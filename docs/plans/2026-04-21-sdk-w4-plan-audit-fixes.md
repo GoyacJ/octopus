@@ -104,6 +104,30 @@ Step 1:
 - Verify: `git diff --check -- docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md docs/sdk/README.md docs/plans/2026-04-21-sdk-w4-plan-audit-fixes.md && rg -n 'RenderBlockEmitted|selected_option_id|prompt\\.id|PermissionOutcome::Continue|ToolInvoked|redact_for_event|CredentialLeak|registry\\.iter\\(|read_back_to_message' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md && rg -n 'evaluate\\(&self, ctx: &PermissionContext\\)|check\\(&self, call: &ToolCallRequest\\)|maybe_compact\\(&self, session: &mut SessionView\\)|InjectNotAllowed' docs/plans/sdk/02-crate-topology.md && rg -n '07-hooks-lifecycle\\.md|PreSampling|PostSampling|SubagentSpawn|OnToolError|PreFileWrite|PostFileWrite|07-week-4-permissions-hooks-sandbox-context\\.md' docs/sdk/README.md`
 - Stop if: verification exposes a new contradiction outside the planned file set.
 
+### Task 4: Close hook-result layering gap and stale contracts test target
+
+Status: `done`
+
+Files:
+- Modify: `docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md`
+- Modify: `docs/plans/sdk/02-crate-topology.md`
+- Modify: `docs/plans/2026-04-21-sdk-w4-plan-audit-fixes.md`
+
+Preconditions:
+- Tasks 1-3 are done and the newly reported contradictions have been re-verified against current code and test layout.
+
+Step 1:
+- Action: Replace the Level 0 hook payload's direct `ToolResult` dependency with a contracts-local mirror type (`HookToolResult`) and document the conversion boundary so `octopus-sdk-contracts` does not grow a `tools` back-edge.
+- Done when: both `07-week-4-permissions-hooks-sandbox-context.md` and `02-crate-topology.md` express `PostToolUse` and `RewritePayload::ToolResult(...)` via `HookToolResult`, while keeping `octopus-sdk-tools::ToolResult` in Level 2.
+- Verify: `rg -n 'PostToolUse \\{ call: ToolCallRequest, result: ToolResult \\}|ToolResult\\(ToolResult\\)' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md && rg -n 'HookToolResult' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md`
+- Stop if: closing the gap would require rewriting W3 ownership so `ToolResult` itself moves into `octopus-sdk-contracts`.
+
+Step 2:
+- Action: Replace the nonexistent `w3_contracts` verification target with a stable crate-level contracts test command that matches the current `crates/octopus-sdk-contracts/tests` layout.
+- Done when: no `w3_contracts` reference remains in the W4 plan and the contracts verification step uses `cargo test -p octopus-sdk-contracts`.
+- Verify: `rg -n 'w3_contracts|cargo test -p octopus-sdk-contracts' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md`
+- Stop if: a dedicated W3 compatibility target is added during this batch and supersedes the crate-level command.
+
 ## Batch Checkpoint Format
 
 After each batch, append a short checkpoint using this shape:
@@ -133,6 +157,23 @@ After each batch, append a short checkpoint using this shape:
   - `rg -n 'RenderBlockEmitted|selected_option_id|prompt\.id|PermissionOutcome::Continue|ToolInvoked|redact_for_event|CredentialLeak|registry\.iter\(|read_back_to_message' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md` -> pass (no matches)
   - `rg -n 'evaluate\(&self, ctx: &PermissionContext\)|check\(&self, call: &ToolCallRequest\)|maybe_compact\(&self, session: &mut SessionView\)|InjectNotAllowed|PreToolUse \{ call: ToolCallRequest, category: ToolCategory \}|PreCompact \{ session: SessionId, ctx: CompactionCtx \}' docs/plans/sdk/02-crate-topology.md` -> pass
   - `rg -n '07-hooks-lifecycle\.md|PreSampling|PostSampling|SubagentSpawn|OnToolError|PreFileWrite|PostFileWrite|07-week-4-permissions-hooks-sandbox-context\.md' docs/sdk/README.md` -> pass
+- Blockers:
+  - none
+- Next:
+  - ready to report
+
+## Checkpoint 2026-04-21 17:46
+
+- Batch: Task 4 Step 1 -> Task 4 Step 2
+- Completed:
+  - Replaced the W4 hook contract's direct `ToolResult` dependency with a Level 0 `HookToolResult` mirror in the W4 plan and linked topology doc
+  - Added the missing `RewritePayload` definition to `02-crate-topology.md` so the hook public surface is self-contained again
+  - Replaced the stale `cargo test -p octopus-sdk-contracts --test w3_contracts` command with `cargo test -p octopus-sdk-contracts`
+- Verification:
+  - `git diff --check -- docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md docs/plans/2026-04-21-sdk-w4-plan-audit-fixes.md` -> pass
+  - `rg -n 'PostToolUse \{ call: ToolCallRequest, result: ToolResult \}|ToolResult\(ToolResult\)|w3_contracts' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md` -> pass (no matches)
+  - `rg -n 'HookToolResult|cargo test -p octopus-sdk-contracts' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md` -> pass
+  - `cargo test -p octopus-sdk-contracts` -> pass
 - Blockers:
   - none
 - Next:

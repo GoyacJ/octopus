@@ -37,7 +37,7 @@
 
 - **Contracts 补丁面（Level 0 下沉，承 W1/W2/W3 先例）**：W3 已在 `octopus-sdk-contracts` 下沉 `ToolCallRequest / PermissionMode / PermissionOutcome::{Allow, Deny, AskApproval} / PermissionGate / AskResolver / AskAnswer / AskError / EventSink`。W4 追加：
   - `PermissionOutcome::RequireAuth { prompt: AskPrompt }`（完成四变体）；
-  - `HookEvent` 枚举（8 类）+ `HookDecision` 薄形状 + `EndReason`；
+  - `HookEvent` 枚举（8 类）+ `HookToolResult`（`PostToolUse` 的 Level 0 薄镜像，字段与 `sdk-tools::ToolResult` 对齐，由 hooks/core 边界互转）+ `HookDecision` 薄形状 + `EndReason`；
   - `CompactionResult`（`summary: String / folded_turn_ids: Vec<EventId> / tool_results_cleared: u32 / tokens_before: u32 / tokens_after: u32 / strategy: CompactionStrategyTag`）；
   - `MemoryItem / MemoryError`（最小签名，Level 0 只定义值形状，trait 留在 `sdk-context` Level 3）。
   - 下沉原因：这些是 Level 2/3 之间、以及未来 Level 4 Brain Loop 与 Level 2 hooks 之间的跨层数据契约；与 W3 `ToolCallRequest` / W2 `ToolSchema` 完全对称。
@@ -125,7 +125,7 @@
 | R8 | **凭据泄漏合同测试的口径**：扫描什么字段算"明文凭据"？ | 白名单反向：扫描所有 `emit` 的 `SessionEvent` 的 JSON 序列化结果，断言不含 `API_KEY=` / `Bearer ` / `x-api-key` / `xxx-secret`（测试用预置 token）/ `Authorization:` / `-----BEGIN` / `sk-` 前缀。沙箱 stdout/stderr 同样扫描。**W4 明确规则**：审批与工具执行事件只能发射当前 contracts 已有的安全摘要事件（`SessionEvent::Ask` / `SessionEvent::ToolExecuted`），不得把原始 `ToolCallRequest.input` 或 bearer material 序列化进事件。 | 若 W4 需要新增会携带原始 input 的事件载荷 → Stop #5，先补独立 redaction contract 再实现 |
 | R9 | **W3 反向回填 `ToolCategory` 下沉到 Level 0**：W3 Checkpoint 已锁在 `sdk-tools`，现在要把 `ToolCategory` 移到 `sdk-contracts`，是"修订 W3 公共面"。 | 在 `02 §2.4` 标注"W4 把 `ToolCategory` 下沉到 `§2.1`"，`sdk-tools` 通过 `pub use octopus_sdk_contracts::ToolCategory` re-export 保持源兼容；不破坏 W3 call-site。在 `02 §10 变更日志` 追加 `W4 反向修订` 条目；不走 Fact-Fix（这是计划文档间的一致性，不是规范层 vs 实现的矛盾）。 | 若下沉触发 `sdk-tools` 测试失败 → Stop #10 |
 | R10 | **`MemoryItem` 字段**：为了让 Level 0 不做 I/O，`MemoryItem` 是否要含 `embedding: Vec<f32>`？ | **不含**。Level 0 `MemoryItem { id: String, kind: MemoryKind, payload: serde_json::Value, created_at_ms: i64 }`；embedding 是后端内部细节（SQLite/FTS/Vector），由 `MemoryBackend` 实现者自行管理。 | 若 W5/W6 发现 `MemoryItem` 字段不够 → 走 `02 §5` 登记而非直接加字段 |
-| R11 | **Hook 对"即将发生"数据的修改语义**：`HookDecision::Rewrite(payload)` 的 `payload` 是 `serde_json::Value` 还是强类型？ | 强类型：每个 `HookEvent` 的 `Rewrite` 载荷形状固定 —— `PreToolUse → ToolCallRequest`；`PostToolUse → ToolResult`；`UserPromptSubmit → Message`；`PreCompact / PostCompact → CompactionCtx`；其他事件不允许 `Rewrite`，返回 `Rewrite` 视为 `HookError::RewriteNotAllowed`。契约通过 `HookDecision` 的泛型或 `enum RewritePayload`（推荐 enum）表达。 | 若泛型版本污染 trait object → 用 enum |
+| R11 | **Hook 对"即将发生"数据的修改语义**：`HookDecision::Rewrite(payload)` 的 `payload` 是 `serde_json::Value` 还是强类型？ | 强类型：每个 `HookEvent` 的 `Rewrite` 载荷形状固定 —— `PreToolUse → ToolCallRequest`；`PostToolUse → HookToolResult`；`UserPromptSubmit → Message`；`PreCompact → CompactionCtx`；其他事件（含 `PostCompact`）不允许 `Rewrite`，返回 `Rewrite` 视为 `HookError::RewriteNotAllowed`。契约通过 `enum RewritePayload` 表达。**不直接复用 `sdk-tools::ToolResult`**，避免 `contracts` 反向依赖 Level 2。 | 若后续确需让 `PostCompact` 可改写结果 → 追加独立 `RewritePayload::CompactionResult(CompactionResult)`，不复用 `CompactionCtx` |
 | R12 | **四态权限与现有 UI/runtime 三态映射的割裂**：当前 `packages/schema` / runtime config 仍暴露 `auto / readonly / danger-full-access` 与 `read-only / workspace-write / danger-full-access`，W4 若直接切四态会让 adapter/UI 无法对齐。 | **本周必须显式登记兼容层**：在 `02 §5` 记录 `PermissionMode` 迁移项，至少说明 `Default ↔ readonly(read-only)`、`AcceptEdits ↔ auto(workspace-write)`、`BypassPermissions ↔ danger-full-access` 的暂时映射，以及 `Plan` 只在 SDK 内部生效、对外未公开前不得替换现有 UI/runtime 枚举。若要对外公开四态，先走 OpenAPI/schema 生成链。 | 若 Task 4/12 需要改现有 UI/runtime 枚举才能继续 → Stop #1，先开契约迁移专项 |
 
 ## 承 W3 / 启 W5-W6 的契约链
@@ -152,10 +152,10 @@
 |---|---|---|---|
 | 1 | `§2.1` `PermissionOutcome` | 变体新增 | 追加 `RequireAuth { prompt: AskPrompt }`，变体数量 `3 → 4` |
 | 2 | `§2.1` `ToolCategory`（W3 在 `§2.4`）| 反向下沉 | 从 `§2.4` 迁到 `§2.1`；`sdk-tools` 保持 `pub use octopus_sdk_contracts::ToolCategory` 源兼容；登记到 `§2.4` "W4 反向修订" 小节 |
-| 3 | `§2.1` 新增类型 | 类型新增 | `HookEvent { PreToolUse { call: ToolCallRequest, category: ToolCategory }, PostToolUse { call: ToolCallRequest, result: ToolResult }, Stop { session: SessionId }, SessionStart { session: SessionId }, SessionEnd { session: SessionId, reason: EndReason }, UserPromptSubmit { message: Message }, PreCompact { session: SessionId, ctx: CompactionCtx }, PostCompact { session: SessionId, result: CompactionResult } }` |
+| 3 | `§2.1` 新增类型 | 类型新增 | `HookEvent { PreToolUse { call: ToolCallRequest, category: ToolCategory }, PostToolUse { call: ToolCallRequest, result: HookToolResult }, Stop { session: SessionId }, SessionStart { session: SessionId }, SessionEnd { session: SessionId, reason: EndReason }, UserPromptSubmit { message: Message }, PreCompact { session: SessionId, ctx: CompactionCtx }, PostCompact { session: SessionId, result: CompactionResult } }` |
 | 4 | `§2.1` 新增类型 | 类型新增 | `EndReason { Normal, MaxTurns, UserCancelled, Error(String), Compaction }` |
 | 5 | `§2.1` 新增类型 | 类型新增 | `HookDecision { Continue, Rewrite(RewritePayload), Abort { reason: String }, InjectMessage(Message) }` |
-| 6 | `§2.1` 新增类型 | 类型新增 | `RewritePayload { ToolCall(ToolCallRequest), ToolResult(ToolResult), UserPrompt(Message), Compaction(CompactionCtx) }` |
+| 6 | `§2.1` 新增类型 | 类型新增 | `HookToolResult { content: Vec<ContentBlock>, is_error: bool, duration_ms: u64, render: Option<RenderBlock> }`、`RewritePayload { ToolCall(ToolCallRequest), ToolResult(HookToolResult), UserPrompt(Message), Compaction(CompactionCtx) }` |
 | 7 | `§2.1` 新增类型 | 类型新增 | `CompactionCtx { session: SessionId, strategy: CompactionStrategyTag, threshold: f32, tokens_current: u32, tokens_budget: u32 }` |
 | 8 | `§2.1` 新增类型 | 类型新增 | `CompactionResult { summary: String, folded_turn_ids: Vec<EventId>, tool_results_cleared: u32, tokens_before: u32, tokens_after: u32, strategy: CompactionStrategyTag }` |
 | 9 | `§2.1` 新增类型 | 类型新增 | `CompactionStrategyTag { Summarize, ClearToolResults, Hybrid }` |
@@ -231,11 +231,11 @@ Preconditions:
 Step 1:
 - Action: 拆 `permissions` 子模块，追加 `PermissionOutcome::RequireAuth { prompt: AskPrompt }` 变体；把 W3 已定义的 `ToolCallRequest / PermissionMode / PermissionOutcome / PermissionGate / AskResolver / AskAnswer / AskError / EventSink` 迁到 `permissions.rs`；`lib.rs` `pub use` re-export 维持源兼容。
 - Done when: `cargo check -p octopus-sdk-contracts` 通过；`rg 'pub enum PermissionOutcome' crates/octopus-sdk-contracts/src` 命中 1 处且含 4 变体。
-- Verify: `cargo test -p octopus-sdk-contracts --test w3_contracts`（W3 的既有测试）依然 pass（源兼容验证）。
+- Verify: `cargo test -p octopus-sdk-contracts`（覆盖当前 `serialization_golden` 与模块内既有测试）依然 pass（源兼容验证）。
 - Stop if: W3 测试失败（说明拆模块破坏了 re-export）→ 回滚到单文件。
 
 Step 2:
-- Action: 新增 `hooks.rs`，定义 `HookEvent`（8 变体）/ `HookDecision` / `RewritePayload` / `EndReason` / `CompactionCtx`；其中 `CompactionCtx` 跨文件引用 `CompactionStrategyTag`（见 Step 3）。
+- Action: 新增 `hooks.rs`，定义 `HookToolResult` / `HookEvent`（8 变体）/ `HookDecision` / `RewritePayload` / `EndReason` / `CompactionCtx`；其中 `CompactionCtx` 跨文件引用 `CompactionStrategyTag`（见 Step 3）。
 - Done when: 所有类型 `Serialize + Deserialize + Debug + Clone`；`HookEvent::variant_count() == 8`（自写 const fn 或单测枚举）。
 - Verify: `cargo test -p octopus-sdk-contracts --test w4_contracts` 含 "HookEvent 8 variants 稳定" 断言，pass。
 - Stop if: `CompactionCtx` 字段引用形成 `hooks → compaction → hooks` 循环 → 把共享字段提到 `lib.rs` 或第三方 mod。
@@ -523,7 +523,7 @@ Step 1:
 - Action: `events_matrix.rs` 枚举 8 种 `HookEvent`，对每种验证：(1) `HookRunner::run` 不 panic；(2) `Continue` 可达；(3) `Abort` 生效；(4) `Rewrite` 的载荷 enum 变体与事件种类强绑定；(5) `InjectMessage` 仅允许 `UserPromptSubmit / Stop`，其余返回 `HookError::InjectNotAllowed`。
 - Done when: 8 × 5 = 40 条断言 pass。
 - Verify: `cargo test -p octopus-sdk-hooks --test events_matrix`。
-- Stop if: `RewritePayload` 对 `PreCompact / PostCompact` 的形状不明 → 先固化 `CompactionCtx` 为 Rewrite 目标，W4 Compactor 读取 `CompactionCtx.threshold`。
+- Stop if: `RewritePayload` 对 `PreCompact` 的形状不明 → 先固化 `CompactionCtx` 为 Rewrite 目标，W4 Compactor 读取 `CompactionCtx.threshold`。
 
 Step 2:
 - Action: `credential_scrub.rs` 合同测试：注册一个 "故意泄漏凭据" 的恶意 Hook（在 `PreToolUse.Rewrite` 里把 `API_KEY=xxx-secret` 塞进 `ToolCallRequest.input`），然后只发射当前 contracts 已有的安全摘要事件（`SessionEvent::Ask` / `SessionEvent::ToolExecuted`），扫描事件 JSON 与沙箱 `stdout/stderr`，断言 `xxx-secret` 不出现。该测试验证的是"事件构造边界不序列化原始 input"，不是 HookRunner 主动清洗 rewrite payload。
