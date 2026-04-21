@@ -756,12 +756,15 @@ impl SdkTransport {
 ```rust
 pub struct SystemPromptBuilder { /* identity + tool guidance + output format + examples */ }
 impl SystemPromptBuilder {
-    pub fn build(&self, ctx: &PromptCtx) -> Vec<String>;  // stable sections; order locked
+    pub fn with_section(self, section: SystemPromptSection) -> Self;
+    pub fn build(&self, ctx: &PromptCtx) -> Vec<String>;   // stable sections; order locked
+    pub fn fingerprint(&self, ctx: &PromptCtx) -> [u8; 32];
 }
 
 pub struct Compactor { /* compaction + tool-result clearing */ }
 impl Compactor {
-    pub async fn maybe_compact(&self, session: &mut SessionView) -> Option<CompactionResult>;
+    pub async fn maybe_compact(&self, session: &mut SessionView)
+        -> Result<Option<CompactionResult>, CompactionError>;
 }
 
 pub enum CompactionStrategy { Summarize, ClearToolResults, Hybrid }
@@ -783,8 +786,13 @@ pub struct DurableScratchpad { /* runtime/notes/<session>.md */ }
 pub enum PermissionMode { Default, AcceptEdits, BypassPermissions, Plan }
 
 pub struct PermissionPolicy { /* allowlist / denylist / by-argument rules */ }
+impl PermissionPolicy {
+    pub fn evaluate(&self, ctx: &PermissionContext) -> Option<PermissionOutcome>;
+}
 
-pub struct PermissionGate { /* 持有 policy + mode */ }
+pub struct PermissionContext { /* internal: call + mode + category */ }
+
+pub struct PermissionGate { /* 持有 policy + mode + broker + category_resolver */ }
 impl PermissionGate {
     pub async fn check(&self, call: &ToolCallRequest) -> PermissionOutcome;
 }
@@ -796,7 +804,7 @@ pub enum PermissionOutcome {
     RequireAuth { prompt: AskPrompt },
 }
 
-pub struct ApprovalBroker { /* 把 AskPrompt 推向业务层；等待业务回调 */ }
+pub struct ApprovalBroker { /* emit SessionEvent::Ask; resolve approval:<call_id> */ }
 ```
 
 ### 2.8 `octopus-sdk-sandbox`（Level 2）
@@ -828,13 +836,13 @@ pub struct SandboxSpec {
 
 ```rust
 pub enum HookEvent {
-    PreToolUse { call: ToolCallRequest },
+    PreToolUse { call: ToolCallRequest, category: ToolCategory },
     PostToolUse { call: ToolCallRequest, result: ToolResult },
     Stop { session: SessionId },
     SessionStart { session: SessionId },
     SessionEnd { session: SessionId, reason: EndReason },
     UserPromptSubmit { message: Message },
-    PreCompact { session: SessionId },
+    PreCompact { session: SessionId, ctx: CompactionCtx },
     PostCompact { session: SessionId, result: CompactionResult },
 }
 
@@ -844,9 +852,21 @@ pub trait Hook: Send + Sync {
     async fn on_event(&self, event: &HookEvent) -> HookDecision;
 }
 
-pub enum HookDecision { Continue, Abort { reason: String }, InjectMessage(Message) }
+pub enum HookDecision {
+    Continue,
+    Rewrite(RewritePayload),
+    Abort { reason: String },
+    InjectMessage(Message),
+}
 
-pub struct HookRunner { /* 并发安全；按 name deterministic order */ }
+pub enum HookError {
+    RewriteNotAllowed { event_kind: &'static str },
+    InjectNotAllowed { event_kind: &'static str },
+    HookPanic { name: String },
+    Serialization(serde_json::Error),
+}
+
+pub struct HookRunner { /* W4 最小子集：8 events；按 source/priority/name deterministic order */ }
 ```
 
 ### 2.10 `octopus-sdk-subagent`（Level 3）

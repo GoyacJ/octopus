@@ -143,12 +143,14 @@ Hierarchy:
 | UI label | 13px | 500 | 1.4 | normal |
 | Caption | 12px | 500 | 1.35 | 0.01em |
 | Badge | 12px | 600 | 1.2 | 0.02em |
+| Micro | 11px | 600 | 1.2 | 0.02em |
 
 Rules:
 
 - UI chrome may scale with `fontSize` preference only.
 - Serif or mono are allowed only inside content/editor surfaces that explicitly need them.
 - Page titles are visually quiet: no oversized billboard heroes on desktop workbench pages.
+- `Micro` is reserved for eyebrow labels, timestamps, tab badges, and status chips. `uppercase` is allowed only on `Micro` and `Badge` roles, never on body or title surfaces.
 
 ### 5.6 Focus
 
