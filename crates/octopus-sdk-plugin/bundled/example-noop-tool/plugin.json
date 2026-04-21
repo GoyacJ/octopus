@@ -1,0 +1,17 @@
+{
+  "id": "example-noop-tool",
+  "version": "0.1.0",
+  "git_sha": "0123456789abcdef0123456789abcdef01234567",
+  "source": "local",
+  "compat": { "pluginApi": "^1.0.0" },
+  "components": [
+    {
+      "kind": "tool",
+      "id": "noop-tool",
+      "name": "noop-tool",
+      "description": "No-op bundled tool",
+      "schema": { "type": "object" },
+      "source": { "kind": "bundled" }
+    }
+  ]
+}

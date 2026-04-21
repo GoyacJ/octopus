@@ -1,8 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use octopus_sdk_contracts::{
-    AskPrompt, AssistantEvent, ContentBlock, EndReason, EventId, Message, RenderBlock, RenderKind,
-    RenderLifecycle, RenderMeta, Role, SessionEvent, StopReason, ToolCallId, Usage,
+    AskPrompt, AssistantEvent, ContentBlock, EndReason, EventId, Message, PluginSourceTag,
+    PluginSummary, PluginsSnapshot, RenderBlock, RenderKind, RenderLifecycle, RenderMeta, Role,
+    SessionEvent, StopReason, ToolCallId, Usage,
 };
 use octopus_sdk_session::{EventRange, SessionStore, SqliteJsonlSessionStore};
 use rusqlite::params;
@@ -82,6 +83,7 @@ async fn test_snapshot_matches_last_event() {
     assert_eq!(snapshot.id.0, "session-snapshot");
     assert_eq!(snapshot.config_snapshot_id, "cfg-1");
     assert_eq!(snapshot.effective_config_hash, "hash-1");
+    assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
     assert_eq!(
         snapshot.usage,
         Usage {
@@ -138,6 +140,7 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
 
     assert_eq!(actual, expected);
     assert_eq!(snapshot.head_event_id, event_ids[9]);
+    assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
     assert_eq!(
         snapshot.usage,
         Usage {
@@ -192,6 +195,7 @@ fn sample_events() -> Vec<SessionEvent> {
     let session_started = SessionEvent::SessionStarted {
         config_snapshot_id: "cfg-1".into(),
         effective_config_hash: "hash-1".into(),
+        plugins_snapshot: Some(sample_plugins_snapshot()),
     };
     let user_message = SessionEvent::UserMessage(Message {
         role: Role::User,
@@ -282,4 +286,18 @@ fn sample_events() -> Vec<SessionEvent> {
         assistant_usage,
         message_stop,
     ]
+}
+
+fn sample_plugins_snapshot() -> PluginsSnapshot {
+    PluginsSnapshot {
+        api_version: "1.0.0".into(),
+        plugins: vec![PluginSummary {
+            id: "example-noop-tool".into(),
+            version: "0.1.0".into(),
+            git_sha: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source: PluginSourceTag::Bundled,
+            enabled: true,
+            components_count: 1,
+        }],
+    }
 }

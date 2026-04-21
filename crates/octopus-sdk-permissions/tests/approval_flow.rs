@@ -14,7 +14,10 @@ struct RecordingEventSink {
 
 impl EventSink for RecordingEventSink {
     fn emit(&self, event: SessionEvent) {
-        self.events.lock().expect("events mutex poisoned").push(event);
+        self.events
+            .lock()
+            .expect("events mutex poisoned")
+            .push(event);
     }
 }
 

@@ -121,7 +121,11 @@ impl PermissionPolicy {
     pub fn match_rules(
         &self,
         call: &ToolCallRequest,
-    ) -> (Vec<&PermissionRule>, Vec<&PermissionRule>, Vec<&PermissionRule>) {
+    ) -> (
+        Vec<&PermissionRule>,
+        Vec<&PermissionRule>,
+        Vec<&PermissionRule>,
+    ) {
         let mut allow = Vec::new();
         let mut deny = Vec::new();
         let mut ask = Vec::new();
@@ -147,10 +151,7 @@ impl PermissionPolicy {
 
         if let Some(rule) = deny_matches.first() {
             return Some(PermissionOutcome::Deny {
-                reason: format!(
-                    "tool '{}' denied by {:?} rule",
-                    ctx.call.name, rule.source
-                ),
+                reason: format!("tool '{}' denied by {:?} rule", ctx.call.name, rule.source),
             });
         }
 
@@ -158,9 +159,11 @@ impl PermissionPolicy {
             return Some(PermissionOutcome::Allow);
         }
 
-        ask_matches.first().map(|rule| PermissionOutcome::AskApproval {
-            prompt: approval_prompt(rule, ctx),
-        })
+        ask_matches
+            .first()
+            .map(|rule| PermissionOutcome::AskApproval {
+                prompt: approval_prompt(rule, ctx),
+            })
     }
 }
 

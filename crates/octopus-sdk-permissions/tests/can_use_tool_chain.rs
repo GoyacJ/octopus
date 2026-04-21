@@ -17,7 +17,10 @@ struct RecordingEventSink {
 
 impl EventSink for RecordingEventSink {
     fn emit(&self, event: SessionEvent) {
-        self.events.lock().expect("events mutex poisoned").push(event);
+        self.events
+            .lock()
+            .expect("events mutex poisoned")
+            .push(event);
     }
 }
 
@@ -130,7 +133,10 @@ async fn ask_rule_runs_through_broker() {
     );
 
     let outcome = gate
-        .check(&tool_call("bash", json!({ "command": "npm install lodash" })))
+        .check(&tool_call(
+            "bash",
+            json!({ "command": "npm install lodash" }),
+        ))
         .await;
 
     assert_eq!(outcome, PermissionOutcome::Allow);
@@ -140,7 +146,9 @@ async fn ask_rule_runs_through_broker() {
 async fn bypass_mode_allows_without_matching_rules() {
     let gate = gate(PermissionMode::BypassPermissions, Vec::new(), "deny");
 
-    let outcome = gate.check(&tool_call("bash", json!({ "command": "rm demo.txt" }))).await;
+    let outcome = gate
+        .check(&tool_call("bash", json!({ "command": "rm demo.txt" })))
+        .await;
 
     assert_eq!(outcome, PermissionOutcome::Allow);
 }
@@ -214,7 +222,9 @@ async fn accept_edits_allows_write_tools() {
 async fn accept_edits_prompts_for_shell_tools() {
     let gate = gate(PermissionMode::AcceptEdits, Vec::new(), "approve");
 
-    let outcome = gate.check(&tool_call("bash", json!({ "command": "git status" }))).await;
+    let outcome = gate
+        .check(&tool_call("bash", json!({ "command": "git status" })))
+        .await;
 
     assert_eq!(outcome, PermissionOutcome::Allow);
 }
@@ -223,7 +233,9 @@ async fn accept_edits_prompts_for_shell_tools() {
 async fn accept_edits_allows_subagent_tools() {
     let gate = gate(PermissionMode::AcceptEdits, Vec::new(), "deny");
 
-    let outcome = gate.check(&tool_call("subagent", json!({ "task": "index repo" }))).await;
+    let outcome = gate
+        .check(&tool_call("subagent", json!({ "task": "index repo" })))
+        .await;
 
     assert_eq!(outcome, PermissionOutcome::Allow);
 }
@@ -232,7 +244,9 @@ async fn accept_edits_allows_subagent_tools() {
 async fn plan_mode_denies_subagent_tools() {
     let gate = gate(PermissionMode::Plan, Vec::new(), "approve");
 
-    let outcome = gate.check(&tool_call("subagent", json!({ "task": "index repo" }))).await;
+    let outcome = gate
+        .check(&tool_call("subagent", json!({ "task": "index repo" })))
+        .await;
 
     assert_eq!(
         outcome,

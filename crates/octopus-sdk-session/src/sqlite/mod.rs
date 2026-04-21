@@ -9,7 +9,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{EventId, SessionEvent, SessionId};
+use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionEvent, SessionId, SubagentSpec};
 use rusqlite::Connection;
 
 use crate::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
@@ -56,6 +56,44 @@ impl SessionStore for SqliteJsonlSessionStore {
         self.append_event(id, event)
     }
 
+    async fn append_session_started(
+        &self,
+        id: &SessionId,
+        config_snapshot_id: String,
+        effective_config_hash: String,
+        plugins_snapshot: Option<PluginsSnapshot>,
+    ) -> Result<EventId, SessionError> {
+        self.append_event(
+            id,
+            SessionEvent::SessionStarted {
+                config_snapshot_id,
+                effective_config_hash,
+                plugins_snapshot,
+            },
+        )
+    }
+
+    async fn new_child_session(
+        &self,
+        parent_id: &SessionId,
+        spec: &SubagentSpec,
+    ) -> Result<SessionId, SessionError> {
+        let _ = spec;
+        let parent = self.load_snapshot(parent_id)?;
+        let child_id = SessionId::new_v4();
+
+        self.append_event(
+            &child_id,
+            SessionEvent::SessionStarted {
+                config_snapshot_id: parent.config_snapshot_id,
+                effective_config_hash: parent.effective_config_hash,
+                plugins_snapshot: Some(parent.plugins_snapshot),
+            },
+        )?;
+
+        Ok(child_id)
+    }
+
     async fn stream(&self, id: &SessionId, range: EventRange) -> Result<EventStream, SessionError> {
         self.stream_events(id, range)
     }
@@ -77,6 +115,7 @@ impl SessionStore for SqliteJsonlSessionStore {
 pub(crate) fn event_kind(event: &SessionEvent) -> &'static str {
     match event {
         SessionEvent::SessionStarted { .. } => "session_started",
+        SessionEvent::SessionPluginsSnapshot { .. } => "session_plugins_snapshot",
         SessionEvent::UserMessage(_) => "user_message",
         SessionEvent::AssistantMessage(_) => "assistant_message",
         SessionEvent::ToolExecuted { .. } => "tool_executed",

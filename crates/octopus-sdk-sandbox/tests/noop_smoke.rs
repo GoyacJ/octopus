@@ -6,9 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use octopus_sdk_sandbox::{
-    NoopBackend, SandboxBackend, SandboxCommand, SandboxSpec,
-};
+use octopus_sdk_sandbox::{NoopBackend, SandboxBackend, SandboxCommand, SandboxSpec};
 
 fn temp_workspace(name: &str) -> PathBuf {
     let unique = SystemTime::now()

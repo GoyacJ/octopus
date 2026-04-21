@@ -1,0 +1,16 @@
+{
+  "kind": "session_plugins_snapshot",
+  "plugins_snapshot": {
+    "api_version": "1.0.0",
+    "plugins": [
+      {
+        "components_count": 1,
+        "enabled": true,
+        "git_sha": "0123456789abcdef0123456789abcdef01234567",
+        "id": "example-noop-tool",
+        "source": "bundled",
+        "version": "0.1.0"
+      }
+    ]
+  }
+}

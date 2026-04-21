@@ -2,7 +2,7 @@ use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::Stream;
-use octopus_sdk_contracts::{EventId, SessionEvent, SessionId};
+use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionEvent, SessionId, SubagentSpec};
 
 use crate::{SessionError, SessionSnapshot};
 
@@ -17,6 +17,18 @@ pub type EventStream = Pin<Box<dyn Stream<Item = Result<SessionEvent, SessionErr
 #[async_trait]
 pub trait SessionStore: Send + Sync {
     async fn append(&self, id: &SessionId, event: SessionEvent) -> Result<EventId, SessionError>;
+    async fn append_session_started(
+        &self,
+        id: &SessionId,
+        config_snapshot_id: String,
+        effective_config_hash: String,
+        plugins_snapshot: Option<PluginsSnapshot>,
+    ) -> Result<EventId, SessionError>;
+    async fn new_child_session(
+        &self,
+        parent_id: &SessionId,
+        spec: &SubagentSpec,
+    ) -> Result<SessionId, SessionError>;
     async fn stream(&self, id: &SessionId, range: EventRange) -> Result<EventStream, SessionError>;
     async fn snapshot(&self, id: &SessionId) -> Result<SessionSnapshot, SessionError>;
     async fn fork(&self, id: &SessionId, from: EventId) -> Result<SessionId, SessionError>;
@@ -28,7 +40,7 @@ mod trait_object {
     use std::{pin::Pin, sync::Arc};
 
     use futures::Stream;
-    use octopus_sdk_contracts::{EventId, SessionEvent, SessionId};
+    use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionEvent, SessionId, SubagentSpec};
 
     use super::{EventRange, EventStream, SessionSnapshot, SessionStore};
     use crate::SessionError;
@@ -44,6 +56,24 @@ mod trait_object {
                 _id: &SessionId,
                 _event: SessionEvent,
             ) -> Result<EventId, SessionError> {
+                Err(SessionError::NotFound)
+            }
+
+            async fn append_session_started(
+                &self,
+                _id: &SessionId,
+                _config_snapshot_id: String,
+                _effective_config_hash: String,
+                _plugins_snapshot: Option<PluginsSnapshot>,
+            ) -> Result<EventId, SessionError> {
+                Err(SessionError::NotFound)
+            }
+
+            async fn new_child_session(
+                &self,
+                _parent_id: &SessionId,
+                _spec: &SubagentSpec,
+            ) -> Result<SessionId, SessionError> {
                 Err(SessionError::NotFound)
             }
 
@@ -80,7 +110,7 @@ mod trait_object {
 
 #[cfg(test)]
 mod contract_fields {
-    use octopus_sdk_contracts::{EventId, SessionId, Usage};
+    use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionId, Usage};
 
     use super::EventRange;
     use crate::SessionSnapshot;
@@ -95,6 +125,7 @@ mod contract_fields {
             id: SessionId("session-1".into()),
             config_snapshot_id: "cfg-1".into(),
             effective_config_hash: "hash-1".into(),
+            plugins_snapshot: PluginsSnapshot::default(),
             head_event_id: EventId("event-9".into()),
             usage: Usage {
                 input_tokens: 3,
@@ -106,6 +137,7 @@ mod contract_fields {
 
         assert_eq!(range.limit, Some(25));
         assert_eq!(snapshot.id.0, "session-1");
+        assert!(snapshot.plugins_snapshot.plugins.is_empty());
         assert_eq!(snapshot.usage.output_tokens, 5);
     }
 }

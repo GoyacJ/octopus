@@ -1,5 +1,5 @@
 use octopus_sdk_contracts::{
-    AssistantEvent, ContentBlock, EventId, SessionEvent, SessionId, Usage,
+    AssistantEvent, ContentBlock, EventId, PluginsSnapshot, SessionEvent, SessionId, Usage,
 };
 use rusqlite::{params, OptionalExtension, Transaction};
 
@@ -78,6 +78,7 @@ impl SqliteJsonlSessionStore {
         let SessionEvent::SessionStarted {
             config_snapshot_id,
             effective_config_hash,
+            plugins_snapshot,
         } = event
         else {
             return Err(SessionError::Corrupted {
@@ -94,17 +95,19 @@ impl SqliteJsonlSessionStore {
                 session_id,
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot_json,
                 head_event_id,
                 usage_json,
                 created_at,
                 updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ",
             params![
                 session_id.0,
                 config_snapshot_id,
                 effective_config_hash,
+                serialize_plugins_snapshot(plugins_snapshot.as_ref())?,
                 event_id.0,
                 usage_json,
                 now,
@@ -129,21 +132,43 @@ impl SqliteJsonlSessionStore {
             SessionEvent::SessionStarted {
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot,
             } => {
                 transaction.execute(
                     "
                     UPDATE sessions
                     SET config_snapshot_id = ?2,
                         effective_config_hash = ?3,
-                        head_event_id = ?4,
-                        usage_json = ?5,
-                        updated_at = ?6
+                        plugins_snapshot_json = ?4,
+                        head_event_id = ?5,
+                        usage_json = ?6,
+                        updated_at = ?7
                     WHERE session_id = ?1
                     ",
                     params![
                         session_id.0,
                         config_snapshot_id,
                         effective_config_hash,
+                        serialize_plugins_snapshot(plugins_snapshot.as_ref())?,
+                        event_id.0,
+                        usage_json,
+                        now
+                    ],
+                )?;
+            }
+            SessionEvent::SessionPluginsSnapshot { plugins_snapshot } => {
+                transaction.execute(
+                    "
+                    UPDATE sessions
+                    SET plugins_snapshot_json = ?2,
+                        head_event_id = ?3,
+                        usage_json = ?4,
+                        updated_at = ?5
+                    WHERE session_id = ?1
+                    ",
+                    params![
+                        session_id.0,
+                        serde_json::to_string(plugins_snapshot)?,
                         event_id.0,
                         usage_json,
                         now
@@ -200,7 +225,10 @@ fn next_usage(
     session_id: &SessionId,
     event: &SessionEvent,
 ) -> Result<Usage, SessionError> {
-    if matches!(event, SessionEvent::SessionStarted { .. }) {
+    if matches!(
+        event,
+        SessionEvent::SessionStarted { .. } | SessionEvent::SessionPluginsSnapshot { .. }
+    ) {
         return Ok(Usage::default());
     }
 
@@ -261,4 +289,11 @@ fn parse_usage_event(text: &str) -> Option<Usage> {
         AssistantEvent::Usage(usage) => Some(usage),
         _ => None,
     }
+}
+
+fn serialize_plugins_snapshot(
+    plugins_snapshot: Option<&PluginsSnapshot>,
+) -> Result<String, SessionError> {
+    serde_json::to_string(&plugins_snapshot.cloned().unwrap_or_default())
+        .map_err(SessionError::from)
 }

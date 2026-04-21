@@ -91,7 +91,10 @@ async fn test_source_ordering() {
         100,
     );
 
-    let outcome = runner.run(sample_pre_tool_use()).await.expect("run should work");
+    let outcome = runner
+        .run(sample_pre_tool_use())
+        .await
+        .expect("run should work");
 
     assert_eq!(outcome.aborted, None);
     assert_eq!(
@@ -141,7 +144,10 @@ async fn unregister_by_source_only_removes_matching_plugin_id() {
         1
     );
 
-    let outcome = runner.run(sample_pre_tool_use()).await.expect("run should work");
+    let outcome = runner
+        .run(sample_pre_tool_use())
+        .await
+        .expect("run should work");
 
     assert_eq!(outcome.aborted, None);
     assert_eq!(
@@ -180,7 +186,10 @@ async fn continues_and_priority_then_name_are_stable() {
         10,
     );
 
-    let outcome = runner.run(sample_pre_tool_use()).await.expect("run should work");
+    let outcome = runner
+        .run(sample_pre_tool_use())
+        .await
+        .expect("run should work");
 
     assert_eq!(
         outcome
@@ -218,24 +227,31 @@ async fn rewrite_chain_updates_final_payload() {
     );
     runner.register(
         "rewrite-2",
-        Arc::new(TestHook::new("rewrite-2", Arc::clone(&record), |event| match event {
-            HookEvent::PreToolUse { call, .. } => {
-                assert_eq!(call.input["command"], "echo one");
-                HookDecision::Rewrite(octopus_sdk_contracts::RewritePayload::ToolCall {
-                    call: ToolCallRequest {
-                        id: call.id.clone(),
-                        name: call.name.clone(),
-                        input: json!({ "command": "echo two" }),
-                    },
-                })
-            }
-            _ => HookDecision::Continue,
-        })),
+        Arc::new(TestHook::new(
+            "rewrite-2",
+            Arc::clone(&record),
+            |event| match event {
+                HookEvent::PreToolUse { call, .. } => {
+                    assert_eq!(call.input["command"], "echo one");
+                    HookDecision::Rewrite(octopus_sdk_contracts::RewritePayload::ToolCall {
+                        call: ToolCallRequest {
+                            id: call.id.clone(),
+                            name: call.name.clone(),
+                            input: json!({ "command": "echo two" }),
+                        },
+                    })
+                }
+                _ => HookDecision::Continue,
+            },
+        )),
         HookSource::Workspace,
         20,
     );
 
-    let outcome = runner.run(sample_pre_tool_use()).await.expect("run should work");
+    let outcome = runner
+        .run(sample_pre_tool_use())
+        .await
+        .expect("run should work");
 
     assert_eq!(
         outcome.final_payload,
@@ -273,7 +289,10 @@ async fn abort_short_circuits_following_hooks() {
         20,
     );
 
-    let outcome = runner.run(sample_pre_tool_use()).await.expect("run should work");
+    let outcome = runner
+        .run(sample_pre_tool_use())
+        .await
+        .expect("run should work");
 
     assert_eq!(outcome.aborted, Some("stop-here".into()));
     assert_eq!(
@@ -284,7 +303,10 @@ async fn abort_short_circuits_following_hooks() {
             .collect::<Vec<_>>(),
         vec!["first"]
     );
-    assert_eq!(*record.lock().expect("record lock should work"), vec!["first"]);
+    assert_eq!(
+        *record.lock().expect("record lock should work"),
+        vec!["first"]
+    );
 }
 
 #[tokio::test]
@@ -303,7 +325,10 @@ async fn inject_message_only_allowed_for_stop_and_user_prompt_submit() {
         10,
     );
 
-    let stop_outcome = runner.run(sample_stop()).await.expect("stop run should work");
+    let stop_outcome = runner
+        .run(sample_stop())
+        .await
+        .expect("stop run should work");
     assert_eq!(
         stop_outcome.final_payload,
         Some(octopus_sdk_contracts::RewritePayload::UserPrompt {

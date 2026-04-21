@@ -3444,6 +3444,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-sdk-plugin"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-sdk-contracts",
+ "octopus-sdk-hooks",
+ "octopus-sdk-tools",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
 name = "octopus-sdk-sandbox"
 version = "0.2.5"
 dependencies = [
@@ -3462,6 +3479,7 @@ dependencies = [
  "async-trait",
  "futures",
  "octopus-sdk-contracts",
+ "octopus-sdk-plugin",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3470,6 +3488,31 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "octopus-sdk-subagent"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk-context",
+ "octopus-sdk-contracts",
+ "octopus-sdk-hooks",
+ "octopus-sdk-model",
+ "octopus-sdk-permissions",
+ "octopus-sdk-sandbox",
+ "octopus-sdk-session",
+ "octopus-sdk-tools",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]
@@ -3482,10 +3525,13 @@ dependencies = [
  "futures",
  "globset",
  "ignore",
+ "octopus-sdk-context",
  "octopus-sdk-contracts",
  "octopus-sdk-mcp",
+ "octopus-sdk-model",
  "octopus-sdk-sandbox",
  "octopus-sdk-session",
+ "octopus-sdk-subagent",
  "regex",
  "reqwest 0.12.28",
  "serde",

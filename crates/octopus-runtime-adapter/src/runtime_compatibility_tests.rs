@@ -37,7 +37,6 @@ fn runtime_capability_transport_defaults_exposure_fields_for_legacy_payloads() {
     .expect("legacy capability plan summary should deserialize");
     assert!(plan.discovered_tools.is_empty());
     assert!(plan.exposed_tools.is_empty());
-
 }
 
 #[tokio::test]

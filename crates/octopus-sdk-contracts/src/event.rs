@@ -2,8 +2,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::{
-    AskPrompt, ContentBlock, EndReason, EventId, Message, PromptCacheEvent, RenderBlock,
-    RenderLifecycle, Role, ToolCallId, Usage,
+    AskPrompt, ContentBlock, EndReason, EventId, Message, PluginsSnapshot, PromptCacheEvent,
+    RenderBlock, RenderLifecycle, Role, ToolCallId, Usage,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +138,10 @@ enum SessionEventRepr {
     SessionStarted {
         config_snapshot_id: String,
         effective_config_hash: String,
+        plugins_snapshot: Option<PluginsSnapshot>,
+    },
+    SessionPluginsSnapshot {
+        plugins_snapshot: PluginsSnapshot,
     },
     UserMessage {
         role: Role,
@@ -174,6 +178,10 @@ pub enum SessionEvent {
     SessionStarted {
         config_snapshot_id: String,
         effective_config_hash: String,
+        plugins_snapshot: Option<PluginsSnapshot>,
+    },
+    SessionPluginsSnapshot {
+        plugins_snapshot: PluginsSnapshot,
     },
     UserMessage(Message),
     AssistantMessage(Message),
@@ -209,10 +217,17 @@ impl From<&SessionEvent> for SessionEventRepr {
             SessionEvent::SessionStarted {
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot,
             } => Self::SessionStarted {
                 config_snapshot_id: config_snapshot_id.clone(),
                 effective_config_hash: effective_config_hash.clone(),
+                plugins_snapshot: plugins_snapshot.clone(),
             },
+            SessionEvent::SessionPluginsSnapshot { plugins_snapshot } => {
+                Self::SessionPluginsSnapshot {
+                    plugins_snapshot: plugins_snapshot.clone(),
+                }
+            }
             SessionEvent::UserMessage(message) => Self::UserMessage {
                 role: message.role.clone(),
                 content: message.content.clone(),
@@ -259,10 +274,15 @@ impl From<SessionEventRepr> for SessionEvent {
             SessionEventRepr::SessionStarted {
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot,
             } => Self::SessionStarted {
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot,
             },
+            SessionEventRepr::SessionPluginsSnapshot { plugins_snapshot } => {
+                Self::SessionPluginsSnapshot { plugins_snapshot }
+            }
             SessionEventRepr::UserMessage { role, content } => {
                 Self::UserMessage(Message { role, content })
             }
@@ -319,13 +339,14 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{AssistantEvent, EventSink, SessionEvent, StopReason};
-    use crate::{EventId, ToolCallId, Usage};
+    use crate::{EventId, PluginSourceTag, PluginSummary, PluginsSnapshot, ToolCallId, Usage};
 
     #[test]
     fn session_started_serializes_kind_before_payload_fields() {
         let event = SessionEvent::SessionStarted {
             config_snapshot_id: "cfg-1".into(),
             effective_config_hash: "hash-1".into(),
+            plugins_snapshot: Some(sample_plugins_snapshot()),
         };
 
         let serialized = serde_json::to_string(&event).expect("session event should serialize");
@@ -345,6 +366,20 @@ mod tests {
 
         assert_eq!(value.get("kind"), Some(&Value::String("tool_use".into())));
         assert_eq!(value.get("input"), Some(&json!({ "query": "octopus" })));
+    }
+
+    fn sample_plugins_snapshot() -> PluginsSnapshot {
+        PluginsSnapshot {
+            api_version: "1.0.0".into(),
+            plugins: vec![PluginSummary {
+                id: "example-noop-tool".into(),
+                version: "0.1.0".into(),
+                git_sha: Some("0123456789abcdef0123456789abcdef01234567".into()),
+                source: PluginSourceTag::Bundled,
+                enabled: true,
+                components_count: 1,
+            }],
+        }
     }
 
     #[test]

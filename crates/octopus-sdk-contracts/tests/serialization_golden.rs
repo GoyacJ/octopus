@@ -2,7 +2,8 @@ use std::{fs, path::PathBuf};
 
 use octopus_sdk_contracts::{
     AskOption, AskPrompt, AskQuestion, AssistantEvent, ContentBlock, EndReason, EventId, Message,
-    RenderBlock, RenderKind, RenderLifecycle, Role, SessionEvent, StopReason, ToolCallId, Usage,
+    PluginSourceTag, PluginSummary, PluginsSnapshot, RenderBlock, RenderKind, RenderLifecycle,
+    Role, SessionEvent, StopReason, ToolCallId, Usage,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -24,6 +25,17 @@ fn fixtures() -> Vec<FixtureCase> {
     let anchor_event_id = EventId("event-anchor".into());
     let render_event_id = EventId("event-render".into());
     let render_parent_id = EventId("event-parent".into());
+    let plugins_snapshot = PluginsSnapshot {
+        api_version: "1.0.0".into(),
+        plugins: vec![PluginSummary {
+            id: "example-noop-tool".into(),
+            version: "0.1.0".into(),
+            git_sha: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source: PluginSourceTag::Bundled,
+            enabled: true,
+            components_count: 1,
+        }],
+    };
 
     let usage = Usage {
         input_tokens: 13,
@@ -100,6 +112,13 @@ fn fixtures() -> Vec<FixtureCase> {
             &SessionEvent::SessionStarted {
                 config_snapshot_id: "cfg-2026-04-21".into(),
                 effective_config_hash: "sha256:abc123".into(),
+                plugins_snapshot: Some(plugins_snapshot.clone()),
+            },
+        ),
+        fixture_case(
+            "session_event/session_plugins_snapshot",
+            &SessionEvent::SessionPluginsSnapshot {
+                plugins_snapshot: plugins_snapshot.clone(),
             },
         ),
         fixture_case(

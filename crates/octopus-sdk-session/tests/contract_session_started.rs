@@ -1,6 +1,9 @@
 use std::fs;
 
-use octopus_sdk_contracts::{ContentBlock, Message, Role, SessionEvent, SessionId};
+use octopus_sdk_contracts::{
+    ContentBlock, Message, PluginSourceTag, PluginSummary, PluginsSnapshot, Role, SessionEvent,
+    SessionId,
+};
 use octopus_sdk_session::{SessionError, SessionStore, SqliteJsonlSessionStore};
 use uuid::Uuid;
 
@@ -44,14 +47,14 @@ async fn session_started_fields_roundtrip_into_snapshot() {
 
     let store = SqliteJsonlSessionStore::open(&db_path, &jsonl_root).expect("store should open");
     let session_id = SessionId("session-contract-started".into());
+    let plugins_snapshot = sample_plugins_snapshot();
 
     store
-        .append(
+        .append_session_started(
             &session_id,
-            SessionEvent::SessionStarted {
-                config_snapshot_id: "cfg-contract".into(),
-                effective_config_hash: "hash-contract".into(),
-            },
+            "cfg-contract".into(),
+            "hash-contract".into(),
+            Some(plugins_snapshot.clone()),
         )
         .await
         .expect("session started should append");
@@ -63,4 +66,19 @@ async fn session_started_fields_roundtrip_into_snapshot() {
 
     assert_eq!(snapshot.config_snapshot_id, "cfg-contract");
     assert_eq!(snapshot.effective_config_hash, "hash-contract");
+    assert_eq!(snapshot.plugins_snapshot, plugins_snapshot);
+}
+
+fn sample_plugins_snapshot() -> PluginsSnapshot {
+    PluginsSnapshot {
+        api_version: "1.0.0".into(),
+        plugins: vec![PluginSummary {
+            id: "example-noop-tool".into(),
+            version: "0.1.0".into(),
+            git_sha: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source: PluginSourceTag::Bundled,
+            enabled: true,
+            components_count: 1,
+        }],
+    }
 }

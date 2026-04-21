@@ -1,4 +1,6 @@
-use octopus_sdk_contracts::{PermissionMode, PermissionOutcome, ToolCallId, ToolCallRequest, ToolCategory};
+use octopus_sdk_contracts::{
+    PermissionMode, PermissionOutcome, ToolCallId, ToolCallRequest, ToolCategory,
+};
 use octopus_sdk_permissions::{
     PermissionBehavior, PermissionContext, PermissionPolicy, PermissionRule, PermissionRuleSource,
 };
@@ -46,7 +48,10 @@ fn test_source_priority_ordering() {
     assert!(ask_matches.is_empty());
     assert_eq!(allow_matches.len(), 3);
     assert_eq!(allow_matches[0].source, PermissionRuleSource::Session);
-    assert_eq!(allow_matches[1].source, PermissionRuleSource::ProjectSettings);
+    assert_eq!(
+        allow_matches[1].source,
+        PermissionRuleSource::ProjectSettings
+    );
     assert_eq!(allow_matches[2].source, PermissionRuleSource::UserSettings);
 }
 
@@ -59,7 +64,10 @@ fn evaluate_returns_deny_when_deny_rule_matches() {
         rule_content: Some("rm -rf /tmp/demo".into()),
     }]);
 
-    let outcome = policy.evaluate(&context(call("bash", json!({ "command": "rm -rf /tmp/demo" }))));
+    let outcome = policy.evaluate(&context(call(
+        "bash",
+        json!({ "command": "rm -rf /tmp/demo" }),
+    )));
 
     assert_eq!(
         outcome,
@@ -92,7 +100,10 @@ fn evaluate_returns_ask_prompt_when_ask_rule_matches() {
         rule_content: Some("npm install:*".into()),
     }]);
 
-    let outcome = policy.evaluate(&context(call("bash", json!({ "command": "npm install lodash" }))));
+    let outcome = policy.evaluate(&context(call(
+        "bash",
+        json!({ "command": "npm install lodash" }),
+    )));
 
     match outcome {
         Some(PermissionOutcome::AskApproval { prompt }) => {

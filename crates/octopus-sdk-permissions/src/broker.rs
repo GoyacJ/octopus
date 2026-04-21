@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use octopus_sdk_contracts::{
-    AskResolver, AskPrompt, EventSink, PermissionOutcome, SessionEvent, ToolCallRequest,
+    AskPrompt, AskResolver, EventSink, PermissionOutcome, SessionEvent, ToolCallRequest,
 };
 
 #[derive(Clone)]

@@ -1,7 +1,11 @@
+use std::{sync::Arc, time::Instant};
+
 use async_trait::async_trait;
+use octopus_sdk_contracts::{ContentBlock, SubagentOutput, SubagentSpec};
+use serde::Deserialize;
 use serde_json::json;
 
-use crate::{Tool, ToolCategory, ToolContext, ToolError, ToolResult, ToolSpec};
+use crate::{TaskFn, Tool, ToolCategory, ToolContext, ToolError, ToolResult, ToolSpec};
 
 macro_rules! define_stub_tool {
     ($tool:ident, $tool_name:literal, $description:literal, $category:expr, $crate_name:literal) => {
@@ -53,13 +57,149 @@ macro_rules! define_stub_tool {
     };
 }
 
-define_stub_tool!(
-    AgentTool,
-    "task",
-    "Spawn and manage subagent execution.",
-    ToolCategory::Subagent,
-    "octopus-sdk-subagent"
-);
+const DEFAULT_TASK_FN_REASON: &str = "TaskFn not injected";
+
+pub struct AgentTool {
+    spec: ToolSpec,
+    task_fn: Arc<dyn TaskFn>,
+    missing_task_fn_reason: Option<String>,
+}
+
+impl AgentTool {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            spec: ToolSpec {
+                name: "task".into(),
+                description: "[STUB · W5] Spawn and manage subagent execution.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "required": ["spec", "input"],
+                    "properties": {
+                        "spec": { "type": "object" },
+                        "input": { "type": "string" }
+                    }
+                }),
+                category: ToolCategory::Subagent,
+            },
+            task_fn: Arc::new(ErrorTaskFn::new(DEFAULT_TASK_FN_REASON)),
+            missing_task_fn_reason: Some(DEFAULT_TASK_FN_REASON.into()),
+        }
+    }
+
+    #[must_use]
+    pub fn with_task_fn(mut self, f: Arc<dyn TaskFn>) -> Self {
+        self.task_fn = f;
+        self.missing_task_fn_reason = None;
+        self
+    }
+}
+
+impl Default for AgentTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for AgentTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn is_concurrency_safe(&self, _input: &serde_json::Value) -> bool {
+        false
+    }
+
+    async fn execute(
+        &self,
+        _ctx: ToolContext,
+        input: serde_json::Value,
+    ) -> Result<ToolResult, ToolError> {
+        let started_at = Instant::now();
+        if let Some(reason) = &self.missing_task_fn_reason {
+            return Ok(error_result(
+                reason.clone(),
+                started_at.elapsed().as_millis() as u64,
+            ));
+        }
+
+        let input: AgentToolInput =
+            serde_json::from_value(input).map_err(|error| ToolError::Validation {
+                message: error.to_string(),
+            })?;
+
+        match self.task_fn.run(&input.spec, &input.input).await {
+            Ok(output) => Ok(output_result(
+                output,
+                started_at.elapsed().as_millis() as u64,
+            )?),
+            Err(error) => Ok(error_result(
+                error.to_string(),
+                started_at.elapsed().as_millis() as u64,
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentToolInput {
+    spec: SubagentSpec,
+    input: String,
+}
+
+struct ErrorTaskFn {
+    #[allow(dead_code)]
+    reason: String,
+}
+
+impl ErrorTaskFn {
+    fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl TaskFn for ErrorTaskFn {
+    async fn run(
+        &self,
+        _spec: &SubagentSpec,
+        _input: &str,
+    ) -> Result<SubagentOutput, octopus_sdk_contracts::SubagentError> {
+        Err(octopus_sdk_contracts::SubagentError::Provider {
+            reason: self.reason.clone(),
+        })
+    }
+}
+
+fn output_result(output: SubagentOutput, duration_ms: u64) -> Result<ToolResult, ToolError> {
+    let text = match output {
+        SubagentOutput::Summary { text, .. } => text,
+        SubagentOutput::FileRef { path, bytes, .. } => {
+            format!("file: {} ({} bytes)", path.display(), bytes)
+        }
+        SubagentOutput::Json { value, .. } => serde_json::to_string(&value)?,
+    };
+
+    Ok(ToolResult {
+        content: vec![ContentBlock::Text { text }],
+        is_error: false,
+        duration_ms,
+        render: None,
+    })
+}
+
+fn error_result(reason: String, duration_ms: u64) -> ToolResult {
+    ToolResult {
+        content: vec![ContentBlock::Text { text: reason }],
+        is_error: true,
+        duration_ms,
+        render: None,
+    }
+}
+
 define_stub_tool!(
     SkillTool,
     "skill",

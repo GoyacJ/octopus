@@ -6,9 +6,7 @@ use std::{
 };
 
 #[cfg(target_os = "macos")]
-use octopus_sdk_sandbox::{
-    SandboxBackend, SandboxCommand, SandboxSpec, SeatbeltBackend,
-};
+use octopus_sdk_sandbox::{SandboxBackend, SandboxCommand, SandboxSpec, SeatbeltBackend};
 
 #[cfg(target_os = "macos")]
 fn temp_workspace(name: &str) -> PathBuf {

@@ -114,7 +114,9 @@ impl HookRunner {
         };
 
         for registration in self.sorted_registrations() {
-            let decision = self.invoke_hook(&registration, current_event.clone()).await?;
+            let decision = self
+                .invoke_hook(&registration, current_event.clone())
+                .await?;
             outcome
                 .decisions
                 .push((registration.name.clone(), decision.clone()));
@@ -122,10 +124,8 @@ impl HookRunner {
             match decision {
                 HookDecision::Continue => {}
                 HookDecision::Rewrite(payload) => {
-                    let applied =
-                        apply_rewrite(&mut current_event, payload).map_err(|event_kind| {
-                            HookError::RewriteNotAllowed { event_kind }
-                        })?;
+                    let applied = apply_rewrite(&mut current_event, payload)
+                        .map_err(|event_kind| HookError::RewriteNotAllowed { event_kind })?;
                     outcome.final_payload = Some(applied);
                 }
                 HookDecision::Abort { reason } => {

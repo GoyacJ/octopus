@@ -118,7 +118,9 @@ fn estimate_tokens(messages: &[Message]) -> u32 {
                 .content
                 .iter()
                 .map(|block| match block {
-                    ContentBlock::Text { text } | ContentBlock::Thinking { text } => chars_to_tokens(text.len()),
+                    ContentBlock::Text { text } | ContentBlock::Thinking { text } => {
+                        chars_to_tokens(text.len())
+                    }
                     ContentBlock::ToolUse { name, input, .. } => {
                         chars_to_tokens(name.len() + input.to_string().len())
                     }

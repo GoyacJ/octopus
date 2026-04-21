@@ -2,7 +2,8 @@ use std::{fs, path::PathBuf};
 
 use futures::StreamExt;
 use octopus_sdk_contracts::{
-    ContentBlock, EndReason, EventId, Message, Role, SessionEvent, SessionId,
+    ContentBlock, EndReason, EventId, Message, PluginSourceTag, PluginSummary, PluginsSnapshot,
+    Role, SessionEvent, SessionId,
 };
 use octopus_sdk_session::{EventRange, SessionError, SessionStore, SqliteJsonlSessionStore};
 use uuid::Uuid;
@@ -13,6 +14,7 @@ async fn test_fork_preserves_prefix() {
     let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
         .expect("store should open");
     let session_id = SessionId("session-fork".into());
+    let plugins_snapshot = sample_plugins_snapshot();
 
     let started_id = store
         .append(
@@ -20,6 +22,7 @@ async fn test_fork_preserves_prefix() {
             SessionEvent::SessionStarted {
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                plugins_snapshot: Some(plugins_snapshot.clone()),
             },
         )
         .await
@@ -74,6 +77,7 @@ async fn test_fork_preserves_prefix() {
             SessionEvent::SessionStarted {
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                plugins_snapshot: Some(plugins_snapshot.clone()),
             },
             SessionEvent::UserMessage(Message {
                 role: Role::User,
@@ -89,6 +93,7 @@ async fn test_fork_preserves_prefix() {
     );
     assert_eq!(forked_snapshot.config_snapshot_id, "cfg-fork");
     assert_eq!(forked_snapshot.effective_config_hash, "hash-fork");
+    assert_eq!(forked_snapshot.plugins_snapshot, plugins_snapshot);
     assert_ne!(started_id, checkpoint_id);
 }
 
@@ -98,6 +103,7 @@ async fn test_wake_returns_latest_snapshot() {
     let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
         .expect("store should open");
     let session_id = SessionId("session-wake".into());
+    let plugins_snapshot = sample_plugins_snapshot();
 
     let _started_id = store
         .append(
@@ -105,6 +111,7 @@ async fn test_wake_returns_latest_snapshot() {
             SessionEvent::SessionStarted {
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                plugins_snapshot: Some(plugins_snapshot.clone()),
             },
         )
         .await
@@ -149,6 +156,7 @@ async fn test_wake_returns_latest_snapshot() {
     assert_eq!(snapshot.id, session_id);
     assert_eq!(snapshot.config_snapshot_id, "cfg-fork");
     assert_eq!(snapshot.effective_config_hash, "hash-fork");
+    assert_eq!(snapshot.plugins_snapshot, plugins_snapshot);
     assert_eq!(snapshot.head_event_id, last_event_id);
 }
 
@@ -165,6 +173,7 @@ async fn test_wake_rejects_checkpoint_with_missing_anchor() {
             SessionEvent::SessionStarted {
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                plugins_snapshot: Some(sample_plugins_snapshot()),
             },
         )
         .await
@@ -190,6 +199,20 @@ async fn test_wake_rejects_checkpoint_with_missing_anchor() {
         SessionError::Corrupted { reason }
         if reason == "checkpoint_anchor_event_not_found"
     ));
+}
+
+fn sample_plugins_snapshot() -> PluginsSnapshot {
+    PluginsSnapshot {
+        api_version: "1.0.0".into(),
+        plugins: vec![PluginSummary {
+            id: "example-noop-tool".into(),
+            version: "0.1.0".into(),
+            git_sha: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            source: PluginSourceTag::Bundled,
+            enabled: true,
+            components_count: 1,
+        }],
+    }
 }
 
 struct TestPaths {

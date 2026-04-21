@@ -3,7 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder, SystemPromptSection};
 use octopus_sdk_contracts::{PermissionMode, SessionId};
-use octopus_sdk_tools::{Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec};
+use octopus_sdk_tools::{
+    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec,
+};
 use serde_json::json;
 
 struct DummyTool {
@@ -82,7 +84,9 @@ fn test_tools_guidance_stability() {
     assert!(first[1].contains("- glob: Match files"));
     assert!(first[1].contains("- write_file: Persist file content"));
     assert!(
-        first[1].find("- glob: Match files").expect("glob line should exist")
+        first[1]
+            .find("- glob: Match files")
+            .expect("glob line should exist")
             < first[1]
                 .find("- write_file: Persist file content")
                 .expect("write_file line should exist")

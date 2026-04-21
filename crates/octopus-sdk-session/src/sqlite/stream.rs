@@ -1,5 +1,5 @@
 use futures::stream;
-use octopus_sdk_contracts::{EventId, SessionEvent, SessionId, Usage};
+use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionEvent, SessionId, Usage};
 use rusqlite::{params, OptionalExtension};
 
 use crate::{jsonl::JsonlRecord, EventRange, EventStream, SessionError, SessionSnapshot};
@@ -83,8 +83,9 @@ impl SqliteJsonlSessionStore {
             id: session_id.clone(),
             config_snapshot_id: row.0,
             effective_config_hash: row.1,
-            head_event_id: EventId(row.2),
-            usage: serde_json::from_str::<Usage>(&row.3)?,
+            plugins_snapshot: serde_json::from_str::<PluginsSnapshot>(&row.2)?,
+            head_event_id: EventId(row.3),
+            usage: serde_json::from_str::<Usage>(&row.4)?,
         })
     }
 
@@ -142,19 +143,21 @@ impl SqliteJsonlSessionStore {
                 session_id,
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot_json,
                 head_event_id,
                 usage_json,
                 created_at,
                 updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ",
             params![
                 forked_session_id.0,
                 source.0,
                 source.1,
+                source.2,
                 head_event_id.0,
-                source.3,
+                source.4,
                 now,
                 now
             ],
@@ -217,17 +220,19 @@ impl SqliteJsonlSessionStore {
                 session_id,
                 config_snapshot_id,
                 effective_config_hash,
+                plugins_snapshot_json,
                 head_event_id,
                 usage_json,
                 created_at,
                 updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ",
             params![
                 session_id.0,
                 expected.config_snapshot_id,
                 expected.effective_config_hash,
+                serde_json::to_string(&expected.plugins_snapshot)?,
                 expected.head_event_id.0,
                 serde_json::to_string(&expected.usage)?,
                 now,
@@ -277,11 +282,11 @@ fn session_exists(
 fn load_session_row(
     connection: &rusqlite::Connection,
     session_id: &SessionId,
-) -> Result<Option<(String, String, String, String)>, SessionError> {
+) -> Result<Option<(String, String, String, String, String)>, SessionError> {
     connection
         .query_row(
             "
-            SELECT config_snapshot_id, effective_config_hash, head_event_id, usage_json
+            SELECT config_snapshot_id, effective_config_hash, plugins_snapshot_json, head_event_id, usage_json
             FROM sessions
             WHERE session_id = ?1
             ",
@@ -292,6 +297,7 @@ fn load_session_row(
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
                 ))
             },
         )
@@ -422,6 +428,7 @@ fn load_checkpoint_rows(
 struct ExpectedProjection {
     config_snapshot_id: String,
     effective_config_hash: String,
+    plugins_snapshot: PluginsSnapshot,
     head_event_id: EventId,
     usage: Usage,
 }
@@ -437,6 +444,7 @@ fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, Se
     let SessionEvent::SessionStarted {
         config_snapshot_id,
         effective_config_hash,
+        plugins_snapshot,
     } = &first.event
     else {
         return Err(SessionError::Corrupted {
@@ -444,9 +452,18 @@ fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, Se
         });
     };
 
+    let mut resolved_plugins_snapshot = plugins_snapshot.clone().unwrap_or_default();
+
+    for record in &records[1..] {
+        if let SessionEvent::SessionPluginsSnapshot { plugins_snapshot } = &record.event {
+            resolved_plugins_snapshot = plugins_snapshot.clone();
+        }
+    }
+
     Ok(ExpectedProjection {
         config_snapshot_id: config_snapshot_id.clone(),
         effective_config_hash: effective_config_hash.clone(),
+        plugins_snapshot: resolved_plugins_snapshot,
         head_event_id: last.event_id.clone(),
         usage: project_usage(records.iter().map(|record| &record.event))?,
     })
@@ -458,8 +475,13 @@ fn projection_needs_repair(
     records: &[JsonlRecord],
     expected: &ExpectedProjection,
 ) -> Result<bool, SessionError> {
-    let Some((config_snapshot_id, effective_config_hash, head_event_id, usage_json)) =
-        load_session_row(connection, session_id)?
+    let Some((
+        config_snapshot_id,
+        effective_config_hash,
+        plugins_snapshot_json,
+        head_event_id,
+        usage_json,
+    )) = load_session_row(connection, session_id)?
     else {
         return Ok(true);
     };
@@ -469,10 +491,12 @@ fn projection_needs_repair(
         .iter()
         .map(|record| record.event_id.0.clone())
         .collect::<Vec<_>>();
+    let plugins_snapshot = serde_json::from_str::<PluginsSnapshot>(&plugins_snapshot_json)?;
     let usage = serde_json::from_str::<Usage>(&usage_json)?;
 
     Ok(config_snapshot_id != expected.config_snapshot_id
         || effective_config_hash != expected.effective_config_hash
+        || plugins_snapshot != expected.plugins_snapshot
         || head_event_id != expected.head_event_id.0
         || usage != expected.usage
         || db_event_ids != jsonl_event_ids)

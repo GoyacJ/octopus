@@ -70,7 +70,12 @@ async fn hook_event_matrix_is_stable() {
             .run(case.event.clone())
             .await
             .expect("abort path should still return outcome");
-        assert_eq!(abort_outcome.aborted, Some("blocked".into()), "{}", case.kind);
+        assert_eq!(
+            abort_outcome.aborted,
+            Some("blocked".into()),
+            "{}",
+            case.kind
+        );
         assert_eq!(abort_outcome.decisions.len(), 1, "{}", case.kind);
 
         let rewrite_runner = HookRunner::new();

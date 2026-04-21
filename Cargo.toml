@@ -20,6 +20,8 @@ default-members = [
   "crates/octopus-sdk-sandbox",
   "crates/octopus-sdk-hooks",
   "crates/octopus-sdk-context",
+  "crates/octopus-sdk-subagent",
+  "crates/octopus-sdk-plugin",
 ]
 resolver = "2"
 

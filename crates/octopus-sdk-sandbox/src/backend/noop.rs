@@ -15,9 +15,13 @@ pub struct NoopBackend;
 #[async_trait]
 impl SandboxBackend for NoopBackend {
     async fn provision(&self, spec: SandboxSpec) -> Result<SandboxHandle, SandboxError> {
-        let cwd = spec.fs_whitelist.first().cloned().ok_or(SandboxError::Provision {
-            reason: "noop backend requires fs_whitelist[0] as working directory".into(),
-        })?;
+        let cwd = spec
+            .fs_whitelist
+            .first()
+            .cloned()
+            .ok_or(SandboxError::Provision {
+                reason: "noop backend requires fs_whitelist[0] as working directory".into(),
+            })?;
 
         Ok(SandboxHandle::new(cwd, spec.env_allowlist, "noop"))
     }
@@ -57,9 +61,12 @@ impl SandboxBackend for NoopBackend {
                 })?;
         }
 
-        let output = child.wait_with_output().await.map_err(|error| SandboxError::Execute {
-            reason: error.to_string(),
-        })?;
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|error| SandboxError::Execute {
+                reason: error.to_string(),
+            })?;
 
         Ok(SandboxOutput {
             exit_code: output.status.code().unwrap_or(-1),

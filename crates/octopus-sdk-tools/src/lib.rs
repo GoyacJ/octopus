@@ -11,6 +11,7 @@ mod partition;
 mod registry;
 mod result;
 mod spec;
+mod task_fn;
 mod tool;
 
 pub use octopus_sdk_contracts::ToolCategory;
@@ -22,4 +23,5 @@ pub use partition::*;
 pub use registry::*;
 pub use result::*;
 pub use spec::*;
+pub use task_fn::*;
 pub use tool::*;

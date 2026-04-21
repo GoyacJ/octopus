@@ -3,7 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder};
 use octopus_sdk_contracts::{PermissionMode, SessionId};
-use octopus_sdk_tools::{Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec};
+use octopus_sdk_tools::{
+    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec,
+};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 

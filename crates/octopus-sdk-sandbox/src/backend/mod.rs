@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::SandboxBackend;
 
-mod noop;
 #[cfg(target_os = "linux")]
 mod bubblewrap;
+mod noop;
 #[cfg(target_os = "macos")]
 mod seatbelt;
 

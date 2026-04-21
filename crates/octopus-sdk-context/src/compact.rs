@@ -40,8 +40,7 @@ impl Compactor {
         &self,
         session: &mut SessionView<'_>,
     ) -> Result<Option<CompactionResult>, CompactionError> {
-        let usage_ratio =
-            f64::from(session.tokens) / f64::from(session.tokens_budget.max(1));
+        let usage_ratio = f64::from(session.tokens) / f64::from(session.tokens_budget.max(1));
         if session.tokens_budget == 0 || usage_ratio < f64::from(self.threshold) {
             return Ok(None);
         }
@@ -188,7 +187,9 @@ fn clear_blocks(blocks: &mut Vec<ContentBlock>) -> u32 {
                     cleared += 1;
                 }
             }
-            ContentBlock::ToolUse { .. } | ContentBlock::Text { .. } | ContentBlock::Thinking { .. } => {}
+            ContentBlock::ToolUse { .. }
+            | ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. } => {}
         }
     }
     cleared

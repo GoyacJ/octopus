@@ -18,5 +18,8 @@ tokio-stream.workspace = true
 tracing = "0.1"
 uuid.workspace = true
 
+[dev-dependencies]
+octopus-sdk-plugin = { path = "../octopus-sdk-plugin" }
+
 [lints]
 workspace = true

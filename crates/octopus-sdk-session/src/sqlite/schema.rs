@@ -7,6 +7,7 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), rusqlite::Error>
             session_id TEXT PRIMARY KEY,
             config_snapshot_id TEXT NOT NULL,
             effective_config_hash TEXT NOT NULL,
+            plugins_snapshot_json TEXT NOT NULL DEFAULT '{\"api_version\":\"\",\"plugins\":[]}',
             head_event_id TEXT NOT NULL,
             usage_json TEXT NOT NULL,
             created_at INTEGER NOT NULL,
@@ -26,7 +27,29 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), rusqlite::Error>
         CREATE UNIQUE INDEX IF NOT EXISTS idx_events_session_seq
             ON events(session_id, seq);
         ",
-    )
+    )?;
+
+    if !has_column(connection, "sessions", "plugins_snapshot_json")? {
+        connection.execute(
+            "ALTER TABLE sessions ADD COLUMN plugins_snapshot_json TEXT NOT NULL DEFAULT '{\"api_version\":\"\",\"plugins\":[]}'",
+            [],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn has_column(connection: &Connection, table: &str, column: &str) -> Result<bool, rusqlite::Error> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+
+    for value in rows {
+        if value? == column {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]

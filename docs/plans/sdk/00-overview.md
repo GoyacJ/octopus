@@ -170,8 +170,15 @@
   - `PluginManifest / PluginRegistry / PluginLifecycle` 初版 + 最小 native plugin 示例。
   - `ToolRegistry / HookRunner` 通过 executable runtime registration 向插件开放；`SkillDecl / ModelProviderDecl` 在 W5 保持 metadata + builder slot。
 - 硬门禁：
-  - `crates/plugins/*` + `runtime::plugin_lifecycle` + `runtime::hooks` 四源合一，无重复生命周期。
-  - plugin session 快照可从 `SessionStarted` 或紧随其后的 `session.plugins_snapshot` 恢复，并可回放。
+  - `crates/plugins/*` + `runtime::plugin_lifecycle` + `runtime::hooks` 四源合一，无重复生命周期。守护命令固定为：
+    `rg "use runtime::plugin_lifecycle" crates/octopus-sdk-*`
+    `rg "use runtime::hooks" crates/octopus-sdk-*`
+    `rg "use plugins::manifest" crates/octopus-sdk-*`
+    `rg "use plugins::hooks" crates/octopus-sdk-*`
+    `rg "use tools::subagent_runtime" crates/octopus-sdk-*`
+    `rg "octopus-sdk-plugin|octopus-sdk-subagent" Cargo.toml`
+    `find crates/octopus-sdk-subagent crates/octopus-sdk-plugin -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'`
+  - plugin session 快照可从 `SessionStarted` 或紧随其后的 `session.plugins_snapshot` 恢复，并可回放。回放测试固定为：`cargo test -p octopus-sdk-session --test plugins_snapshot_stability test_snapshot_replay_embedded test_snapshot_replay_second_event`。
 
 ### W6 · `octopus-sdk-core`（Brain Loop）
 
@@ -345,3 +352,4 @@ cleanup+split                                                          │██
 | 2026-04-21 | W5 Plan 起稿：`08-week-5-subagent-plugin.md` 由 `pending` 切为 `draft`；2 个 SDK crate（`octopus-sdk-subagent` Level 3 / `octopus-sdk-plugin` Level 2）公共面与 12-Task Ledger 完成；4 项审核决策（D1 仅 `MockEvaluator` / D2 插件仅本地目录 / D3 `worker_boot` 只取 Orchestrator 通用部分 / D4 `.agents/**` 双 root 发现）在审核中已确认。 | Architect (Claude Opus 4.7) |
 | 2026-04-21 | W5 审计追补：W5 出口状态第 3 条改成 `ToolRegistry / HookRunner` 的 executable runtime registration，并明确 `SkillDecl / ModelProviderDecl` 在 W5 仍是 metadata + builder slot；`worker_boot` 更正为 W5 non-source、留到 W7 复核。 | Codex |
 | 2026-04-21 | W5 三轮审计追补：`plugins_snapshot` 硬门禁改成“首事件优先，必要时退回 `session.plugins_snapshot` 次事件”的显式双分支；W8/DoD 的 800 行守护命令改成真实按行数检查。 | Codex |
+| 2026-04-21 | W5 Weekly Gate 收尾：`08-week-5-subagent-plugin.md` 由 `in_progress` 切为 `done`；2 个 SDK crate（subagent / plugin）落地；Level 0 contracts W5 补丁完成；`plugins_snapshot` replay 合同、四源合一守护与 workspace `build/clippy/test` 全部通过。 | Codex |

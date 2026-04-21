@@ -1,5 +1,18 @@
 {
   "config_snapshot_id": "cfg-2026-04-21",
   "effective_config_hash": "sha256:abc123",
-  "kind": "session_started"
+  "kind": "session_started",
+  "plugins_snapshot": {
+    "api_version": "1.0.0",
+    "plugins": [
+      {
+        "components_count": 1,
+        "enabled": true,
+        "git_sha": "0123456789abcdef0123456789abcdef01234567",
+        "id": "example-noop-tool",
+        "source": "bundled",
+        "version": "0.1.0"
+      }
+    ]
+  }
 }

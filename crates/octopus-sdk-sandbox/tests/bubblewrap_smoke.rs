@@ -6,9 +6,7 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-use octopus_sdk_sandbox::{
-    BubblewrapBackend, SandboxBackend, SandboxCommand, SandboxSpec,
-};
+use octopus_sdk_sandbox::{BubblewrapBackend, SandboxBackend, SandboxCommand, SandboxSpec};
 
 #[cfg(target_os = "linux")]
 fn temp_workspace(name: &str) -> PathBuf {

@@ -58,6 +58,22 @@ impl SessionStore for SessionStub {
     async fn append(&self, _id: &SessionId, _event: SessionEvent) -> Result<EventId, SessionError> {
         Err(SessionError::NotFound)
     }
+    async fn append_session_started(
+        &self,
+        _id: &SessionId,
+        _config_snapshot_id: String,
+        _effective_config_hash: String,
+        _plugins_snapshot: Option<octopus_sdk_contracts::PluginsSnapshot>,
+    ) -> Result<EventId, SessionError> {
+        Err(SessionError::NotFound)
+    }
+    async fn new_child_session(
+        &self,
+        _parent_id: &SessionId,
+        _spec: &octopus_sdk_contracts::SubagentSpec,
+    ) -> Result<SessionId, SessionError> {
+        Err(SessionError::NotFound)
+    }
     async fn stream(
         &self,
         _id: &SessionId,

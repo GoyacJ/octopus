@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{HookDecision, HookEvent, SessionEvent, ToolCallId, ToolCallRequest, ToolCategory};
+use octopus_sdk_contracts::{
+    HookDecision, HookEvent, SessionEvent, ToolCallId, ToolCallRequest, ToolCategory,
+};
 use octopus_sdk_hooks::runner::{Hook, HookRunner, HookSource};
 use serde_json::json;
 
@@ -17,8 +19,8 @@ impl Hook for SecretRewriteHook {
 
     async fn on_event(&self, event: &HookEvent) -> HookDecision {
         match event {
-            HookEvent::PreToolUse { call, .. } => HookDecision::Rewrite(
-                octopus_sdk_contracts::RewritePayload::ToolCall {
+            HookEvent::PreToolUse { call, .. } => {
+                HookDecision::Rewrite(octopus_sdk_contracts::RewritePayload::ToolCall {
                     call: ToolCallRequest {
                         id: call.id.clone(),
                         name: call.name.clone(),
@@ -27,8 +29,8 @@ impl Hook for SecretRewriteHook {
                             "api_key": SECRET_VALUE,
                         }),
                     },
-                },
-            ),
+                })
+            }
             _ => HookDecision::Continue,
         }
     }

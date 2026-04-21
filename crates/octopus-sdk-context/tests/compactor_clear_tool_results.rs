@@ -3,7 +3,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use octopus_sdk_context::{Compactor, SessionView};
 use octopus_sdk_contracts::{CompactionStrategyTag, ContentBlock, EventId, Message, Role};
-use octopus_sdk_model::{ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor, ProviderId};
+use octopus_sdk_model::{
+    ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
+    ProviderId,
+};
 
 struct NoopProvider;
 
@@ -73,14 +76,12 @@ async fn clear_tool_results_updates_message_bodies_and_token_count() {
     assert_eq!(result.tool_results_cleared, 3);
     assert_eq!(result.strategy, CompactionStrategyTag::ClearToolResults);
     assert_eq!(result.tokens_before - result.tokens_after, removed_tokens);
-    assert!(
-        session.messages.iter().all(|message| {
-            message.content.iter().all(|block| match block {
-                ContentBlock::ToolResult { content, .. } => content.is_empty(),
-                _ => true,
-            })
+    assert!(session.messages.iter().all(|message| {
+        message.content.iter().all(|block| match block {
+            ContentBlock::ToolResult { content, .. } => content.is_empty(),
+            _ => true,
         })
-    );
+    }));
 }
 
 #[tokio::test]
@@ -99,7 +100,10 @@ async fn hybrid_strategy_is_explicitly_aborted() {
         .await
         .expect_err("hybrid should abort");
 
-    assert_eq!(error.to_string(), "compaction aborted: hybrid not implemented in W4");
+    assert_eq!(
+        error.to_string(),
+        "compaction aborted: hybrid not implemented in W4"
+    );
 }
 
 fn sample_messages() -> Vec<Message> {
@@ -171,7 +175,9 @@ fn estimate_blocks_tokens(blocks: &[ContentBlock]) -> u32 {
     blocks
         .iter()
         .map(|block| match block {
-            ContentBlock::Text { text } | ContentBlock::Thinking { text } => chars_to_tokens(text.len()),
+            ContentBlock::Text { text } | ContentBlock::Thinking { text } => {
+                chars_to_tokens(text.len())
+            }
             ContentBlock::ToolUse { name, input, .. } => {
                 chars_to_tokens(name.len() + input.to_string().len())
             }

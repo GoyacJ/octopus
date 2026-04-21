@@ -27,9 +27,13 @@ pub struct SeatbeltBackend;
 #[async_trait]
 impl SandboxBackend for SeatbeltBackend {
     async fn provision(&self, spec: SandboxSpec) -> Result<SandboxHandle, SandboxError> {
-        let cwd = spec.fs_whitelist.first().cloned().ok_or(SandboxError::Provision {
-            reason: "seatbelt backend requires fs_whitelist[0] as working directory".into(),
-        })?;
+        let cwd = spec
+            .fs_whitelist
+            .first()
+            .cloned()
+            .ok_or(SandboxError::Provision {
+                reason: "seatbelt backend requires fs_whitelist[0] as working directory".into(),
+            })?;
 
         let profile = render_profile(&spec.fs_whitelist);
         let profile_path = profile_path_for(&cwd);
@@ -79,9 +83,12 @@ impl SandboxBackend for SeatbeltBackend {
                 })?;
         }
 
-        let output = child.wait_with_output().await.map_err(|error| SandboxError::Execute {
-            reason: error.to_string(),
-        })?;
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|error| SandboxError::Execute {
+                reason: error.to_string(),
+            })?;
 
         Ok(SandboxOutput {
             exit_code: output.status.code().unwrap_or(-1),
@@ -104,8 +111,7 @@ fn render_profile(paths: &[PathBuf]) -> String {
         .collect::<Vec<_>>()
         .join(" ");
 
-    SEATBELT_PROFILE_TEMPLATE
-        .replace("{write_paths}", rendered_paths.as_str())
+    SEATBELT_PROFILE_TEMPLATE.replace("{write_paths}", rendered_paths.as_str())
 }
 
 fn profile_path_for(cwd: &Path) -> PathBuf {

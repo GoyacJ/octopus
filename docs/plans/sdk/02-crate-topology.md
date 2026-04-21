@@ -448,6 +448,8 @@ impl SqliteJsonlSessionStore {
 ```
 
 > W5 前置合同：`plugins_snapshot` 优先扩进 `SessionEvent::SessionStarted` 与 `SessionSnapshot`；若 W1 首事件不能扩面，则退回紧随其后的 `SessionEvent::SessionPluginsSnapshot`，但 `SessionSnapshot` 仍必须持有快照。store 持久化、golden fixture、OpenAPI/schema 对齐在同一批次继续跟进，不能留到 session 尾部小补丁。
+>
+> W5 Task 10 当前落地：`append_session_started(..., Some(snapshot))` 走首事件内嵌分支，`append_session_started(..., None)` + `append(SessionPluginsSnapshot { ... })` 走次事件分支；`plugins_snapshot_stability` 合同测试同时锁住 JSONL、SQLite 投影和 reopen replay 的恢复结果。
 
 #### 契约不变量
 
@@ -722,10 +724,20 @@ pub mod builtin {
     impl TodoWriteTool { pub fn new() -> Self; }
     impl SleepTool { pub fn new() -> Self; }
     impl AgentTool { pub fn new() -> Self; }
+    impl AgentTool { pub fn with_task_fn(self, f: Arc<dyn TaskFn>) -> Self; }
     impl SkillTool { pub fn new() -> Self; }
     impl TaskListTool { pub fn new() -> Self; }
     impl TaskGetTool { pub fn new() -> Self; }
     pub fn register_builtins(registry: &mut ToolRegistry) -> Result<(), RegistryError>;
+}
+
+#[async_trait]
+pub trait TaskFn: Send + Sync {
+    async fn run(
+        &self,
+        spec: &SubagentSpec,
+        input: &str,
+    ) -> Result<SubagentOutput, SubagentError>;
 }
 
 pub const BASH_MAX_OUTPUT_DEFAULT: usize = 30_000;
@@ -1200,24 +1212,145 @@ pub struct SubagentSpec {
     pub allowed_tools: Vec<String>,
     pub model_role: String,
     pub permission_mode: PermissionMode,
+    pub task_budget: TaskBudget,
+    pub max_turns: u16,
+    pub depth: u8,
+}
+
+pub struct TaskBudget {
+    pub total: u32,
+    pub completion_threshold: f32,
+}
+
+pub struct SubagentSummary {
+    pub session_id: SessionId,
+    pub turns: u16,
+    pub tokens_used: u32,
+    pub duration_ms: u64,
+    pub trace_id: String,
+}
+
+pub enum SubagentOutput {
+    Summary { text: String, meta: SubagentSummary },
+    FileRef { path: PathBuf, bytes: u64, meta: SubagentSummary },
+    Json { value: serde_json::Value, meta: SubagentSummary },
+}
+
+pub enum SubagentError {
+    DepthExceeded { depth: u8 },
+    BudgetExceeded { used: u32, total: u32 },
+    EvaluatorExhausted { rounds: u16 },
+    Permission { reason: String },
+    Provider { reason: String },
+    Storage { reason: String },
+}
+
+pub struct SprintContract {
+    pub scope: String,
+    pub done_definition: String,
+    pub out_of_scope: Vec<String>,
+    pub invariants: Vec<String>,
+}
+
+pub enum Verdict {
+    Pass { notes: Vec<String> },
+    Fail { reasons: Vec<String>, next_actions: Vec<String> },
+}
+
+pub struct ParentSessionContext {
+    pub session_id: SessionId,
+    pub session_store: Arc<dyn SessionStore>,
+    pub model: Arc<dyn ModelProvider>,
+    pub tools: Arc<ToolRegistry>,
+    pub permissions: Arc<dyn PermissionGate>,
+    pub scratchpad: DurableScratchpad,
 }
 
 pub struct SubagentContext {
+    pub parent_session: SessionId,
     pub session_store: Arc<dyn SessionStore>,
     pub model: Arc<dyn ModelProvider>,
     pub tools: Arc<ToolRegistry>,
     pub permissions: Arc<dyn PermissionGate>,
     pub hooks: Arc<HookRunner>,
-    pub parent_session: Option<SessionId>,
+    pub scratchpad: DurableScratchpad,
+    pub spec: SubagentSpec,
     pub depth: u8,
 }
+impl SubagentContext {
+    pub fn new(/* ... */) -> Self;
+    pub fn from_parent(parent: ParentSessionContext, spec: SubagentSpec) -> Self;
+    pub fn for_evaluator(parent: ParentSessionContext, draft: &Draft) -> Self;
+    pub fn allowed_tools(&self) -> Vec<String>;
+    pub fn on_turn_end(&mut self, usage: &Usage);
+    pub fn completion_threshold_reached(&self) -> bool;
+}
 
-pub struct OrchestratorWorkers { /* fan-out → fan-in with condensed summaries */ }
+pub struct OrchestratorWorkers { /* semaphore-backed worker orchestration */ }
 impl OrchestratorWorkers {
-    pub async fn run(&self, spec: SubagentSpec, input: String) -> Result<SubagentOutput, SubagentError>;
+    pub fn new(parent: ParentSessionContext, max_concurrency: usize) -> Self;
+    pub async fn run(&self, specs: Vec<SubagentSpec>, inputs: Vec<String>) -> Vec<Result<SubagentOutput, SubagentError>>;
+    pub async fn run_worker(&self, spec: SubagentSpec, input: impl Into<String>) -> Result<SubagentOutput, SubagentError>;
+    pub fn fan_in(outputs: Vec<SubagentOutput>) -> SubagentOutput;
+    pub fn into_task_fn(self) -> Arc<dyn TaskFn>;
+}
+
+pub struct Draft {
+    pub content: SubagentOutput,
+    pub metadata: serde_json::Value,
+}
+impl Draft {
+    pub fn strip_thinking(&self) -> Self;
+}
+
+#[async_trait]
+pub trait Planner: Send + Sync {
+    async fn expand(&self, prompt: &str) -> Result<SprintContract, SubagentError>;
+}
+
+#[async_trait]
+pub trait Generator: Send + Sync {
+    async fn run(
+        &self,
+        contract: &SprintContract,
+        feedback: Option<&Verdict>,
+    ) -> Result<Draft, SubagentError>;
+}
+
+#[async_trait]
+pub trait Evaluator: Send + Sync {
+    async fn judge(&self, draft: &Draft) -> Result<Verdict, SubagentError>;
 }
 
 pub struct GeneratorEvaluator { /* sprint-contract + loop until pass */ }
+impl GeneratorEvaluator {
+    pub fn new(
+        planner: Arc<dyn Planner>,
+        generator: Arc<dyn Generator>,
+        evaluator: Arc<dyn Evaluator>,
+        max_rounds: u16,
+    ) -> Self;
+    pub fn with_evaluator_parent(self, parent: ParentSessionContext) -> Self;
+    pub async fn run(&self, prompt: &str) -> Result<Draft, SubagentError>;
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+pub struct MockEvaluator { /* closure-backed verdict rubric */ }
+#[cfg(any(test, feature = "test-utils"))]
+impl MockEvaluator {
+    pub fn new<F>(rubric: F) -> Self
+    where
+        F: Fn(&Draft) -> Verdict + Send + Sync + 'static;
+}
+
+pub struct AgentRegistry { /* discovered subagent definitions */ }
+impl AgentRegistry {
+    pub fn discover(roots: &[PathBuf]) -> Result<Self, SubagentError>;
+    pub fn get(&self, name: &str) -> Option<&SubagentSpec>;
+    pub fn list(&self) -> Vec<&SubagentSpec>;
+}
+
+pub const FILE_REF_THRESHOLD: usize = 4_096;
 ```
 
 ### 2.11 `octopus-sdk-plugin`（Level 2）
@@ -1225,12 +1358,23 @@ pub struct GeneratorEvaluator { /* sprint-contract + loop until pass */ }
 **职责**：Plugin Manifest / Registry / Lifecycle 三层。
 
 ```rust
+pub const SDK_PLUGIN_API_VERSION: &str = "1.0.0";
+
+pub struct PluginCompat {
+    pub plugin_api: String,
+}
+
 pub struct PluginManifest {
     pub id: String,
     pub version: String,
     pub git_sha: Option<String>,
     pub compat: PluginCompat,
     pub components: Vec<PluginComponent>,
+    pub source: PluginSourceTag,
+}
+impl PluginManifest {
+    pub fn load_from_path(path: &Path) -> Result<Self, PluginError>;
+    pub fn validate(&self, manifest_path: &Path) -> Result<(), PluginError>;
 }
 
 pub enum PluginComponent {
@@ -1248,6 +1392,57 @@ pub enum PluginComponent {
     MemoryBackend(MemoryBackendDecl),
 }
 
+pub struct CommandDecl {
+    pub id: String,
+    pub path: PathBuf,
+    pub source: DeclSource,
+}
+
+pub struct AgentDecl {
+    pub id: String,
+    pub manifest_path: PathBuf,
+    pub source: DeclSource,
+}
+
+pub struct OutputStyleDecl {
+    pub id: String,
+    pub template_path: PathBuf,
+}
+
+pub struct McpServerDecl {
+    pub id: String,
+    pub manifest_path: PathBuf,
+}
+
+pub struct LspServerDecl {
+    pub id: String,
+    pub command: String,
+    pub source: DeclSource,
+}
+
+pub struct ChannelDecl {
+    pub id: String,
+    pub transport: String,
+    pub source: DeclSource,
+}
+
+pub struct ContextEngineDecl {
+    pub id: String,
+    pub entrypoint: PathBuf,
+}
+
+pub struct MemoryBackendDecl {
+    pub id: String,
+    pub entrypoint: PathBuf,
+}
+
+pub struct PluginDiscoveryConfig {
+    pub roots: Vec<PathBuf>,
+    pub allow: Vec<String>,
+    pub deny: Vec<String>,
+}
+pub fn default_roots() -> Vec<PathBuf>;
+
 pub struct PluginToolRegistration {
     pub decl: ToolDecl,
     pub tool: Arc<dyn Tool>,
@@ -1262,9 +1457,21 @@ pub struct PluginHookRegistration {
 
 pub struct PluginRegistry { /* 单向：plugin → registry ← core；tools/hooks 同时持有 runtime handle */ }
 impl PluginRegistry {
+    pub fn new() -> Self;
+    pub fn register_plugin(
+        &mut self,
+        manifest: PluginManifest,
+        source: PluginSourceTag,
+    ) -> Result<(), PluginError>;
     pub fn tools(&self) -> &ToolRegistry;
     pub fn hooks(&self) -> &HookRunner;
     pub fn get_snapshot(&self) -> PluginsSnapshot;
+}
+
+pub trait Plugin: Send + Sync {
+    fn manifest(&self) -> &PluginManifest;
+    fn source(&self) -> PluginSourceTag { PluginSourceTag::Local }
+    fn register(&self, api: &mut PluginApi<'_>) -> Result<(), PluginError>;
 }
 
 pub struct PluginApi<'a> { /* 持有 ToolRegistry / HookRunner + metadata stores */ }
@@ -1275,9 +1482,32 @@ impl PluginApi<'_> {
     pub fn register_model_provider_decl(&mut self, decl: ModelProviderDecl) -> Result<(), PluginError>;
 }
 
-pub struct PluginLifecycle { /* discover → enable → load → register */ }
+pub struct PluginLifecycle;
+impl PluginLifecycle {
+    pub fn run(
+        registry: &mut PluginRegistry,
+        config: &PluginDiscoveryConfig,
+        plugins: &[Box<dyn Plugin>],
+    ) -> Result<(), PluginError>;
+}
 
-pub enum PluginError { /* 22 型分类错误 */ }
+pub fn example_bundled_plugins() -> Vec<Box<dyn Plugin>>;
+
+pub enum PluginError {
+    PathNotFound { path: PathBuf },
+    ManifestParseError { cause: String },
+    ManifestValidationError { cause: String },
+    IncompatibleApi { actual: String, required: String },
+    PluginNotFound { plugin_id: String },
+    DependencyUnsatisfied { dependency: String },
+    DuplicateId { id: String },
+    PathEscape { path: PathBuf },
+    WorldWritable { path: PathBuf },
+    UnsupportedSource { source_kind: String },
+}
+impl PluginError {
+    pub const fn kind(&self) -> PluginErrorKind;
+}
 ```
 
 > W5 执行边界：`ToolDecl` / `HookDecl` 只用于 manifest、诊断、snapshot；真正接入 runtime 的是 `PluginToolRegistration` / `PluginHookRegistration`。`skills / model providers` 在 W5 仍先停留在 metadata + builder slot。
@@ -1459,7 +1689,7 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 8 | 2026-04-21 | `octopus-sdk-model::{SurfaceId, Surface}` | `packages/schema/src/catalog.ts#ModelSurfaceId` | provider-qualified surface id vs generic surface kind | SDK catalog 用 `anthropic.conversation` / `openai.responses` 这类 provider-qualified `SurfaceId` 保证全局唯一；schema 侧 `ModelSurfaceId` 仍是 `conversation / responses / files ...` 的通用枚举，缺少 provider 维度。 | `dual-carry` | `open` |
 | 9 | 2026-04-21 | `octopus-sdk-model::ModelRequest` | `contracts/openapi/src/**` / `packages/schema/src/**` runtime request shapes | `cache_breakpoints` / `cache_control` 缺口 | SDK canonical request 已公开 `cache_breakpoints` 与 `cache_control`，用于 prompt cache / context cache 控制；现有 OpenAPI/schema 请求体没有对应字段或等价结构。 | `align-openapi` | `open` |
 | 10 | 2026-04-21 | `octopus-sdk-tools::{ToolSpec, ToolCategory}` | `contracts/openapi/src/**` / `packages/schema/src/**` runtime tool catalog shapes | tool category enum 缺口 | W3 SDK 工具目录把 `read / write / network / shell / subagent / skill / meta` 作为 prompt cache 稳定排序键的一部分；现有 OpenAPI `RuntimeToolDefinition` 没有等价 `category` 枚举，也没有排序稳定性的契约文字。 | `align-openapi` | `open` |
-| 11 | 2026-04-21 | `octopus-sdk-contracts::{SessionEvent::SessionStarted, SessionEvent::SessionPluginsSnapshot, PluginsSnapshot}` / `octopus-sdk-session::SessionSnapshot` | `contracts/openapi/src/components/schemas/runtime.yaml` / `packages/schema/src/**` runtime session shapes | `plugins_snapshot` 缺口 | W5 子代理/插件周要求 plugin session 快照走显式双分支：优先由首事件 `SessionStarted` 携带，若首事件无法扩面则退回紧随其后的 `SessionPluginsSnapshot`；两条分支都必须能投影出 `SessionSnapshot.plugins_snapshot`，以保证 replay 可复现插件集合。现有 OpenAPI/schema 侧没有等价字段、次事件或插件快照对象。 | `align-openapi` | `open` |
+| 11 | 2026-04-21 | `octopus-sdk-contracts::{SessionEvent::SessionStarted, SessionEvent::SessionPluginsSnapshot, PluginsSnapshot}` / `octopus-sdk-session::SessionSnapshot` | `contracts/openapi/src/components/schemas/runtime.yaml` / `packages/schema/src/**` runtime session shapes | `plugins_snapshot` 缺口 | W5 子代理/插件周要求 plugin session 快照走显式双分支：优先由首事件 `SessionStarted` 携带，若首事件无法扩面则退回紧随其后的 `SessionPluginsSnapshot`；两条分支都必须能投影出 `SessionSnapshot.plugins_snapshot`，以保证 replay 可复现插件集合。SDK store/replay 侧已由 `plugins_snapshot_stability` 合同测试锁定；OpenAPI/schema 侧仍缺等价字段、次事件或插件快照对象。 | `align-openapi` | `open` |
 | 12 | 2026-04-21 | `octopus-sdk-mcp::{McpTool, McpPrompt, McpResource, McpToolResult}` | `contracts/openapi/src/**` / `packages/schema/src/**` runtime transport/tool shapes | MCP-native DTO 缺口 | W3 已冻结 `tools/list` / `prompts/list` / `resources/list` / `tools/call` 的 SDK-native DTO；现有 OpenAPI/schema 仍只有 runtime/session 侧 envelope，没有直接承载 MCP 目录与结果的对外契约。 | `align-openapi` | `open` |
 | 13 | 2026-04-21 | `octopus-sdk-contracts::{ToolCallRequest, PermissionMode, PermissionOutcome}` | `contracts/openapi/src/components/schemas/runtime.yaml#RuntimePermissionDecision`（现状） | permission handshake 形状不一致 | W3 SDK 使用 `ToolCallRequest + PermissionMode + PermissionOutcome(Allow/Deny/AskApproval)` 作为 tools/permissions 的最小握手面；现有 runtime schema 仍以 adapter 侧 decision/projection 字段为主，未公开等价调用请求与审批 prompt 契约。 | `align-openapi` | `open` |
 | 14 | 2026-04-21 | `octopus-sdk-tools::partition_tool_calls` | `docs/sdk/03-tool-system.md §3.2` / future runtime orchestration contract | `partition_tool_calls.resource_bucket` 延后 | W3 只冻结"工具级"并发分区：读工具按 `is_concurrency_safe` 合批，写工具串行；资源级串行桶 `partition_tool_calls.resource_bucket` 明确延到 W4，由 `HookRunner / PermissionPolicy` 外层兜底，当前无需改 OpenAPI。 | `no-op` | `open` |
@@ -1574,3 +1804,9 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 2026-04-21 | W4 Weekly Gate：workspace `build/clippy/test` 全绿；`§2.6 / §2.7 / §2.8 / §2.9` 的实现与 W4 出口状态对齐，Week 4 状态收口为 `done` | Codex |
 | 2026-04-21 | W5 审计追补：`ModelProviderDecl.provider_ref` 与 `SubagentSpec.model_role` 明确为 Level 0 opaque key，避免 contracts 直接引用 `ProviderId / ModelRole`；`§2.9` 补记 W5 hook 来源优先级 `session > project > plugin > workspace > defaults` | Codex |
 | 2026-04-21 | W5 三轮审计追补：`§2.1` 把 `plugins_snapshot` 调整为“首事件优先 + `SessionPluginsSnapshot` fallback”的显式双分支；`§2.2` 补登记 `append_session_started(..., Option<PluginsSnapshot>)` 与 `new_child_session(...)`；`§5` 的 session 差异描述同步改成双分支 replay 合同 | Codex |
+| 2026-04-21 | W5 Task 7：`§2.11` 回填 `SDK_PLUGIN_API_VERSION / PluginCompat / PluginManifest / PluginComponent` 12 变体、8 个最小 decl、`PluginDiscoveryConfig::default_roots()` 与 `PluginError` 10 型；Manifest/security/compat 合同与当前实现对齐 | Codex |
+| 2026-04-21 | W5 Task 8：`§2.11` 回填 `PluginRegistry::{new,register_plugin,get_snapshot}`、`Plugin`、`PluginApi` 与 `PluginLifecycle::run`；明确 tools/hooks 走 runtime registration，skills/model providers 仍停在 metadata | Codex |
+| 2026-04-21 | W5 Task 9：`§2.11` 把 `PluginLifecycle::run` 明确为 `discover/config + supplied plugins` 双输入，并登记 `example_bundled_plugins()`；bundled fixture、deny 过滤和 4 条错误路径合同与当前实现对齐 | Codex |
+| 2026-04-21 | W5 Task 10：`§2.2` 明确 `plugins_snapshot` 的 helper/store/replay 目标态已经落到双分支实现；`§5` 把差异项改成“SDK store/replay 已落地、OpenAPI/schema 仍待对齐”的状态描述，并把 `plugins_snapshot_stability` 作为回放合同锚点 | Codex |
+| 2026-04-21 | W5 Weekly Gate 收尾：`§2.10 / §2.11 / §5` 的 W5 公共面与合同差异登记完成收口；`plugins_snapshot` 双分支 replay、四源合一守护与 legacy 退役映射已对齐到周收尾状态 | Codex |
+| 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |

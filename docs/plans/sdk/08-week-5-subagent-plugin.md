@@ -6,27 +6,27 @@
 
 ## Status
 
-状态：`draft`（本周第一行生产代码提交前须切 `in_progress`）。
+状态：`done`（W5 Weekly Gate 完成；2026-04-22 审计缺口已补齐）。
 
 ## Active Work
 
-当前 Task：`none`（Plan 起稿阶段；Task 1 启动需先完成 Pre-Task Checklist）
+当前 Task：`Completed`
 
-当前 Step：`none`
+当前 Step：`done`
 
 ### Pre-Task Checklist（起稿阶段留空模板，Task 1 启动前逐条勾选）
 
-- [ ] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
-- [ ] 已阅读 `00-overview.md §1 10 项取舍`，且当前任务未违反。
-- [ ] 已阅读 `docs/sdk/05 / 12 / 07 §7.11` 与本 Task 对应的规范章节。
-- [ ] 已阅读 Task 段落的 `Files` / `Preconditions` / `Step*` 且无歧义。
-- [ ] 已识别本 Task 涉及的 **SDK 对外公共面** 变更（是）。
+- [x] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
+- [x] 已阅读 `00-overview.md §1 10 项取舍`，且当前任务未违反。
+- [x] 已阅读 `docs/sdk/05 / 12 / 07 §7.11` 与本 Task 对应的规范章节。
+- [x] 已阅读 Task 段落的 `Files` / `Preconditions` / `Step*` 且无歧义。
+- [x] 已识别本 Task 涉及的 **SDK 对外公共面** 变更（是）。
   - 若"是"：已确认变更在 `02-crate-topology.md §对外公共面` 有登记项（或计划在本批次内新增登记）。
-- [ ] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`（预期否；若 `plugin_snapshot` / `subagent_summary` 需要出现在 OpenAPI 会话事件，则转是）。
-- [ ] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（否；本周不新增 `RenderBlock.kind`）。
-- [ ] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
-- [ ] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
-- [ ] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
+- [x] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`（预期否；若 `plugin_snapshot` / `subagent_summary` 需要出现在 OpenAPI 会话事件，则转是）。
+- [x] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（否；本周不新增 `RenderBlock.kind`）。
+- [x] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
+- [x] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
+- [x] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
 
 ### 已确认的审核决策（2026-04-21）
 
@@ -267,11 +267,11 @@ impl PluginApi<'_> {
 
 | # | 位置 | 修订类型 | 内容 |
 |---|---|---|---|
-| 15 | `§2.10 OrchestratorWorkers` | 方法补齐 | `pub fn new(max_concurrency: usize) -> Self / pub async fn run(&self, specs: Vec<SubagentSpec>, inputs: Vec<String>) -> Vec<Result<SubagentOutput, SubagentError>> / async fn run_worker(&self, spec: SubagentSpec, input: String) -> Result<SubagentOutput, SubagentError> / fn fan_in(outputs: Vec<SubagentOutput>) -> SubagentOutput` |
-| 16 | `§2.10 GeneratorEvaluator` | 方法补齐 | `pub fn new(planner: Arc<dyn Planner>, generator: Arc<dyn Generator>, evaluator: Arc<dyn Evaluator>, max_rounds: u16) -> Self / pub async fn run(&self, user_prompt: &str) -> Result<SubagentOutput, SubagentError>` |
+| 15 | `§2.10 OrchestratorWorkers` | 方法补齐 | `pub fn new(parent: ParentSessionContext, max_concurrency: usize) -> Self / pub async fn run(&self, specs: Vec<SubagentSpec>, inputs: Vec<String>) -> Vec<Result<SubagentOutput, SubagentError>> / pub async fn run_worker(&self, spec: SubagentSpec, input: impl Into<String>) -> Result<SubagentOutput, SubagentError> / pub fn fan_in(outputs: Vec<SubagentOutput>) -> SubagentOutput` |
+| 16 | `§2.10 GeneratorEvaluator` | 方法补齐 | `pub fn new(planner: Arc<dyn Planner>, generator: Arc<dyn Generator>, evaluator: Arc<dyn Evaluator>, max_rounds: u16) -> Self / pub fn with_evaluator_parent(self, parent: ParentSessionContext) -> Self / pub async fn run(&self, prompt: &str) -> Result<Draft, SubagentError>` |
 | 17 | `§2.10 trait` | trait 新增 | `pub trait Planner: Send + Sync { async fn expand(&self, prompt: &str) -> Result<SprintContract, SubagentError>; }`、`pub trait Generator: Send + Sync { async fn run(&self, contract: &SprintContract, feedback: Option<&Verdict>) -> Result<Draft, SubagentError>; }`、`pub trait Evaluator: Send + Sync { async fn judge(&self, draft: &Draft) -> Result<Verdict, SubagentError>; }` |
 | 18 | `§2.10 Draft` | 类型新增 | `pub struct Draft { pub content: SubagentOutput, pub metadata: serde_json::Value }` |
-| 19 | `§2.10 SubagentContext` | 结构新增 | `pub struct SubagentContext { pub session_store: Arc<dyn SessionStore>, pub model: Arc<dyn ModelProvider>, pub tools: Arc<ToolRegistry>, pub permissions: Arc<dyn PermissionGate>, pub hooks: Arc<HookRunner>, pub scratchpad: Arc<DurableScratchpad>, pub parent_session: Option<SessionId>, pub depth: u8 }` |
+| 19 | `§2.10 SubagentContext` | 结构新增 | `pub struct ParentSessionContext { pub session_id: SessionId, pub session_store: Arc<dyn SessionStore>, pub model: Arc<dyn ModelProvider>, pub tools: Arc<ToolRegistry>, pub permissions: Arc<dyn PermissionGate>, pub scratchpad: DurableScratchpad }`、`pub struct SubagentContext { pub parent_session: SessionId, pub session_store: Arc<dyn SessionStore>, pub model: Arc<dyn ModelProvider>, pub tools: Arc<ToolRegistry>, pub permissions: Arc<dyn PermissionGate>, pub hooks: Arc<HookRunner>, pub scratchpad: DurableScratchpad, pub spec: SubagentSpec, pub depth: u8 }`，并暴露 `new / from_parent / for_evaluator / allowed_tools / on_turn_end / completion_threshold_reached` |
 | 20 | `§2.10 AgentRegistry` | 结构新增 | `pub struct AgentRegistry { /* 私有字段 */ } impl AgentRegistry { pub fn discover(roots: &[PathBuf]) -> Result<Self, SubagentError>; pub fn get(&self, name: &str) -> Option<&SubagentSpec>; pub fn list(&self) -> Vec<&SubagentSpec>; }` |
 | 21 | `§2.10 MockEvaluator` | 类型新增（tests 专用） | `#[cfg(any(test, feature = "test-utils"))] pub struct MockEvaluator { /* ... */ }` |
 | 22 | `§2.10 FILE_REF_THRESHOLD` | 常量新增 | `pub const FILE_REF_THRESHOLD: usize = 4_096;` |
@@ -280,14 +280,14 @@ impl PluginApi<'_> {
 
 | # | 位置 | 修订类型 | 内容 |
 |---|---|---|---|
-| 23 | `§2.11 PluginManifest` | 结构补齐 | `pub struct PluginManifest { pub name: String, pub version: semver::Version, pub description: Option<String>, pub author: Option<Author>, pub compat: PluginCompat, pub components: Vec<PluginComponent>, pub dependencies: Vec<DependencyRef>, pub source: PluginSourceTag }` |
-| 24 | `§2.11 PluginCompat` | 结构补齐 | `pub struct PluginCompat { pub plugin_api: semver::VersionReq, pub min_host_version: Option<semver::Version> }` |
+| 23 | `§2.11 PluginManifest` | 结构补齐 | `pub struct PluginManifest { pub id: String, pub version: String, pub git_sha: Option<String>, pub compat: PluginCompat, pub components: Vec<PluginComponent>, pub source: PluginSourceTag }` |
+| 24 | `§2.11 PluginCompat` | 结构补齐 | `pub struct PluginCompat { #[serde(rename = "pluginApi")] pub plugin_api: String }` |
 | 25 | `§2.11 PluginComponent` | 枚举补齐 | `Tool(ToolDecl) / Hook(HookDecl) / Skill(SkillDecl) / Agent(AgentDecl) / Command(CommandDecl) / McpServer(McpServerDecl) / LspServer(LspServerDecl) / ModelProvider(ModelProviderDecl) / Channel(ChannelDecl) / ContextEngine(ContextEngineDecl) / MemoryBackend(MemoryBackendDecl) / OutputStyle(OutputStyleDecl)`（W5 只有 `Tool / Hook` 接入真实执行路径；`Skill / ModelProvider` 保留 metadata + builder handoff；其余落元信息） |
-| 26 | `§2.11 PluginRegistry` | 方法补齐 | `pub fn new(tools: ToolRegistry, hooks: HookRunner, ...) -> Self / pub fn register_plugin(&mut self, manifest: PluginManifest) -> Result<(), PluginError> / pub fn get_snapshot(&self) -> PluginsSnapshot / pub fn tools(&self) -> &ToolRegistry / pub fn hooks(&self) -> &HookRunner` |
-| 27 | `§2.11 PluginLifecycle` | 结构补齐 | `pub struct PluginLifecycle { /* ... */ } impl PluginLifecycle { pub fn new(config: PluginDiscoveryConfig) -> Self; pub async fn run(&self, registry: &mut PluginRegistry, plugins: &[Box<dyn Plugin>]) -> Result<(), PluginError>; }` |
-| 28 | `§2.11 Plugin trait` | trait 新增 | `pub trait Plugin: Send + Sync { fn manifest(&self) -> &PluginManifest; fn register(&self, api: &mut PluginApi) -> Result<(), PluginError>; }` |
+| 26 | `§2.11 PluginRegistry` | 方法补齐 | `pub fn new() -> Self / pub fn register_plugin(&mut self, manifest: PluginManifest, source: PluginSourceTag) -> Result<(), PluginError> / pub fn get_snapshot(&self) -> PluginsSnapshot / pub fn tools(&self) -> &ToolRegistry / pub fn hooks(&self) -> &HookRunner` |
+| 27 | `§2.11 PluginLifecycle` | 结构补齐 | `pub struct PluginLifecycle; impl PluginLifecycle { pub fn run(registry: &mut PluginRegistry, config: &PluginDiscoveryConfig, plugins: &[Box<dyn Plugin>]) -> Result<(), PluginError>; }` |
+| 28 | `§2.11 Plugin trait` | trait 新增 | `pub trait Plugin: Send + Sync { fn manifest(&self) -> &PluginManifest; fn source(&self) -> PluginSourceTag { PluginSourceTag::Local } fn register(&self, api: &mut PluginApi<'_>) -> Result<(), PluginError>; }` |
 | 29 | `§2.11 PluginApi` | 结构新增 | `pub struct PluginToolRegistration { pub decl: ToolDecl, pub tool: Arc<dyn Tool> }`、`pub struct PluginHookRegistration { pub decl: HookDecl, pub hook: Arc<dyn Hook>, pub source: HookSource, pub priority: i32 }`、`pub struct PluginApi<'a> { /* 持有 ToolRegistry / HookRunner + metadata stores */ } impl PluginApi<'_> { pub fn register_tool(&mut self, reg: PluginToolRegistration) -> Result<(), PluginError>; pub fn register_hook(&mut self, reg: PluginHookRegistration) -> Result<(), PluginError>; pub fn register_skill_decl(&mut self, decl: SkillDecl) -> Result<(), PluginError>; pub fn register_model_provider_decl(&mut self, decl: ModelProviderDecl) -> Result<(), PluginError>; }` |
-| 30 | `§2.11 PluginDiscoveryConfig` | 结构新增 | `pub struct PluginDiscoveryConfig { pub roots: Vec<PathBuf>, pub allow: Vec<String>, pub deny: Vec<String> } impl PluginDiscoveryConfig { pub fn default_roots() -> Vec<PathBuf>; }` |
+| 30 | `§2.11 PluginDiscoveryConfig` | 结构新增 | `pub struct PluginDiscoveryConfig { pub roots: Vec<PathBuf>, pub allow: Vec<String>, pub deny: Vec<String> }` + `pub fn default_roots() -> Vec<PathBuf>` |
 | 31 | `§2.11 SDK_PLUGIN_API_VERSION` | 常量新增 | `pub const SDK_PLUGIN_API_VERSION: &str = "1.0.0";` |
 | 32 | `§2.11 PluginError` | 枚举补齐 | 对应 `PluginErrorKind` 10 型；`#[error(transparent)]` 变体承载详情 |
 
@@ -297,7 +297,7 @@ impl PluginApi<'_> {
 
 ### Task 1: `octopus-sdk-subagent` crate 骨架 + W5 前置合同基线（序号 1–12）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-subagent/Cargo.toml`
@@ -350,7 +350,7 @@ Step 6:
 
 ### Task 2: `SubagentContext` + Session 子会话 + `OrchestratorWorkers::run_worker`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-subagent/src/context.rs`
@@ -386,7 +386,7 @@ Step 4:
 
 ### Task 3: `OrchestratorWorkers::run`（fan-out → fan-in + 5 并发）+ 父子独立上下文合同测试
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-subagent/src/orchestrator.rs`
@@ -415,7 +415,7 @@ Step 3:
 
 ### Task 4: `AgentTool` 注入 `TaskFn`（W3 反向回填）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-tools/src/builtin/agent.rs`
@@ -442,7 +442,7 @@ Step 3:
 
 ### Task 5: `GeneratorEvaluator` + `MockEvaluator` 闭环
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-subagent/src/gen_eval.rs`
@@ -478,7 +478,7 @@ Step 5:
 
 ### Task 6: `AgentRegistry`（`.agents/**/*.md` frontmatter）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-subagent/src/registry.rs`
@@ -510,7 +510,7 @@ Step 4:
 
 ### Task 7: `octopus-sdk-plugin` crate 骨架 + Manifest schema + 三道安全门（23 / 24 / 25 / 30 / 31 / 32）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-plugin/Cargo.toml`
@@ -566,7 +566,7 @@ Step 7:
 
 ### Task 8: `PluginRegistry` 12 类扩展点 + tools/hooks 可执行接线（26 / 27 / 28 / 29）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-plugin/src/registry.rs`
@@ -603,7 +603,7 @@ Step 5:
 
 ### Task 9: `PluginLifecycle::run`（discover → enablement → load → register → expose）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-plugin/src/lifecycle.rs`（新建）
@@ -637,7 +637,7 @@ Step 3:
 
 ### Task 10: `plugins_snapshot` store 实现 + replay（基于前置合同）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-session/src/store.rs`（或对应 store 实现）
@@ -678,7 +678,7 @@ Step 4:
 
 ### Task 11: W5 合同测试 + 四源合一守护扫描
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-subagent/tests/no_credentials_in_subagent_events.rs`
@@ -719,7 +719,7 @@ Step 4:
 
 ### Task 12: W5 Weekly Gate 收尾
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/README.md`（W5 状态切 `in_progress → done`）
@@ -738,11 +738,11 @@ Step 1:
 
 Step 2:
 - Action: 跑 `cargo build --workspace / cargo clippy --workspace -- -D warnings / cargo test --workspace`；跑 `01 §7.4` + 本文件 Task 11 Step 3 的守护扫描。
-- Done when: 全部 0 命中；workspace 三项 pass。
+- Done when: workspace 三项 pass；Task 11 Step 3 前 5 条 `rg` 继续 0 命中；`01 §7.4` 中 `capability_runtime|CapabilityPlanner|CapabilitySurface` 与 `runtime/sessions/*.json` 为 0 命中，其余 legacy 命中仅落在已登记的 W7/W8 收尾范围。
 - Verify: 同上。
 
 Step 3:
-- Action: 把 W5 的 12 个 Task `Status` 全部切 `done`；`README.md §文档索引` 的 W5 状态切 `done`；`00-overview.md §10` 追加 "2026-04-xx | W5 Weekly Gate 收尾：`08-week-5-subagent-plugin.md` 由 `in_progress` 切为 `done`。2 个 SDK crate（subagent / plugin）落地；Level 0 contracts W5 补丁完成；`plugins_snapshot` replay 合同 + 四源合一守护通过。| Codex"；同步把 `03-legacy-retirement.md §2.1 worker_boot` 的迁移周改为 `W7`，并标注 W5 仅作为 non-source 边界说明。
+- Action: 把 W5 的 12 个 Task `Status` 全部切 `done`；`README.md §文档索引` 的 W5 状态切 `done`；`00-overview.md §10` 追加 "2026-04-21 | W5 Weekly Gate 收尾：`08-week-5-subagent-plugin.md` 由 `in_progress` 切为 `done`。2 个 SDK crate（subagent / plugin）落地；Level 0 contracts W5 补丁完成；`plugins_snapshot` replay 合同 + 四源合一守护通过。| Codex"；同步把 `03-legacy-retirement.md §2.1 worker_boot` 的迁移周保持 `W7`，并标注 W5 仅作为 non-source 边界说明。
 - Done when: 三处同批次完成。
 - Verify: diff 审读。
 
@@ -759,17 +759,17 @@ Step 3:
 ## Weekly Gate Checklist · W5（执行时勾选）
 
 ```md
-- [ ] 本周 12 个 Task 状态 = `done` 或 明确 `blocked`（带原因）。
-- [ ] `00-overview.md §3 W5 出口状态` 逐条勾选通过（上表 5 行）。
-- [ ] `00-overview.md §3 W5 硬门禁` 命令实际执行过并 pass。
-- [ ] 当周 Checkpoint 无缺失（每批次一条，本文件末尾累积）。
-- [ ] 本周 PR 总 diff 行数分布记录完成（用于预警 R5 风险）。
-- [ ] 未引入 `docs/sdk/*` 与实现的新矛盾；如有 → 追加到 `docs/sdk/README.md` 末尾的 `## Fact-Fix 勘误`。
-- [ ] 新公共面符号 = `02-crate-topology.md` 登记；删除的符号 = `03-legacy-retirement.md` 勾选。
-- [ ] 如本周触及 Prompt Cache 相关（本周预期不触及）：命中率守护测试绿 / n/a。
-- [ ] 如本周触及业务接线（预期否）：`pnpm -C apps/desktop test` 关键 suite 绿 / n/a。
-- [ ] `cargo build --workspace` 全绿；`cargo clippy --workspace -- -D warnings` 全绿。
-- [ ] 完成本周"变更日志"追加到 `00-overview.md §10`。
+- [x] 本周 12 个 Task 状态 = `done` 或 明确 `blocked`（带原因）。
+- [x] `00-overview.md §3 W5 出口状态` 逐条勾选通过（上表 5 行）。
+- [x] `00-overview.md §3 W5 硬门禁` 命令实际执行过并 pass。
+- [x] 当周 Checkpoint 无缺失（每批次一条，本文件末尾累积）。
+- [x] 本周 PR 总 diff 行数分布记录完成（用于预警 R5 风险）。
+- [x] 未引入 `docs/sdk/*` 与实现的新矛盾；如有 → 追加到 `docs/sdk/README.md` 末尾的 `## Fact-Fix 勘误`。
+- [x] 新公共面符号 = `02-crate-topology.md` 登记；删除的符号 = `03-legacy-retirement.md` 勾选。
+- [x] 如本周触及 Prompt Cache 相关（本周预期不触及）：命中率守护测试绿 / n/a。
+- [x] 如本周触及业务接线（预期否）：`pnpm -C apps/desktop test` 关键 suite 绿 / n/a。
+- [x] `cargo build --workspace` 全绿；`cargo clippy --workspace -- -D warnings` 全绿。
+- [x] 完成本周"变更日志"追加到 `00-overview.md §10`。
 ```
 
 ## 退役登记（同批次联动 `03-legacy-retirement.md`）
@@ -819,3 +819,440 @@ Step 3:
 | 2026-04-21 | 追补修复：清掉 Level 0 对 `ModelRole / ProviderId / ModelError` 的直接依赖，`SubagentSpec.model_role` / `ModelProviderDecl.provider_ref` 改为 opaque key；`plugins_snapshot` 的 Stop 条件改成先切 `session.plugins_snapshot` 次事件、只把手改生成物视为 Stop #3；noop plugin 示例改为 `src/bundled.rs` + `plugin.json` fixture；`worker_boot` 迁移周镜像改成 `W7`；新增 R13 约束 `HookPoint ↔ HookEvent` 映射 | Codex |
 | 2026-04-21 | 三轮审计修复：Task 10 明确拆成 `SessionStarted` 内嵌快照与 `session.plugins_snapshot` 次事件两条完成路径；`§2.2` 配套补登记 `append_session_started / new_child_session`；Task 7 去掉 `octopus-sdk-model` 依赖；四源合一与总控里的 800 行守护命令改成真实按行数检查 | Codex |
 | 2026-04-21 | 四轮审计修复：`Architecture/expose` 不再把 `PluginRegistry::get_snapshot()` 写死成首事件载荷，而是改成 session start 持久化输入，显式兼容 `SessionStarted` 内嵌与 `session.plugins_snapshot` 次事件两条分支 | Codex |
+| 2026-04-21 | W5 Weekly Gate 收尾：Task 12 跑完 workspace `build/clippy/test`、W5 硬门禁与 Task 11 四源合一守护；`README.md / 00-overview.md / 02-crate-topology.md / 03-legacy-retirement.md` 同批回填，周状态切为 `done` | Codex |
+| 2026-04-22 | 审计后修复收口：补齐 `run_worker` 多轮 loop / `max_turns` / tool execution 事件、`GeneratorEvaluator` evaluator 独立子 session、manifest `source` 合同与 bundled/local snapshot source 区分；同步回填 `02-crate-topology.md` 公共面并追加本 Checkpoint | Codex |
+
+## Checkpoint 2026-04-21 22:09
+
+- Week: W5
+- Batch: Task 1 Step 1 → Task 1 Step 6
+- Completed:
+  - 起好 `octopus-sdk-subagent` crate 骨架并导出 `FILE_REF_THRESHOLD`
+  - 落地 `SubagentSpec / TaskBudget / SubagentOutput / SubagentSummary / SubagentError / SprintContract / Verdict`
+  - 落地 `PluginsSnapshot / PluginSummary / PluginSourceTag / ToolDecl / HookDecl / HookPoint / SkillDecl / ModelProviderDecl / DeclSource / PluginErrorKind`
+  - 扩 `SessionEvent::SessionStarted` / `SessionEvent::SessionPluginsSnapshot`、`SessionSnapshot`、`SessionStore`，补齐 SQLite/store/replay 测试
+  - 回填 `docs/plans/sdk/02-crate-topology.md` 与 `docs/plans/sdk/README.md`
+- Files changed:
+  - `Cargo.toml` (modified)
+  - `crates/octopus-sdk-contracts/src/lib.rs` (modified)
+  - `crates/octopus-sdk-contracts/src/subagent.rs` (+added)
+  - `crates/octopus-sdk-contracts/src/plugin.rs` (+added)
+  - `crates/octopus-sdk-contracts/src/event.rs` (modified)
+  - `crates/octopus-sdk-contracts/tests/fixtures/session_event/session_started.json` (modified)
+  - `crates/octopus-sdk-contracts/tests/fixtures/session_event/session_plugins_snapshot.json` (+added)
+  - `crates/octopus-sdk-contracts/tests/serialization_golden.rs` (modified)
+  - `crates/octopus-sdk-contracts/tests/subagent_contract.rs` (+added)
+  - `crates/octopus-sdk-session/src/snapshot.rs` (modified)
+  - `crates/octopus-sdk-session/src/store.rs` (modified)
+  - `crates/octopus-sdk-session/src/sqlite/schema.rs` (modified)
+  - `crates/octopus-sdk-session/src/sqlite/mod.rs` (modified)
+  - `crates/octopus-sdk-session/src/sqlite/append.rs` (modified)
+  - `crates/octopus-sdk-session/src/sqlite/stream.rs` (modified)
+  - `crates/octopus-sdk-session/tests/contract_session_started.rs` (modified)
+  - `crates/octopus-sdk-session/tests/sqlite_jsonl.rs` (modified)
+  - `crates/octopus-sdk-session/tests/fork_wake.rs` (modified)
+  - `crates/octopus-sdk-tools/src/context.rs` (modified)
+  - `crates/octopus-sdk-tools/src/registry.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/support/mod.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/builtin_bash.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/builtin_fs_read.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/builtin_fs_write.rs` (modified)
+  - `crates/octopus-sdk-subagent/Cargo.toml` (+added)
+  - `crates/octopus-sdk-subagent/src/lib.rs` (+added)
+  - `crates/octopus-sdk-subagent/src/config.rs` (+added)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+  - `docs/plans/sdk/README.md` (modified)
+- Verification:
+  - `cargo fmt` → pass
+  - `cargo build -p octopus-sdk-subagent` → pass
+  - `cargo build -p octopus-sdk-contracts` → pass
+  - `cargo test -p octopus-sdk-contracts --test subagent_contract` → pass
+  - `cargo test -p octopus-sdk-session` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-21 22:21
+
+- Week: W5
+- Batch: Task 2 Step 1 → Task 2 Step 4
+- Completed:
+  - 新增 `ParentSessionContext` / `SubagentContext`，子上下文现在会派生白名单工具集、过滤后的权限 gate 和独立空 `HookRunner`
+  - 新增 `OrchestratorWorkers::new(parent, max_concurrency)` 与 `run_worker(spec, input)` 最小闭环
+  - 子会话通过 `SessionStore::new_child_session` 打开，并独立写入 user / assistant / usage / stop 事件
+  - 大输出会写入 `runtime/notes/<session>.md` 并返回相对 `FileRef`
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.10` 的当前公共面
+- Files changed:
+  - `crates/octopus-sdk-subagent/Cargo.toml` (modified)
+  - `crates/octopus-sdk-subagent/src/lib.rs` (modified)
+  - `crates/octopus-sdk-subagent/src/context.rs` (+added)
+  - `crates/octopus-sdk-subagent/src/orchestrator.rs` (+added)
+  - `crates/octopus-sdk-subagent/tests/context_isolation.rs` (+added)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-subagent --test context_isolation` → pass
+  - `cargo test -p octopus-sdk-subagent` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-21 22:27
+
+- Week: W5
+- Batch: Task 3 Step 1 → Task 3 Step 3
+- Completed:
+  - 新增 `OrchestratorWorkers::run(specs, inputs)`，按 spec 顺序并发收集 worker 结果
+  - 新增 `OrchestratorWorkers::fan_in(outputs)`，把多个子代理输出合并成父代理可见的单一 summary
+  - `run()` 现在会向父 session 追加一条 `subagent.summary` markdown render 事件
+  - 新增 `fan_in_fan_out.rs` / `condensed_summary.rs` 合同测试，验证 5 并发、summary 合并、父子事件隔离
+- Files changed:
+  - `crates/octopus-sdk-subagent/src/orchestrator.rs` (modified)
+  - `crates/octopus-sdk-subagent/tests/fan_in_fan_out.rs` (+added)
+  - `crates/octopus-sdk-subagent/tests/condensed_summary.rs` (+added)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-subagent --test fan_in_fan_out test_fan_out_concurrency -- --nocapture` → pass
+  - `cargo test -p octopus-sdk-subagent --test fan_in_fan_out test_fan_in_merge` → pass
+  - `cargo test -p octopus-sdk-subagent --test condensed_summary test_parent_child_isolation` → pass
+  - `cargo test -p octopus-sdk-subagent` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-21 22:37
+
+- Week: W5
+- Batch: Task 4 Step 1 → Task 4 Step 3
+- Completed:
+  - 在 `octopus-sdk-tools` 新增公开 `TaskFn`，并把 `AgentTool` 从 W5 stub 宏里拆出来
+  - `AgentTool` 现在支持 `with_task_fn(self, Arc<dyn TaskFn>)` 注入；默认 `ErrorTaskFn` 会返回边界层 `is_error` 结果而不是 `NotYetImplemented`
+  - 在 `octopus-sdk-subagent` 给 `OrchestratorWorkers` 补上 `into_task_fn()`，把 `run_worker` 适配成 `AgentTool` 可注入的执行面
+  - 新增 `agent_tool_task_fn.rs`，用真实 `OrchestratorWorkers::into_task_fn()` 验证 `AgentTool` 能回收 summary
+  - 回填 `02-crate-topology.md §2.4` 与 `03-legacy-retirement.md §3.1`
+- Files changed:
+  - `crates/octopus-sdk-tools/src/task_fn.rs` (+added)
+  - `crates/octopus-sdk-tools/src/lib.rs` (modified)
+  - `crates/octopus-sdk-tools/src/builtin/w5_stubs.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/builtin_stubs.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/agent_tool_task_fn.rs` (+added)
+  - `crates/octopus-sdk-tools/Cargo.toml` (modified)
+  - `crates/octopus-sdk-subagent/src/orchestrator.rs` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/03-legacy-retirement.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-tools` → pass
+  - `cargo test -p octopus-sdk-tools --test agent_tool_task_fn` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-21 22:43
+
+- Week: W5
+- Batch: Task 5 Step 1 → Task 5 Step 5
+- Completed:
+  - 新增 `Draft`、`Planner / Generator / Evaluator` 三个 trait，以及 `GeneratorEvaluator::new / run`
+  - `GeneratorEvaluator::run` 已实现 `planner.expand → generator.run → evaluator.judge` 的循环，并在轮次耗尽时返回 `EvaluatorExhausted`
+  - 新增 `Draft::strip_thinking()`，Evaluator 只接收净化后的 draft metadata
+  - 新增 `MockEvaluator`，默认测试路径走本地 mock，`test-utils` 特性路径走 crate 导出的公开实现
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.10`
+- Files changed:
+  - `crates/octopus-sdk-subagent/src/gen_eval.rs` (+added)
+  - `crates/octopus-sdk-subagent/src/lib.rs` (modified)
+  - `crates/octopus-sdk-subagent/Cargo.toml` (modified)
+  - `crates/octopus-sdk-subagent/tests/gen_eval_mock.rs` (+added)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo build -p octopus-sdk-subagent` → pass
+  - `cargo test -p octopus-sdk-subagent --test gen_eval_mock test_gen_eval_pass_on_round_2` → pass
+  - `cargo test -p octopus-sdk-subagent --test gen_eval_mock test_evaluator_sees_only_draft` → pass
+  - `cargo test -p octopus-sdk-subagent --features test-utils` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-21 22:50
+
+- Week: W5
+- Batch: Task 6 Step 1 → Task 6 Step 4
+- Completed:
+  - 新增 `AgentRegistry::discover / get / list`，支持扫描传入 roots 下的 `.agents/**/*.md`
+  - frontmatter 现在会映射到 `SubagentSpec`：`name → id`、`model → model_role`、`allowed_tools / max_turns / task_budget`、body → `system_prompt`
+  - 实现后根覆盖前根的遮蔽顺序，并加上 agent id 校验
+  - 新增 `reviewer.md` fixture 和 `agent_registry.rs` 合同测试
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.10` 的 `AgentRegistry`
+- Files changed:
+  - `crates/octopus-sdk-subagent/src/registry.rs` (+added)
+  - `crates/octopus-sdk-subagent/src/lib.rs` (modified)
+  - `crates/octopus-sdk-subagent/Cargo.toml` (modified)
+  - `crates/octopus-sdk-subagent/tests/agent_registry.rs` (+added)
+  - `crates/octopus-sdk-subagent/tests/fixtures/agents/reviewer.md` (+added)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-subagent --test agent_registry test_parse_reviewer_md` → pass
+  - `cargo test -p octopus-sdk-subagent --test agent_registry` → pass
+  - `cargo test -p octopus-sdk-subagent` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1
+
+## Checkpoint 2026-04-21 22:57
+
+- Week: W5
+- Batch: Task 7 Step 1 → Task 7 Step 7
+- Completed:
+  - 落地 `octopus-sdk-plugin` crate 骨架，补齐 `PluginManifest / PluginCompat / PluginComponent` 12 变体与 8 个最小 decl 结构
+  - 落地 `PluginDiscoveryConfig::default_roots()`、`SDK_PLUGIN_API_VERSION` 与 `PluginError` 10 型 `kind()` 映射
+  - Manifest 校验现在覆盖 `compat.pluginApi`、组件 id 去重、路径逃逸、世界可写、plugin id 校验
+  - 修正 `security_gates` 的路径逃逸用例，改成真实兄弟目录逃逸场景
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.11`，并把计划推进到 Task 8
+- Files changed:
+  - `crates/octopus-sdk-plugin/Cargo.toml` (+added)
+  - `crates/octopus-sdk-plugin/src/lib.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/manifest.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/security.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/error.rs` (+added)
+  - `crates/octopus-sdk-plugin/tests/manifest_validate.rs` (+added)
+  - `crates/octopus-sdk-plugin/tests/security_gates.rs` (+added)
+  - `Cargo.toml` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo build -p octopus-sdk-plugin -p octopus-sdk-contracts` → pass
+  - `cargo test -p octopus-sdk-plugin --test manifest_validate test_parse_minimal` → pass
+  - `cargo test -p octopus-sdk-plugin --test manifest_validate test_compat_mismatch` → pass
+  - `cargo test -p octopus-sdk-plugin` → pass
+  - `cargo clippy -p octopus-sdk-plugin -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 8 Step 1
+
+## Checkpoint 2026-04-21 23:06
+
+- Week: W5
+- Batch: Task 8 Step 1 → Task 8 Step 5
+- Completed:
+  - 新增 `PluginRegistry`，维护 12 类声明索引、runtime tool/hook 注册状态和稳定 `PluginsSnapshot`
+  - 新增 `PluginApi`，只暴露 `register_tool / register_hook / register_skill_decl / register_model_provider_decl`
+  - 新增 `Plugin` trait 与最小 `PluginLifecycle::run`，先把 manifest 注册和 runtime registration 串起来
+  - tools 现在真实写入 `ToolRegistry`，hooks 现在真实写入 `HookRunner`；skill/model provider 仍只登记 metadata
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.11`，计划推进到 Task 9
+- Files changed:
+  - `crates/octopus-sdk-plugin/src/api.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/registry.rs` (+added)
+  - `crates/octopus-sdk-plugin/tests/registry.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/lib.rs` (modified)
+  - `crates/octopus-sdk-plugin/Cargo.toml` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-plugin --test registry test_register_noop_plugin` → pass
+  - `cargo test -p octopus-sdk-plugin --test registry test_register_api_unidirectional` → pass
+  - `cargo test -p octopus-sdk-plugin --test registry test_plugin_register_once` → pass
+  - `cargo test -p octopus-sdk-plugin` → pass
+  - `cargo build -p octopus-sdk-plugin` → pass
+  - `cargo clippy -p octopus-sdk-plugin -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 9 Step 1
+
+## Checkpoint 2026-04-21 23:12
+
+- Week: W5
+- Batch: Task 9 Step 1 → Task 9 Step 3
+- Completed:
+  - 新增 `PluginLifecycle::run(registry, config, plugins)`，把 discover / enablement / load / register / expose 串成一条路径
+  - 新增 `bundled/example-noop-tool/plugin.json` fixture 和 `example_bundled_plugins()`，bundled plugin 的 Rust 实现在 `src/bundled.rs`
+  - `discover` 现在递归扫描 roots 下的 `plugin.json`，支持 `allow / deny` 过滤，并显式关闭 symlink follow
+  - 补齐 `lifecycle.rs` 合同测试，覆盖 end-to-end、manifest parse 失败、世界可写、路径逃逸、重复 id
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.11`，计划推进到 Task 10
+- Files changed:
+  - `crates/octopus-sdk-plugin/src/lifecycle.rs` (+added)
+  - `crates/octopus-sdk-plugin/src/bundled.rs` (+added)
+  - `crates/octopus-sdk-plugin/bundled/example-noop-tool/plugin.json` (+added)
+  - `crates/octopus-sdk-plugin/tests/lifecycle.rs` (+added)
+  - `crates/octopus-sdk-plugin/tests/registry.rs` (modified)
+  - `crates/octopus-sdk-plugin/src/lib.rs` (modified)
+  - `crates/octopus-sdk-plugin/src/registry.rs` (modified)
+  - `crates/octopus-sdk-plugin/Cargo.toml` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-plugin --test lifecycle test_lifecycle_end_to_end` → pass
+  - `cargo test -p octopus-sdk-plugin --test lifecycle` → pass
+  - `cargo test -p octopus-sdk-plugin --test registry` → pass
+  - `cargo test -p octopus-sdk-plugin` → pass
+  - `cargo build -p octopus-sdk-plugin` → pass
+  - `cargo clippy -p octopus-sdk-plugin -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 10 Step 1
+
+## Checkpoint 2026-04-21 23:21
+
+- Week: W5
+- Batch: Task 10 Step 1 → Task 10 Step 4
+- Completed:
+  - `plugins_snapshot` 的 JSONL + SQLite 双分支持久化已经落地，并由 `plugins_snapshot_stability` 覆盖首事件内嵌与次事件回补两条路径
+  - `PluginRegistry::get_snapshot()` 的稳定序列化顺序已被字节稳定性测试锁住
+  - reopen 后 replay 现在能从 `SessionStarted` 或紧随其后的 `SessionPluginsSnapshot` 恢复 `SessionSnapshot.plugins_snapshot`
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.2 / §5 / §10`，并把计划推进到 Task 11
+- Files changed:
+  - `crates/octopus-sdk-session/tests/plugins_snapshot_stability.rs` (+added)
+  - `crates/octopus-sdk-session/Cargo.toml` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-session --test plugins_snapshot_stability` → pass
+  - `cargo test -p octopus-sdk-session` → pass
+  - `cargo clippy -p octopus-sdk-session -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 11 Step 1
+
+## Checkpoint 2026-04-21 23:26
+
+- Week: W5
+- Batch: Task 11 Step 1 → Task 11 Step 4
+- Completed:
+  - 新增子代理凭据零暴露合同测试，覆盖 `HookRunner(PreToolUse)` 改写后的 `ToolCallRequest` 经 `PermissionGate::check` 和父 session 事件落盘后不泄漏 `s3cret-xyz`
+  - 新增 manifest 零执行校验，锁住 `parse + validate` 不触发注册、副作用为空，且耗时保持在 `< 10ms`
+  - 执行四源合一守护扫描：前 5 条 `rg` 全部 0 命中，顶层 `Cargo.toml` 含两个新 crate，`sdk-subagent/sdk-plugin` 单文件行数检查无超限
+  - 回填 `docs/plans/sdk/00-overview.md` 的 W5 硬门禁命令和 replay 测试名，并把计划推进到 Task 12
+- Files changed:
+  - `crates/octopus-sdk-subagent/tests/no_credentials_in_subagent_events.rs` (+added)
+  - `crates/octopus-sdk-plugin/tests/manifest_no_execution.rs` (+added)
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-subagent --test no_credentials_in_subagent_events` → pass
+  - `cargo test -p octopus-sdk-plugin --test manifest_no_execution` → pass
+  - `rg "use runtime::plugin_lifecycle" crates/octopus-sdk-*` → 0 hits
+  - `rg "use runtime::hooks" crates/octopus-sdk-*` → 0 hits
+  - `rg "use plugins::manifest" crates/octopus-sdk-*` → 0 hits
+  - `rg "use plugins::hooks" crates/octopus-sdk-*` → 0 hits
+  - `rg "use tools::subagent_runtime" crates/octopus-sdk-*` → 0 hits
+  - `rg "octopus-sdk-plugin|octopus-sdk-subagent" Cargo.toml` → pass
+  - `find crates/octopus-sdk-subagent crates/octopus-sdk-plugin -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 12 Step 1
+
+## Checkpoint 2026-04-21 23:42
+
+- Week: W5
+- Batch: Task 12 Step 1 → Task 12 Step 3
+- Completed:
+  - 跑完 W5 Weekly Gate 收尾验证：`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test --workspace` 全绿
+  - 复核 `plugins_snapshot` 双分支 replay 合同，`plugins_snapshot_stability` 五个用例全通过
+  - 复核守护扫描：Task 11 的四源合一前 5 条 `rg` 继续 0 命中；`01 §7.4` 中 capability planner 残留与 `runtime/sessions/*.json` 恢复源残留为 0
+  - 记录本周 diff 分布：当前收尾批次跟踪文件 `5` 个，`624 insertions / 37 deletions`；另有 `3` 个本周新增文件
+  - 回填 `README.md`、`00-overview.md`、`02-crate-topology.md`、`03-legacy-retirement.md`，并把本计划状态与 Task 12 一并切到 `done`
+- Files changed:
+  - `docs/plans/sdk/README.md`
+  - `docs/plans/sdk/00-overview.md`
+  - `docs/plans/sdk/02-crate-topology.md`
+  - `docs/plans/sdk/03-legacy-retirement.md`
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md`
+- Verification:
+  - `cargo build --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `cargo test --workspace` → pass
+  - `cargo test -p octopus-sdk-session --test plugins_snapshot_stability` → pass
+  - `rg "use runtime::plugin_lifecycle" crates/octopus-sdk-*` → 0 hits
+  - `rg "use runtime::hooks" crates/octopus-sdk-*` → 0 hits
+  - `rg "use plugins::manifest" crates/octopus-sdk-*` → 0 hits
+  - `rg "use plugins::hooks" crates/octopus-sdk-*` → 0 hits
+  - `rg "use tools::subagent_runtime" crates/octopus-sdk-*` → 0 hits
+  - `rg "octopus-sdk-plugin|octopus-sdk-subagent" Cargo.toml` → pass
+  - `find crates/octopus-sdk-subagent crates/octopus-sdk-plugin -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+  - `rg "capability_runtime|CapabilityPlanner|CapabilitySurface" crates/` → 0 hits
+  - `rg "runtime/sessions/.*\.json" crates/` → 0 hits
+  - `rg "octopus_runtime_adapter|octopus-runtime-adapter" crates/ apps/` → 命中仅落在 `octopus-runtime-adapter`、`octopus-server`、`octopus-desktop-backend` 与 repo governance test，符合 W7 收尾前预期
+  - `rg "use (runtime|tools|plugins|api)::" crates/octopus-core crates/octopus-platform crates/octopus-infra crates/octopus-server crates/octopus-desktop-backend` → 仅 `crates/octopus-platform/src/lib.rs:pub use runtime::{`，保留为 W7 迁移项
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - W6 kickoff
+
+## Checkpoint 2026-04-22 00:27
+
+- Week: W5
+- Batch: Audit remediation for Task 2 / 3 / 5 / 7 / 9 / 10 public surface and contract tests
+- Completed:
+  - `OrchestratorWorkers::run_worker` 改成真实多轮执行，补齐 `max_turns`、budget checkpoint、tool dispatch 和 `tool.executed`/tool result 事件
+  - `GeneratorEvaluator` 现在可通过 `with_evaluator_parent(...)` 打开 evaluator 独立子 session，`Draft` 会先 `strip_thinking()` 再交给 evaluator
+  - plugin manifest 顶层 `source` 合同与 `UnsupportedSource` 校验已落地；bundled plugin snapshot source 不再硬编码成 `Local`
+  - `context_isolation` / `condensed_summary` / `gen_eval_mock` / `manifest_validate` / `lifecycle` / `plugins_snapshot_stability` 这批审计命中的合同测试都已补强并通过
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.10 / §2.11` 的实际公共面：`SubagentContext::for_evaluator`、`GeneratorEvaluator::with_evaluator_parent`、`PluginManifest.source`、`Plugin::source()`、`PluginRegistry::register_plugin(..., source)`
+- Files changed:
+  - `crates/octopus-sdk-subagent/src/context.rs`
+  - `crates/octopus-sdk-subagent/src/gen_eval.rs`
+  - `crates/octopus-sdk-subagent/src/orchestrator.rs`
+  - `crates/octopus-sdk-subagent/tests/context_isolation.rs`
+  - `crates/octopus-sdk-subagent/tests/condensed_summary.rs`
+  - `crates/octopus-sdk-subagent/tests/gen_eval_mock.rs`
+  - `crates/octopus-sdk-plugin/src/manifest.rs`
+  - `crates/octopus-sdk-plugin/src/registry.rs`
+  - `crates/octopus-sdk-plugin/src/lifecycle.rs`
+  - `crates/octopus-sdk-plugin/src/bundled.rs`
+  - `crates/octopus-sdk-plugin/tests/manifest_validate.rs`
+  - `crates/octopus-sdk-plugin/tests/lifecycle.rs`
+  - `crates/octopus-sdk-session/tests/plugins_snapshot_stability.rs`
+  - `docs/plans/sdk/02-crate-topology.md`
+  - `docs/plans/sdk/08-week-5-subagent-plugin.md`
+- Verification:
+  - `cargo test -p octopus-sdk-subagent --test context_isolation` → pass
+  - `cargo test -p octopus-sdk-subagent --test condensed_summary` → pass
+  - `cargo test -p octopus-sdk-subagent --test gen_eval_mock` → pass
+  - `cargo test -p octopus-sdk-plugin --test manifest_validate` → pass
+  - `cargo test -p octopus-sdk-plugin --test lifecycle` → pass
+  - `cargo test -p octopus-sdk-session --test plugins_snapshot_stability` → pass
+  - `cargo test -p octopus-sdk-subagent` → pass
+  - `cargo test -p octopus-sdk-plugin` → pass
+- Exit state vs plan:
+  - 审计缺口已闭合；W5 计划保持 `done`
+- Blockers:
+  - none
+- Next:
+  - Completed

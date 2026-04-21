@@ -31,4 +31,7 @@ tracing = "0.1"
 workspace = true
 
 [dev-dependencies]
+octopus-sdk-context = { path = "../octopus-sdk-context" }
+octopus-sdk-model = { path = "../octopus-sdk-model" }
+octopus-sdk-subagent = { path = "../octopus-sdk-subagent" }
 wiremock = "0.6"

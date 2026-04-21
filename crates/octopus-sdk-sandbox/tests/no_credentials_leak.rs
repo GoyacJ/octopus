@@ -6,9 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use octopus_sdk_sandbox::{
-    NoopBackend, SandboxBackend, SandboxCommand, SandboxSpec,
-};
+use octopus_sdk_sandbox::{NoopBackend, SandboxBackend, SandboxCommand, SandboxSpec};
 
 fn temp_workspace(name: &str) -> PathBuf {
     let unique = SystemTime::now()
@@ -43,10 +41,7 @@ async fn noop_backend_filters_non_allowlisted_secrets() {
             &handle,
             SandboxCommand {
                 cmd: "/bin/sh".into(),
-                args: vec![
-                    "-c".into(),
-                    format!("env | grep {SECRET_KEY} || true"),
-                ],
+                args: vec!["-c".into(), format!("env | grep {SECRET_KEY} || true")],
                 stdin: None,
             },
         )
