@@ -2,7 +2,9 @@ use bytes::Bytes;
 use futures::{stream, StreamExt};
 use serde_json::{json, Value};
 
-use octopus_sdk_contracts::{AssistantEvent, CacheBreakpoint, CacheTtl, ContentBlock, Message, Role, ToolSchema, Usage};
+use octopus_sdk_contracts::{
+    AssistantEvent, CacheBreakpoint, CacheTtl, ContentBlock, Message, Role, ToolSchema, Usage,
+};
 use octopus_sdk_model::{
     AnthropicMessagesAdapter, CacheControlStrategy, ModelId, ModelRequest, ModelRole,
     ProtocolAdapter, ResponseFormat, ThinkingConfig,
@@ -115,7 +117,9 @@ async fn anthropic_prompt_cache_inputs_stay_stable_across_turns() {
         .map(ModelRequest::tools_fingerprint)
         .collect::<Vec<_>>();
     assert!(
-        tool_fingerprints.windows(2).all(|window| window[0] == window[1]),
+        tool_fingerprints
+            .windows(2)
+            .all(|window| window[0] == window[1]),
         "tools fingerprint drifted across otherwise stable requests: {tool_fingerprints:?}"
     );
 

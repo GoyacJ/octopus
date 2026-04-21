@@ -29,8 +29,8 @@
   - **`octopus-sdk-contracts` 新增 Level 0 权限握手面**（W1 补丁，沿用 W2 对 `ToolSchema` 的 B3 先例）：`trait PermissionGate` / `PermissionOutcome` / `PermissionMode` / `ToolCallRequest`。`ToolCallRequest` 下沉到 contracts 是因为权限层也需引用同一值形状（Tools 与 Permissions 同为 Level 2，不可横向依赖）。
   - **15 个内置工具**落地（**10 full + 5 stub**，满足 `00 §3 W3` 出口"15 个内置工具以 `trait Tool` 形式存在"的唯一硬指标；`full` 与 `stub` 的分布是实现层取舍，非 `00` 硬门禁）：
     - **10 full**：`FileReadTool / FileWriteTool / FileEditTool / GlobTool / GrepTool / BashTool / WebFetchTool / AskUserQuestionTool / TodoWriteTool / SleepTool`。
-    - **4 W5-stub**（返回 `ToolError::NotYetImplemented { crate: "octopus-sdk-subagent", week: "W5" }`，`ToolSpec.description` 前缀 `[STUB · W5]`）：`AgentTool / SkillTool / TaskListTool / TaskGetTool`。
-    - **1 W6-stub**（返回 `ToolError::NotYetImplemented { crate: "octopus-sdk-tools::web_search", week: "W6" }`，`ToolSpec.description` 前缀 `[STUB · W6]`）：`WebSearchTool`——**降级理由**：W3 无稳定的 `SearchProvider` 抽象归属（当 `octopus-sdk-plugin` 在 W5 落地后再迁）、无 vendor key 注入通路（W6 Brain Loop 才装配），强行在 W3 绑定 vendor API 会污染 `octopus-sdk-tools` 的纯度；W3 只保留 `WebSearchTool` 的 `impl Tool` 壳与 `ToolSpec`，满足"15"出口。
+    - **4 W5-stub**（返回 `ToolError::NotYetImplemented { crate_name: "octopus-sdk-subagent", week: "W5" }`，`ToolSpec.description` 前缀 `[STUB · W5]`）：`AgentTool / SkillTool / TaskListTool / TaskGetTool`。
+    - **1 W6-stub**（返回 `ToolError::NotYetImplemented { crate_name: "octopus-sdk-tools::web_search", week: "W6" }`，`ToolSpec.description` 前缀 `[STUB · W6]`）：`WebSearchTool`——**降级理由**：W3 无稳定的 `SearchProvider` 抽象归属（当 `octopus-sdk-plugin` 在 W5 落地后再迁）、无 vendor key 注入通路（W6 Brain Loop 才装配），强行在 W3 绑定 vendor API 会污染 `octopus-sdk-tools` 的纯度；W3 只保留 `WebSearchTool` 的 `impl Tool` 壳与 `ToolSpec`，满足"15"出口。
   - MCP `stdio / http / sdk`三 transport 的 full impl + 集成测试（含 **process drop 安全 · R3**、`notifications/tools/list_changed` 刷新、错误传播）。
   - `partition_tool_calls(calls, registry) → Vec<ExecBatch>`：**工具级**并发/串行——`tool.is_concurrency_safe(&input) == true` 的连续段聚合为 `Concurrent` 批次（上限 `DEFAULT_TOOL_MAX_CONCURRENCY = 10`），否则独立 `Serial` 批次；未注册工具强制 `Serial`。**不包含** `ResourceKey` 级细粒度桶（同一文件路径并发写的资源冲突检测），此语义 **延 W4**：届时由 `octopus-sdk-permissions::PermissionPolicy` + `octopus-sdk-hooks::HookRunner` 在调度外层兜底，`partition_tool_calls` 签名不变，只在 W4 补充 "serial bucket override" 辅助（登记到 `02 §5`）。
   - **Prompt cache 稳定性硬门禁**：`ToolRegistry::schemas_sorted()` 3 次调用字节一致；`tools_fingerprint()` 单调稳定。
@@ -89,34 +89,38 @@ capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|Capabi
 | 2 | `§2.1` 新增类型 | 类型新增 | `PermissionMode { Default, AcceptEdits, BypassPermissions, Plan }` |
 | 3 | `§2.1` 新增类型 | 类型新增 | `PermissionOutcome { Allow, Deny { reason: String }, AskApproval { prompt: AskPrompt } }`（`RequireAuth` 由 W4 追加） |
 | 4 | `§2.1` 新增 trait | trait 新增 | `trait PermissionGate: Send + Sync { async fn check(&self, call: &ToolCallRequest) -> PermissionOutcome; }` |
-| 5 | `§2.1` 新增 trait | trait 新增 | `trait AskResolver: Send + Sync { async fn resolve(&self, prompt: &AskPrompt) -> Result<AskAnswer, AskError>; }` + `AskAnswer / AskError` |
+| 5 | `§2.1` 新增 trait | trait 新增 | `trait AskResolver: Send + Sync { async fn resolve(&self, prompt_id: &str, prompt: &AskPrompt) -> Result<AskAnswer, AskError>; }` + `AskAnswer / AskError` |
+| 6 | `§2.1` 新增 trait | trait 新增 | `trait EventSink: Send + Sync { fn emit(&self, event: SessionEvent); }` |
 
 ### `02 §2.4 octopus-sdk-tools`
 
 | # | 位置 | 修订类型 | 内容 |
 |---|---|---|---|
-| 6 | `§2.4` `Tool` trait | 保持 | `spec / is_concurrency_safe / execute` 三方法保持；`execute` 返回 `Result<ToolResult, ToolError>` |
-| 7 | `§2.4` `ToolSpec` | 字段保持 | 4 字段；`input_schema` 为 `serde_json::Value`（JSON Schema v7） |
-| 8 | `§2.4` `ToolCategory` | 保持 | 7 变体；新增 `category_priority()` 常量函数固定排序权重 |
-| 9 | `§2.4` 新增类型 | 类型新增 | `ToolError`（`Validation / Permission / Execution / Timeout / Cancelled / NotYetImplemented { crate: &'static str, week: &'static str } / Transport(#[from] reqwest::Error) / Serialization(#[from] serde_json::Error) / Sandbox { reason: String }`） |
-| 10 | `§2.4` `ToolContext` | 字段调整 | 去 `session: SessionId`（挪到 `session_id: SessionId`），新增 `ask_resolver: Arc<dyn AskResolver>`、`secret_vault: Arc<dyn SecretVault>`、`permissions: Arc<dyn PermissionGate>`、`sandbox: SandboxHandle`（W3 占位类型）、`working_dir: PathBuf`、`cancellation: CancellationToken`、`event_sink: Arc<dyn EventSink>`（`EventSink` 从 contracts re-export） |
-| 11 | `§2.4` 新增类型 | 类型新增 | `SandboxHandle { pub cwd: PathBuf, pub env_allowlist: Vec<String> }`（W3 占位；W4 `octopus-sdk-sandbox` 升级） |
-| 12 | `§2.4` `ToolRegistry` | 方法补齐 | `new / register / get / schemas_sorted / tools_fingerprint / iter`；**不含 `dispatch`**（R2 决策） |
-| 13 | `§2.4` `partition_tool_calls` | 签名细化 | `fn partition_tool_calls<'a>(calls: &'a [ToolCallRequest], registry: &ToolRegistry) -> Vec<ExecBatch<'a>>`；`ExecBatch<'a> { Concurrent(Vec<&'a ToolCallRequest>), Serial(Vec<&'a ToolCallRequest>) }` |
-| 14 | `§2.4` 常量 | 常量锁定 | `BASH_MAX_OUTPUT_DEFAULT: usize = 30_000`、`BASH_MAX_OUTPUT_UPPER_LIMIT: usize = 150_000`、`DEFAULT_TOOL_MAX_CONCURRENCY: usize = 10` |
-| 15 | `§2.4` `builtin` 模块 | 符号新增 | 15 个 struct：`FileReadTool / FileWriteTool / FileEditTool / GlobTool / GrepTool / BashTool / WebSearchTool / WebFetchTool / AskUserQuestionTool / TodoWriteTool / SleepTool / AgentTool / SkillTool / TaskListTool / TaskGetTool`（4 个 W5-stub + 1 个 W6-stub） |
+| 7 | `§2.4` `Tool` trait | 保持 | `spec / is_concurrency_safe / execute` 三方法保持；`execute` 返回 `Result<ToolResult, ToolError>` |
+| 8 | `§2.4` `ToolSpec` | 字段保持 | 4 字段；`input_schema` 为 `serde_json::Value`（JSON Schema v7） |
+| 9 | `§2.4` `ToolCategory` | 保持 | 7 变体；新增 `category_priority()` 常量函数固定排序权重 |
+| 10 | `§2.4` 新增类型 | 类型新增 | `ToolError`（`Validation / Permission / Execution / Timeout / Cancelled / NotYetImplemented { crate_name: &'static str, week: &'static str } / Transport(#[from] reqwest::Error) / Serialization(#[from] serde_json::Error) / Sandbox { reason: String }`） |
+| 11 | `§2.4` `ToolContext` | 字段调整 | 去 `session: SessionId`（挪到 `session_id: SessionId`），新增 `ask_resolver: Arc<dyn AskResolver>`、`secret_vault: Arc<dyn SecretVault>`、`permissions: Arc<dyn PermissionGate>`、`sandbox: SandboxHandle`（W3 占位类型）、`working_dir: PathBuf`、`cancellation: CancellationToken`、`event_sink: Arc<dyn EventSink>`（`EventSink` 从 contracts re-export） |
+| 12 | `§2.4` 新增类型 | 类型新增 | `SandboxHandle { pub cwd: PathBuf, pub env_allowlist: Vec<String> }`（W3 占位；W4 `octopus-sdk-sandbox` 升级） |
+| 13 | `§2.4` `ToolRegistry` | 方法补齐 | `new / register / get / schemas_sorted / tools_fingerprint / iter`；**不含 `dispatch`**（R2 决策） |
+| 14 | `§2.4` `partition_tool_calls` | 签名细化 | `fn partition_tool_calls<'a>(calls: &'a [ToolCallRequest], registry: &ToolRegistry) -> Vec<ExecBatch<'a>>`；`ExecBatch<'a> { Concurrent(Vec<&'a ToolCallRequest>), Serial(Vec<&'a ToolCallRequest>) }` |
+| 15 | `§2.4` 常量 | 常量锁定 | `BASH_MAX_OUTPUT_DEFAULT: usize = 30_000`、`BASH_MAX_OUTPUT_UPPER_LIMIT: usize = 150_000`、`DEFAULT_TOOL_MAX_CONCURRENCY: usize = 10` |
+| 16 | `§2.4` `builtin` 模块 | 符号新增 | 15 个 struct：`FileReadTool / FileWriteTool / FileEditTool / GlobTool / GrepTool / BashTool / WebSearchTool / WebFetchTool / AskUserQuestionTool / TodoWriteTool / SleepTool / AgentTool / SkillTool / TaskListTool / TaskGetTool`（4 个 W5-stub + 1 个 W6-stub） |
 
 ### `02 §2.5 octopus-sdk-mcp`
 
 | # | 位置 | 修订类型 | 内容 |
 |---|---|---|---|
-| 16 | `§2.5` `McpTransport` | 保持 | 1 方法 `call`；新增 `async fn notify(&self, msg: JsonRpcNotification) -> Result<(), McpError>` |
-| 17 | `§2.5` 新增类型 | 类型新增 | `JsonRpcRequest / JsonRpcResponse / JsonRpcNotification / JsonRpcError { code: i32, message: String, data: Option<serde_json::Value> }` |
-| 18 | `§2.5` 新增类型 | 类型新增 | `McpError`（`Transport / Protocol / Timeout / Handshake / ServerCrashed { server_id, exit_code } / ToolNotFound / InvalidResponse { body_preview }`） |
-| 19 | `§2.5` `McpClient` | 字段 | `transport: Arc<dyn McpTransport>`、`server_id: String`；方法 `initialize / list_tools / call_tool / list_prompts / list_resources` 全 `async fn` |
-| 20 | `§2.5` `McpServerManager` | 方法新增 | `spawn / shutdown / list_servers / get_client`；内部 `Drop` 保证 kill + wait 所有 stdio 子进程（R3） |
-| 21 | `§2.5` transport 三 impl | 符号新增 | `StdioTransport / HttpTransport / SdkTransport` + 各自构造器 `StdioTransport::spawn(cmd, args, env)` / `HttpTransport::new(url, headers)` / `SdkTransport::from_directory(dir: Arc<dyn ToolDirectory>)` |
-| 22 | `§2.5` 新增 trait | trait 新增 | `#[async_trait] trait ToolDirectory: Send + Sync { fn list_tools(&self) -> Vec<McpTool>; async fn call_tool(&self, name: &str, input: serde_json::Value) -> Result<McpToolResult, McpError>; }`（**全 MCP 原生类型**，不触 `octopus-sdk-tools` 的任何符号；由 `octopus-sdk-tools::ToolRegistry` 在 tools crate 内 `impl ToolDirectory for ToolRegistry`，方向保持 `tools → mcp`。详见 Task 4 Step 4 + Task 6 Step 3 + Task 8 Step 4 三处一致化决策。） |
+| 17 | `§2.5` `McpTransport` | 保持 | 1 方法 `call`；新增 `async fn notify(&self, msg: JsonRpcNotification) -> Result<(), McpError>` |
+| 18 | `§2.5` 新增类型 | 类型新增 | `JsonRpcRequest / JsonRpcResponse / JsonRpcNotification / JsonRpcError { code: i32, message: String, data: Option<serde_json::Value> }` |
+| 19 | `§2.5` 新增类型 | 类型新增 | `McpError`（`Transport / Protocol / Timeout / Handshake / ServerCrashed { server_id, exit_code } / ToolNotFound / InvalidResponse { body_preview }`） |
+| 20 | `§2.5` 新增类型 | 类型新增 | `InitializeResult { protocol_version: String }` |
+| 21 | `§2.5` `McpClient` | 字段 | `transport: Arc<dyn McpTransport>`、`server_id: String`、`initialized: AtomicBool`；方法 `initialize / list_tools / call_tool / list_prompts / list_resources` 全 `async fn` |
+| 22 | `§2.5` 新增类型 | 类型新增 | `McpLifecyclePhase { Starting, Ready, Degraded, Stopped }` |
+| 23 | `§2.5` 新增类型 | 类型新增 | `McpServerSpec { server_id: String, transport: McpServerTransport }` 与 `McpServerTransport::{ Stdio { command, args, env, transport }, Http { transport }, Sdk { transport } }` |
+| 24 | `§2.5` `McpServerManager` | 方法新增 | `spawn / shutdown / list_servers / get_client`；内部 `Drop` 保证 kill + wait 所有 stdio 子进程（R3） |
+| 25 | `§2.5` transport 三 impl | 符号新增 | `StdioTransport / HttpTransport / SdkTransport` + 各自构造器 `StdioTransport::spawn(cmd, args, env)` / `HttpTransport::new(url, headers)` / `SdkTransport::from_directory(dir: Arc<dyn ToolDirectory>)` |
+| 26 | `§2.5` 新增 trait | trait 新增 | `#[async_trait] trait ToolDirectory: Send + Sync { fn list_tools(&self) -> Vec<McpTool>; async fn call_tool(&self, name: &str, input: serde_json::Value) -> Result<McpToolResult, McpError>; }`（**全 MCP 原生类型**，不触 `octopus-sdk-tools` 的任何符号；由 `octopus-sdk-tools::ToolRegistry` 在 tools crate 内 `impl ToolDirectory for ToolRegistry`，方向保持 `tools → mcp`。详见 Task 4 Step 4 + Task 6 Step 3 + Task 8 Step 4 三处一致化决策。） |
 
 任何额外出现的 `pub` 符号都必须在 Task 10 Step 1 之前追加到本表与 `02 §2.1 / §2.4 / §2.5`，否则 Weekly Gate 阻断。
 
@@ -139,26 +143,26 @@ capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|Capabi
 
 ## Active Work
 
-- Current task: `Task 1：两 crate 骨架 + workspace 登记 + contracts 权限握手下沉`
-- Current step: `Pending：Step 1 尚未启动`
+- Current task: `Done（W3 Weekly Gate 已完成）`
+- Current step: `Completed：Task 10 Step 3（全部门禁通过，W3 收口）`
 - Execution mode: `continuous-by-task`
 
 ### Pre-Task Checklist（Task 1，启动前勾选）
 
-- [ ] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
-- [ ] 已阅读 `00-overview.md §1 10 项取舍`（特别是 #2 删 Capability Planner、#4 内置工具走 MCP shim），且当前任务未违反。
-- [ ] 已阅读 `docs/sdk/03-tool-system.md §3.1 / §3.2 / §3.3 / §3.4 / §3.5 / §3.6`。
-- [ ] 已阅读 `02-crate-topology.md §1 依赖图 / §2.4 / §2.5`。
-- [ ] 已阅读 `03-legacy-retirement.md §3（crates/tools）/ §6.1 Capability Bridge 行 / §8 守护扫描`。
-- [ ] 已识别本 Task 涉及的 SDK 对外公共面变更（是 / 否）。
+- [x] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
+- [x] 已阅读 `00-overview.md §1 10 项取舍`（特别是 #2 删 Capability Planner、#4 内置工具走 MCP shim），且当前任务未违反。
+- [x] 已阅读 `docs/sdk/03-tool-system.md §3.1 / §3.2 / §3.3 / §3.4 / §3.5 / §3.6`。
+- [x] 已阅读 `02-crate-topology.md §1 依赖图 / §2.4 / §2.5`。
+- [x] 已阅读 `03-legacy-retirement.md §3（crates/tools）/ §6.1 Capability Bridge 行 / §8 守护扫描`。
+- [x] 已识别本 Task 涉及的 SDK 对外公共面变更（是 / 否）。
   - 当前判断：`是`（§2.1 contracts 新增 5 项 + §2.4/§2.5 全部公共面本周首次落地）。
-- [ ] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`。
+- [x] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`。
   - 当前判断：`否`（差异走 `02 §5` 登记，不改 OpenAPI）。
-- [ ] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（是 / 否）。
+- [x] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（是 / 否）。
   - 当前判断：`否`（`AskPrompt` / `RenderBlock` 沿用 W1 现状）。
-- [ ] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
-- [ ] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
-- [ ] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
+- [x] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
+- [x] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
+- [x] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
 
 ---
 
@@ -166,7 +170,7 @@ capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|Capabi
 
 ### Task 1：两 crate 骨架 + workspace 登记 + contracts 权限握手下沉
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-tools/Cargo.toml`
@@ -212,7 +216,7 @@ Notes：
 
 ### Task 2：`Tool` trait + `ToolSpec` + `ToolCategory` + `ToolRegistry`（确定性排序）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-tools/src/tool.rs`（`trait Tool` + `async_trait`）
@@ -248,7 +252,7 @@ Notes：
 
 ### Task 3：`ToolContext` + `ToolResult` + `ToolError` + `partition_tool_calls`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-tools/src/context.rs`（`ToolContext + SandboxHandle`）
@@ -289,7 +293,7 @@ Notes：
 
 ### Task 4：MCP 核心类型（`JsonRpc*` + `McpError` + `McpTool/Prompt/Resource`）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-mcp/src/jsonrpc.rs`
@@ -307,7 +311,7 @@ Step 1：
 - Stop if：MCP 官方文档（2024-11-05 spec）对 `id` 允许 `null` / string / number → 本实现用 `serde_json::Value` 兼容所有形态；若需更窄类型保证 → 登记 `02 §5`。
 
 Step 2：
-- Action：落地 `McpTool { name, description, input_schema }`（与 `ToolSpec` 同构，但保持 MCP 原字段命名避免 wire 不兼容）；`McpPrompt / McpResource` 按 MCP spec 最小字段；`McpToolResult { content: Vec<ContentBlock>, is_error: bool }`（与 `ToolResult` 同构，便于 `SdkTransport` 折返）。提供 `From<ToolSpec> for McpTool` 与 `TryFrom<McpTool> for ToolSpec`。
+- Action：落地 `McpTool { name, description, input_schema }`（与 `ToolSchema` 同构，但保持 MCP 原字段命名避免 wire 不兼容）；`McpPrompt / McpResource` 按 MCP spec 最小字段；`McpToolResult { content: Vec<ContentBlock>, is_error: bool }`（与 `ToolResult` 同构，便于 `SdkTransport` 折返）。提供 `From<ToolSchema> for McpTool` 与 `From<McpTool> for ToolSchema`。
 - Done when：`cargo test -p octopus-sdk-mcp types::` round-trip + `ToolSpec ↔ McpTool` 互转测试通过。
 - Verify：`cargo test -p octopus-sdk-mcp types::`
 - Stop if：MCP `inputSchema`（驼峰）vs 本库 `input_schema`（蛇形） → 在 `#[serde(rename = "inputSchema")]` 保持 wire 驼峰，Rust 侧用 snake_case。
@@ -332,7 +336,7 @@ Notes：
 
 ### Task 5：`trait McpTransport` + `McpClient` + `McpServerManager`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-mcp/src/transport/mod.rs`（`trait McpTransport` + `enum TransportKind`）
@@ -379,7 +383,7 @@ Notes：
 
 ### Task 6：三 transport 实现 + 集成测试（含 process drop）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-mcp/src/transport/stdio.rs`
@@ -428,7 +432,7 @@ Notes：
 
 ### Task 7：15 个内置工具（按 4 个子 PR 合入）
 
-Status: `pending`
+Status: `done`
 
 Files：
 - **7a：FS 读族**（3 工具 · Read / Glob / Grep）
@@ -451,7 +455,7 @@ Files：
   - Create: `crates/octopus-sdk-tools/tests/builtin_web.rs`
   - Create: `crates/octopus-sdk-tools/tests/builtin_ask.rs`
 - **7d：W5 stub 族**（4 工具 · Agent / Skill / TaskList / TaskGet）
-  - Create: `crates/octopus-sdk-tools/src/builtin/stubs.rs`
+  - Create: `crates/octopus-sdk-tools/src/builtin/w5_stubs.rs`
   - Create: `crates/octopus-sdk-tools/tests/builtin_stubs.rs`
 
 Preconditions：Task 2 / Task 3 完成；Task 6 Step 3 完成（`SdkTransport` 存在，但本 Task 不依赖它，直接注册进 `ToolRegistry`）。
@@ -476,16 +480,16 @@ Step 7b（FS 写族 + Shell）：
 Step 7c（Web + 交互 + 调度）：
 - Action：
   - `WebFetchTool`：`is_concurrency_safe = true`；`reqwest::get(url).timeout(30s)`；html → markdown（`html2md` 或最小正则剥 script/style + 30 000 字符截断）。
-  - `WebSearchTool`（**W6-stub**，与 Scope 的 "10 full + 5 stub" 分类一致）：`is_concurrency_safe = true`；`execute()` 直接返回 `ToolError::NotYetImplemented { crate: "octopus-sdk-tools::web_search", week: "W6" }`；`ToolSpec` 填入完整 `input_schema`（`query: string, count?: u32`）供 prompt cache 稳定性参与 fingerprint；`ToolSpec.description` 前 80 字符以 `"[STUB · W6]"` 开头。**不** 在 W3 内引入 `SearchProvider` trait（该 trait 归 `octopus-sdk-plugin` 在 W5 定义，`WebSearchTool` 在 W6 Brain Loop 装配时注入 provider）。
-  - `AskUserQuestionTool`：`is_concurrency_safe = false`；构造 `AskPrompt`（`docs/sdk/14`） + 调用 `ctx.ask_resolver.resolve(&prompt)` → 返回 `AskAnswer` 填入 `ToolResult`；超时 300s。
-  - `TodoWriteTool`：`is_concurrency_safe = false`；把 input 作为 `SessionEvent::TodoUpdated { items }` 通过 `ctx.event_sink.emit(...)`。
+  - `WebSearchTool`（**W6-stub**，与 Scope 的 "10 full + 5 stub" 分类一致）：`is_concurrency_safe = true`；`execute()` 直接返回 `ToolError::NotYetImplemented { crate_name: "octopus-sdk-tools::web_search", week: "W6" }`；`ToolSpec` 填入完整 `input_schema`（`query: string, count?: u32`）供 prompt cache 稳定性参与 fingerprint；`ToolSpec.description` 前 80 字符以 `"[STUB · W6]"` 开头。**不** 在 W3 内引入 `SearchProvider` trait（该 trait 归 `octopus-sdk-plugin` 在 W5 定义，`WebSearchTool` 在 W6 Brain Loop 装配时注入 provider）。
+  - `AskUserQuestionTool`：`is_concurrency_safe = false`；构造 `AskPrompt`（`docs/sdk/14`） + 调用 `ctx.ask_resolver.resolve(prompt_id, &prompt)` → 返回 `AskAnswer` 填入 `ToolResult`；超时 300s；同时发出 `SessionEvent::Ask`。
+  - `TodoWriteTool`：`is_concurrency_safe = false`；W3 contracts 里还没有 `SessionEvent::TodoUpdated`，因此改用现有 `SessionEvent::Render { block: RenderBlock { kind: Record, ... }, lifecycle: OnToolResult }` 承载结构化 todo 更新。
   - `SleepTool`：`is_concurrency_safe = true`；`tokio::time::sleep(Duration::from_millis(input.ms))`；上限 60 000ms。
 - Done when：`tests/builtin_web.rs` 用 `wiremock` 覆盖 fetch（含截断断言）；`WebSearchTool` 单测断言 `execute()` 返回 `ToolError::NotYetImplemented { week: "W6" }` + `ToolSpec.description.starts_with("[STUB · W6]")`；`tests/builtin_ask.rs` 用 `MockAskResolver` 返回预设 `AskAnswer`，断言 `ToolResult.content` 含答案文本。
 - Verify：`cargo test -p octopus-sdk-tools --test builtin_web --test builtin_ask`
 - Stop if：`html2md` 输出不稳定 → 用最小剥离（`regex` 去 tag）；`SearchProvider` trait 若被误抽到 tools crate → 立刻回退（归属 `octopus-sdk-plugin` W5）。
 
 Step 7d（W5 stub 族）：
-- Action：落地 4 个 stub：`AgentTool / SkillTool / TaskListTool / TaskGetTool`。所有 `execute` 返回 `ToolError::NotYetImplemented { crate: "octopus-sdk-subagent" (或 "octopus-sdk-tools::task_registry"), week: "W5" }`；`is_concurrency_safe = false`；`ToolSpec.description` 前 80 字符以 `"[STUB · W5]"` 开头。
+- Action：落地 4 个 stub：`AgentTool / SkillTool / TaskListTool / TaskGetTool`。所有 `execute` 返回 `ToolError::NotYetImplemented { crate_name: "octopus-sdk-subagent" (或 "octopus-sdk-tools::task_registry"), week: "W5" }`；`is_concurrency_safe = false`；`ToolSpec.description` 前 80 字符以 `"[STUB · W5]"` 开头。
 - Done when：`tests/builtin_stubs.rs` 覆盖 4 个 stub 均返回 `NotYetImplemented` + `ToolResult.is_error = true`；`ToolSpec.description.starts_with("[STUB · W5]")` 断言通过。
 - Verify：`cargo test -p octopus-sdk-tools --test builtin_stubs`
 - Stop if：`AgentTool / TaskListTool` 等某工具在 W3 出口前被 Brain Loop 或其他 crate 需要"真能用" → Stop #8（跨周契约）。
@@ -499,7 +503,7 @@ Notes：
 
 ### Task 8：Prompt Cache 稳定性 + partition_tool_calls 契约 + Bash 截断硬门禁
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-tools/tests/registry_stability.rs`
@@ -553,7 +557,7 @@ Notes：
 
 ### Task 9：Capability 退役（4 个 sub-Step 串行合入）
 
-Status: `pending`
+Status: `done`
 
 Files（总表；sub-Step 分割见下）：
 - Delete: `crates/tools/src/capability_runtime/mod.rs`
@@ -617,7 +621,7 @@ Notes：
 
 ### Task 10：`02 §2.1 / §2.4 / §2.5` 公共面冻结 + Weekly Gate 收尾
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/02-crate-topology.md §2.1 / §2.4 / §2.5`（若实际 `pub` 符号与登记仍有 diff；Task 1/2/3/4/5/6/7 已做同批次回填，此处仅"补漏"）
@@ -736,13 +740,52 @@ Notes：
 
 ---
 
-## 附录 A：capability call-site 分类表（Task 9a 填充）
+## 附录 A：capability call-site 分类表（Task 9a 已填充）
 
-> Task 9a 执行时在此追加真实命中清单；格式如下（示例行，非真实数据，**Task 9a 前为空**）：
+> `Capability Scan Superset` 实扫结果共 34 个 Rust 文件；口径：
+>
+> ```
+> capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|CapabilityExposure|CapabilityState|CapabilityStore|CapabilityExecutionEvent|CapabilityExecutionPhase|CapabilityExecutionRequest|CapabilityMediationDecision|capability_executor_bridge|capability_planner_bridge|capability_state|capability_state_ref|load_capability_store|persist_capability_store
+> ```
+>
+> 分类结果：`redirect-to-sdk = 4`，未超过 Step 9a 的 Stop 条件。
 
-| 文件 | 命中行数 | 分类 | 所属 sub-Step | 预估改动行 | 备注 |
-|---|---|---|---|---|---|
-| *待 Task 9a 填充* | | | | | |
+| 文件 | 命中 token 列表 | 命中行数 | 分类 | 所属 sub-Step | 预估改动行 | 备注 |
+|---|---|---|---|---|---|---|
+| crates/octopus-core/src/lib.rs | CapabilityState, CapabilitySurface, capability_state_ref | 7 | dead | 9c | 90 | 删 `RuntimeCapability*` DTO 与 `capability_state_ref` 字段 |
+| crates/octopus-infra/src/infra_state.rs | capability_state_ref | 4 | dead | 9c | 36 | 删持久化列与迁移断言里的 `capability_state_ref` |
+| crates/octopus-platform/src/runtime.rs | capability_state_ref | 3 | dead | 9c | 18 | 测试/fixture 里的旧字段字面量 |
+| crates/octopus-runtime-adapter/src/adapter_state.rs | capability_state_ref | 1 | dead | 9b | 6 | 聚合 summary 的残留字段透传 |
+| crates/octopus-runtime-adapter/src/agent_runtime_core.rs | capability_executor_bridge, capability_planner_bridge, capability_runtime, capability_state, capability_state_ref, load_capability_store, persist_capability_store | 96 | redirect-to-sdk | 9b | 280 | 运行时主调用链，替到 `octopus_sdk_tools` / `octopus_sdk_mcp` |
+| crates/octopus-runtime-adapter/src/approval_runtime_tests.rs | capability_state_ref, load_capability_store, persist_capability_store | 13 | dead | 9b | 48 | capability 持久化测试壳，跟随 adapter 清理 |
+| crates/octopus-runtime-adapter/src/capability_executor_bridge.rs | CapabilityPlanner, CapabilityStore, capability_runtime | 12 | dead | 9b | 298 | 整文件删除 |
+| crates/octopus-runtime-adapter/src/capability_planner_bridge.rs | CapabilityPlanner, CapabilityState, CapabilityStore, capability_runtime, capability_state, capability_state_ref, persist_capability_store | 39 | dead | 9b | 593 | 整文件删除 |
+| crates/octopus-runtime-adapter/src/capability_runtime_tests.rs | capability_runtime, capability_state, capability_state_ref | 16 | dead | 9b | 1994 | 整文件删除 |
+| crates/octopus-runtime-adapter/src/capability_state.rs | CapabilityState, CapabilityStore, capability_state, load_capability_store, persist_capability_store | 25 | dead | 9b | 91 | 整文件删除 |
+| crates/octopus-runtime-adapter/src/execution_events.rs | capability_state_ref | 25 | dead | 9b | 38 | 事件投影里的旧字段搬运 |
+| crates/octopus-runtime-adapter/src/lib.rs | CapabilityState, capability_executor_bridge, capability_planner_bridge, capability_runtime, capability_state | 5 | dead | 9b | 8 | 删 `mod capability_*` 与相关 re-export |
+| crates/octopus-runtime-adapter/src/memory_selector.rs | capability_state_ref | 1 | dead | 9b | 4 | 默认 summary 里的空字段 |
+| crates/octopus-runtime-adapter/src/persistence.rs | capability_state, capability_state_ref | 6 | redirect-to-sdk | 9b | 120 | 持久化路径需改到 SDK 后的新快照/结果面 |
+| crates/octopus-runtime-adapter/src/run_context.rs | capability_planner_bridge, capability_state, capability_state_ref, load_capability_store | 10 | redirect-to-sdk | 9b | 60 | submit 上下文仍在拼 capability runtime 输入 |
+| crates/octopus-runtime-adapter/src/runtime_compatibility_tests.rs | CapabilityState | 1 | dead | 9b | 14 | 兼容测试只剩旧快照类型引用 |
+| crates/octopus-runtime-adapter/src/runtime_persistence_tests.rs | capability_state, capability_state_ref, load_capability_store | 6 | dead | 9b | 34 | legacy capability 文件回退测试 |
+| crates/octopus-runtime-adapter/src/session_service.rs | CapabilityStore, capability_state, capability_state_ref | 8 | redirect-to-sdk | 9b | 90 | 建 session 时仍走 capability projection |
+| crates/octopus-runtime-adapter/src/subrun_orchestrator.rs | capability_state_ref | 5 | dead | 9b | 20 | 子运行默认 checkpoint 里的旧字段 |
+| crates/octopus-runtime-adapter/src/team_runtime.rs | CapabilityStore, capability_state, capability_state_ref | 6 | dead | 9b | 40 | worker subrun 的旧 capability 预热与摘要透传 |
+| crates/octopus-server/src/workspace_runtime.rs | capability_state_ref | 3 | dead | 9c | 18 | server 侧 fixture / 断言字段 |
+| crates/runtime/src/session/session_tests.rs | capability_runtime | 3 | panic-stub | 9c | 24 | legacy session extension 测试；W7 runtime 清退前改成占位 |
+| crates/rusty-claude-cli/src/main.rs | CapabilityExecutor, CapabilityPlanner, CapabilityState, CapabilityStore, capability_runtime, capability_state | 163 | panic-stub | 9c | 320 | CLI 仍整块依赖 legacy capability runtime；先打 `TODO(W7-RETIRE)` |
+| crates/tools/src/builtin_catalog.rs | capability_runtime | 1 | dead | 9c | 12 | capability 可见性桥接类型删掉 |
+| crates/tools/src/capability_runtime/executor.rs | CapabilityExecutor, CapabilityPlanner, CapabilityStore | 17 | dead | 9c | 645 | 整文件删除 |
+| crates/tools/src/capability_runtime/exposure.rs | CapabilityExposure | 2 | dead | 9c | 60 | 整文件删除 |
+| crates/tools/src/capability_runtime/planner.rs | CapabilityPlanner, CapabilityState, CapabilitySurface | 32 | dead | 9c | 449 | 整文件删除 |
+| crates/tools/src/capability_runtime/provider.rs | CapabilityExecutor, CapabilityPlanner, CapabilityState, CapabilityStore, CapabilitySurface | 40 | dead | 9c | 1506 | 整文件删除 |
+| crates/tools/src/capability_runtime/state.rs | CapabilityExposure, CapabilityState, CapabilityStore, CapabilitySurface, capability_runtime | 18 | dead | 9c | 437 | 整文件删除 |
+| crates/tools/src/lib.rs | CapabilityExecutor, CapabilityExposure, CapabilityPlanner, CapabilityState, CapabilityStore, CapabilitySurface, capability_runtime | 13 | dead | 9c | 30 | 删 `mod capability_runtime` 与全部导出 |
+| crates/tools/src/skill_runtime.rs | CapabilityExecutor, CapabilityState, capability_runtime | 9 | dead | 9c | 60 | skill capability 描述与 executor 接口一起退掉 |
+| crates/tools/src/split_module_tests.rs | CapabilityPlanner, CapabilityState, CapabilityStore, capability_runtime, capability_state | 167 | dead | 9c | 280 | legacy capability 回归测试批量删除 |
+| crates/tools/src/subagent_runtime.rs | CapabilityPlanner, CapabilityState, CapabilityStore, capability_runtime, capability_state | 31 | panic-stub | 9c | 160 | W5 `AgentTool` 前不再维护 legacy subagent capability wiring |
+| crates/tools/src/tool_registry.rs | CapabilityPlanner, CapabilityState, capability_runtime | 10 | dead | 9c | 52 | 旧 tool search / deferred surface 帮助函数删掉 |
 
 ---
 
@@ -753,3 +796,387 @@ Notes：
 | 2026-04-21 | 首稿（10 Task Ledger + Exit State 对齐表 + Legacy 退役回链 + 附录 A 占位）。核心决策：① 沿用 W2 B3 先例，在 `octopus-sdk-contracts` 下沉 `PermissionGate / PermissionOutcome / PermissionMode / ToolCallRequest / AskResolver`；② `SandboxHandle` 占位于 tools crate，W4 由 `octopus-sdk-sandbox` 升级；③ MCP in-process shim 以 `ToolDirectory` trait（定义于 mcp）+ `ToolRegistry::as_directory()` 实现的方向一致化方案落地；④ Task 9 的 capability 退役拆 4 sub-PR，每 PR ≤ 800 行；⑤ Task 7 的 15 工具分 11 full + 4 W5-stub；⑥ W3 硬门禁加入 `mcp_process_lifecycle` + `mcp_sdk_shim_roundtrip` + `registry_stability` 三项契约测试。 | AI Agent |
 | 2026-04-21 | P1/P2 审计修订：① **P1-a** 修订清单 #22 的 `ToolDirectory` 签名改为全 MCP 原生类型（`fn list_tools(&self) -> Vec<McpTool>; async fn call_tool(..) -> Result<McpToolResult, McpError>`），与 Architecture `tools → mcp` 方向与 Task 4 Step 4 决策对齐；② **P1-b** 引入 `Capability Scan Superset`（14-token 正则），Step 9a 审计、9b/9c/9d 守护扫描、Exit Alignment、Task 10 Weekly Gate 全部同步为"对外 3-token + 内部 14-token 双口径"；Task 9 Files 清单补入 `adapter_state.rs / memory_selector.rs / subrun_orchestrator.rs / team_runtime.rs / runtime_persistence_tests.rs / execution_events.rs / approval_runtime_tests.rs` 等仅持 `capability_state_ref / load_capability_store / persist_capability_store` 的调用点；③ **P2-a** WebSearchTool 由 11 full 降为 5 个 stub 中的 W6-stub（W3 不引入 `SearchProvider` trait，归 `octopus-sdk-plugin` W5 定义、`octopus-sdk-core` W6 装配），Scope/R4/Task 7c/Exit Alignment 统一为 "10 full + 5 stub (4 W5 + 1 W6)"；④ **P2-b** `partition_tool_calls` 语义统一为工具级粒度（`is_concurrency_safe` 为准），`ResourceKey` 级 serial bucket 明确延 W4，Scope/Task 3 Step 3/Task 8 Step 2 同批对齐，`02 §5` 预登 `W4 增强项 · partition_tool_calls.resource_bucket`；⑤ **Open Q1** Scope Out of scope 追加 `task_output` defer 条款 + Task 10 Step 2 强制 `docs/sdk/README.md ## Fact-Fix 勘误` 追加 `[Fact-Fix · W3] 03-tool-system.md §3.4 task_output`；⑥ **Open Q2** Execution Rules 第 "default-members" 条补阶段性偏离说明 + 回收点（W7 legacy 整合同批收敛回 `02 §8` 目标口径）。 | AI Agent |
 | 2026-04-21 | 复审收口修订：① Architecture / Execution Rules 统一为 **`tools → mcp` 单向窄依赖**，删除 W3 中会导致 `mcp → tools` 反向依赖的旧表述；② Task 4 改成唯一的 MCP-native `ToolDirectory` 路径，去掉旧版 `ToolSpec / ToolResult / ToolError` 签名与伪 precondition；③ 修订清单 #15 改成 `4 个 W5-stub + 1 个 W6-stub`；④ `task_output` defer/Fact-Fix 只引用仓内已登记事实，不再引用任何未落 retrieval 契约名；⑤ R5 的 shim 构造器口径统一成 `SdkTransport::from_directory(registry.as_directory())`。 | AI Agent |
+| 2026-04-21 | W3 Weekly Gate 收口：① `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test --workspace` 全绿；② 显式补跑 `registry_stability / partition_concurrency / bash_output_limit / mcp_sdk_shim_roundtrip / mcp_process_lifecycle` 硬门禁；③ `02-crate-topology.md §2.4` 补登记 `ToolError::as_tool_result`；④ Task 9 / Task 10 切为 `done` 并补齐最终 Checkpoint。 | AI Agent |
+| 2026-04-21 | W3 审计补完：① 删除遗漏的 `crates/tools/src/capability_runtime/{mod.rs,events.rs}` 两个残留文件；② `Capability Scan Superset` 从 14-token 扩为 18-token，补上 `CapabilityExecutionEvent / CapabilityExecutionPhase / CapabilityExecutionRequest / CapabilityMediationDecision`，避免 residual 类型绕过门禁；③ 重跑 capability 守护扫描与 W3 关键门禁，确认 Task 9 真正闭环。 | AI Agent |
+| 2026-04-21 | W3 最终审计收口：删除空目录 `crates/tools/src/capability_runtime/`，使 capability runtime 目录级残留也归零；补记最终 Checkpoint，确认 Task 9/10 与仓库物理状态一致。 | AI Agent |
+
+## Checkpoint 2026-04-21 11:45
+
+- Week: W3
+- Batch: Task 1 Step 1 → Step 3
+- Completed:
+  - 新建 `octopus-sdk-tools` 与 `octopus-sdk-mcp` crate 骨架，并把两者加入 workspace `default-members`
+  - 在 `octopus-sdk-contracts` 下沉 `ToolCallRequest / PermissionMode / PermissionOutcome / PermissionGate / AskResolver` 契约
+  - 回填 `docs/plans/sdk/02-crate-topology.md §2.1` 的 W3 公共面修订清单，并把 W3 plan 状态切到 `in_progress`
+- Files changed:
+  - `Cargo.toml` / `Cargo.lock`
+  - `crates/octopus-sdk-contracts/src/{lib.rs,permission.rs,ask_resolver.rs}`
+  - `crates/octopus-sdk-tools/Cargo.toml`
+  - `crates/octopus-sdk-tools/src/{lib.rs,stub.rs}`
+  - `crates/octopus-sdk-mcp/Cargo.toml`
+  - `crates/octopus-sdk-mcp/src/{lib.rs,stub.rs}`
+  - `docs/plans/sdk/{README.md,02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo build -p octopus-sdk-tools -p octopus-sdk-mcp` → pass
+  - `cargo test -p octopus-sdk-contracts permission::` → pass
+  - `cargo test -p octopus-sdk-contracts ask_resolver::` → pass
+  - `cargo clippy -p octopus-sdk-contracts -p octopus-sdk-tools -p octopus-sdk-mcp -- -D warnings` → pass
+  - `cargo metadata --format-version=1 --no-deps | jq -r '.workspace_default_members[]' | rg 'octopus-sdk-(tools|mcp)'` → pass
+  - `rg -n '^(rusqlite|tauri|axum|octopus-core|octopus-platform)\\s*=|^octopus-sdk-mcp\\s*=|^octopus-sdk-tools\\s*=' crates/octopus-sdk-tools/Cargo.toml crates/octopus-sdk-mcp/Cargo.toml` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-21 11:48
+
+- Week: W3
+- Batch: Task 2 Step 1 → Step 3
+- Completed:
+  - 落地 `ToolCategory / ToolSpec / Tool::spec()` 基础契约，并复用 `octopus_sdk_contracts::ToolSchema`
+  - 落地 `ToolRegistry` 的确定性排序、重复名防护、稳定指纹和 canonical JSON 排序
+  - 预置 `ToolContext / ToolResult / ToolError / RegistryError` 最小骨架，满足 `Tool` trait 对象安全与注册表测试
+- Files changed:
+  - `crates/octopus-sdk-tools/src/{lib.rs,context.rs,error.rs,result.rs,spec.rs,tool.rs,registry.rs}`
+- Verification:
+  - `cargo test -p octopus-sdk-tools spec::` → pass
+  - `cargo test -p octopus-sdk-tools registry::` → pass
+  - `cargo clippy -p octopus-sdk-tools -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-21 12:00
+
+- Week: W3
+- Batch: Task 3 Step 1 → Step 3
+- Completed:
+  - 落地 `ToolContext` / `SandboxHandle` 真字段，并用 mock services 补齐可构造测试
+  - 落地 `ToolResult` / `ToolError` / `RegistryError` 与 `as_tool_result()` 边界转换
+  - 落地 `ExecBatch` / `partition_tool_calls` / 三个常量，并把 `EventSink`、`AskResolver(prompt_id, ...)`、`ToolError::NotYetImplemented { crate_name, week }` 同步回计划与拓扑文档
+- Files changed:
+  - `crates/octopus-sdk-contracts/src/event.rs`
+  - `crates/octopus-sdk-tools/src/{constants.rs,context.rs,error.rs,lib.rs,partition.rs,result.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo check -p octopus-sdk-tools --tests` → pass
+  - `cargo test -p octopus-sdk-tools error::` → pass
+  - `cargo test -p octopus-sdk-tools result::` → pass
+  - `cargo test -p octopus-sdk-tools partition::` → pass
+  - `cargo clippy -p octopus-sdk-tools -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-21 12:04
+
+- Week: W3
+- Batch: Task 4 Step 1 → Step 4
+- Completed:
+  - 落地 `JsonRpcRequest / JsonRpcResponse / JsonRpcNotification / JsonRpcError`，补齐 round-trip 测试
+  - 落地 `McpTool / McpPrompt / McpResource / McpToolResult / McpError / ToolDirectory`
+  - 把计划里的 Task 4 互转口径从 `ToolSpec` 收口为 `ToolSchema`，同步回 `§2.5` 公共面文档
+- Files changed:
+  - `crates/octopus-sdk-mcp/src/{directory.rs,error.rs,jsonrpc.rs,lib.rs,types.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-mcp jsonrpc::` → pass
+  - `cargo test -p octopus-sdk-mcp types::` → pass
+  - `cargo test -p octopus-sdk-mcp error::` → pass
+  - `cargo check -p octopus-sdk-mcp` → pass
+  - `wc -l crates/octopus-sdk-mcp/src/lib.rs` → `13`
+  - `cargo clippy -p octopus-sdk-mcp -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-21 12:08
+
+- Week: W3
+- Batch: Task 5 Step 1 → Step 3
+- Completed:
+  - 落地 `McpTransport` / `TransportKind` 与默认 `notify()` 路径
+  - 落地 `McpClient` 自动初始化链路、`InitializeResult`、prompt/resource 的空列表降级
+  - 落地 `McpServerManager` / `McpServerSpec` / `McpServerTransport` / `McpLifecyclePhase`，补齐 spawn-shutdown-drop 基础测试
+- Files changed:
+  - `crates/octopus-sdk-mcp/src/{client.rs,lib.rs,lifecycle.rs,manager.rs,transport/mod.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo check -p octopus-sdk-mcp` → pass
+  - `cargo test -p octopus-sdk-mcp client::` → pass
+  - `cargo test -p octopus-sdk-mcp manager::` → pass
+  - `cargo clippy -p octopus-sdk-mcp -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-21 12:31
+
+- Week: W3
+- Batch: Task 6 Step 1 → Step 4
+- Completed:
+  - 落地 `StdioTransport / HttpTransport / SdkTransport` 三个 transport，并补齐 `mcp-echo-server` fixture binary
+  - 修正 stdio drop 在 `tokio current_thread` runtime 下的回收路径，改成独立线程同步 `start_kill + wait`
+  - 补齐 HTTP method 精确匹配与 lifecycle 进程标记，避免并行测试互相污染
+- Files changed:
+  - `crates/octopus-sdk-mcp/Cargo.toml`
+  - `crates/octopus-sdk-mcp/src/transport/{http.rs,sdk.rs,stdio.rs}`
+  - `crates/octopus-sdk-mcp/src/bin/mcp-echo-server.rs`
+  - `crates/octopus-sdk-mcp/tests/{mcp_http_transport.rs,mcp_process_lifecycle.rs,mcp_sdk_transport.rs,mcp_stdio_transport.rs}`
+  - `crates/octopus-sdk-mcp/tests/fixtures/{initialize_response.json,tools_call_response.json,tools_list_response.json}`
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+- Verification:
+  - `cargo test -p octopus-sdk-mcp --test mcp_stdio_transport` → pass
+  - `cargo test -p octopus-sdk-mcp --test mcp_http_transport` → pass
+  - `cargo test -p octopus-sdk-mcp --test mcp_sdk_transport` → pass
+  - `cargo test -p octopus-sdk-mcp --test mcp_process_lifecycle` → pass
+  - `cargo check -p octopus-sdk-mcp` → pass
+  - `cargo test -p octopus-sdk-mcp` → pass
+  - `cargo clippy -p octopus-sdk-mcp --tests -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 7a
+
+## Checkpoint 2026-04-21 12:43
+
+- Week: W3
+- Batch: Task 7 Step 7a
+- Completed:
+  - 新增 `builtin` 模块并落地 `FileReadTool / GlobTool / GrepTool`
+  - `FileReadTool` 支持 `offset + limit` 区间读、`NNNNNN|` 行号格式和 2000 行 / 500 KB 双阈值截断
+  - `GlobTool` 与 `GrepTool` 统一按 workspace 相对路径回显，避免 canonical path 泄露到工具输出
+- Files changed:
+  - `crates/octopus-sdk-tools/src/{lib.rs,builtin/mod.rs,builtin/fs_read.rs,builtin/fs_glob.rs,builtin/fs_grep.rs}`
+  - `crates/octopus-sdk-tools/tests/builtin_fs_read.rs`
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+- Verification:
+  - `cargo test -p octopus-sdk-tools --test builtin_fs_read` → pass
+  - `cargo check -p octopus-sdk-tools` → pass
+  - `cargo clippy -p octopus-sdk-tools --test builtin_fs_read -- -D warnings` → pass
+- Exit state vs plan:
+  - partial（Task 7 持续中；7a 完成，切到 7b）
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 7b
+
+## Checkpoint 2026-04-21 13:02
+
+- Week: W3
+- Batch: Task 7 Step 7b
+- Completed:
+  - 落地 `FileWriteTool / FileEditTool / BashTool`
+  - 写工具统一走 `permissions.check()` 和原子落盘；`edit_file` 支持 `replace_all`
+  - `BashTool` 接上 `sandbox.cwd`、环境白名单、120s 默认超时和输出截断提示
+- Files changed:
+  - `crates/octopus-sdk-tools/Cargo.toml`
+  - `crates/octopus-sdk-tools/src/builtin/{mod.rs,fs_write.rs,fs_edit.rs,shell_bash.rs}`
+  - `crates/octopus-sdk-tools/tests/{builtin_fs_write.rs,builtin_bash.rs}`
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+- Verification:
+  - `cargo test -p octopus-sdk-tools --test builtin_fs_write` → pass
+  - `cargo test -p octopus-sdk-tools --test builtin_bash` → pass
+  - `cargo check -p octopus-sdk-tools` → pass
+  - `cargo clippy -p octopus-sdk-tools --test builtin_fs_write --test builtin_bash -- -D warnings` → pass
+- Exit state vs plan:
+  - partial（Task 7 持续中；7a/7b 完成，切到 7c）
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 7c
+
+## Checkpoint 2026-04-21 13:18
+
+- Week: W3
+- Batch: Task 7 Step 7c
+- Completed:
+  - 落地 `WebFetchTool / WebSearchTool / AskUserQuestionTool / TodoWriteTool / SleepTool`
+  - `WebFetchTool` 走 `reqwest` + 最小 HTML 剥离和 30_000 字符截断；`WebSearchTool` 固定为 W6 stub
+  - `AskUserQuestionTool` 接上 `AskResolver`、300s 超时和 `SessionEvent::Ask`；`TodoWriteTool` 因 contracts 无 `TodoUpdated` 改为发 `RenderKind::Record`
+- Files changed:
+  - `crates/octopus-sdk-tools/Cargo.toml`
+  - `crates/octopus-sdk-tools/src/builtin/{mod.rs,web_fetch.rs,web_search.rs,ask_user_question.rs,todo_write.rs,sleep.rs}`
+  - `crates/octopus-sdk-tools/tests/{builtin_web.rs,builtin_ask.rs,support/mod.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-tools --test builtin_web --test builtin_ask` → pass
+  - `cargo check -p octopus-sdk-tools` → pass
+  - `cargo clippy -p octopus-sdk-tools --test builtin_web --test builtin_ask -- -D warnings` → pass
+- Exit state vs plan:
+  - partial（Task 7 持续中；7c 完成，切到 7d）
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 7d
+
+## Checkpoint 2026-04-21 13:19
+
+- Week: W3
+- Batch: Task 7 Step 7d
+- Completed:
+  - 落地 `AgentTool / SkillTool / TaskListTool / TaskGetTool` 四个 W5 stub
+  - 在 `builtin/mod.rs` 增加 `register_builtins()`，固定 15 个内置工具注册入口
+  - 补齐 W5 stub 集成测试，统一断言 `NotYetImplemented` 和 `ToolResult.is_error = true`
+- Files changed:
+  - `crates/octopus-sdk-tools/src/builtin/{mod.rs,w5_stubs.rs}`
+  - `crates/octopus-sdk-tools/tests/builtin_stubs.rs`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-tools --test builtin_stubs` → pass
+  - `cargo test -p octopus-sdk-tools --test builtin_web --test builtin_ask --test builtin_stubs` → pass
+  - `cargo check -p octopus-sdk-tools` → pass
+  - `cargo clippy -p octopus-sdk-tools --test builtin_web --test builtin_ask --test builtin_stubs -- -D warnings` → pass
+- Exit state vs plan:
+  - matches（Task 7 完成，切到 Task 8）
+- Blockers:
+  - none
+- Next:
+  - Task 8 Step 1
+
+## Checkpoint 2026-04-21 13:42
+
+- Week: W3
+- Batch: Task 8 Step 1 → Step 4
+- Completed:
+  - 新增 `registry_stability / partition_concurrency / bash_output_limit / mcp_sdk_shim_roundtrip` 四组硬门禁测试
+  - `ToolRegistry` 增加 `as_directory()`，并在 tools crate 内实现 `ToolDirectory` shim adapter，收口 `ToolResult -> McpToolResult`
+  - 追加 `octopus-sdk-tools -> octopus-sdk-mcp` 的窄依赖，只用于 in-process MCP shim
+- Files changed:
+  - `crates/octopus-sdk-tools/Cargo.toml`
+  - `crates/octopus-sdk-tools/src/registry.rs`
+  - `crates/octopus-sdk-tools/tests/{registry_stability.rs,partition_concurrency.rs,bash_output_limit.rs,mcp_sdk_shim_roundtrip.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,06-week-3-tools-mcp.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-tools --test registry_stability --test partition_concurrency --test bash_output_limit --test mcp_sdk_shim_roundtrip` → pass
+  - `cargo check -p octopus-sdk-tools` → pass
+  - `cargo clippy -p octopus-sdk-tools --test registry_stability --test partition_concurrency --test bash_output_limit --test mcp_sdk_shim_roundtrip -- -D warnings` → pass
+- Exit state vs plan:
+  - matches（Task 8 完成，切到 Task 9）
+- Blockers:
+  - none
+- Next:
+  - Task 9 Step 9a
+
+## Checkpoint 2026-04-21 14:41
+
+- Week: W3
+- Batch: Task 9 Step 9a → Step 9d
+- Completed:
+  - 删除 `crates/tools/src/capability_runtime/**` 与 `crates/octopus-runtime-adapter/src/capability_{executor_bridge,planner_bridge,state,runtime_tests}.rs`
+  - 对齐 `octopus-runtime-adapter` 相关测试到当前 runtime 投影边界，收口 approval / tool events / runtime turn loop 断言
+  - 将 `rusty-claude-cli` 主入口降级为 `TODO(W7-RETIRE)` panic-stub，并禁用依赖 legacy `claw` binary 的集成测试
+- Files changed:
+  - `crates/tools/src/lib.rs` + `crates/tools/src/capability_runtime/**`
+  - `crates/octopus-runtime-adapter/src/{approval_runtime_tests.rs,actor_runtime_tests.rs,lib.rs,mcp_runtime_tests.rs,runtime_persistence_tests.rs}`
+  - `crates/octopus-runtime-adapter/tests/runtime_turn_loop.rs`
+  - `crates/rusty-claude-cli/src/main.rs`
+  - `crates/rusty-claude-cli/tests/{cli_flags_and_config_defaults.rs,resume_slash_commands.rs,mock_parity_harness.rs,output_format_contract.rs}`
+  - `docs/plans/sdk/03-legacy-retirement.md`
+- Verification:
+  - `cargo build --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `cargo test -p octopus-runtime-adapter --lib` → pass
+  - `cargo test -p octopus-runtime-adapter --test runtime_turn_loop` → pass
+  - `cargo test -p rusty-claude-cli` → pass
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface' crates/` → 0 hits
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|CapabilityExposure|CapabilityState|CapabilityStore|capability_executor_bridge|capability_planner_bridge|capability_state|capability_state_ref|load_capability_store|persist_capability_store' crates/` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 10 Step 1
+
+## Checkpoint 2026-04-21 14:42
+
+- Week: W3
+- Batch: Task 10 Step 1 → Step 3
+- Completed:
+  - 完成 `octopus-sdk-contracts / octopus-sdk-tools / octopus-sdk-mcp` 公共面自核对，并在 `02 §2.4` 补登记 `ToolError::as_tool_result`
+  - 确认 `02 §5` 的 W3 契约差异和 `docs/sdk/README.md` 的 `task_output` Fact-Fix 已落地
+  - 完成 W3 Weekly Gate，Task 9 / Task 10 与 Active Work 全部切到完成态
+- Files changed:
+  - `docs/plans/sdk/02-crate-topology.md`
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+- Verification:
+  - `cargo build --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `cargo test --workspace` → pass
+  - `cargo test -p octopus-sdk-contracts -p octopus-sdk-tools -p octopus-sdk-mcp` → pass
+  - `cargo clippy -p octopus-sdk-contracts -p octopus-sdk-tools -p octopus-sdk-mcp -- -D warnings` → pass
+  - `cargo test -p octopus-sdk-tools --test registry_stability --test partition_concurrency --test bash_output_limit --test mcp_sdk_shim_roundtrip` → pass
+  - `cargo test -p octopus-sdk-mcp --test mcp_process_lifecycle` → pass
+  - `find crates/octopus-sdk-tools crates/octopus-sdk-mcp -type f -name '*.rs' -exec wc -l {} \; | awk '$1 > 800'` → 0 hits
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface' crates/` → 0 hits
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|CapabilityExposure|CapabilityState|CapabilityStore|capability_executor_bridge|capability_planner_bridge|capability_state|capability_state_ref|load_capability_store|persist_capability_store' crates/` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - W4 kick-off
+
+## Checkpoint 2026-04-21 16:05
+
+- Week: W3
+- Batch: Task 9 residual closeout
+- Completed:
+  - 删除遗漏的 `crates/tools/src/capability_runtime/{mod.rs,events.rs}`
+  - 扩大 `Capability Scan Superset` 守护口径，补上 4 个 legacy execution token
+  - 复核 W3 收尾门禁，确认 Task 9/Task 10 的 `done` 状态现在与磁盘真实状态一致
+- Files changed:
+  - `crates/tools/src/capability_runtime/{mod.rs,events.rs}` (-deleted)
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+- Verification:
+  - `find crates/tools/src/capability_runtime -maxdepth 1 -type f` → 0 hits
+  - `rg -n 'CapabilityExecution(Request|Event|Phase|MediationDecision)' crates/` → 0 hits
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|CapabilityExposure|CapabilityState|CapabilityStore|CapabilityExecutionEvent|CapabilityExecutionPhase|CapabilityExecutionRequest|CapabilityMediationDecision|capability_executor_bridge|capability_planner_bridge|capability_state|capability_state_ref|load_capability_store|persist_capability_store' crates/` → 0 hits
+  - `cargo test -p octopus-sdk-contracts -p octopus-sdk-tools -p octopus-sdk-mcp` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - W4 kick-off
+
+## Checkpoint 2026-04-21 16:10
+
+- Week: W3
+- Batch: Final audit closeout
+- Completed:
+  - 删除空目录 `crates/tools/src/capability_runtime/`
+  - 复核 W3 计划、SDK 实现、legacy 删除状态和全仓门禁结果
+  - 确认 Task 1–10 的 `done` 状态与当前代码仓库一致
+- Files changed:
+  - `docs/plans/sdk/06-week-3-tools-mcp.md`
+  - `crates/tools/src/capability_runtime/` (-removed directory)
+- Verification:
+  - `test ! -e crates/tools/src/capability_runtime && echo removed` → pass
+  - `rg -n 'CapabilityExecution(Request|Event|Phase|MediationDecision)' crates/` → 0 hits
+  - `rg --type rust -e 'capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutor|CapabilityExposure|CapabilityState|CapabilityStore|CapabilityExecutionEvent|CapabilityExecutionPhase|CapabilityExecutionRequest|CapabilityMediationDecision|capability_executor_bridge|capability_planner_bridge|capability_state|capability_state_ref|load_capability_store|persist_capability_store' crates/` → 0 hits
+  - `cargo build --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `cargo test --workspace` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - W4 kick-off

@@ -19,7 +19,9 @@ impl SqliteJsonlSessionStore {
         }
 
         let after_seq = match range.after {
-            Some(after) => event_sequence(&connection, session_id, &after)?.ok_or(SessionError::NotFound)?,
+            Some(after) => {
+                event_sequence(&connection, session_id, &after)?.ok_or(SessionError::NotFound)?
+            }
             None => 0,
         };
 
@@ -36,8 +38,9 @@ impl SqliteJsonlSessionStore {
                 LIMIT ?3
                 ",
             )?;
-            let rows = statement
-                .query_map(params![session_id.0, after_seq, limit], |row| row.get::<_, String>(0))?;
+            let rows = statement.query_map(params![session_id.0, after_seq, limit], |row| {
+                row.get::<_, String>(0)
+            })?;
 
             rows.map(|row| -> Result<SessionEvent, SessionError> {
                 Ok(serde_json::from_str(&row?)?)
@@ -52,8 +55,9 @@ impl SqliteJsonlSessionStore {
                 ORDER BY seq ASC
                 ",
             )?;
-            let rows =
-                statement.query_map(params![session_id.0, after_seq], |row| row.get::<_, String>(0))?;
+            let rows = statement.query_map(params![session_id.0, after_seq], |row| {
+                row.get::<_, String>(0)
+            })?;
 
             rows.map(|row| -> Result<SessionEvent, SessionError> {
                 Ok(serde_json::from_str(&row?)?)
@@ -62,14 +66,18 @@ impl SqliteJsonlSessionStore {
         };
 
         Ok(Box::pin(stream::iter(
-            events.into_iter().map(Result::<SessionEvent, SessionError>::Ok),
+            events
+                .into_iter()
+                .map(Result::<SessionEvent, SessionError>::Ok),
         )))
     }
 
-    pub(crate) fn load_snapshot(&self, session_id: &SessionId) -> Result<SessionSnapshot, SessionError> {
+    pub(crate) fn load_snapshot(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<SessionSnapshot, SessionError> {
         let connection = self.open_connection()?;
-        let row = load_session_row(&connection, session_id)?
-            .ok_or(SessionError::NotFound)?;
+        let row = load_session_row(&connection, session_id)?.ok_or(SessionError::NotFound)?;
 
         Ok(SessionSnapshot {
             id: session_id.clone(),
@@ -109,7 +117,8 @@ impl SqliteJsonlSessionStore {
     ) -> Result<SessionId, SessionError> {
         let mut connection = self.open_connection()?;
         let source = load_session_row(&connection, session_id)?.ok_or(SessionError::NotFound)?;
-        let max_seq = event_sequence(&connection, session_id, from_event_id)?.ok_or(SessionError::NotFound)?;
+        let max_seq = event_sequence(&connection, session_id, from_event_id)?
+            .ok_or(SessionError::NotFound)?;
         let source_events = load_events_through(&connection, session_id, max_seq)?;
         let forked_session_id = SessionId::new_v4();
         let mut cloned = Vec::with_capacity(source_events.len());
@@ -194,8 +203,14 @@ impl SqliteJsonlSessionStore {
 
         let now = now_millis();
         let transaction = connection.unchecked_transaction()?;
-        transaction.execute("DELETE FROM events WHERE session_id = ?1", [session_id.0.as_str()])?;
-        transaction.execute("DELETE FROM sessions WHERE session_id = ?1", [session_id.0.as_str()])?;
+        transaction.execute(
+            "DELETE FROM events WHERE session_id = ?1",
+            [session_id.0.as_str()],
+        )?;
+        transaction.execute(
+            "DELETE FROM sessions WHERE session_id = ?1",
+            [session_id.0.as_str()],
+        )?;
         transaction.execute(
             "
             INSERT INTO sessions (
@@ -298,7 +313,8 @@ fn load_event_ids(
     )?;
     let rows = statement.query_map([session_id.0.as_str()], |row| row.get::<_, String>(0))?;
 
-    rows.collect::<Result<Vec<_>, _>>().map_err(SessionError::from)
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(SessionError::from)
 }
 
 fn event_sequence(
@@ -361,12 +377,12 @@ fn load_events_after_seq(
         ORDER BY seq ASC
         ",
     )?;
-    let rows = statement.query_map(params![session_id.0, after_seq], |row| row.get::<_, String>(0))?;
+    let rows = statement.query_map(params![session_id.0, after_seq], |row| {
+        row.get::<_, String>(0)
+    })?;
 
-    rows.map(|row| -> Result<SessionEvent, SessionError> {
-        Ok(serde_json::from_str(&row?)?)
-    })
-    .collect()
+    rows.map(|row| -> Result<SessionEvent, SessionError> { Ok(serde_json::from_str(&row?)?) })
+        .collect()
 }
 
 fn load_checkpoint_rows(
@@ -389,7 +405,9 @@ fn load_checkpoint_rows(
         let (seq, payload) = row?;
         let event = serde_json::from_str::<SessionEvent>(&payload)?;
         Ok(match event {
-            SessionEvent::Checkpoint { anchor_event_id, .. } => Some((seq, anchor_event_id)),
+            SessionEvent::Checkpoint {
+                anchor_event_id, ..
+            } => Some((seq, anchor_event_id)),
             _ => None,
         })
     })
@@ -409,16 +427,12 @@ struct ExpectedProjection {
 }
 
 fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, SessionError> {
-    let first = records
-        .first()
-        .ok_or(SessionError::Corrupted {
-            reason: "jsonl_session_has_no_events".into(),
-        })?;
-    let last = records
-        .last()
-        .ok_or(SessionError::Corrupted {
-            reason: "jsonl_session_has_no_events".into(),
-        })?;
+    let first = records.first().ok_or(SessionError::Corrupted {
+        reason: "jsonl_session_has_no_events".into(),
+    })?;
+    let last = records.last().ok_or(SessionError::Corrupted {
+        reason: "jsonl_session_has_no_events".into(),
+    })?;
 
     let SessionEvent::SessionStarted {
         config_snapshot_id,

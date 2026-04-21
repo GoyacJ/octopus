@@ -1,0 +1,3 @@
+pub const BASH_MAX_OUTPUT_DEFAULT: usize = 30_000;
+pub const BASH_MAX_OUTPUT_UPPER_LIMIT: usize = 150_000;
+pub const DEFAULT_TOOL_MAX_CONCURRENCY: usize = 10;

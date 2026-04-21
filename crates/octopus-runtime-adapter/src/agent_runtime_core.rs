@@ -69,7 +69,17 @@ const MAX_RUNTIME_ITERATIONS: u32 = 8;
 pub(crate) struct RuntimePendingToolUse {
     pub(crate) tool_use_id: String,
     pub(crate) tool_name: String,
+    #[allow(dead_code)]
     pub(crate) input: Value,
+}
+
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Default)]
+struct RuntimeLoopProjection {
+    plan_summary: RuntimeCapabilityPlanSummary,
+    provider_state_summary: Vec<RuntimeCapabilityProviderState>,
+    auth_state_summary: RuntimeAuthStateSummary,
+    policy_decision_summary: RuntimePolicyDecisionSummary,
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +89,7 @@ struct RuntimeLoopResult {
     usage_summary: RuntimeUsageSummary,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
-    capability_projection: capability_planner_bridge::CapabilityProjection,
+    capability_projection: RuntimeLoopProjection,
     mediation_request: Option<approval_broker::MediationRequest>,
     broker_decision: Option<approval_broker::BrokerDecision>,
     planner_events: Vec<RuntimeLoopPlannerEvent>,
@@ -93,7 +103,7 @@ struct RuntimeLoopFailure {
     serialized_session: Value,
     usage_summary: RuntimeUsageSummary,
     current_iteration_index: u32,
-    capability_projection: capability_planner_bridge::CapabilityProjection,
+    capability_projection: RuntimeLoopProjection,
     planner_events: Vec<RuntimeLoopPlannerEvent>,
     model_iterations: Vec<RuntimeLoopModelIteration>,
     capability_events: Vec<RuntimeLoopCapabilityEvent>,
@@ -139,7 +149,6 @@ pub(crate) struct RuntimeLoopPlannerEvent {
     pub(crate) phase: RuntimeLoopPlannerPhase,
     pub(crate) capability_plan_summary: Option<RuntimeCapabilityPlanSummary>,
     pub(crate) provider_state_summary: Option<Vec<RuntimeCapabilityProviderState>>,
-    pub(crate) capability_state_ref: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -150,11 +159,25 @@ pub(crate) struct RuntimeLoopModelIteration {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) enum RuntimeLoopCapabilityPhase {
+    Started,
+    Completed,
+    Failed,
+    BlockedApproval,
+    BlockedAuth,
+    Denied,
+    Cancelled,
+    Interrupted,
+    Degraded,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct RuntimeLoopCapabilityEvent {
     pub(crate) iteration: u32,
     pub(crate) tool_use_id: String,
-    pub(crate) capability: Option<tools::CapabilitySpec>,
-    pub(crate) execution: tools::CapabilityExecutionEvent,
+    pub(crate) family: &'static str,
+    pub(crate) phase: RuntimeLoopCapabilityPhase,
 }
 
 fn capability_execution_outcome(
@@ -586,6 +609,7 @@ fn collect_tool_uses(message: &runtime::ConversationMessage) -> Vec<RuntimePendi
         .collect()
 }
 
+#[allow(dead_code)]
 fn serialize_pending_tool_use(tool_use: &RuntimePendingToolUse) -> Value {
     json!({
         "toolUseId": tool_use.tool_use_id,
@@ -628,6 +652,7 @@ fn pending_tool_uses_from_serialized_session(
         .unwrap_or_else(|| Ok(Vec::new()))
 }
 
+#[allow(dead_code)]
 fn latest_runtime_response(
     session: &runtime::Session,
     total_tokens: Option<u32>,
@@ -834,6 +859,7 @@ fn serialized_runtime_session_with_state(
     })
 }
 
+#[allow(dead_code)]
 fn serialized_runtime_session_with_pending_tool_uses(
     content: &str,
     trace_context: &RuntimeTraceContext,
@@ -1139,20 +1165,18 @@ fn planner_started_event(iteration: u32) -> RuntimeLoopPlannerEvent {
         phase: RuntimeLoopPlannerPhase::Started,
         capability_plan_summary: None,
         provider_state_summary: None,
-        capability_state_ref: None,
     }
 }
 
 fn planner_completed_event(
     iteration: u32,
-    projection: &capability_planner_bridge::CapabilityProjection,
+    projection: &RuntimeLoopProjection,
 ) -> RuntimeLoopPlannerEvent {
     RuntimeLoopPlannerEvent {
         iteration,
         phase: RuntimeLoopPlannerPhase::Completed,
         capability_plan_summary: Some(projection.plan_summary.clone()),
         provider_state_summary: Some(projection.provider_state_summary.clone()),
-        capability_state_ref: Some(projection.capability_state_ref.clone()),
     }
 }
 
@@ -1160,13 +1184,12 @@ async fn execute_runtime_turn_loop(
     adapter: &RuntimeAdapter,
     session_id: &str,
     conversation_id: &str,
-    run_id: &str,
+    _run_id: &str,
     resolved_target: &ResolvedExecutionTarget,
     configured_model: &ConfiguredModelRecord,
     actor_manifest: &actor_manifest::CompiledActorManifest,
-    session_policy: &session_policy::CompiledSessionPolicy,
+    _session_policy: &session_policy::CompiledSessionPolicy,
     requested_permission_mode: &str,
-    capability_state_ref: &str,
     content: &str,
     trace_context: &RuntimeTraceContext,
     mut session: runtime::Session,
@@ -1180,164 +1203,37 @@ async fn execute_runtime_turn_loop(
     let mut pending_tool_uses = std::collections::VecDeque::from(pending_tool_uses);
     let mut planner_events = Vec::new();
     let mut model_iterations = Vec::new();
-    let mut capability_events = Vec::new();
+    let capability_events = Vec::new();
+    let capability_projection = RuntimeLoopProjection::default();
 
     loop {
         let planned_iteration = next_runtime_iteration_index_from_value(current_iteration_index)?;
         planner_events.push(planner_started_event(planned_iteration));
-        let capability_store = adapter.load_capability_store(Some(capability_state_ref))?;
-        let prepared = adapter
-            .prepare_capability_runtime_async(
-                actor_manifest,
-                session_policy,
-                &session_policy.config_snapshot_id,
-                capability_state_ref.to_string(),
-                &capability_store,
-            )
-            .await?;
         planner_events.push(planner_completed_event(
             planned_iteration,
-            &prepared.projection,
+            &capability_projection,
         ));
-        let capability_projection = prepared.projection.clone();
-        let capability_runtime = prepared.capability_runtime.clone();
-        let managed_mcp_runtime = prepared.managed_mcp_runtime.clone();
-        let visible_capabilities = prepared.visible_capabilities.clone();
-        let planned_tool_names = prepared.planned_tool_names.clone();
         let mut processed_pending_tool_use = false;
-
-        let pending_mcp_servers = managed_mcp_runtime.as_ref().and_then(|runtime| {
-            runtime
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .pending_servers()
-        });
-        let mcp_degraded = managed_mcp_runtime.as_ref().and_then(|runtime| {
-            runtime
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .degraded_report()
-        });
 
         while let Some(tool_use) = pending_tool_uses.pop_front() {
             processed_pending_tool_use = true;
-            let execution = capability_executor_bridge::execute_pending_tool_use(
-                adapter,
-                &capability_runtime,
-                managed_mcp_runtime.as_ref(),
-                &visible_capabilities,
-                &planned_tool_names,
-                &capability_store,
-                session_id,
-                conversation_id,
-                run_id,
-                requested_permission_mode,
-                &tool_use,
-                pending_mcp_servers.clone(),
-                mcp_degraded.clone(),
-            )?;
-            capability_events.extend(execution.execution_events.into_iter().map(|event| {
-                RuntimeLoopCapabilityEvent {
-                    iteration: current_iteration_index,
-                    tool_use_id: tool_use.tool_use_id.clone(),
-                    capability: execution.capability.clone(),
-                    execution: event,
-                }
-            }));
-            match execution.outcome {
-                runtime::ToolExecutionOutcome::Allow { output } => {
-                    let result_message = runtime::ConversationMessage::tool_result(
-                        tool_use.tool_use_id,
-                        tool_use.tool_name,
-                        output,
-                        false,
-                    );
-                    session
-                        .push_message(result_message)
-                        .map_err(|error| AppError::runtime(error.to_string()))?;
-                }
-                runtime::ToolExecutionOutcome::RequireApproval { .. }
-                | runtime::ToolExecutionOutcome::RequireAuth { .. } => {
-                    let mediation_request = execution.mediation_request.ok_or_else(|| {
-                        AppError::runtime(
-                            "runtime capability mediation did not capture a blocked request",
-                        )
-                    })?;
-                    let broker_decision = approval_broker::mediate(&mediation_request);
-                    let updated_projection = adapter
-                        .project_capability_state_async(
-                            actor_manifest,
-                            session_policy,
-                            &session_policy.config_snapshot_id,
-                            capability_state_ref.to_string(),
-                            &capability_store,
-                        )
-                        .await?;
-                    let mut remaining_tool_uses = vec![tool_use];
-                    remaining_tool_uses.extend(pending_tool_uses.into_iter());
-                    adapter.persist_capability_store(capability_state_ref, &capability_store)?;
-                    let segment_total_tokens = usage_complete.then_some(
-                        usage_summary
-                            .total_tokens
-                            .saturating_sub(starting_total_tokens),
-                    );
-                    let response = latest_runtime_response(&session, segment_total_tokens)?;
-                    let consumed_tokens =
-                        adapter.resolve_consumed_tokens(configured_model, &response)?;
-                    return Ok(RuntimeLoopExit::Completed(Box::new(RuntimeLoopResult {
-                        response,
-                        serialized_session: serialized_runtime_session_with_pending_tool_uses(
-                            content,
-                            trace_context,
-                            requested_permission_mode,
-                            &session,
-                            &remaining_tool_uses,
-                        ),
-                        usage_summary,
-                        consumed_tokens,
-                        current_iteration_index,
-                        capability_projection: updated_projection,
-                        mediation_request: Some(mediation_request),
-                        broker_decision: Some(broker_decision),
-                        planner_events,
-                        model_iterations,
-                        capability_events,
-                    })));
-                }
-                other => {
-                    let result_message = runtime::ConversationMessage::tool_result(
-                        tool_use.tool_use_id,
-                        tool_use.tool_name.clone(),
-                        other.message_for_tool(&tool_use.tool_name),
-                        true,
-                    );
-                    session
-                        .push_message(result_message)
-                        .map_err(|error| AppError::runtime(error.to_string()))?;
-                }
-            }
+            let result_message = runtime::ConversationMessage::tool_result(
+                tool_use.tool_use_id,
+                tool_use.tool_name.clone(),
+                "Tool execution is unavailable while the legacy capability runtime is retired.",
+                true,
+            );
+            session
+                .push_message(result_message)
+                .map_err(|error| AppError::runtime(error.to_string()))?;
         }
-        adapter.persist_capability_store(capability_state_ref, &capability_store)?;
-
-        let (capability_projection, visible_capabilities) = if processed_pending_tool_use {
+        if processed_pending_tool_use {
             planner_events.push(planner_started_event(planned_iteration));
-            let prepared = adapter
-                .prepare_capability_runtime_async(
-                    actor_manifest,
-                    session_policy,
-                    &session_policy.config_snapshot_id,
-                    capability_state_ref.to_string(),
-                    &capability_store,
-                )
-                .await?;
             planner_events.push(planner_completed_event(
                 planned_iteration,
-                &prepared.projection,
+                &capability_projection,
             ));
-            (prepared.projection, prepared.visible_capabilities)
-        } else {
-            (capability_projection, visible_capabilities)
-        };
+        }
 
         let system_prompt = actor_manifest.system_prompt();
         let request = RuntimeConversationRequest {
@@ -1346,10 +1242,7 @@ async fn execute_runtime_turn_loop(
                 .into_iter()
                 .collect(),
             messages: session.messages.clone(),
-            tools: visible_capabilities
-                .iter()
-                .map(tools::CapabilitySpec::to_tool_definition)
-                .collect(),
+            tools: Vec::new(),
         };
         current_iteration_index = next_runtime_iteration_index_from_value(current_iteration_index)?;
         let conversation_execution = adapter
@@ -1390,7 +1283,7 @@ async fn execute_runtime_turn_loop(
                     serialized_session,
                     usage_summary,
                     current_iteration_index,
-                    capability_projection,
+                    capability_projection: capability_projection.clone(),
                     planner_events,
                     model_iterations,
                     capability_events,
@@ -1438,7 +1331,7 @@ async fn execute_runtime_turn_loop(
                 usage_summary,
                 consumed_tokens,
                 current_iteration_index,
-                capability_projection,
+                capability_projection: capability_projection.clone(),
                 mediation_request: None,
                 broker_decision: None,
                 planner_events,
@@ -1460,7 +1353,6 @@ async fn execute_runtime_turn_loop_with_budget_reservation(
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
     requested_permission_mode: &str,
-    capability_state_ref: &str,
     content: &str,
     trace_context: &RuntimeTraceContext,
     session: runtime::Session,
@@ -1484,7 +1376,6 @@ async fn execute_runtime_turn_loop_with_budget_reservation(
         actor_manifest,
         session_policy,
         requested_permission_mode,
-        capability_state_ref,
         content,
         trace_context,
         session,
@@ -1543,7 +1434,6 @@ fn build_runtime_checkpoint(
     pending_approval: Option<ApprovalRequestRecord>,
     pending_auth_challenge: Option<RuntimeAuthChallengeSummary>,
     pending_mediation: Option<RuntimePendingMediationSummary>,
-    capability_state_ref: Option<String>,
     capability_plan_summary: RuntimeCapabilityPlanSummary,
     last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     last_mediation_outcome: Option<RuntimeMediationOutcome>,
@@ -1609,7 +1499,6 @@ fn build_runtime_checkpoint(
         requires_auth,
         target_kind,
         target_ref,
-        capability_state_ref,
         capability_plan_summary,
         last_execution_outcome,
         last_mediation_outcome,
@@ -1747,7 +1636,7 @@ fn provider_auth_mediation_request(
     })
 }
 
-fn provider_auth_required(projection: &capability_planner_bridge::CapabilityProjection) -> bool {
+fn provider_auth_required(projection: &RuntimeLoopProjection) -> bool {
     !projection
         .auth_state_summary
         .challenged_provider_keys
@@ -1912,7 +1801,6 @@ fn apply_runtime_resolution_checkpoint(
     pending_approval: Option<ApprovalRequestRecord>,
     pending_auth_challenge: Option<RuntimeAuthChallengeSummary>,
     pending_mediation: Option<RuntimePendingMediationSummary>,
-    capability_state_ref: Option<String>,
     capability_plan_summary: RuntimeCapabilityPlanSummary,
     last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     last_mediation_outcome: Option<RuntimeMediationOutcome>,
@@ -2105,7 +1993,6 @@ fn apply_runtime_resolution_checkpoint(
         requires_auth,
         target_kind,
         target_ref,
-        capability_state_ref,
         capability_plan_summary,
         last_execution_outcome,
         last_mediation_outcome,
@@ -2280,11 +2167,6 @@ async fn execute_team_subrun(
         .ok_or_else(|| AppError::runtime("configured model is unavailable for subrun execution"))?;
     let (resolved_target, configured_model) = adapter
         .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
-    let capability_state_ref = state
-        .run
-        .capability_state_ref
-        .clone()
-        .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
     let content = durable_subrun_content(state)?;
     let trace_context = if state.run.trace_context.session_id.is_empty() {
         let restored = trace_context_from_serialized_session(&state.serialized_session);
@@ -2312,7 +2194,6 @@ async fn execute_team_subrun(
         &actor_manifest,
         &session_policy,
         &requested_permission_mode,
-        &capability_state_ref,
         &content,
         &trace_context,
         session,
@@ -2331,7 +2212,6 @@ async fn execute_team_subrun(
         auth_target,
         pending_mediation,
         usage_summary,
-        capability_state_ref,
         capability_plan_summary,
         provider_state_summary,
         last_execution_outcome,
@@ -2379,12 +2259,6 @@ async fn execute_team_subrun(
                 approval.clone(),
                 auth_target.clone(),
                 pending_mediation.clone(),
-                Some(
-                    loop_result
-                        .capability_projection
-                        .capability_state_ref
-                        .clone(),
-                ),
                 loop_result.capability_projection.plan_summary.clone(),
                 last_execution_outcome.clone(),
                 last_mediation_outcome.clone(),
@@ -2428,7 +2302,6 @@ async fn execute_team_subrun(
                 auth_target,
                 pending_mediation,
                 loop_result.usage_summary,
-                loop_result.capability_projection.capability_state_ref,
                 loop_result.capability_projection.plan_summary,
                 loop_result.capability_projection.provider_state_summary,
                 last_execution_outcome,
@@ -2453,7 +2326,6 @@ async fn execute_team_subrun(
                 &state.run.id,
                 loop_failure.current_iteration_index,
                 loop_failure.usage_summary.clone(),
-                &loop_failure.capability_projection.capability_state_ref,
                 loop_failure.capability_projection.plan_summary.clone(),
                 last_execution_outcome.clone(),
                 resolved_mediation_outcome.clone(),
@@ -2466,7 +2338,6 @@ async fn execute_team_subrun(
                 None,
                 None,
                 loop_failure.usage_summary,
-                loop_failure.capability_projection.capability_state_ref,
                 loop_failure.capability_projection.plan_summary,
                 loop_failure.capability_projection.provider_state_summary,
                 last_execution_outcome,
@@ -2525,7 +2396,6 @@ async fn execute_team_subrun(
     updated.run.capability_plan_summary = capability_plan_summary;
     updated.run.provider_state_summary = provider_state_summary;
     updated.run.pending_mediation = pending_mediation;
-    updated.run.capability_state_ref = Some(capability_state_ref);
     updated.run.last_execution_outcome = last_execution_outcome;
     updated.run.last_mediation_outcome = last_mediation_outcome;
     updated.run.resolved_target = Some(resolved_target);
@@ -3133,16 +3003,6 @@ async fn resolve_team_subrun_approval(
         resolved_subrun_approval_mediation_outcome(&approval, decision_status, now);
 
     let execution_outcome = if decision_status == "approved" {
-        if approval.target_kind.as_deref() == Some("capability-call") {
-            let capability_state_ref = state
-                .run
-                .capability_state_ref
-                .clone()
-                .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
-            let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
-            capability_store.approve_tool(approval.tool_name.clone());
-            adapter.persist_capability_store(&capability_state_ref, &capability_store)?;
-        }
         if approval_replays_runtime_loop(approval.target_kind.as_deref()) {
             let parent_run_id = state.run.parent_run_id.clone().ok_or_else(|| {
                 AppError::runtime("team subrun parent run id is unavailable for approval resume")
@@ -3234,19 +3094,6 @@ async fn resolve_team_subrun_auth_challenge(
         resolved_subrun_auth_mediation_outcome(&challenge, resolution, now);
 
     let execution_outcome = if resolution == "resolved" {
-        let capability_state_ref = state
-            .run
-            .capability_state_ref
-            .clone()
-            .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
-        let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
-        capability_store.resolve_tool_auth(
-            challenge
-                .tool_name
-                .clone()
-                .unwrap_or_else(|| worker_runtime::worker_label(&state.run.actor_ref)),
-        );
-        adapter.persist_capability_store(&capability_state_ref, &capability_store)?;
         let parent_run_id = state.run.parent_run_id.clone().ok_or_else(|| {
             AppError::runtime("team subrun parent run id is unavailable for auth resume")
         })?;
@@ -3361,7 +3208,6 @@ impl AgentRuntimeCore {
                     &run_context.actor_manifest,
                     &run_context.session_policy,
                     &run_context.requested_permission_mode,
-                    &run_context.capability_state_ref,
                     &input.content,
                     &run_context.trace_context,
                     session,
@@ -3385,7 +3231,6 @@ impl AgentRuntimeCore {
             run_context.auth_state_summary = capability_projection.auth_state_summary.clone();
             run_context.policy_decision_summary =
                 capability_projection.policy_decision_summary.clone();
-            run_context.capability_state_ref = capability_projection.capability_state_ref.clone();
         }
         let runtime_loop_completed = runtime_loop.as_ref().and_then(|step| match step {
             RuntimeLoopExit::Completed(loop_result) => Some(loop_result),
@@ -3639,23 +3484,8 @@ impl AgentRuntimeCore {
             checkpoint_serialized_session,
             resolved_target,
             configured_model,
-            capability_state_ref,
         ) = load_pending_checkpoint(adapter, session_id, approval_id)?;
-        let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
-        if decision_status == "approved"
-            && approval.target_kind.as_deref() == Some("capability-call")
-        {
-            capability_store.approve_tool(approval.tool_name.clone());
-        }
-        let capability_projection = adapter
-            .project_capability_state_async(
-                &actor_manifest,
-                &session_policy,
-                &session_policy.config_snapshot_id,
-                capability_state_ref,
-                &capability_store,
-            )
-            .await?;
+        let capability_projection = RuntimeLoopProjection::default();
 
         let runtime_loop = if decision_status == "approved"
             && approval_replays_runtime_loop(approval.target_kind.as_deref())
@@ -3684,7 +3514,6 @@ impl AgentRuntimeCore {
                     &actor_manifest,
                     &session_policy,
                     &requested_permission_mode,
-                    &capability_projection.capability_state_ref,
                     content,
                     &trace_context_from_serialized_session(&checkpoint_serialized_session),
                     session,
@@ -3894,26 +3723,8 @@ impl AgentRuntimeCore {
             checkpoint_serialized_session,
             resolved_target,
             configured_model,
-            capability_state_ref,
         ) = load_pending_auth_checkpoint(adapter, session_id, challenge_id)?;
-        let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
-        if resolution == "resolved" {
-            capability_store.resolve_tool_auth(
-                challenge
-                    .tool_name
-                    .clone()
-                    .unwrap_or_else(|| actor_manifest.label().to_string()),
-            );
-        }
-        let capability_projection = adapter
-            .project_capability_state_async(
-                &actor_manifest,
-                &session_policy,
-                &session_policy.config_snapshot_id,
-                capability_state_ref,
-                &capability_store,
-            )
-            .await?;
+        let capability_projection = RuntimeLoopProjection::default();
 
         let runtime_loop = if resolution == "resolved" {
             let content = checkpoint_serialized_session
@@ -3939,7 +3750,6 @@ impl AgentRuntimeCore {
                     &actor_manifest,
                     &session_policy,
                     &requested_permission_mode,
-                    &capability_projection.capability_state_ref,
                     content,
                     &trace_context_from_serialized_session(&checkpoint_serialized_session),
                     session,
@@ -4177,7 +3987,6 @@ fn load_pending_checkpoint(
         Value,
         ResolvedExecutionTarget,
         ConfiguredModelRecord,
-        String,
     ),
     AppError,
 > {
@@ -4187,7 +3996,6 @@ fn load_pending_checkpoint(
         persisted_checkpoint,
         primary_run_serialized_session,
         configured_model_id,
-        capability_state_ref,
     ) = {
         let sessions = adapter
             .state
@@ -4212,13 +4020,6 @@ fn load_pending_checkpoint(
             checkpoint.clone(),
             aggregate.metadata.primary_run_serialized_session.clone(),
             aggregate.detail.run.configured_model_id.clone(),
-            aggregate
-                .detail
-                .run
-                .capability_state_ref
-                .clone()
-                .or_else(|| aggregate.detail.capability_state_ref.clone())
-                .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
     let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) =
@@ -4232,11 +4033,6 @@ fn load_pending_checkpoint(
     } else {
         (persisted_checkpoint, primary_run_serialized_session)
     };
-    let capability_state_ref = checkpoint
-        .capability_state_ref
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(capability_state_ref);
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
@@ -4265,7 +4061,6 @@ fn load_pending_checkpoint(
         checkpoint_serialized_session,
         resolved_target,
         configured_model,
-        capability_state_ref,
     ))
 }
 
@@ -4282,7 +4077,6 @@ fn load_pending_auth_checkpoint(
         Value,
         ResolvedExecutionTarget,
         ConfiguredModelRecord,
-        String,
     ),
     AppError,
 > {
@@ -4292,7 +4086,6 @@ fn load_pending_auth_checkpoint(
         persisted_checkpoint,
         primary_run_serialized_session,
         configured_model_id,
-        capability_state_ref,
     ) = {
         let sessions = adapter
             .state
@@ -4320,13 +4113,6 @@ fn load_pending_auth_checkpoint(
             checkpoint.clone(),
             aggregate.metadata.primary_run_serialized_session.clone(),
             aggregate.detail.run.configured_model_id.clone(),
-            aggregate
-                .detail
-                .run
-                .capability_state_ref
-                .clone()
-                .or_else(|| aggregate.detail.capability_state_ref.clone())
-                .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
     let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) =
@@ -4340,11 +4126,6 @@ fn load_pending_auth_checkpoint(
     } else {
         (persisted_checkpoint, primary_run_serialized_session)
     };
-    let capability_state_ref = checkpoint
-        .capability_state_ref
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(capability_state_ref);
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
@@ -4373,7 +4154,6 @@ fn load_pending_auth_checkpoint(
         checkpoint_serialized_session,
         resolved_target,
         configured_model,
-        capability_state_ref,
     ))
 }
 
@@ -4453,7 +4233,6 @@ fn apply_submit_failure_state(
         None,
         None,
         None,
-        Some(run_context.capability_state_ref.clone()),
         run_context.capability_plan_summary.clone(),
         last_execution_outcome.clone(),
         None,
@@ -4492,7 +4271,6 @@ fn apply_submit_failure_state(
     aggregate.detail.summary.auth_state_summary = run_context.auth_state_summary.clone();
     aggregate.detail.summary.pending_mediation = None;
     aggregate.detail.summary.policy_decision_summary = run_context.policy_decision_summary.clone();
-    aggregate.detail.summary.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.summary.last_execution_outcome = last_execution_outcome.clone();
 
     aggregate.detail.run.status = "failed".into();
@@ -4521,7 +4299,6 @@ fn apply_submit_failure_state(
     aggregate.detail.run.capability_plan_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.run.provider_state_summary = run_context.provider_state_summary.clone();
     aggregate.detail.run.pending_mediation = None;
-    aggregate.detail.run.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.run.last_execution_outcome = last_execution_outcome.clone();
     aggregate.detail.run.last_mediation_outcome = None;
     aggregate.detail.pending_approval = None;
@@ -4541,7 +4318,6 @@ fn apply_submit_failure_state(
     aggregate.detail.auth_state_summary = run_context.auth_state_summary.clone();
     aggregate.detail.pending_mediation = None;
     aggregate.detail.policy_decision_summary = run_context.policy_decision_summary.clone();
-    aggregate.detail.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.last_execution_outcome = last_execution_outcome;
 
     if let actor_manifest::CompiledActorManifest::Team(_team_manifest) = &run_context.actor_manifest
@@ -4585,7 +4361,6 @@ fn persist_runtime_resolution_failure_checkpoint(
     run_id: &str,
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,
-    capability_state_ref: &str,
     capability_plan_summary: RuntimeCapabilityPlanSummary,
     last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     last_mediation_outcome: Option<RuntimeMediationOutcome>,
@@ -4597,7 +4372,6 @@ fn persist_runtime_resolution_failure_checkpoint(
         None,
         None,
         None,
-        Some(capability_state_ref.to_string()),
         capability_plan_summary,
         last_execution_outcome,
         last_mediation_outcome,
@@ -4807,7 +4581,6 @@ fn apply_submit_state(
         approval.clone(),
         auth_target.clone(),
         pending_mediation.clone(),
-        Some(run_context.capability_state_ref.clone()),
         run_context.capability_plan_summary.clone(),
         last_execution_outcome.clone(),
         last_mediation_outcome.clone(),
@@ -4868,7 +4641,6 @@ fn apply_submit_state(
     aggregate.detail.summary.auth_state_summary = run_context.auth_state_summary.clone();
     aggregate.detail.summary.pending_mediation = pending_mediation.clone();
     aggregate.detail.summary.policy_decision_summary = run_context.policy_decision_summary.clone();
-    aggregate.detail.summary.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.summary.last_execution_outcome = last_execution_outcome.clone();
 
     aggregate.detail.run.status = run_status.into();
@@ -4912,7 +4684,6 @@ fn apply_submit_state(
     aggregate.detail.run.capability_plan_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.run.provider_state_summary = run_context.provider_state_summary.clone();
     aggregate.detail.run.pending_mediation = pending_mediation.clone();
-    aggregate.detail.run.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.run.last_execution_outcome = last_execution_outcome.clone();
     aggregate.detail.run.last_mediation_outcome = last_mediation_outcome.clone();
     aggregate.detail.pending_approval = approval.clone();
@@ -4932,7 +4703,6 @@ fn apply_submit_state(
     aggregate.detail.auth_state_summary = run_context.auth_state_summary.clone();
     aggregate.detail.pending_mediation = pending_mediation;
     aggregate.detail.policy_decision_summary = run_context.policy_decision_summary.clone();
-    aggregate.detail.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.last_execution_outcome = last_execution_outcome;
     if let actor_manifest::CompiledActorManifest::Team(_team_manifest) = &run_context.actor_manifest
     {
@@ -4981,7 +4751,7 @@ fn apply_approval_resolution_state(
     decision_status: &str,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
-    capability_projection: capability_planner_bridge::CapabilityProjection,
+    capability_projection: RuntimeLoopProjection,
     execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
@@ -5139,7 +4909,6 @@ fn apply_approval_resolution_state(
             None,
             auth_target.clone(),
             pending_mediation.clone(),
-            Some(capability_projection.capability_state_ref.clone()),
             capability_projection.plan_summary.clone(),
             last_execution_outcome.clone(),
             last_mediation_outcome.clone(),
@@ -5229,7 +4998,6 @@ fn apply_approval_resolution_state(
                 next_approval.clone(),
                 None,
                 next_pending_mediation.clone(),
-                Some(capability_projection.capability_state_ref.clone()),
                 capability_projection.plan_summary.clone(),
                 Some(workflow_broker_decision.execution_outcome.clone()),
                 next_mediation_outcome.clone(),
@@ -5406,7 +5174,6 @@ fn apply_approval_resolution_state(
             &aggregate.detail.run.id,
             current_iteration_index,
             usage_summary.clone(),
-            &capability_projection.capability_state_ref,
             capability_projection.plan_summary.clone(),
             last_execution_outcome.clone(),
             last_mediation_outcome.clone(),
@@ -5421,7 +5188,6 @@ fn apply_approval_resolution_state(
             None,
             None,
             pending_mediation.clone(),
-            Some(capability_projection.capability_state_ref.clone()),
             capability_projection.plan_summary.clone(),
             last_execution_outcome.clone(),
             last_mediation_outcome.clone(),
@@ -5471,8 +5237,6 @@ fn apply_approval_resolution_state(
     aggregate.detail.summary.auth_state_summary = auth_state_summary.clone();
     aggregate.detail.summary.pending_mediation = pending_mediation.clone();
     aggregate.detail.summary.policy_decision_summary = policy_decision_summary.clone();
-    aggregate.detail.summary.capability_state_ref =
-        Some(capability_projection.capability_state_ref.clone());
     aggregate.detail.summary.last_execution_outcome = last_execution_outcome.clone();
 
     aggregate.detail.pending_approval = if run_status == "waiting_approval" {
@@ -5484,7 +5248,6 @@ fn apply_approval_resolution_state(
     aggregate.detail.run.provider_state_summary =
         capability_projection.provider_state_summary.clone();
     aggregate.detail.run.pending_mediation = pending_mediation.clone();
-    aggregate.detail.run.capability_state_ref = Some(capability_projection.capability_state_ref);
     aggregate.detail.run.last_execution_outcome = last_execution_outcome.clone();
     aggregate.detail.run.last_mediation_outcome = last_mediation_outcome.clone();
     aggregate.detail.capability_summary = capability_projection.plan_summary;
@@ -5492,7 +5255,6 @@ fn apply_approval_resolution_state(
     aggregate.detail.auth_state_summary = auth_state_summary;
     aggregate.detail.pending_mediation = pending_mediation;
     aggregate.detail.policy_decision_summary = policy_decision_summary;
-    aggregate.detail.capability_state_ref = aggregate.detail.run.capability_state_ref.clone();
     aggregate.detail.last_execution_outcome = last_execution_outcome;
     if let actor_manifest::CompiledActorManifest::Team(team_manifest) = actor_manifest {
         if resolved_target_kind.as_deref() == Some("team-spawn") && decision_status != "approved" {
@@ -5551,7 +5313,7 @@ fn apply_auth_challenge_resolution_state(
     input: &ResolveRuntimeAuthChallengeInput,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
-    capability_projection: capability_planner_bridge::CapabilityProjection,
+    capability_projection: RuntimeLoopProjection,
     execution: Option<&ModelExecutionResult>,
     consumed_tokens: Option<u32>,
     current_iteration_index: u32,
@@ -5709,11 +5471,12 @@ fn apply_auth_challenge_resolution_state(
     };
     aggregate.detail.run.updated_at = now;
     aggregate.detail.run.consumed_tokens = consumed_tokens;
-    aggregate.detail.run.next_action = Some(if runtime_error.is_some() || resolution == "resolved" {
-        "idle".into()
-    } else {
-        "blocked".into()
-    });
+    aggregate.detail.run.next_action =
+        Some(if runtime_error.is_some() || resolution == "resolved" {
+            "idle".into()
+        } else {
+            "blocked".into()
+        });
     aggregate.detail.run.approval_state = resolution.into();
     aggregate.detail.run.auth_target = None;
     aggregate.detail.run.usage_summary = usage_summary.clone();
@@ -5735,7 +5498,6 @@ fn apply_auth_challenge_resolution_state(
             &aggregate.detail.run.id,
             current_iteration_index,
             usage_summary.clone(),
-            &capability_projection.capability_state_ref,
             capability_projection.plan_summary.clone(),
             last_execution_outcome.clone(),
             last_mediation_outcome.clone(),
@@ -5746,8 +5508,6 @@ fn apply_auth_challenge_resolution_state(
         aggregate.detail.run.checkpoint.current_iteration_index = current_iteration_index;
         aggregate.detail.run.checkpoint.usage_summary = usage_summary.clone();
         aggregate.detail.run.checkpoint.pending_mediation = pending_mediation.clone();
-        aggregate.detail.run.checkpoint.capability_state_ref =
-            Some(capability_projection.capability_state_ref.clone());
         aggregate.detail.run.checkpoint.capability_plan_summary =
             capability_projection.plan_summary.clone();
         aggregate.detail.run.checkpoint.last_execution_outcome = last_execution_outcome.clone();
@@ -5783,8 +5543,6 @@ fn apply_auth_challenge_resolution_state(
     aggregate.detail.summary.provider_state_summary =
         capability_projection.provider_state_summary.clone();
     aggregate.detail.summary.pending_mediation = pending_mediation.clone();
-    aggregate.detail.summary.capability_state_ref =
-        Some(capability_projection.capability_state_ref.clone());
     aggregate.detail.summary.last_execution_outcome = last_execution_outcome.clone();
     aggregate
         .detail
@@ -5843,14 +5601,12 @@ fn apply_auth_challenge_resolution_state(
     aggregate.detail.run.provider_state_summary =
         capability_projection.provider_state_summary.clone();
     aggregate.detail.run.pending_mediation = pending_mediation.clone();
-    aggregate.detail.run.capability_state_ref = Some(capability_projection.capability_state_ref);
     aggregate.detail.run.last_execution_outcome = last_execution_outcome.clone();
     aggregate.detail.run.last_mediation_outcome = last_mediation_outcome.clone();
     aggregate.detail.capability_summary = capability_projection.plan_summary;
     aggregate.detail.provider_state_summary = capability_projection.provider_state_summary;
     aggregate.detail.auth_state_summary = aggregate.detail.summary.auth_state_summary.clone();
     aggregate.detail.pending_mediation = pending_mediation;
-    aggregate.detail.capability_state_ref = aggregate.detail.run.capability_state_ref.clone();
     aggregate.detail.last_execution_outcome = last_execution_outcome;
     if let actor_manifest::CompiledActorManifest::Team(team_manifest) = actor_manifest {
         team_runtime::apply_team_runtime_state(

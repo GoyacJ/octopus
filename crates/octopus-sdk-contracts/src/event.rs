@@ -207,6 +207,10 @@ pub enum SessionEvent {
     },
 }
 
+pub trait EventSink: Send + Sync {
+    fn emit(&self, event: SessionEvent);
+}
+
 impl From<&SessionEvent> for SessionEventRepr {
     fn from(value: &SessionEvent) -> Self {
         match value {
@@ -243,7 +247,10 @@ impl From<&SessionEvent> for SessionEventRepr {
             SessionEvent::Ask { prompt } => Self::Ask {
                 prompt: prompt.clone(),
             },
-            SessionEvent::Checkpoint { id, anchor_event_id } => Self::Checkpoint {
+            SessionEvent::Checkpoint {
+                id,
+                anchor_event_id,
+            } => Self::Checkpoint {
                 id: id.clone(),
                 anchor_event_id: anchor_event_id.clone(),
             },
@@ -264,10 +271,9 @@ impl From<SessionEventRepr> for SessionEvent {
                 config_snapshot_id,
                 effective_config_hash,
             },
-            SessionEventRepr::UserMessage { role, content } => Self::UserMessage(Message {
-                role,
-                content,
-            }),
+            SessionEventRepr::UserMessage { role, content } => {
+                Self::UserMessage(Message { role, content })
+            }
             SessionEventRepr::AssistantMessage { role, content } => {
                 Self::AssistantMessage(Message { role, content })
             }
@@ -284,9 +290,13 @@ impl From<SessionEventRepr> for SessionEvent {
             },
             SessionEventRepr::Render { block, lifecycle } => Self::Render { block, lifecycle },
             SessionEventRepr::Ask { prompt } => Self::Ask { prompt },
-            SessionEventRepr::Checkpoint { id, anchor_event_id } => {
-                Self::Checkpoint { id, anchor_event_id }
-            }
+            SessionEventRepr::Checkpoint {
+                id,
+                anchor_event_id,
+            } => Self::Checkpoint {
+                id,
+                anchor_event_id,
+            },
             SessionEventRepr::SessionEnded { reason } => Self::SessionEnded { reason },
         }
     }
@@ -312,10 +322,12 @@ impl<'de> Deserialize<'de> for SessionEvent {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use serde_json::{json, Value};
 
-    use super::{AssistantEvent, SessionEvent, StopReason};
-    use crate::{ToolCallId, Usage};
+    use super::{AssistantEvent, EventSink, SessionEvent, StopReason};
+    use crate::{EventId, ToolCallId, Usage};
 
     #[test]
     fn session_started_serializes_kind_before_payload_fields() {
@@ -355,8 +367,14 @@ mod tests {
         let value = serde_json::to_value(&event).expect("assistant event should serialize");
 
         assert_eq!(value.get("kind"), Some(&Value::String("usage".into())));
-        assert_eq!(value.get("input_tokens"), Some(&Value::Number(3_u32.into())));
-        assert_eq!(value.get("output_tokens"), Some(&Value::Number(5_u32.into())));
+        assert_eq!(
+            value.get("input_tokens"),
+            Some(&Value::Number(3_u32.into()))
+        );
+        assert_eq!(
+            value.get("output_tokens"),
+            Some(&Value::Number(5_u32.into()))
+        );
     }
 
     #[test]
@@ -367,6 +385,24 @@ mod tests {
 
         let value = serde_json::to_value(&event).expect("assistant event should serialize");
 
-        assert_eq!(value.get("stop_reason"), Some(&Value::String("end_turn".into())));
+        assert_eq!(
+            value.get("stop_reason"),
+            Some(&Value::String("end_turn".into()))
+        );
+    }
+
+    #[test]
+    fn event_sink_is_object_safe() {
+        struct NoopSink;
+
+        impl EventSink for NoopSink {
+            fn emit(&self, _event: SessionEvent) {}
+        }
+
+        let sink: Arc<dyn EventSink> = Arc::new(NoopSink);
+        sink.emit(SessionEvent::Checkpoint {
+            id: "checkpoint-1".into(),
+            anchor_event_id: EventId("event-1".into()),
+        });
     }
 }

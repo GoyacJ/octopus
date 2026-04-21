@@ -6,8 +6,8 @@ use futures::StreamExt;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde_json::{json, Value};
 
-use octopus_sdk_contracts::{AssistantEvent, ToolCallId, Usage};
 use octopus_sdk_contracts::SecretVault;
+use octopus_sdk_contracts::{AssistantEvent, ToolCallId, Usage};
 
 use crate::{ModelError, ModelRequest, ModelStream, ProtocolAdapter, ProtocolFamily, Provider};
 
@@ -190,15 +190,16 @@ impl OpenAiStreamState {
                 }
             }
 
-            if let Some(reason) = choice
-                .get("finish_reason")
-                .and_then(Value::as_str)
-                .or_else(|| {
-                    choice
-                        .get("delta")
-                        .and_then(|delta| delta.get("finish_reason"))
-                        .and_then(Value::as_str)
-                })
+            if let Some(reason) =
+                choice
+                    .get("finish_reason")
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        choice
+                            .get("delta")
+                            .and_then(|delta| delta.get("finish_reason"))
+                            .and_then(Value::as_str)
+                    })
             {
                 self.stop_reason = Some(map_stop_reason(Some(reason)));
                 if reason == "tool_calls" {

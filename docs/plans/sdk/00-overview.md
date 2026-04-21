@@ -339,3 +339,4 @@ cleanup+split                                                          │██
 | 2026-04-20 | 首稿（含 10 项取舍、8 周路线、checkpoint 机制、退出条件） | Architect |
 | 2026-04-20 | P0+P1 修订：§2.3 被删除 crate 扩为 11 项完整清单；§4 W7/W8 硬门禁与扫描命令同步；§5 DoD 取消"删除列表局部枚举"，改为"11 项清单 + `ls crates/` 校验"；#8 fact-fix 锚点改引 `docs/sdk/README.md` "## Fact-Fix 勘误" 小节 | Architect |
 | 2026-04-21 | W2 Weekly Gate 收尾：`05-week-2-model.md` 由 `in_progress` 切为 `done`；为解除工作区门禁补最小 unblocker（desktop sidecar 占位、`crates/tools` / `crates/octopus-runtime-adapter` clippy 清零），并以 fresh `cargo test/build/clippy` 验证通过。 | Codex |
+| 2026-04-21 | W3 Weekly Gate 收尾：`06-week-3-tools-mcp.md` 由 `in_progress` 切为 `done`；`octopus-sdk-tools` / `octopus-sdk-mcp` 的公共面与契约差异清单完成回填；`capability_runtime/** + capability bridge` 真删后通过 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings` 与双口径守护扫描。 | Codex |

@@ -40,7 +40,8 @@ mod tests {
 
     #[test]
     fn creates_sessions_and_events_tables_on_open() {
-        let root = std::env::temp_dir().join(format!("octopus-sdk-session-schema-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("octopus-sdk-session-schema-{}", Uuid::new_v4()));
         let db_path = root.join("data").join("main.db");
         let jsonl_root = root.join("runtime").join("events");
 

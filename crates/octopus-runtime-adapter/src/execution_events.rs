@@ -31,7 +31,6 @@ fn base_run_event(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
@@ -39,32 +38,20 @@ fn base_run_event(
 }
 
 fn capability_family(record: &agent_runtime_core::RuntimeLoopCapabilityEvent) -> &'static str {
-    let Some(capability) = record.capability.as_ref() else {
-        return "tool";
-    };
-    match capability.source_kind {
-        tools::CapabilitySourceKind::McpTool
-        | tools::CapabilitySourceKind::McpPrompt
-        | tools::CapabilitySourceKind::McpResource => "mcp",
-        tools::CapabilitySourceKind::LocalSkill
-        | tools::CapabilitySourceKind::BundledSkill
-        | tools::CapabilitySourceKind::PluginSkill => "skill",
-        _ if capability.execution_kind == tools::CapabilityExecutionKind::PromptSkill => "skill",
-        _ => "tool",
-    }
+    record.family
 }
 
-fn capability_phase_outcome(phase: tools::CapabilityExecutionPhase) -> &'static str {
+fn capability_phase_outcome(phase: agent_runtime_core::RuntimeLoopCapabilityPhase) -> &'static str {
     match phase {
-        tools::CapabilityExecutionPhase::Started => "started",
-        tools::CapabilityExecutionPhase::Completed => "completed",
-        tools::CapabilityExecutionPhase::Failed => "failed",
-        tools::CapabilityExecutionPhase::BlockedApproval => "blocked_approval",
-        tools::CapabilityExecutionPhase::BlockedAuth => "blocked_auth",
-        tools::CapabilityExecutionPhase::Denied => "denied",
-        tools::CapabilityExecutionPhase::Cancelled => "cancelled",
-        tools::CapabilityExecutionPhase::Interrupted => "interrupted",
-        tools::CapabilityExecutionPhase::Degraded => "degraded",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Started => "started",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Completed => "completed",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Failed => "failed",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::BlockedApproval => "blocked_approval",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::BlockedAuth => "blocked_auth",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Denied => "denied",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Cancelled => "cancelled",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Interrupted => "interrupted",
+        agent_runtime_core::RuntimeLoopCapabilityPhase::Degraded => "degraded",
     }
 }
 
@@ -255,9 +242,11 @@ fn append_runtime_loop_events(
             events.push(requested);
         }
 
-        let event_type = match record.execution.phase {
-            tools::CapabilityExecutionPhase::Started => format!("{family}.started"),
-            tools::CapabilityExecutionPhase::Completed => format!("{family}.completed"),
+        let event_type = match record.phase {
+            agent_runtime_core::RuntimeLoopCapabilityPhase::Started => format!("{family}.started"),
+            agent_runtime_core::RuntimeLoopCapabilityPhase::Completed => {
+                format!("{family}.completed")
+            }
             _ => format!("{family}.failed"),
         };
         let mut capability_event = base_run_event(
@@ -274,11 +263,11 @@ fn append_runtime_loop_events(
         capability_event.tool_use_id = Some(record.tool_use_id.clone());
         capability_event.target_kind = Some("capability-call".into());
         capability_event.target_ref = Some(target_ref);
-        capability_event.outcome = Some(capability_phase_outcome(record.execution.phase).into());
+        capability_event.outcome = Some(capability_phase_outcome(record.phase.clone()).into());
         if matches!(
-            record.execution.phase,
-            tools::CapabilityExecutionPhase::BlockedApproval
-                | tools::CapabilityExecutionPhase::BlockedAuth
+            record.phase,
+            agent_runtime_core::RuntimeLoopCapabilityPhase::BlockedApproval
+                | agent_runtime_core::RuntimeLoopCapabilityPhase::BlockedAuth
         ) {
             capability_event.approval_layer = Some("capability-call".into());
         }
@@ -624,9 +613,6 @@ fn append_runtime_loop_planner_events(
         if let Some(provider_state_summary) = record.provider_state_summary.clone() {
             event.provider_state_summary = Some(provider_state_summary);
         }
-        if let Some(capability_state_ref) = record.capability_state_ref.clone() {
-            event.capability_state_ref = Some(capability_state_ref);
-        }
         events.push(event);
     }
 }
@@ -752,7 +738,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -778,7 +763,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         },
@@ -812,7 +796,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -841,7 +824,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -887,7 +869,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         });
@@ -915,7 +896,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         });
@@ -935,7 +915,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -960,7 +939,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -993,7 +971,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         });
@@ -1025,7 +1002,6 @@ pub(super) async fn emit_submit_turn_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         });
@@ -1063,7 +1039,6 @@ pub(super) async fn emit_submit_turn_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         ..Default::default()
     });
@@ -1199,7 +1174,6 @@ pub(super) async fn emit_subrun_cancellation_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
@@ -1295,7 +1269,6 @@ pub(super) async fn emit_memory_proposal_resolution_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             ..Default::default()
         },
@@ -1324,7 +1297,6 @@ pub(super) async fn emit_memory_proposal_resolution_events(
             capability_plan_summary: None,
             provider_state_summary: None,
             pending_mediation: None,
-            capability_state_ref: None,
             last_execution_outcome: None,
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -1544,7 +1516,6 @@ pub(super) async fn emit_approval_resolution_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
@@ -1599,7 +1570,6 @@ pub(super) async fn emit_approval_resolution_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -1622,7 +1592,6 @@ pub(super) async fn emit_approval_resolution_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
@@ -1647,7 +1616,6 @@ pub(super) async fn emit_approval_resolution_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -1684,7 +1652,6 @@ pub(super) async fn emit_approval_resolution_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         ..Default::default()
     });
@@ -1735,7 +1702,6 @@ pub(super) async fn emit_auth_resolution_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
@@ -1794,7 +1760,6 @@ pub(super) async fn emit_auth_resolution_events(
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
             last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -1815,7 +1780,6 @@ pub(super) async fn emit_auth_resolution_events(
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
         pending_mediation: run.pending_mediation.clone(),
-        capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
         last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()

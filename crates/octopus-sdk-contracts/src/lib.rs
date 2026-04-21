@@ -2,18 +2,22 @@
 //!
 //! W1 Task 1 intentionally keeps this crate as a minimal scaffold.
 
-mod id;
+mod ask_resolver;
 mod event;
+mod id;
 mod message;
+mod permission;
 mod prompt_cache;
 mod secret;
 mod tool_schema;
 mod ui_intent;
 mod usage;
 
+pub use ask_resolver::*;
 pub use event::*;
 pub use id::*;
 pub use message::*;
+pub use permission::*;
 pub use prompt_cache::*;
 pub use secret::*;
 pub use tool_schema::*;

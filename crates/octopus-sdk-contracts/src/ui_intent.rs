@@ -121,15 +121,15 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        AskOption, AskPrompt, AskQuestion, ArtifactKind, ArtifactRef, ArtifactStatus, RenderBlock,
+        ArtifactKind, ArtifactRef, ArtifactStatus, AskOption, AskPrompt, AskQuestion, RenderBlock,
         RenderKind, RenderLifecycle, RenderMeta,
     };
     use crate::EventId;
 
     #[test]
     fn render_lifecycle_uses_hook_phase_names() {
-        let value =
-            serde_json::to_value(RenderLifecycle::OnToolProgress).expect("lifecycle should serialize");
+        let value = serde_json::to_value(RenderLifecycle::OnToolProgress)
+            .expect("lifecycle should serialize");
 
         assert_eq!(value, Value::String("on_tool_progress".into()));
     }
@@ -165,7 +165,10 @@ mod tests {
         let value = serde_json::to_value(&prompt).expect("ask prompt should serialize");
 
         assert_eq!(value.get("kind"), Some(&Value::String("ask-user".into())));
-        assert_eq!(value["questions"][0]["options"][0]["previewFormat"], "markdown");
+        assert_eq!(
+            value["questions"][0]["options"][0]["previewFormat"],
+            "markdown"
+        );
     }
 
     #[test]

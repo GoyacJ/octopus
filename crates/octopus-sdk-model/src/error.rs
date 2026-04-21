@@ -67,8 +67,14 @@ mod tests {
             model: ModelId("claude-opus-4-6".to_string()),
         };
 
-        assert_eq!(auth_error.to_string(), "auth kind oauth is not supported yet");
-        assert_eq!(missing_error.to_string(), "missing auth secret for provider anthropic");
+        assert_eq!(
+            auth_error.to_string(),
+            "auth kind oauth is not supported yet"
+        );
+        assert_eq!(
+            missing_error.to_string(),
+            "missing auth secret for provider anthropic"
+        );
         assert_eq!(
             adapter_error.to_string(),
             "adapter for protocol family vendor_native is not implemented"

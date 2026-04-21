@@ -252,7 +252,6 @@ mod tests {
             capability_plan_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),
             provider_state_summary: Vec::new(),
             pending_mediation: None,
-            capability_state_ref: Some("capability-state-1".into()),
             last_execution_outcome: None,
             last_mediation_outcome: None,
             resolved_target: None,
@@ -311,7 +310,6 @@ mod tests {
                 auth_state_summary: octopus_core::RuntimeAuthStateSummary::default(),
                 pending_mediation: None,
                 policy_decision_summary: octopus_core::RuntimePolicyDecisionSummary::default(),
-                capability_state_ref: Some("capability-state-1".into()),
                 last_execution_outcome: None,
             },
             selected_actor_ref: "team:workspace-core".into(),
@@ -346,7 +344,6 @@ mod tests {
             auth_state_summary: octopus_core::RuntimeAuthStateSummary::default(),
             pending_mediation: None,
             policy_decision_summary: octopus_core::RuntimePolicyDecisionSummary::default(),
-            capability_state_ref: Some("capability-state-1".into()),
             last_execution_outcome: None,
             run,
             subruns: vec![octopus_core::RuntimeSubrunSummary {

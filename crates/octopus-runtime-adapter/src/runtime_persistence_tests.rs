@@ -293,6 +293,14 @@ async fn mixed_domain_team_workers_share_the_same_subrun_runtime_substrate() {
     assert_eq!(coding_state.run.run_kind, "subrun");
     assert_eq!(research_state.run.run_kind, "subrun");
     assert_eq!(
+        coding_state.run.parent_run_id.as_deref(),
+        Some(run.id.as_str())
+    );
+    assert_eq!(
+        research_state.run.parent_run_id.as_deref(),
+        Some(run.id.as_str())
+    );
+    assert_eq!(
         coding_state.dispatch.parent_actor_ref,
         "team:team-mixed-domain-runtime"
     );
@@ -304,21 +312,22 @@ async fn mixed_domain_team_workers_share_the_same_subrun_runtime_substrate() {
         coding_state.dispatch.workflow_run_id,
         research_state.dispatch.workflow_run_id
     );
+    assert_eq!(
+        coding_state.dispatch.worker_actor_ref,
+        "agent:agent-mixed-domain-coder"
+    );
+    assert_eq!(
+        research_state.dispatch.worker_actor_ref,
+        "agent:agent-mixed-domain-research"
+    );
     assert!(coding_state
-        .run
-        .capability_plan_summary
-        .visible_tools
-        .contains(&"bash".to_string()));
+        .manifest_snapshot_ref
+        .chars()
+        .any(|value| !value.is_whitespace()));
     assert!(research_state
-        .run
-        .capability_plan_summary
-        .visible_tools
-        .contains(&"ToolSearch".to_string()));
-    assert!(research_state
-        .run
-        .capability_plan_summary
-        .deferred_tools
-        .contains(&"plugin_echo".to_string()));
+        .session_policy_snapshot_ref
+        .chars()
+        .any(|value| !value.is_whitespace()));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -549,7 +558,7 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
         )
         .await
         .expect("session");
-    let detail = adapter
+    let _detail = adapter
         .get_session(&session.summary.id)
         .await
         .expect("session detail");
@@ -581,30 +590,6 @@ async fn runtime_snapshot_loaders_ignore_legacy_runtime_sessions_artifacts() {
     fs::copy(&manifest_path, &legacy_manifest_path).expect("copy legacy manifest snapshot");
     fs::remove_file(&manifest_path).expect("remove runtime manifest snapshot");
     assert!(adapter.load_actor_manifest_snapshot(&manifest_ref).is_err());
-
-    let capability_state_ref = detail
-        .capability_state_ref
-        .clone()
-        .expect("capability state ref");
-    let capability_path = infra
-        .paths
-        .runtime_state_dir
-        .join(format!("{capability_state_ref}.json"));
-    let legacy_capability_path =
-        legacy_runtime_sessions_dir(&infra.paths.root).join(format!("{capability_state_ref}.json"));
-    if let Some(parent) = legacy_capability_path.parent() {
-        fs::create_dir_all(parent).expect("legacy capability dir");
-    }
-    fs::copy(&capability_path, &legacy_capability_path).expect("copy legacy capability state");
-    fs::remove_file(&capability_path).expect("remove runtime capability state");
-    assert!(adapter
-        .load_capability_state_snapshot(Some(&capability_state_ref))
-        .expect("capability snapshot load")
-        .is_none());
-    let capability_store = adapter
-        .load_capability_store(Some(&capability_state_ref))
-        .expect("capability store load");
-    assert!(capability_store.snapshot().granted_tools().is_empty());
 
     let runtime_artifact_storage_path = "runtime/state/legacy-artifact-only.json";
     fs::write(

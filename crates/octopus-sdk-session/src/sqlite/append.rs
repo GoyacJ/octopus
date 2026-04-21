@@ -1,4 +1,6 @@
-use octopus_sdk_contracts::{AssistantEvent, ContentBlock, EventId, SessionEvent, SessionId, Usage};
+use octopus_sdk_contracts::{
+    AssistantEvent, ContentBlock, EventId, SessionEvent, SessionId, Usage,
+};
 use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::SessionError;
@@ -14,7 +16,9 @@ impl SqliteJsonlSessionStore {
         let event_id = EventId::new_v4();
         let mut connection = self.open_connection()?;
 
-        if !session_exists(&connection, session_id)? && !matches!(event, SessionEvent::SessionStarted { .. }) {
+        if !session_exists(&connection, session_id)?
+            && !matches!(event, SessionEvent::SessionStarted { .. })
+        {
             return Err(SessionError::Corrupted {
                 reason: "first_event_must_be_session_started".into(),
             });
@@ -35,7 +39,14 @@ impl SqliteJsonlSessionStore {
             INSERT INTO events (event_id, session_id, seq, kind, payload, created_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ",
-            params![event_id.0, session_id.0, seq, event_kind(&event), payload, now],
+            params![
+                event_id.0,
+                session_id.0,
+                seq,
+                event_kind(&event),
+                payload,
+                now
+            ],
         )?;
 
         self.update_session_projection(&transaction, session_id, &event, &event_id, now)?;
@@ -157,7 +168,10 @@ impl SqliteJsonlSessionStore {
     }
 }
 
-fn next_sequence(transaction: &Transaction<'_>, session_id: &SessionId) -> Result<i64, SessionError> {
+fn next_sequence(
+    transaction: &Transaction<'_>,
+    session_id: &SessionId,
+) -> Result<i64, SessionError> {
     transaction
         .query_row(
             "SELECT COALESCE(MAX(seq), 0) + 1 FROM events WHERE session_id = ?1",

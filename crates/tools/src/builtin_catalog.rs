@@ -4,7 +4,6 @@ use std::sync::OnceLock;
 use runtime::PermissionMode;
 use serde_json::{json, Value};
 
-use crate::capability_runtime::CapabilityVisibility;
 use crate::tool_registry::ToolSpec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +42,12 @@ pub enum BuiltinHandlerKey {
     TestingPermission,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinVisibility {
+    DefaultVisible,
+    Deferred,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BuiltinRoleAvailability {
     pub main_thread_only: bool,
@@ -59,7 +64,7 @@ pub struct BuiltinCapability {
     pub input_schema: Value,
     pub required_permission: PermissionMode,
     pub category: BuiltinCapabilityCategory,
-    pub visibility: CapabilityVisibility,
+    pub visibility: BuiltinVisibility,
     pub handler_key: BuiltinHandlerKey,
     pub search_hint: Option<&'static str>,
     pub role_availability: BuiltinRoleAvailability,
@@ -154,7 +159,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::Bash,
             search_hint: None,
             role_availability: BuiltinRoleAvailability {
@@ -178,7 +183,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::ReadFile,
             search_hint: None,
             role_availability: BuiltinRoleAvailability {
@@ -201,7 +206,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::WriteFile,
             search_hint: None,
             role_availability: BuiltinRoleAvailability {
@@ -226,7 +231,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::EditFile,
             search_hint: None,
             role_availability: BuiltinRoleAvailability {
@@ -249,7 +254,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::GlobSearch,
             search_hint: Some("file glob patterns"),
             role_availability: BuiltinRoleAvailability {
@@ -284,7 +289,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::GrepSearch,
             search_hint: Some("regex content search"),
             role_availability: BuiltinRoleAvailability {
@@ -307,7 +312,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WebContext,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::WebFetch,
             search_hint: Some("read web pages"),
             role_availability: BuiltinRoleAvailability {
@@ -337,7 +342,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WebContext,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::WebSearch,
             search_hint: Some("current internet research"),
             role_availability: BuiltinRoleAvailability {
@@ -374,7 +379,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::TodoWrite,
             search_hint: Some("session task list"),
             role_availability: BuiltinRoleAvailability {
@@ -397,7 +402,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::ToolSearch,
             search_hint: Some("discover deferred tools"),
             role_availability: BuiltinRoleAvailability {
@@ -423,7 +428,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::NotebookEdit,
             search_hint: Some("jupyter notebook cells"),
             role_availability: BuiltinRoleAvailability {
@@ -445,7 +450,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::Orchestration,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::Sleep,
             search_hint: Some("scheduled wait"),
             role_availability: BuiltinRoleAvailability::default(),
@@ -472,7 +477,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::Brief,
             search_hint: Some("reply to user"),
             role_availability: BuiltinRoleAvailability {
@@ -497,7 +502,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::Config,
             search_hint: Some("runtime settings"),
             role_availability: BuiltinRoleAvailability {
@@ -516,7 +521,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::EnterPlanMode,
             search_hint: Some("enter planning mode"),
             role_availability: BuiltinRoleAvailability {
@@ -536,7 +541,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::WorkspaceWrite,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::ExitPlanMode,
             search_hint: Some("leave planning mode"),
             role_availability: BuiltinRoleAvailability {
@@ -555,7 +560,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::StructuredOutput,
             search_hint: Some("structured final answer"),
             role_availability: BuiltinRoleAvailability {
@@ -579,7 +584,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::Repl,
             search_hint: Some("code execution sandbox"),
             role_availability: BuiltinRoleAvailability::default(),
@@ -601,7 +606,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::PowerShell,
             search_hint: Some("powershell commands"),
             role_availability: BuiltinRoleAvailability::default(),
@@ -624,7 +629,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::ControlPlane,
-            visibility: CapabilityVisibility::DefaultVisible,
+            visibility: BuiltinVisibility::DefaultVisible,
             handler_key: BuiltinHandlerKey::AskUserQuestion,
             search_hint: Some("clarify with user"),
             role_availability: BuiltinRoleAvailability {
@@ -651,7 +656,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::ReadOnly,
             category: BuiltinCapabilityCategory::WorkerPrimitive,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::Lsp,
             search_hint: Some("language server intelligence"),
             role_availability: BuiltinRoleAvailability::default(),
@@ -673,7 +678,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
             category: BuiltinCapabilityCategory::Orchestration,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::RemoteTrigger,
             search_hint: Some("trigger external workflow"),
             role_availability: BuiltinRoleAvailability::default(),
@@ -692,7 +697,7 @@ fn build_builtin_capabilities() -> Vec<BuiltinCapability> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
             category: BuiltinCapabilityCategory::TestOnly,
-            visibility: CapabilityVisibility::Deferred,
+            visibility: BuiltinVisibility::Deferred,
             handler_key: BuiltinHandlerKey::TestingPermission,
             search_hint: Some("permission test stub"),
             role_availability: BuiltinRoleAvailability::default(),

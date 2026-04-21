@@ -1,0 +1,30 @@
+[package]
+name = "octopus-sdk-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes = "1"
+futures = "0.3"
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+tokio-util = { workspace = true, features = ["codec"] }
+tracing = "0.1"
+url = "2"
+
+[dev-dependencies]
+wiremock = "0.6"
+
+[[bin]]
+name = "mcp-echo-server"
+path = "src/bin/mcp-echo-server.rs"
+
+[lints]
+workspace = true

@@ -99,8 +99,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(decoded_provider, provider);
-        assert_eq!(to_value(&surface).unwrap()["protocol"], json!("anthropic_messages"));
+        assert_eq!(
+            to_value(&surface).unwrap()["protocol"],
+            json!("anthropic_messages")
+        );
         assert_eq!(to_value(&model).unwrap()["track"], json!("stable"));
-        assert_eq!(to_value(&model).unwrap()["context_window"]["supports_1m"], json!(true));
+        assert_eq!(
+            to_value(&model).unwrap()["context_window"]["supports_1m"],
+            json!(true)
+        );
     }
 }

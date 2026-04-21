@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(dead_code)]
 pub(crate) fn summarize_auth_state(
     provider_state_summary: &[RuntimeCapabilityProviderState],
     pending_auth_challenge: Option<&RuntimeAuthChallengeSummary>,

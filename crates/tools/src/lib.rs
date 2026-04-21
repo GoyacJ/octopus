@@ -1,12 +1,7 @@
 mod builtin_catalog;
 mod builtin_exec;
-mod capability_runtime;
 mod fs_shell;
 mod lsp_runtime;
-mod skill_runtime;
-#[cfg(test)]
-mod split_module_tests;
-mod subagent_runtime;
 mod tool_registry;
 mod web_external;
 
@@ -15,12 +10,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+#[allow(unused_imports)]
 use api::{
     max_tokens_for_model, resolve_model_alias, ContentBlockDelta, InputContentBlock, InputMessage,
     MessageRequest, MessageResponse, OutputContentBlock, ProviderClient,
     StreamEvent as ApiStreamEvent, ToolChoice, ToolResultContentBlock,
 };
 use reqwest::blocking::Client;
+#[allow(unused_imports)]
 use runtime::{
     check_freshness, dedupe_superseded_commit_events, edit_file, execute_bash, glob_search,
     grep_search, load_system_prompt,
@@ -42,30 +39,26 @@ pub use builtin_catalog::{
     BuiltinCapabilityCategory, BuiltinHandlerKey, BuiltinRoleAvailability,
 };
 pub use builtin_exec::{enforce_permission_check, execute_tool};
-pub use capability_runtime::executor::{
-    CapabilityDispatchKind, CapabilityExecutionEvent, CapabilityExecutionPhase,
-    CapabilityExecutionRequest, CapabilityExecutor, CapabilityMediationDecision, CapabilityRuntime,
-};
-pub use capability_runtime::exposure::CapabilityExposureSnapshot;
-pub use capability_runtime::planner::{
-    CapabilityCompiler, CapabilityExecutionPlan, CapabilityPlanner, CapabilityPlannerInput,
-    CapabilitySurfaceProjection, EffectiveCapabilitySurface,
-};
-pub use capability_runtime::provider::{
-    mcp_resource_capability_descriptor, mcp_tool_capability_descriptor,
-    permission_mode_for_mcp_tool, CapabilityConcurrencyPolicy, CapabilityExecutionKind,
-    CapabilityProvider, CapabilitySourceKind, CapabilitySpec, CapabilityState,
-    CapabilityVisibility, ManagedMcpRuntime, McpCapabilityDescriptor, McpCapabilityProvider,
-    McpConnectionProjection,
-};
-pub use capability_runtime::state::{
-    apply_skill_session_overrides, CapabilityActivation, CapabilityProfile,
-    CapabilityRequestOverride, SessionCapabilityState, SessionCapabilityStore,
-    SharedSessionCapabilityState,
-};
-pub use capability_runtime::{events, executor, planner, provider, state};
-pub use skill_runtime::{SkillDiscoveryOutput, SkillExecutionResult, SkillStateUpdate};
 pub use tool_registry::{mvp_tool_specs, RuntimeToolDefinition, ToolSearchOutput, ToolSpec};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentOutput {
+    pub agent_id: String,
+    pub name: String,
+    pub description: String,
+    pub subagent_type: Option<String>,
+    pub model: Option<String>,
+    pub status: String,
+    pub output_file: String,
+    pub manifest_file: String,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub lane_events: Vec<Value>,
+    pub derived_state: String,
+    pub current_blocker: Option<String>,
+    pub error: Option<String>,
+}
 
 #[allow(unused_imports)]
 pub(crate) use builtin_exec::{
@@ -85,14 +78,6 @@ pub(crate) use fs_shell::{
 #[allow(unused_imports)]
 pub(crate) use lsp_runtime::{run_lsp, LspInput};
 #[allow(unused_imports)]
-pub(crate) use subagent_runtime::{
-    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
-    final_assistant_text, iso8601_now, maybe_commit_provenance, persist_agent_terminal_state,
-    push_output_block, spawn_subagent_job, spawn_subagent_task, spawn_subagent_with_job,
-    spawn_subagent_with_job_detailed, AgentInput, AgentJob, AgentOutput, AgentSpawnFailure,
-    SubagentToolExecutor,
-};
-#[allow(unused_imports)]
 pub(crate) use tool_registry::{
     canonical_tool_token, deferred_tool_specs, execute_tool_search, normalize_tool_search_query,
     permission_mode_from_plugin, search_tool_specs,
@@ -104,3 +89,8 @@ pub(crate) use web_external::{
 };
 
 pub mod lane_completion;
+
+#[must_use]
+pub fn iso8601_now() -> String {
+    format!("{:?}", std::time::SystemTime::now())
+}

@@ -124,7 +124,6 @@ pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
     detail.summary.auth_state_summary = detail.auth_state_summary.clone();
     detail.summary.pending_mediation = detail.pending_mediation.clone();
     detail.summary.policy_decision_summary = detail.policy_decision_summary.clone();
-    detail.summary.capability_state_ref = detail.capability_state_ref.clone();
     detail.summary.last_execution_outcome = detail.last_execution_outcome.clone();
 
     if detail.run.actor_ref.is_empty() {

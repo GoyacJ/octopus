@@ -57,8 +57,12 @@ mod tests {
 
         let serialized = serde_json::to_string(&message).expect("message should serialize");
 
-        assert!(serialized.find("\"role\"").expect("role key should exist")
-            < serialized.find("\"content\"").expect("content key should exist"));
+        assert!(
+            serialized.find("\"role\"").expect("role key should exist")
+                < serialized
+                    .find("\"content\"")
+                    .expect("content key should exist")
+        );
     }
 
     #[test]

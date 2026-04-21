@@ -119,16 +119,17 @@ pub(crate) fn workspace_root_display_path(paths: &WorkspacePaths) -> String {
     paths.root.to_string_lossy().to_string()
 }
 
-pub(crate) fn stored_mapped_directory(
-    value: Option<&str>,
-) -> Option<String> {
+pub(crate) fn stored_mapped_directory(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
         .map(str::to_string)
 }
 
-pub(crate) fn workspace_shell_root_display_path(workspace: &WorkspaceSummary, paths: &WorkspacePaths) -> String {
+pub(crate) fn workspace_shell_root_display_path(
+    workspace: &WorkspaceSummary,
+    paths: &WorkspacePaths,
+) -> String {
     workspace
         .mapped_directory_default
         .clone()

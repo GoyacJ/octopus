@@ -46,8 +46,10 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<WorkspaceSummary, AppError> {
         let current_workspace = self.state.workspace_snapshot()?;
         let current_workspace_root = self.state.paths.root.clone();
-        let shell_root =
-            PathBuf::from(workspace_shell_root_display_path(&current_workspace, &self.state.paths));
+        let shell_root = PathBuf::from(workspace_shell_root_display_path(
+            &current_workspace,
+            &self.state.paths,
+        ));
         let next_name = match request.name {
             Some(value) => {
                 let trimmed = value.trim();
@@ -101,8 +103,7 @@ impl WorkspaceService for InfraWorkspaceService {
             workspace.name = next_name;
             workspace.avatar = next_avatar.0.clone();
             workspace.mapped_directory = next_mapped_directory.clone();
-            workspace.mapped_directory_default =
-                Some(shell_root.to_string_lossy().to_string());
+            workspace.mapped_directory_default = Some(shell_root.to_string_lossy().to_string());
         }
         {
             let mut avatar_path = self
@@ -3710,7 +3711,10 @@ mod tests {
                 workspace_id: Some("ws-local".into()),
             }))
             .expect("login after move");
-        assert_eq!(login.session.user_id, workspace.owner_user_id.expect("owner user id"));
+        assert_eq!(
+            login.session.user_id,
+            workspace.owner_user_id.expect("owner user id")
+        );
     }
 
     fn insert_artifact_record(

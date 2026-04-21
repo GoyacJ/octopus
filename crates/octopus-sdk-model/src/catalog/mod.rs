@@ -28,13 +28,17 @@ impl ModelCatalog {
         let models = builtin::all_models();
         let aliases = builtin::all_aliases()
             .into_iter()
-            .map(|(alias, model_id)| (resolve::normalize_lookup(alias), ModelId(model_id.to_string())))
-            .chain(models.iter().map(|model| {
+            .map(|(alias, model_id)| {
                 (
-                    resolve::normalize_lookup(&model.id.0),
-                    model.id.clone(),
+                    resolve::normalize_lookup(alias),
+                    ModelId(model_id.to_string()),
                 )
-            }))
+            })
+            .chain(
+                models
+                    .iter()
+                    .map(|model| (resolve::normalize_lookup(&model.id.0), model.id.clone())),
+            )
             .collect();
 
         Self {

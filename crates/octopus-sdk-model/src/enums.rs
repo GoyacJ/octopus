@@ -106,8 +106,14 @@ mod tests {
             to_string(&ProtocolFamily::AnthropicMessages).unwrap(),
             "\"anthropic_messages\""
         );
-        assert_eq!(to_string(&ProtocolFamily::OpenAiChat).unwrap(), "\"openai_chat\"");
-        assert_eq!(to_string(&ModelTrack::LatestAlias).unwrap(), "\"latest_alias\"");
+        assert_eq!(
+            to_string(&ProtocolFamily::OpenAiChat).unwrap(),
+            "\"openai_chat\""
+        );
+        assert_eq!(
+            to_string(&ModelTrack::LatestAlias).unwrap(),
+            "\"latest_alias\""
+        );
         assert_eq!(to_string(&AuthKind::OAuth).unwrap(), "\"oauth\"");
         assert_eq!(to_string(&AuthKind::AwsSigV4).unwrap(), "\"aws_sigv4\"");
         assert_eq!(to_string(&AuthKind::GcpAdc).unwrap(), "\"gcp_adc\"");

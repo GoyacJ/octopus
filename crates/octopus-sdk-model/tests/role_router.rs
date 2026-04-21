@@ -22,10 +22,8 @@ fn builtin_role_router_resolves_all_primary_roles() {
 #[test]
 fn overrides_take_precedence_over_defaults() {
     let catalog = ModelCatalog::new_builtin();
-    let router = RoleRouter::new_builtin(&catalog).with_override(
-        ModelRole::Fast,
-        ModelId("gpt-5.4-mini".to_string()),
-    );
+    let router = RoleRouter::new_builtin(&catalog)
+        .with_override(ModelRole::Fast, ModelId("gpt-5.4-mini".to_string()));
 
     assert_eq!(
         router.resolve(ModelRole::Fast),

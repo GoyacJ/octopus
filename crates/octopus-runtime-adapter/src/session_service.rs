@@ -75,16 +75,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             &session_policy,
         )?;
         let memory_summary = manifest.memory_summary();
-        let capability_projection = self
-            .project_capability_state_async(
-                &manifest,
-                &session_policy,
-                &snapshot.id,
-                format!("{run_id}-capability-state"),
-                &tools::SessionCapabilityStore::default(),
-            )
-            .await?;
-        let capability_summary = capability_projection.plan_summary.clone();
+        let capability_summary = RuntimeCapabilityPlanSummary::default();
         let memory_selection_summary = RuntimeMemorySelectionSummary::default();
         let memory_state_ref = memory_runtime::runtime_memory_state_ref(&run_id, now);
 
@@ -114,11 +105,10 @@ impl RuntimeSessionService for RuntimeAdapter {
                 pending_memory_proposal_count: 0,
                 memory_state_ref: memory_state_ref.clone(),
                 capability_summary: capability_summary.clone(),
-                provider_state_summary: capability_projection.provider_state_summary.clone(),
-                auth_state_summary: capability_projection.auth_state_summary.clone(),
+                provider_state_summary: Vec::new(),
+                auth_state_summary: RuntimeAuthStateSummary::default(),
                 pending_mediation: None,
-                policy_decision_summary: capability_projection.policy_decision_summary.clone(),
-                capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
+                policy_decision_summary: RuntimePolicyDecisionSummary::default(),
                 last_execution_outcome: None,
             },
             selected_actor_ref: input.selected_actor_ref.clone(),
@@ -134,11 +124,10 @@ impl RuntimeSessionService for RuntimeAdapter {
             pending_memory_proposal_count: 0,
             memory_state_ref: memory_state_ref.clone(),
             capability_summary: capability_summary.clone(),
-            provider_state_summary: capability_projection.provider_state_summary.clone(),
-            auth_state_summary: capability_projection.auth_state_summary.clone(),
+            provider_state_summary: Vec::new(),
+            auth_state_summary: RuntimeAuthStateSummary::default(),
             pending_mediation: None,
-            policy_decision_summary: capability_projection.policy_decision_summary.clone(),
-            capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
+            policy_decision_summary: RuntimePolicyDecisionSummary::default(),
             last_execution_outcome: None,
             run: RuntimeRunSnapshot {
                 id: run_id.clone(),
@@ -198,15 +187,13 @@ impl RuntimeSessionService for RuntimeAdapter {
                     requires_auth: None,
                     target_kind: None,
                     target_ref: None,
-                    capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
                     capability_plan_summary: capability_summary.clone(),
                     last_execution_outcome: None,
                     last_mediation_outcome: None,
                 },
                 capability_plan_summary: capability_summary,
-                provider_state_summary: capability_projection.provider_state_summary.clone(),
+                provider_state_summary: Vec::new(),
                 pending_mediation: None,
-                capability_state_ref: Some(capability_projection.capability_state_ref),
                 last_execution_outcome: None,
                 last_mediation_outcome: None,
                 resolved_target: None,
@@ -264,7 +251,6 @@ impl RuntimeSessionService for RuntimeAdapter {
             capability_plan_summary: Some(detail.summary.capability_summary.clone()),
             provider_state_summary: Some(detail.summary.provider_state_summary.clone()),
             pending_mediation: detail.summary.pending_mediation.clone(),
-            capability_state_ref: detail.summary.capability_state_ref.clone(),
             last_execution_outcome: detail.summary.last_execution_outcome.clone(),
             last_mediation_outcome: detail.run.last_mediation_outcome.clone(),
             ..Default::default()
@@ -307,7 +293,6 @@ impl RuntimeSessionService for RuntimeAdapter {
             capability_plan_summary: Some(detail.summary.capability_summary.clone()),
             provider_state_summary: Some(detail.summary.provider_state_summary.clone()),
             pending_mediation: detail.summary.pending_mediation.clone(),
-            capability_state_ref: detail.summary.capability_state_ref.clone(),
             last_execution_outcome: detail.summary.last_execution_outcome.clone(),
             last_mediation_outcome: detail.run.last_mediation_outcome.clone(),
         };

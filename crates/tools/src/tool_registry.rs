@@ -16,6 +16,7 @@ pub struct RuntimeToolDefinition {
     pub required_permission: PermissionMode,
 }
 
+#[allow(dead_code)]
 pub(crate) fn permission_mode_from_plugin(value: &str) -> Result<PermissionMode, String> {
     match value {
         "read-only" => Ok(PermissionMode::ReadOnly),
@@ -75,16 +76,9 @@ impl ToolSearchOutput {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ToolSearchResult {
     name: String,
-    source_kind: crate::capability_runtime::CapabilitySourceKind,
     description: String,
     permission: String,
-    state: crate::capability_runtime::CapabilityState,
-    requires_auth: bool,
-    requires_approval: bool,
     deferred: bool,
-    discovered: bool,
-    activated: bool,
-    exposed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     search_hint: Option<String>,
 }
@@ -93,58 +87,31 @@ pub struct ToolSearchResult {
 pub(crate) struct SearchableToolSpec {
     pub(crate) name: String,
     pub(crate) description: String,
-    pub(crate) source_kind: crate::capability_runtime::CapabilitySourceKind,
     pub(crate) permission: String,
-    pub(crate) state: crate::capability_runtime::CapabilityState,
-    pub(crate) requires_auth: bool,
-    pub(crate) requires_approval: bool,
     pub(crate) deferred: bool,
-    pub(crate) discovered: bool,
-    pub(crate) activated: bool,
-    pub(crate) exposed: bool,
     pub(crate) search_hint: Option<String>,
 }
 
 impl SearchableToolSpec {
-    pub(crate) fn from_capability(
-        capability: crate::capability_runtime::CapabilitySpec,
-        session_state: &crate::SessionCapabilityState,
-    ) -> Self {
-        let tool_name = capability.display_name.clone();
+    pub(crate) fn from_builtin(entry: &crate::builtin_catalog::BuiltinCapability) -> Self {
         Self {
-            name: tool_name.clone(),
-            description: capability.description,
-            source_kind: capability.source_kind,
-            permission: capability
-                .permission_profile
-                .required_permission
-                .as_str()
-                .to_string(),
-            state: capability.state,
-            requires_auth: capability.invocation_policy.requires_auth,
-            requires_approval: capability.invocation_policy.requires_approval,
-            deferred: capability.visibility
-                == crate::capability_runtime::CapabilityVisibility::Deferred,
-            discovered: session_state.is_tool_discovered(&tool_name),
-            activated: session_state.is_tool_activated(&tool_name),
-            exposed: session_state.is_tool_exposed(&tool_name),
-            search_hint: capability.search_hint,
+            name: entry.name.to_string(),
+            description: entry.description.to_string(),
+            permission: entry.required_permission.as_str().to_string(),
+            deferred: matches!(
+                entry.visibility,
+                crate::builtin_catalog::BuiltinVisibility::Deferred
+            ),
+            search_hint: entry.search_hint.map(str::to_string),
         }
     }
 
     pub(crate) fn to_search_result(&self) -> ToolSearchResult {
         ToolSearchResult {
             name: self.name.clone(),
-            source_kind: self.source_kind,
             description: self.description.clone(),
             permission: self.permission.clone(),
-            state: self.state,
-            requires_auth: self.requires_auth,
-            requires_approval: self.requires_approval,
             deferred: self.deferred,
-            discovered: self.discovered,
-            activated: self.activated,
-            exposed: self.exposed,
             search_hint: self.search_hint.clone(),
         }
     }
@@ -152,10 +119,26 @@ impl SearchableToolSpec {
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn execute_tool_search(input: ToolSearchInput) -> ToolSearchOutput {
-    crate::CapabilityRuntime::builtin().search(
-        &input.query,
-        input.max_results.unwrap_or(5),
-        crate::CapabilityPlannerInput::default(),
+    let query = input.query;
+    let normalized_query = normalize_tool_search_query(&query);
+    let specs = crate::builtin_catalog::builtin_capability_catalog()
+        .entries()
+        .iter()
+        .map(SearchableToolSpec::from_builtin)
+        .collect::<Vec<_>>();
+    let matches = search_tool_specs(&query, input.max_results.unwrap_or(5), &specs);
+    let results = matches
+        .iter()
+        .filter_map(|name| specs.iter().find(|spec| spec.name == *name))
+        .map(SearchableToolSpec::to_search_result)
+        .collect::<Vec<_>>();
+    let total_deferred_tools = specs.iter().filter(|spec| spec.deferred).count();
+    ToolSearchOutput::new(
+        matches,
+        results,
+        query,
+        normalized_query,
+        total_deferred_tools,
         None,
         None,
     )
@@ -163,28 +146,16 @@ pub(crate) fn execute_tool_search(input: ToolSearchInput) -> ToolSearchOutput {
 
 #[allow(dead_code)]
 pub(crate) fn deferred_tool_specs() -> Vec<ToolSpec> {
-    let surface = crate::capability_runtime::plan_effective_capability_surface(
-        crate::capability_runtime::compile_capability_specs(
-            crate::builtin_catalog::builtin_capability_catalog()
-                .entries()
-                .to_vec(),
-            &[],
-            &[],
-            &[],
-            None,
-        ),
-        None,
-        None,
-    );
-    let deferred_names = surface
-        .deferred_tools
-        .into_iter()
-        .map(|capability| capability.display_name)
-        .collect::<BTreeSet<_>>();
-
-    mvp_tool_specs()
-        .into_iter()
-        .filter(|spec| deferred_names.contains(spec.name))
+    crate::builtin_catalog::builtin_capability_catalog()
+        .entries()
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.visibility,
+                crate::builtin_catalog::BuiltinVisibility::Deferred
+            )
+        })
+        .map(crate::builtin_catalog::BuiltinCapability::to_tool_spec)
         .collect()
 }
 

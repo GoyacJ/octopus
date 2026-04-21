@@ -176,7 +176,6 @@ mod tests {
                 requires_auth: None,
                 target_kind: None,
                 target_ref: None,
-                capability_state_ref: Some(format!("{run_id}-capability-state")),
                 capability_plan_summary: RuntimeCapabilityPlanSummary::default(),
                 last_execution_outcome: None,
                 last_mediation_outcome: None,
@@ -184,7 +183,6 @@ mod tests {
             capability_plan_summary: RuntimeCapabilityPlanSummary::default(),
             provider_state_summary: Vec::new(),
             pending_mediation: None,
-            capability_state_ref: Some(format!("{run_id}-capability-state")),
             last_execution_outcome: None,
             last_mediation_outcome: None,
             resolved_target: None,
@@ -261,17 +259,9 @@ mod tests {
     }
 
     #[test]
-    fn test_subrun_uses_runtime_capability_state_ref_shape_and_empty_exposure_fields() {
+    fn test_subrun_keeps_empty_capability_exposure_fields() {
         let run = test_run("run-shape", "queued", 10, 10);
 
-        assert_eq!(
-            run.capability_state_ref.as_deref(),
-            Some("run-shape-capability-state")
-        );
-        assert_eq!(
-            run.checkpoint.capability_state_ref.as_deref(),
-            Some("run-shape-capability-state")
-        );
         assert!(run.capability_plan_summary.discovered_tools.is_empty());
         assert!(run.capability_plan_summary.exposed_tools.is_empty());
         assert!(run

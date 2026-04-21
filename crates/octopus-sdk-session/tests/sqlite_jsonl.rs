@@ -12,8 +12,8 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_append_roundtrip() {
     let paths = test_paths("append");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = octopus_sdk_contracts::SessionId("session-roundtrip".into());
     let expected = sample_events();
 
@@ -31,8 +31,8 @@ async fn test_append_roundtrip() {
 #[tokio::test]
 async fn test_stream_after_cursor() {
     let paths = test_paths("stream");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = octopus_sdk_contracts::SessionId("session-stream".into());
     let expected = sample_events();
     let mut event_ids = Vec::new();
@@ -63,8 +63,8 @@ async fn test_stream_after_cursor() {
 #[tokio::test]
 async fn test_snapshot_matches_last_event() {
     let paths = test_paths("snapshot");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = octopus_sdk_contracts::SessionId("session-snapshot".into());
 
     for event in sample_events() {
@@ -74,7 +74,10 @@ async fn test_snapshot_matches_last_event() {
             .expect("append should succeed");
     }
 
-    let snapshot = store.snapshot(&session_id).await.expect("snapshot should load");
+    let snapshot = store
+        .snapshot(&session_id)
+        .await
+        .expect("snapshot should load");
 
     assert_eq!(snapshot.id.0, "session-snapshot");
     assert_eq!(snapshot.config_snapshot_id, "cfg-1");
@@ -95,8 +98,8 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
     let paths = test_paths("repair");
     let session_id = octopus_sdk_contracts::SessionId("session-repair".into());
     let expected = sample_events();
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let mut event_ids = Vec::new();
 
     for event in &expected {
@@ -125,8 +128,8 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
         )
         .expect("session row should update");
 
-    let repaired =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should reopen");
+    let repaired = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should reopen");
     let actual = read_all_events(&repaired, &session_id).await;
     let snapshot = repaired
         .snapshot(&session_id)
@@ -156,7 +159,10 @@ fn test_paths(label: &str) -> TestPaths {
     let db_path = root.join("data").join("main.db");
     let jsonl_root = root.join("runtime").join("events");
     fs::create_dir_all(db_path.parent().expect("db parent")).expect("db dir should exist");
-    TestPaths { db_path, jsonl_root }
+    TestPaths {
+        db_path,
+        jsonl_root,
+    }
 }
 
 async fn read_all_events(

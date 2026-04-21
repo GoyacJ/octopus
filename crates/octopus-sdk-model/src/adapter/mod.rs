@@ -141,7 +141,10 @@ mod tests {
 
         accepts_trait_object(&adapter);
         assert_eq!(adapter.family(), ProtocolFamily::VendorNative);
-        assert_eq!(adapter.auth_headers(&vault, &provider).await.unwrap().len(), 1);
+        assert_eq!(
+            adapter.auth_headers(&vault, &provider).await.unwrap().len(),
+            1
+        );
         assert!(adapter.parse_stream(raw).is_ok());
     }
 }

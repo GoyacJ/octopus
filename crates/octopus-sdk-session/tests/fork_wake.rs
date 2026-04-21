@@ -1,15 +1,17 @@
 use std::{fs, path::PathBuf};
 
 use futures::StreamExt;
-use octopus_sdk_contracts::{ContentBlock, EndReason, EventId, Message, Role, SessionEvent, SessionId};
+use octopus_sdk_contracts::{
+    ContentBlock, EndReason, EventId, Message, Role, SessionEvent, SessionId,
+};
 use octopus_sdk_session::{EventRange, SessionError, SessionStore, SqliteJsonlSessionStore};
 use uuid::Uuid;
 
 #[tokio::test]
 async fn test_fork_preserves_prefix() {
     let paths = test_paths("fork");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = SessionId("session-fork".into());
 
     let started_id = store
@@ -93,8 +95,8 @@ async fn test_fork_preserves_prefix() {
 #[tokio::test]
 async fn test_wake_returns_latest_snapshot() {
     let paths = test_paths("wake");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = SessionId("session-wake".into());
 
     let _started_id = store
@@ -139,7 +141,10 @@ async fn test_wake_returns_latest_snapshot() {
         .await
         .expect("session ended should append");
 
-    let snapshot = store.wake(&session_id).await.expect("wake should return snapshot");
+    let snapshot = store
+        .wake(&session_id)
+        .await
+        .expect("wake should return snapshot");
 
     assert_eq!(snapshot.id, session_id);
     assert_eq!(snapshot.config_snapshot_id, "cfg-fork");
@@ -150,8 +155,8 @@ async fn test_wake_returns_latest_snapshot() {
 #[tokio::test]
 async fn test_wake_rejects_checkpoint_with_missing_anchor() {
     let paths = test_paths("wake-missing-anchor");
-    let store =
-        SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root).expect("store should open");
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
     let session_id = SessionId("session-wake-missing-anchor".into());
 
     store
@@ -197,7 +202,10 @@ fn test_paths(label: &str) -> TestPaths {
     let db_path = root.join("data").join("main.db");
     let jsonl_root = root.join("runtime").join("events");
     fs::create_dir_all(db_path.parent().expect("db parent")).expect("db dir should exist");
-    TestPaths { db_path, jsonl_root }
+    TestPaths {
+        db_path,
+        jsonl_root,
+    }
 }
 
 async fn read_all_events(

@@ -6,8 +6,8 @@ use futures::StreamExt;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde_json::{json, Value};
 
-use octopus_sdk_contracts::{AssistantEvent, ToolCallId, Usage};
 use octopus_sdk_contracts::SecretVault;
+use octopus_sdk_contracts::{AssistantEvent, ToolCallId, Usage};
 
 use crate::{ModelError, ModelRequest, ModelStream, ProtocolAdapter, ProtocolFamily, Provider};
 
@@ -187,9 +187,11 @@ impl AnthropicStreamState {
                     }
                     Some("input_json_delta") => {
                         if let Some(tool_state) = self.tools.get_mut(&index) {
-                            tool_state
-                                .input_json
-                                .push_str(payload["delta"]["partial_json"].as_str().unwrap_or_default());
+                            tool_state.input_json.push_str(
+                                payload["delta"]["partial_json"]
+                                    .as_str()
+                                    .unwrap_or_default(),
+                            );
                         }
                     }
                     _ => {}

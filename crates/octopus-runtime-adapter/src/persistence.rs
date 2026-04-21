@@ -1750,12 +1750,6 @@ impl RuntimeAdapter {
         let started_from_scope_set = serde_json::to_string(&summary.started_from_scope_set)?;
         let detail_json = serde_json::to_string(&aggregate.detail)?;
         let run_json = serde_json::to_string(run)?;
-        let session_capability_snapshot = self
-            .load_capability_state_snapshot(summary.capability_state_ref.as_deref())?
-            .unwrap_or_default();
-        let run_capability_snapshot = self
-            .load_capability_state_snapshot(run.capability_state_ref.as_deref())?
-            .unwrap_or_default();
         let capability_plan_summary_json = serde_json::to_string(&summary.capability_summary)?;
         let provider_state_summary_json = serde_json::to_string(&summary.provider_state_summary)?;
         let pending_mediation_json = summary
@@ -1799,9 +1793,8 @@ impl RuntimeAdapter {
             .detail
             .policy_decision_summary
             .denied_exposure_count as i64;
-        let granted_tool_count = session_capability_snapshot.granted_tool_count as i64;
-        let injected_skill_message_count =
-            session_capability_snapshot.injected_skill_message_count as i64;
+        let granted_tool_count = aggregate.detail.capability_summary.granted_tools.len() as i64;
+        let injected_skill_message_count = 0_i64;
         let deferred_capability_count =
             aggregate.detail.capability_summary.deferred_tools.len() as i64;
         let hidden_capability_count = aggregate
@@ -1854,9 +1847,8 @@ impl RuntimeAdapter {
                 .or(run.checkpoint.pending_auth_challenge.as_ref()),
             run.last_mediation_outcome.as_ref(),
         )?;
-        let run_granted_tool_count = run_capability_snapshot.granted_tool_count as i64;
-        let run_injected_skill_message_count =
-            run_capability_snapshot.injected_skill_message_count as i64;
+        let run_granted_tool_count = run.capability_plan_summary.granted_tools.len() as i64;
+        let run_injected_skill_message_count = 0_i64;
         let run_deferred_capability_count = run.capability_plan_summary.deferred_tools.len() as i64;
         let run_hidden_capability_count =
             run.capability_plan_summary.hidden_capabilities.len() as i64;
@@ -1972,13 +1964,13 @@ impl RuntimeAdapter {
                   session_policy_snapshot_ref, capability_plan_summary_json, provider_state_summary_json,
                   pending_mediation_json, pending_mediation_kind, pending_target_kind,
                   pending_target_ref, pending_approval_layer, pending_provider_key,
-                  pending_checkpoint_ref, capability_state_ref, last_execution_outcome_json,
+                  pending_checkpoint_ref, last_execution_outcome_json,
                   last_mediation_outcome_json, last_mediation_outcome, last_mediation_target_kind,
                   last_mediation_target_ref, last_mediation_at, auth_challenge_state,
                   approval_lineage_json, denied_exposure_count, granted_tool_count,
                   injected_skill_message_count, deferred_capability_count, hidden_capability_count,
                   degraded_provider_count, detail_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54)",
                 params![
                     summary.id,
                     summary.conversation_id,
@@ -2019,7 +2011,6 @@ impl RuntimeAdapter {
                     pending_approval_layer,
                     pending_provider_key,
                     pending_checkpoint_ref,
-                    summary.capability_state_ref,
                     last_execution_outcome_json,
                     last_mediation_outcome_json,
                     last_mediation_outcome,
@@ -2051,13 +2042,13 @@ impl RuntimeAdapter {
                   workflow_run_detail_json, approval_state, trace_id, turn_id, capability_plan_summary_json,
                   provider_state_summary_json, pending_mediation_json, pending_mediation_kind,
                   pending_target_kind, pending_target_ref, pending_approval_layer,
-                  pending_provider_key, pending_checkpoint_ref, capability_state_ref,
+                  pending_provider_key, pending_checkpoint_ref,
                   last_execution_outcome_json, last_mediation_outcome_json, last_mediation_outcome,
                   last_mediation_target_kind, last_mediation_target_ref, last_mediation_at,
                   auth_challenge_state, approval_lineage_json, denied_exposure_count,
                   granted_tool_count, injected_skill_message_count, deferred_capability_count,
                   hidden_capability_count, degraded_provider_count, run_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55)",
                 params![
                     run.id,
                     run.session_id,
@@ -2099,7 +2090,6 @@ impl RuntimeAdapter {
                     run_pending_approval_layer,
                     run_pending_provider_key,
                     run_pending_checkpoint_ref,
-                    run.capability_state_ref,
                     run_last_execution_outcome_json,
                     run_last_mediation_outcome_json,
                     run_last_mediation_outcome,

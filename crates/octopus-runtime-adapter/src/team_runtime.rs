@@ -753,14 +753,6 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
         worker_policy.manifest_snapshot_ref = manifest_snapshot_ref.clone();
         worker_policy.session_policy_snapshot_ref = session_policy_snapshot_ref.clone();
         adapter.persist_session_policy_snapshot(&session_policy_snapshot_ref, &worker_policy)?;
-        let capability_state_ref = format!("{}-capability-state", subrun.run_id);
-        let capability_projection = adapter.project_capability_state(
-            &worker_manifest,
-            &worker_policy,
-            &worker_policy.config_snapshot_id,
-            capability_state_ref.clone(),
-            &tools::SessionCapabilityStore::default(),
-        )?;
         let memory_state_ref =
             memory_runtime::runtime_memory_state_ref(&subrun.run_id, subrun.updated_at);
 
@@ -845,15 +837,13 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
                         requires_auth: None,
                         target_kind: None,
                         target_ref: None,
-                        capability_state_ref: Some(capability_state_ref.clone()),
-                        capability_plan_summary: capability_projection.plan_summary.clone(),
+                        capability_plan_summary: RuntimeCapabilityPlanSummary::default(),
                         last_execution_outcome: None,
                         last_mediation_outcome: None,
                     },
-                    capability_plan_summary: capability_projection.plan_summary,
-                    provider_state_summary: capability_projection.provider_state_summary,
+                    capability_plan_summary: RuntimeCapabilityPlanSummary::default(),
+                    provider_state_summary: Vec::new(),
                     pending_mediation: None,
-                    capability_state_ref: Some(capability_state_ref),
                     last_execution_outcome: None,
                     last_mediation_outcome: None,
                     resolved_target: None,

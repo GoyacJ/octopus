@@ -824,9 +824,13 @@ impl AuthService for InfraAuthService {
         if workspace.bootstrap_status != "setup_required" && workspace.owner_user_id.is_some() {
             return Err(AppError::conflict("workspace owner already exists"));
         }
-        let mapped_directory = normalize_mapped_directory_input(request.mapped_directory.as_deref())?;
+        let mapped_directory =
+            normalize_mapped_directory_input(request.mapped_directory.as_deref())?;
         let current_workspace_root = self.state.paths.root.clone();
-        let shell_root = PathBuf::from(workspace_shell_root_display_path(&workspace, &self.state.paths));
+        let shell_root = PathBuf::from(workspace_shell_root_display_path(
+            &workspace,
+            &self.state.paths,
+        ));
 
         {
             let users = self

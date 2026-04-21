@@ -144,10 +144,12 @@ impl CompiledActorManifest {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn builtin_tool_keys(&self) -> &[String] {
         &self.capability_policy().builtin_tool_keys
     }
 
+    #[allow(dead_code)]
     pub(crate) fn skill_ids(&self) -> &[String] {
         &self.capability_policy().skill_ids
     }
@@ -156,6 +158,7 @@ impl CompiledActorManifest {
         &self.capability_policy().mcp_server_names
     }
 
+    #[allow(dead_code)]
     pub(crate) fn plugin_capability_refs(&self) -> &[String] {
         &self.capability_policy().plugin_capability_refs
     }

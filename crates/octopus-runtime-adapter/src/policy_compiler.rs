@@ -532,19 +532,9 @@ pub(super) async fn compile_session_policy(
     })
 }
 
-pub(super) fn policy_decision_for_capability<'a>(
-    session_policy: &'a session_policy::CompiledSessionPolicy,
-    capability: &tools::CapabilitySpec,
-) -> &'a RuntimeTargetPolicyDecision {
-    match capability.source_kind {
-        tools::CapabilitySourceKind::Builtin
-        | tools::CapabilitySourceKind::RuntimeTool
-        | tools::CapabilitySourceKind::PluginTool => &session_policy.capability_decisions.builtin,
-        tools::CapabilitySourceKind::LocalSkill
-        | tools::CapabilitySourceKind::BundledSkill
-        | tools::CapabilitySourceKind::PluginSkill => &session_policy.capability_decisions.skill,
-        tools::CapabilitySourceKind::McpTool
-        | tools::CapabilitySourceKind::McpPrompt
-        | tools::CapabilitySourceKind::McpResource => &session_policy.capability_decisions.mcp,
-    }
+#[allow(dead_code)]
+pub(super) fn policy_decision_for_capability(
+    session_policy: &session_policy::CompiledSessionPolicy,
+) -> &RuntimeTargetPolicyDecision {
+    &session_policy.capability_decisions.builtin
 }

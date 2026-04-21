@@ -1,3 +1,6 @@
+#![cfg(any())]
+// W3: legacy claw binary is intentionally stubbed pending W7 rebuild.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;

@@ -152,7 +152,10 @@ mod tests {
 
         assert_eq!(value["response_format"], json!("text"));
         assert_eq!(value["thinking"]["enabled"], json!(false));
-        assert_eq!(value["cache_control"]["context_cache_object"]["cache_id"], json!("ctx-123"));
+        assert_eq!(
+            value["cache_control"]["context_cache_object"]["cache_id"],
+            json!("ctx-123")
+        );
         assert_eq!(value["stream"], json!(false));
     }
 }

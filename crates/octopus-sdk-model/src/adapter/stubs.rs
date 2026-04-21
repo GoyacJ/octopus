@@ -47,11 +47,12 @@ macro_rules! impl_stub_adapter {
                         HeaderValue::from_str(&format!(
                             "Bearer {}",
                             super::secret_to_string(
-                                vault.get(&format!("{}_api_key", provider.id.0)).await.map_err(
-                                    |_| ModelError::AuthMissing {
+                                vault
+                                    .get(&format!("{}_api_key", provider.id.0))
+                                    .await
+                                    .map_err(|_| ModelError::AuthMissing {
                                         provider: provider.id.clone(),
-                                    },
-                                )?,
+                                    },)?,
                             )?,
                         ))
                         .map_err(|_| super::json_error("invalid bearer token"))?,
@@ -59,11 +60,12 @@ macro_rules! impl_stub_adapter {
                     crate::AuthKind::XApiKey => Ok(vec![(
                         HeaderName::from_static("x-api-key"),
                         header_value_from_secret(
-                            vault.get(&format!("{}_api_key", provider.id.0)).await.map_err(|_| {
-                                ModelError::AuthMissing {
+                            vault
+                                .get(&format!("{}_api_key", provider.id.0))
+                                .await
+                                .map_err(|_| ModelError::AuthMissing {
                                     provider: provider.id.clone(),
-                                }
-                            })?,
+                                })?,
                         )?,
                     )]),
                     kind => Err(ModelError::AuthUnsupported { kind: kind.clone() }),
@@ -104,9 +106,18 @@ mod tests {
     #[test]
     fn stubs_return_adapter_not_implemented() {
         for (adapter, family) in [
-            (&OpenAiResponsesAdapter as &dyn ProtocolAdapter, crate::ProtocolFamily::OpenAiResponses),
-            (&GeminiNativeAdapter as &dyn ProtocolAdapter, crate::ProtocolFamily::GeminiNative),
-            (&VendorNativeAdapter as &dyn ProtocolAdapter, crate::ProtocolFamily::VendorNative),
+            (
+                &OpenAiResponsesAdapter as &dyn ProtocolAdapter,
+                crate::ProtocolFamily::OpenAiResponses,
+            ),
+            (
+                &GeminiNativeAdapter as &dyn ProtocolAdapter,
+                crate::ProtocolFamily::GeminiNative,
+            ),
+            (
+                &VendorNativeAdapter as &dyn ProtocolAdapter,
+                crate::ProtocolFamily::VendorNative,
+            ),
         ] {
             assert!(matches!(
                 adapter.to_request(&request()),

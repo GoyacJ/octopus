@@ -28,17 +28,14 @@ pub(crate) fn resolve_reference(catalog: &ModelCatalog, reference: &str) -> Opti
     }
 
     let normalized = normalize_lookup(reference);
-    let model = catalog
-        .list_models()
-        .iter()
-        .find(|model| {
-            normalize_lookup(&model.family) == normalized
-                && model.track == ModelTrack::Stable
-                && catalog
-                    .surface_by_id(&model.surface)
-                    .and_then(|surface| catalog.provider_by_id(&surface.provider_id))
-                    .is_some_and(|provider| provider.status == ProviderStatus::Active)
-        })?;
+    let model = catalog.list_models().iter().find(|model| {
+        normalize_lookup(&model.family) == normalized
+            && model.track == ModelTrack::Stable
+            && catalog
+                .surface_by_id(&model.surface)
+                .and_then(|surface| catalog.provider_by_id(&surface.provider_id))
+                .is_some_and(|provider| provider.status == ProviderStatus::Active)
+    })?;
 
     resolved_from_id(catalog, &model.id)
 }
@@ -91,7 +88,10 @@ mod tests {
         let catalog = ModelCatalog::new_builtin();
 
         assert_eq!(
-            catalog.canonicalize("anthropic.claude-opus-4-6-v1:0").unwrap().0,
+            catalog
+                .canonicalize("anthropic.claude-opus-4-6-v1:0")
+                .unwrap()
+                .0,
             "claude-opus-4-6"
         );
         assert!(catalog.resolve("unknown/xxx").is_none());

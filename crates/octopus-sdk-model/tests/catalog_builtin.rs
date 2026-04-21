@@ -21,7 +21,10 @@ fn builtin_catalog_covers_expected_providers() {
         "qwen",
         "ark",
     ] {
-        assert!(provider_ids.contains(&expected), "missing provider {expected}");
+        assert!(
+            provider_ids.contains(&expected),
+            "missing provider {expected}"
+        );
     }
 }
 
@@ -44,11 +47,19 @@ fn canonicalize_handles_bedrock_style_ids_and_unknown_models() {
     let catalog = ModelCatalog::new_builtin();
 
     assert_eq!(
-        catalog.canonicalize("anthropic.claude-opus-4-6-v1:0").unwrap().0,
+        catalog
+            .canonicalize("anthropic.claude-opus-4-6-v1:0")
+            .unwrap()
+            .0,
         "claude-opus-4-6"
     );
     assert_eq!(
-        catalog.resolve("gpt-5").expect("gpt-5 alias should resolve").model.id.0,
+        catalog
+            .resolve("gpt-5")
+            .expect("gpt-5 alias should resolve")
+            .model
+            .id
+            .0,
         "gpt-5.4"
     );
     assert!(catalog.resolve("unknown/xxx").is_none());

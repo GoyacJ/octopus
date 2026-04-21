@@ -271,7 +271,7 @@ fn persists_session_extensions_in_jsonl_snapshot_and_forks() {
     let path = temp_session_path("extensions");
     let mut session = Session::new();
     session.set_extension(
-        "capability_runtime",
+        "legacy_runtime_extension",
         JsonValue::Object(
             [
                 (
@@ -294,7 +294,7 @@ fn persists_session_extensions_in_jsonl_snapshot_and_forks() {
     fs::remove_file(&path).expect("temp file should be removable");
 
     let restored_extension = restored
-        .extension("capability_runtime")
+        .extension("legacy_runtime_extension")
         .expect("extension should persist");
     assert_eq!(
         restored_extension
@@ -305,7 +305,7 @@ fn persists_session_extensions_in_jsonl_snapshot_and_forks() {
     );
     assert_eq!(
         forked
-            .extension("capability_runtime")
+            .extension("legacy_runtime_extension")
             .expect("fork should preserve extension"),
         restored_extension
     );

@@ -435,7 +435,6 @@ mod tests {
             capability_plan_summary: RuntimeCapabilityPlanSummary::default(),
             provider_state_summary: Vec::new(),
             pending_mediation: None,
-            capability_state_ref: None,
             last_execution_outcome: None,
             last_mediation_outcome: None,
             resolved_target: None,

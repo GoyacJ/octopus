@@ -15,7 +15,10 @@ impl RoleRouter {
 
         for (role, candidates) in [
             (ModelRole::Main, &["opus"][..]),
-            (ModelRole::Fast, &["haiku", "gpt-5.4-mini", "gemini-2.5-flash"][..]),
+            (
+                ModelRole::Fast,
+                &["haiku", "gpt-5.4-mini", "gemini-2.5-flash"][..],
+            ),
             (ModelRole::Best, &["opus-1m", "opus", "gpt-5.4"][..]),
             (ModelRole::Plan, &["opus", "gpt-5.4"][..]),
             (

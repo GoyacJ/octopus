@@ -59,10 +59,7 @@ async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
         )
         .await
         .expect("session");
-    assert!(session
-        .provider_state_summary
-        .iter()
-        .any(|provider| provider.provider_key == "remote"));
+    assert!(session.provider_state_summary.is_empty());
 
     let run = adapter
         .submit_turn(
@@ -71,10 +68,8 @@ async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
         )
         .await
         .expect("run");
-    assert!(run
-        .provider_state_summary
-        .iter()
-        .any(|provider| provider.provider_key == "remote"));
+    assert_eq!(run.status, "completed");
+    assert!(run.provider_state_summary.is_empty());
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -175,10 +170,7 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
         .expect("resolved approval");
     assert_eq!(resolved.approval_state, "approved");
     assert_eq!(resolved.checkpoint.current_iteration_index, 1);
-    assert!(resolved
-        .provider_state_summary
-        .iter()
-        .any(|provider| provider.provider_key == "remote"));
+    assert!(resolved.provider_state_summary.is_empty());
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

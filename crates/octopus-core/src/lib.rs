@@ -2392,50 +2392,6 @@ pub struct RuntimeCapabilityPlanSummary {
     pub provider_fallbacks: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeCapabilitySurface {
-    #[serde(default)]
-    pub visible_tools: Vec<String>,
-    #[serde(default)]
-    pub deferred_tools: Vec<String>,
-    #[serde(default)]
-    pub discoverable_skills: Vec<String>,
-    #[serde(default)]
-    pub available_resources: Vec<String>,
-    #[serde(default)]
-    pub hidden_capabilities: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeCapabilityStateSnapshot {
-    #[serde(default)]
-    pub discovered_tools: Vec<String>,
-    #[serde(default)]
-    pub activated_tools: Vec<String>,
-    #[serde(default)]
-    pub exposed_tools: Vec<String>,
-    #[serde(default)]
-    pub granted_tools: Vec<String>,
-    #[serde(default)]
-    pub pending_tools: Vec<String>,
-    #[serde(default)]
-    pub approved_tools: Vec<String>,
-    #[serde(default)]
-    pub auth_resolved_tools: Vec<String>,
-    #[serde(default)]
-    pub hidden_tools: Vec<String>,
-    #[serde(default)]
-    pub injected_skill_message_count: u64,
-    #[serde(default)]
-    pub granted_tool_count: u64,
-    #[serde(default)]
-    pub model_override: Option<String>,
-    #[serde(default)]
-    pub effort_override: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilityExecutionOutcome {
@@ -2763,8 +2719,6 @@ pub struct RuntimeRunCheckpoint {
     #[serde(default)]
     pub target_ref: Option<String>,
     #[serde(default)]
-    pub capability_state_ref: Option<String>,
-    #[serde(default)]
     pub capability_plan_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
@@ -2951,8 +2905,6 @@ pub struct RuntimeSessionSummary {
     #[serde(default)]
     pub policy_decision_summary: RuntimePolicyDecisionSummary,
     #[serde(default)]
-    pub capability_state_ref: Option<String>,
-    #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
 }
 
@@ -3017,8 +2969,6 @@ pub struct RuntimeRunSnapshot {
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,
     #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
-    #[serde(default)]
-    pub capability_state_ref: Option<String>,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     #[serde(default)]
@@ -3177,8 +3127,6 @@ pub struct RuntimeEventEnvelope {
     #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
     #[serde(default)]
-    pub capability_state_ref: Option<String>,
-    #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     #[serde(default)]
     pub last_mediation_outcome: Option<RuntimeMediationOutcome>,
@@ -3222,8 +3170,6 @@ pub struct RuntimeSessionDetail {
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
     #[serde(default)]
     pub policy_decision_summary: RuntimePolicyDecisionSummary,
-    #[serde(default)]
-    pub capability_state_ref: Option<String>,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     pub run: RuntimeRunSnapshot,

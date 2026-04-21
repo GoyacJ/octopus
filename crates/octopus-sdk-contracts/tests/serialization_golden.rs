@@ -222,8 +222,10 @@ fn fixture_path(name: &str) -> PathBuf {
 
 fn assert_fixture_matches(fixture: &FixtureCase) {
     let path = fixture_path(fixture.name);
-    let actual =
-        format!("{}\n", serde_json::to_string_pretty(&fixture.value).expect("fixture value should serialize"));
+    let actual = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&fixture.value).expect("fixture value should serialize")
+    );
 
     if !path.exists() {
         let parent = path.parent().expect("fixture path should have a parent");

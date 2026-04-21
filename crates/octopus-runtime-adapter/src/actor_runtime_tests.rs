@@ -273,8 +273,11 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         Some("subrun")
     );
     assert!(first_subrun_state
-        .get("run")
-        .and_then(|value| value.get("capabilityStateRef"))
+        .get("manifestSnapshotRef")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.is_empty()));
+    assert!(first_subrun_state
+        .get("sessionPolicySnapshotRef")
         .and_then(serde_json::Value::as_str)
         .is_some_and(|value| !value.is_empty()));
     assert_eq!(

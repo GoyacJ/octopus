@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use futures::stream;
@@ -10,8 +7,8 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use octopus_sdk_contracts::SecretVault;
 
 use crate::{
-    CacheControlStrategy, FallbackPolicy, ModelCatalog, ModelError, ModelRequest, ModelStream, ProtocolAdapter,
-    ProtocolFamily, ProviderDescriptor,
+    CacheControlStrategy, FallbackPolicy, ModelCatalog, ModelError, ModelRequest, ModelStream,
+    ProtocolAdapter, ProtocolFamily, ProviderDescriptor,
 };
 
 #[async_trait]
@@ -70,17 +67,18 @@ impl DefaultModelProvider {
 #[async_trait]
 impl ModelProvider for DefaultModelProvider {
     async fn complete(&self, req: ModelRequest) -> Result<ModelStream, ModelError> {
-        let resolved = self
-            .catalog
-            .resolve(&req.model.0)
-            .ok_or_else(|| ModelError::ModelNotFound {
-                id: req.model.clone(),
-            })?;
-        let adapter = self.adapters.get(&resolved.surface.protocol).ok_or_else(|| {
-            ModelError::AdapterNotImplemented {
+        let resolved =
+            self.catalog
+                .resolve(&req.model.0)
+                .ok_or_else(|| ModelError::ModelNotFound {
+                    id: req.model.clone(),
+                })?;
+        let adapter = self
+            .adapters
+            .get(&resolved.surface.protocol)
+            .ok_or_else(|| ModelError::AdapterNotImplemented {
                 family: resolved.surface.protocol.clone(),
-            }
-        })?;
+            })?;
         let mut headers = adapter
             .auth_headers(self.secret_vault.as_ref(), &resolved.provider)
             .await?;
@@ -93,7 +91,11 @@ impl ModelProvider for DefaultModelProvider {
             headers,
             &body,
         )?;
-        let response = self.http_client.execute(request).await.map_err(map_transport_error)?;
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .map_err(map_transport_error)?;
         let response = map_response(response).await?;
         let raw = response_byte_stream(response);
 
@@ -273,10 +275,7 @@ mod tests {
             Ok(json!({ "model": req.model.0 }))
         }
 
-        fn parse_stream(
-            &self,
-            _raw: crate::StreamBytes,
-        ) -> Result<ModelStream, ModelError> {
+        fn parse_stream(&self, _raw: crate::StreamBytes) -> Result<ModelStream, ModelError> {
             let model = self.current_model.lock().unwrap().clone().unwrap();
             let outcome = self
                 .outcomes
@@ -293,9 +292,11 @@ mod tests {
                 .unwrap_or(Ok(()));
 
             match outcome {
-                Ok(()) => Ok(Box::pin(stream::iter(vec![Ok(AssistantEvent::MessageStop {
-                    stop_reason: StopReason::EndTurn,
-                })]))),
+                Ok(()) => Ok(Box::pin(stream::iter(vec![Ok(
+                    AssistantEvent::MessageStop {
+                        stop_reason: StopReason::EndTurn,
+                    },
+                )]))),
                 Err(err) => Err(err),
             }
         }
@@ -470,7 +471,10 @@ mod tests {
             catalog_version: "builtin-2026-04-02".to_string(),
         };
 
-        assert_eq!(serde_json::to_value(&descriptor).unwrap()["catalog_version"], "builtin-2026-04-02");
+        assert_eq!(
+            serde_json::to_value(&descriptor).unwrap()["catalog_version"],
+            "builtin-2026-04-02"
+        );
     }
 
     #[test]
@@ -481,11 +485,7 @@ mod tests {
             breakpoints: vec!["system", "tools"],
         };
 
-        append_request_headers(
-            &mut headers,
-            &ProtocolFamily::AnthropicMessages,
-            &request,
-        );
+        append_request_headers(&mut headers, &ProtocolFamily::AnthropicMessages, &request);
 
         assert!(headers.iter().any(|(name, value)| {
             name == &HeaderName::from_static("anthropic-beta")
@@ -627,7 +627,9 @@ mod tests {
         mount_ok(&server, "/v1/messages").await;
         let adapter = MockAdapter::default().with_outcome(
             "claude-opus-4-6",
-            Err(ModelError::Overloaded { retry_after_ms: None }),
+            Err(ModelError::Overloaded {
+                retry_after_ms: None,
+            }),
         );
         let provider = DefaultModelProvider::new(
             Arc::new(test_catalog(&server.uri())),

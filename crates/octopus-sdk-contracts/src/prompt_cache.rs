@@ -44,7 +44,10 @@ mod tests {
             value.get("cache_creation_input_tokens"),
             Some(&Value::Number(13_u32.into()))
         );
-        assert_eq!(value.get("breakpoint_count"), Some(&Value::Number(2_u32.into())));
+        assert_eq!(
+            value.get("breakpoint_count"),
+            Some(&Value::Number(2_u32.into()))
+        );
     }
 
     #[test]
@@ -56,6 +59,9 @@ mod tests {
 
         let value = serde_json::to_value(&breakpoint).expect("cache breakpoint should serialize");
 
-        assert_eq!(value.get("ttl"), Some(&Value::String("five_minutes".into())));
+        assert_eq!(
+            value.get("ttl"),
+            Some(&Value::String("five_minutes".into()))
+        );
     }
 }

@@ -11,8 +11,8 @@ use octopus_sdk_contracts::{
     SecretVault, StopReason, VaultError,
 };
 use octopus_sdk_model::{
-    AnthropicMessagesAdapter, CacheControlStrategy, ModelId, ModelRequest, ModelRole, ProtocolAdapter,
-    ResponseFormat, StreamBytes, ThinkingConfig, ToolSchema,
+    AnthropicMessagesAdapter, CacheControlStrategy, ModelId, ModelRequest, ModelRole,
+    ProtocolAdapter, ResponseFormat, StreamBytes, ThinkingConfig, ToolSchema,
 };
 
 struct StaticVault;
@@ -85,26 +85,28 @@ fn header_map(headers: Vec<(HeaderName, HeaderValue)>) -> HeaderMap {
 }
 
 fn response_byte_stream(response: reqwest::Response) -> StreamBytes {
-    Box::pin(futures::stream::try_unfold(response, |mut response| async move {
-        match response.chunk().await {
-            Ok(Some(chunk)) => Ok(Some((chunk, response))),
-            Ok(None) => Ok(None),
-            Err(error) => Err(octopus_sdk_model::ModelError::Transport(error)),
-        }
-    }))
+    Box::pin(futures::stream::try_unfold(
+        response,
+        |mut response| async move {
+            match response.chunk().await {
+                Ok(Some(chunk)) => Ok(Some((chunk, response))),
+                Ok(None) => Ok(None),
+                Err(error) => Err(octopus_sdk_model::ModelError::Transport(error)),
+            }
+        },
+    ))
 }
 
-async fn send_request(
-    server: &MockServer,
-    request: &ModelRequest,
-) -> Vec<AssistantEvent> {
+async fn send_request(server: &MockServer, request: &ModelRequest) -> Vec<AssistantEvent> {
     let adapter = AnthropicMessagesAdapter::default();
     let client = reqwest::Client::new();
     let headers = adapter
         .auth_headers(&StaticVault, &anthropic_provider())
         .await
         .expect("auth headers should resolve");
-    let body = adapter.to_request(request).expect("request body should serialize");
+    let body = adapter
+        .to_request(request)
+        .expect("request body should serialize");
     let response = client
         .post(format!("{}/v1/messages", server.uri()))
         .headers(header_map(headers))

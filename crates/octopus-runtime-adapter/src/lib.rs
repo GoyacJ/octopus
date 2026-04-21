@@ -12,11 +12,6 @@ mod approval_flow;
 mod approval_runtime_tests;
 mod auth_mediation;
 mod background_runtime;
-mod capability_executor_bridge;
-mod capability_planner_bridge;
-#[cfg(test)]
-mod capability_runtime_tests;
-mod capability_state;
 mod config_service;
 #[cfg(test)]
 mod deliverable_runtime_tests;
@@ -80,7 +75,7 @@ use octopus_core::{
     RunRuntimeGenerationInput, RuntimeAuthChallengeSummary, RuntimeAuthStateSummary,
     RuntimeBackgroundRunSummary, RuntimeBootstrap, RuntimeCapabilityExecutionOutcome,
     RuntimeCapabilityPlanSummary, RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
-    RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
+    RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
     RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelCredentialInput,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
     RuntimeEventEnvelope, RuntimeGenerationResult, RuntimeHandoffSummary, RuntimeMailboxSummary,
@@ -92,8 +87,7 @@ use octopus_core::{
     RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
     RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowBlockingSummary,
     RuntimeWorkflowRunDetail, RuntimeWorkflowStepSummary, RuntimeWorkflowSummary,
-    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_READ_ONLY,
-    RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
