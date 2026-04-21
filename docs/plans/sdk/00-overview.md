@@ -168,10 +168,10 @@
 - 出口状态：
   - `Orchestrator-Workers` + `Generator-Evaluator` 最小可运行示例；子代理独立上下文窗口，返回 condensed 摘要。
   - `PluginManifest / PluginRegistry / PluginLifecycle` 初版 + 最小 native plugin 示例。
-  - `HookRunner` / `ToolRegistry` / `SkillRegistry` / `ModelProvider` 的扩展点以 `trait object` 形式向插件开放。
+  - `ToolRegistry / HookRunner` 通过 executable runtime registration 向插件开放；`SkillDecl / ModelProviderDecl` 在 W5 保持 metadata + builder slot。
 - 硬门禁：
   - `crates/plugins/*` + `runtime::plugin_lifecycle` + `runtime::hooks` 四源合一，无重复生命周期。
-  - plugin session 快照包含 `pluginsSnapshot` 字段，可回放。
+  - plugin session 快照可从 `SessionStarted` 或紧随其后的 `session.plugins_snapshot` 恢复，并可回放。
 
 ### W6 · `octopus-sdk-core`（Brain Loop）
 
@@ -202,7 +202,7 @@
   - `octopus-server/handlers.rs`（4300）、`workspace_runtime.rs`（9890）按资源切分。
   - §2.3 列出的 11 个遗留 crate 目录在 W7 已全部删除；本周的验证动作是"grep + `ls crates/` 复核 + 书面 Weekly Gate 勾选"。
 - 硬门禁：
-  - `find crates -type f -name '*.rs' -size +800 | wc -l` 为 0（单文件 ≤ 800 行硬约束）。
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }' | wc -l` 为 0（单文件 ≤ 800 行硬约束）。
   - `rg "runtime/sessions/.*\.json" crates/` 仅命中测试或显式 debug 导出路径。
   - 全仓库 `cargo test --workspace` 全绿 + `pnpm test` 关键 suite 全绿。
 
@@ -248,7 +248,7 @@
 4. 全仓库 `cargo test --workspace` 全绿 + `pnpm -C apps/desktop test` 关键 suite 全绿 + `cargo clippy --workspace -- -D warnings` 全绿。
 5. Prompt cache 基线测试：工具顺序变更守护测试在 CI 中存在并绿。
 6. 凭据零暴露合同测试：事件日志扫描 CI job 绿。
-7. `find crates -type f -name '*.rs' -size +800` 为 0（单文件行数硬上限）。
+7. `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }' | wc -l` 为 0（单文件行数硬上限）。
 8. `docs/sdk/01–14` 与实现出现矛盾时已在 `docs/sdk/README.md` "## Fact-Fix 勘误" 小节追加条目。
 9. `docs/plans/sdk/README.md` 索引状态全部 `done`；本文档 `Goal` 节追加 "Completed YYYY-MM-DD"。
 
@@ -342,3 +342,6 @@ cleanup+split                                                          │██
 | 2026-04-21 | W3 Weekly Gate 收尾：`06-week-3-tools-mcp.md` 由 `in_progress` 切为 `done`；`octopus-sdk-tools` / `octopus-sdk-mcp` 的公共面与契约差异清单完成回填；`capability_runtime/** + capability bridge` 真删后通过 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings` 与双口径守护扫描。 | Codex |
 | 2026-04-21 | W4 Plan 起稿：`07-week-4-permissions-hooks-sandbox-context.md` 由 `pending` 切为 `draft`；4 crate（`octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context`）公共面与 12-Task Ledger 完成；3 项关键决策（`ToolCategory` 反向下沉到 Level 0 / Compactor 首版 `ClearToolResults` + `Summarize` / Sandbox 3 后端 + Windows Noop fallback）在审核中已确认。 | Architect (Claude) |
 | 2026-04-21 | W4 Weekly Gate 收尾：`07-week-4-permissions-hooks-sandbox-context.md` 由 `in_progress` 切为 `done`；4 个 Level 2/3 crate 落地；Level 0 contracts W4 补丁完成；凭据零暴露合同测试与 prompt cache fingerprint 守护通过，且 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test --workspace` 全绿。 | Codex |
+| 2026-04-21 | W5 Plan 起稿：`08-week-5-subagent-plugin.md` 由 `pending` 切为 `draft`；2 个 SDK crate（`octopus-sdk-subagent` Level 3 / `octopus-sdk-plugin` Level 2）公共面与 12-Task Ledger 完成；4 项审核决策（D1 仅 `MockEvaluator` / D2 插件仅本地目录 / D3 `worker_boot` 只取 Orchestrator 通用部分 / D4 `.agents/**` 双 root 发现）在审核中已确认。 | Architect (Claude Opus 4.7) |
+| 2026-04-21 | W5 审计追补：W5 出口状态第 3 条改成 `ToolRegistry / HookRunner` 的 executable runtime registration，并明确 `SkillDecl / ModelProviderDecl` 在 W5 仍是 metadata + builder slot；`worker_boot` 更正为 W5 non-source、留到 W7 复核。 | Codex |
+| 2026-04-21 | W5 三轮审计追补：`plugins_snapshot` 硬门禁改成“首事件优先，必要时退回 `session.plugins_snapshot` 次事件”的显式双分支；W8/DoD 的 800 行守护命令改成真实按行数检查。 | Codex |

@@ -227,7 +227,7 @@ rg "capability_runtime|CapabilityPlanner|CapabilitySurface" crates/
 rg "octopus_runtime_adapter|octopus-runtime-adapter" crates/ apps/
 rg "use (runtime|tools|plugins|api)::" crates/octopus-{platform,persistence,server,desktop,cli}
 rg "runtime/sessions/.*\.json" crates/
-find crates -type f -name '*.rs' -size +800
+find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'
 ```
 
 ---
@@ -258,3 +258,4 @@ find crates -type f -name '*.rs' -size +800
 | 2026-04-20 | 首稿（三层 Checklist + Stop Conditions + 每周门禁） | Architect |
 | 2026-04-20 | P1 修订：Weekly Gate 的 fact-fix 追加目标明确为 `docs/sdk/README.md` 末尾新增的 "## Fact-Fix 勘误" 累计登记簿 | Architect |
 | 2026-04-20 | 方案 B 落地：新增 Stop Condition #11（违反 `docs/plans/sdk/AGENTS.md` 的命名/登记约束） | Architect |
+| 2026-04-21 | 审计修复：`§7.4` 单文件 ≤ 800 行守护从 `find -size +800` 改为 `wc -l + awk` 行数检查，避免把文件字节大小误当成 Weekly Gate 的行数门禁 | Codex |

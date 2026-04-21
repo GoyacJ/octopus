@@ -65,7 +65,7 @@
 | `stale_base.rs` / `stale_branch.rs` / `branch_lock.rs` / `green_contract.rs` | git lane 业务 | `octopus-platform::governance` | W7 | pending |
 | `trust_resolver.rs` | `TrustResolver / TrustPolicy / TrustConfig / TrustDecision / TrustEvent` | `octopus-platform::governance` | W7 | pending |
 | `bootstrap.rs` | `BootstrapPhase / BootstrapPlan` | `octopus-platform::bootstrap` | W7 | pending |
-| `worker_boot.rs`（1168） | `Worker / WorkerRegistry / WorkerEvent / WorkerEventKind / WorkerEventPayload / WorkerFailure / WorkerFailureKind / WorkerPromptTarget / WorkerReadySnapshot / WorkerStatus / WorkerTrustResolution` | `octopus-sdk-subagent`（SubagentSpec / OrchestratorWorkers 替代）+ `octopus-platform::team` 业务映射 | W5 | pending |
+| `worker_boot.rs`（1168） | `Worker / WorkerRegistry / WorkerEvent / WorkerEventKind / WorkerEventPayload / WorkerFailure / WorkerFailureKind / WorkerPromptTarget / WorkerReadySnapshot / WorkerStatus / WorkerTrustResolution` | **W5 不作为 `octopus-sdk-subagent` 实现来源**；当前文件保留 trust gate / ready-for-prompt / prompt-misdelivery 控制面。若 W7 业务侧改接通用 subagent SDK，再由 `octopus-platform::team` 承接团队态映射。 | W7 | pending |
 | `lsp_client.rs` | `LspRegistry` | `octopus-sdk-tools`（内部）或 `octopus-sdk-plugin::LspServer` 扩展点 | W5 | pending |
 
 ### 2.2 彻底废弃（deprecate-with-no-successor）
@@ -87,7 +87,7 @@
 | `fs_shell.rs` | `run_bash / run_edit_file / run_glob_search / run_grep_search / run_notebook_edit / run_powershell / run_read_file / run_repl / run_write_file / workspace_test_branch_preflight / *Input` | `octopus-sdk-tools::builtin::{BashTool, FileReadTool, FileWriteTool, FileEditTool, GlobTool, GrepTool}` + 去除 PowerShell / Repl / Notebook（保留 Notebook 作为 plugin 示例） | W3 | pending |
 | `lsp_runtime.rs` | `run_lsp / LspInput` | `octopus-sdk-plugin::LspServer` 扩展点（最小 stub；W5 落地） | W5 | pending |
 | `skill_runtime.rs`（1107） | `SkillDiscoveryOutput / SkillExecutionResult / SkillStateUpdate` | `octopus-sdk-tools::builtin::SkillTool` + `octopus-sdk-context`（Skill 按需加载） | W3 | pending |
-| `subagent_runtime.rs`（1024） | `spawn_subagent_job / spawn_subagent_task / spawn_subagent_with_job / spawn_subagent_with_job_detailed / AgentInput / AgentJob / AgentOutput / AgentSpawnFailure / SubagentToolExecutor / agent_permission_policy / allowed_tools_for_subagent / classify_lane_failure / derive_agent_state / final_assistant_text / iso8601_now / maybe_commit_provenance / persist_agent_terminal_state / push_output_block` | `octopus-sdk-subagent::OrchestratorWorkers / GeneratorEvaluator` + `octopus-sdk-tools::builtin::AgentTool` | W5 | pending |
+| `subagent_runtime.rs`（1024） | `spawn_subagent_job / spawn_subagent_task / spawn_subagent_with_job / spawn_subagent_with_job_detailed / AgentInput / AgentJob / AgentOutput / AgentSpawnFailure / SubagentToolExecutor / agent_permission_policy / allowed_tools_for_subagent / classify_lane_failure / derive_agent_state / final_assistant_text / iso8601_now / maybe_commit_provenance / persist_agent_terminal_state / push_output_block` | `octopus-sdk-subagent::OrchestratorWorkers / GeneratorEvaluator` + `octopus-sdk-tools::builtin::AgentTool`；但当前文件已降为 TODO stub，W5 只由 greenfield SDK 覆盖职责边界，不从此处迁实现。 | W5 | pending |
 | `web_external.rs` | `run_web_fetch / run_web_search / run_remote_trigger / WebFetchInput / WebSearchInput / RemoteTriggerInput` | `octopus-sdk-tools::builtin::{WebFetchTool, WebSearchTool}`；`RemoteTrigger` 作为 plugin 示例 | W3 | pending |
 | `lane_completion.rs` | lane 业务 | `octopus-platform::governance` | W7 | pending |
 | `split_module_tests.rs`（5433） | 整体测试合集 | 拆分到 `octopus-sdk-tools/tests/<feature>.rs` | W3 | **must-split** |
@@ -251,14 +251,14 @@ rg 'capability_runtime|CapabilityPlanner|CapabilitySurface|CapabilityExecutionPl
 rg 'runtime/sessions/.*\.json' crates/ --glob '!**/tests/**' --glob '!**/fixtures/**'
 
 # 单文件行数硬约束
-find crates -type f -name '*.rs' -size +800
+find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'
 ```
 
 ### 退役阶段特例
 
 - W7 结束前 `Cargo.toml` 扫描命中 → 阻塞本周。
 - W7 结束后 `crates/{runtime,tools,plugins,api,octopus-runtime-adapter,commands,compat-harness,mock-anthropic-service,rusty-claude-cli,octopus-desktop-backend,octopus-model-policy}` 目录不存在 → 上述命令自然返回 0 hits。
-- W8 结束前 `find +800` 必须为 0。
+- W8 结束前上述行数检查命令必须为 0。
 
 ---
 
@@ -279,3 +279,4 @@ find crates -type f -name '*.rs' -size +800
 | 2026-04-20 | 首稿：10 个旧 crate 的模块/符号级退役矩阵 + 守护扫描 | Architect |
 | 2026-04-20 | P0 事实修订：§1 总览表行数改为 2026-04-20 `wc -l` 实测值（共校正 7 项：`runtime 19 281`、`tools 14 391`、`plugins 3 938`、`api 5 597`、`octopus-runtime-adapter 38 673`、`commands 5 010`、`rusty-claude-cli 12 844`、`compat-harness 385`、`mock-anthropic-service 1 178`、`octopus-desktop-backend 196`、`octopus-model-policy 143`），并就 `rusty-claude-cli` 实际体量为 W6 工作量给出警示 | Architect |
 | 2026-04-20 | P1 修订：§0 增加"目标态路径"说明，明确 `octopus-platform::{config/governance/host/…}` 等子模块属 W4–W7 新建目标态，当前不存在即属预期 | Architect |
+| 2026-04-21 | 审计修复：`§8` 的 Weekly Gate 守护扫描把单文件 ≤ 800 行检查从 `find -size +800` 改为 `wc -l + awk` 行数版，并同步把 W8 特例说明改成引用该命令 | Codex |

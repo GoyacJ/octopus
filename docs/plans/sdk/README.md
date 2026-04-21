@@ -17,7 +17,7 @@
 | `05-week-2-model.md` | W2：`octopus-sdk-model`（Provider / Surface / Model 三层） | `done` |
 | `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `done` |
 | `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `done` |
-| `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `pending` |
+| `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `draft` |
 | `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + 端到端最小链路 | `pending` |
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `pending` |
 | `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `pending` |
@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-21（W4 Weekly Gate 完成，`07-week-4-permissions-hooks-sandbox-context.md` = `done`；`octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context` 全量落地并通过 workspace build/clippy/test）
+**最后更新**：2026-04-21（W5 Plan 起稿：`08-week-5-subagent-plugin.md` = `draft`；2 个 SDK crate（subagent / plugin）公共面 + 12-Task Ledger + 4 项审核决策已落地；W4 Weekly Gate 仍保持完成态）
