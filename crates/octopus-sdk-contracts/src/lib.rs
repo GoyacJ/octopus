@@ -7,6 +7,7 @@ mod event;
 mod message;
 mod prompt_cache;
 mod secret;
+mod tool_schema;
 mod ui_intent;
 mod usage;
 
@@ -15,5 +16,6 @@ pub use id::*;
 pub use message::*;
 pub use prompt_cache::*;
 pub use secret::*;
+pub use tool_schema::*;
 pub use ui_intent::*;
 pub use usage::*;

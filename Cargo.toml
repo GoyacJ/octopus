@@ -12,6 +12,7 @@ default-members = [
   "crates/octopus-server",
   "crates/octopus-desktop-backend",
   "crates/octopus-sdk-contracts",
+  "crates/octopus-sdk-model",
   "crates/octopus-sdk-session",
 ]
 resolver = "2"

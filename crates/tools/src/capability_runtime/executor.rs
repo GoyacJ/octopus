@@ -520,35 +520,31 @@ impl CapabilityExecutor {
             .iter()
             .find(|capability| capability.display_name == tool_name)
             .cloned();
-        let capability = match capability {
-            Some(capability) => capability,
-            None => {
-                if let Some(deferred_capability) = surface
-                    .deferred_tools
-                    .iter()
-                    .find(|capability| capability.display_name == tool_name)
-                    .cloned()
-                {
-                    let request = Self::request_for_capability(
-                        tool_name,
-                        &deferred_capability,
-                        input.clone(),
-                    );
-                    let outcome = ToolExecutionOutcome::Failed {
-                        message: format!(
-                            "{tool_name}: tool `{tool_name}` is not exposed in the current capability surface. Use `ToolSearch` with query `select:{tool_name}` to expose it, then retry."
-                        ),
-                    };
-                    self.emit_terminal_event(&request, &outcome, None);
-                    return outcome;
-                }
-                return Self::classify_dispatch_error(
-                    tool_name,
-                    ToolError::new(format!(
-                        "tool `{tool_name}` is not enabled in the current capability surface"
-                    )),
-                );
+        let capability = if let Some(capability) = capability {
+            capability
+        } else {
+            if let Some(deferred_capability) = surface
+                .deferred_tools
+                .iter()
+                .find(|capability| capability.display_name == tool_name)
+                .cloned()
+            {
+                let request =
+                    Self::request_for_capability(tool_name, &deferred_capability, input.clone());
+                let outcome = ToolExecutionOutcome::Failed {
+                    message: format!(
+                        "{tool_name}: tool `{tool_name}` is not exposed in the current capability surface. Use `ToolSearch` with query `select:{tool_name}` to expose it, then retry."
+                    ),
+                };
+                self.emit_terminal_event(&request, &outcome, None);
+                return outcome;
             }
+            return Self::classify_dispatch_error(
+                tool_name,
+                ToolError::new(format!(
+                    "tool `{tool_name}` is not enabled in the current capability surface"
+                )),
+            );
         };
         let request = Self::request_for_capability(tool_name, &capability, input.clone());
         let effective_request = self.effective_request(&request, store);

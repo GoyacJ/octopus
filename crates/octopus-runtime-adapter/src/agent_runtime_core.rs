@@ -101,8 +101,8 @@ struct RuntimeLoopFailure {
 
 #[derive(Debug, Clone)]
 enum RuntimeLoopExit {
-    Completed(RuntimeLoopResult),
-    Failed(RuntimeLoopFailure),
+    Completed(Box<RuntimeLoopResult>),
+    Failed(Box<RuntimeLoopFailure>),
 }
 
 #[derive(Debug, Clone)]
@@ -1284,7 +1284,7 @@ async fn execute_runtime_turn_loop(
                     let response = latest_runtime_response(&session, segment_total_tokens)?;
                     let consumed_tokens =
                         adapter.resolve_consumed_tokens(configured_model, &response)?;
-                    return Ok(RuntimeLoopExit::Completed(RuntimeLoopResult {
+                    return Ok(RuntimeLoopExit::Completed(Box::new(RuntimeLoopResult {
                         response,
                         serialized_session: serialized_runtime_session_with_pending_tool_uses(
                             content,
@@ -1302,7 +1302,7 @@ async fn execute_runtime_turn_loop(
                         planner_events,
                         model_iterations,
                         capability_events,
-                    }));
+                    })));
                 }
                 other => {
                     let result_message = runtime::ConversationMessage::tool_result(
@@ -1385,7 +1385,7 @@ async fn execute_runtime_turn_loop(
                     interrupted_turn.usage,
                     &interrupted_turn.detail,
                 );
-                return Ok(RuntimeLoopExit::Failed(RuntimeLoopFailure {
+                return Ok(RuntimeLoopExit::Failed(Box::new(RuntimeLoopFailure {
                     error: interrupted_turn.detail,
                     serialized_session,
                     usage_summary,
@@ -1394,7 +1394,7 @@ async fn execute_runtime_turn_loop(
                     planner_events,
                     model_iterations,
                     capability_events,
-                }));
+                })));
             }
         };
         let assistant_message = consumed_turn.assistant_message;
@@ -1427,7 +1427,7 @@ async fn execute_runtime_turn_loop(
 
         if tool_uses.is_empty() {
             let consumed_tokens = adapter.resolve_consumed_tokens(configured_model, &response)?;
-            return Ok(RuntimeLoopExit::Completed(RuntimeLoopResult {
+            return Ok(RuntimeLoopExit::Completed(Box::new(RuntimeLoopResult {
                 response,
                 serialized_session: serialized_runtime_session_with_state(
                     content,
@@ -1444,7 +1444,7 @@ async fn execute_runtime_turn_loop(
                 planner_events,
                 model_iterations,
                 capability_events,
-            }));
+            })));
         }
         pending_tool_uses.extend(tool_uses);
     }
@@ -5709,9 +5709,7 @@ fn apply_auth_challenge_resolution_state(
     };
     aggregate.detail.run.updated_at = now;
     aggregate.detail.run.consumed_tokens = consumed_tokens;
-    aggregate.detail.run.next_action = Some(if runtime_error.is_some() {
-        "idle".into()
-    } else if resolution == "resolved" {
+    aggregate.detail.run.next_action = Some(if runtime_error.is_some() || resolution == "resolved" {
         "idle".into()
     } else {
         "blocked".into()

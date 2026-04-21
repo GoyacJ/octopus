@@ -325,6 +325,19 @@ pub enum ModelTrack { Preview, Stable, LatestAlias, Deprecated, Sunset }
 pub enum AuthKind { ApiKey, XApiKey, OAuth, AwsSigV4, GcpAdc, AzureAd, None }
 // W2 执行层公共面暂不含 `Rerank`；见 `docs/sdk/README.md` 的 Fact-Fix 勘误。
 pub enum ModelRole { Main, Fast, Best, Plan, Compact, Vision, WebExtract, Embedding, Eval, SubagentDefault }
+pub struct ModelCatalog { /* built-in providers/surfaces/models + alias index */ }
+pub struct ResolvedModel {
+    pub provider: Provider,
+    pub surface: Surface,
+    pub model: Model,
+}
+impl ModelCatalog {
+    pub fn new_builtin() -> Self;
+    pub fn list_providers(&self) -> &[Provider];
+    pub fn list_models(&self) -> &[Model];
+    pub fn resolve(&self, reference: &str) -> Option<ResolvedModel>;
+    pub fn canonicalize(&self, id: &str) -> Option<ModelId>;
+}
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
@@ -351,6 +364,9 @@ pub struct ModelRequest {
     pub temperature: Option<f32>,
     pub stream: bool,
 }
+impl ModelRequest {
+    pub fn tools_fingerprint(&self) -> String;
+}
 pub enum ResponseFormat { Json { schema: serde_json::Value }, Text }
 pub struct ThinkingConfig { pub enabled: bool, pub budget_tokens: Option<u32> }
 pub enum CacheControlStrategy {
@@ -375,13 +391,25 @@ pub enum ModelError {
 }
 
 pub struct RoleRouter { /* 静态映射 role → ModelId */ }
+impl RoleRouter {
+    pub fn new_builtin(catalog: &ModelCatalog) -> Self;
+    pub fn with_override(self, role: ModelRole, model: ModelId) -> Self;
+    pub fn resolve(&self, role: ModelRole) -> Option<ModelId>;
+}
 pub enum FallbackTrigger { Overloaded, Upstream5xx, PromptTooLong, ModelDeprecated }
 pub struct FallbackPolicy { /* chain + triggers */ }
 impl FallbackPolicy {
+    pub fn with_route(self, current: ModelId, next: ModelId) -> Self;
     pub fn should_fallback(&self, err: &ModelError) -> Option<FallbackTrigger>;
     pub fn next_model(&self, current: &ModelId) -> Option<&ModelId>;
 }
 
+pub type StreamBytes = Pin<Box<dyn Stream<Item = Result<bytes::Bytes, ModelError>> + Send>>;
+pub struct AnthropicMessagesAdapter;
+pub struct OpenAiChatAdapter;
+pub struct OpenAiResponsesAdapter;
+pub struct GeminiNativeAdapter;
+pub struct VendorNativeAdapter;
 pub trait ProtocolAdapter: Send + Sync {
     fn family(&self) -> ProtocolFamily;
     fn to_request(&self, req: &ModelRequest) -> Result<serde_json::Value, ModelError>;
@@ -395,6 +423,12 @@ pub trait ProtocolAdapter: Send + Sync {
 
 pub struct DefaultModelProvider { /* catalog + adapters + http_client + secret_vault */ }
 impl DefaultModelProvider {
+    pub fn new(
+        catalog: Arc<ModelCatalog>,
+        adapters: HashMap<ProtocolFamily, Arc<dyn ProtocolAdapter>>,
+        http_client: reqwest::Client,
+        secret_vault: Arc<dyn SecretVault>,
+    ) -> Self;
     pub async fn complete_with_fallback(
         &self,
         req: ModelRequest,
@@ -820,6 +854,11 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 2 | 2026-04-21 | `octopus-sdk-contracts::{Message, ContentBlock}` | `contracts/openapi/src/components/schemas/runtime.yaml#RuntimeMessage` / `packages/schema/src/workbench.ts#Message` | block-based IR vs flattened message envelope | SDK 侧 `Message` 是 `role + Vec<ContentBlock>`，支持 `tool_use` / `tool_result` / `thinking` 的递归块结构；OpenAPI/workbench 侧仍是 `content: string` + `toolCalls/processEntries/attachments` 的扁平 envelope。 | `align-openapi` | `open` |
 | 3 | 2026-04-21 | `octopus-sdk-contracts::SessionEvent::SessionStarted` | `contracts/openapi/src/components/schemas/runtime.yaml` session/message shapes | `config_snapshot_id` / `effective_config_hash` 首事件缺口 | W1 SDK 会话流把 `SessionStarted { config_snapshot_id, effective_config_hash }` 作为首事件强制不变量，但现有 OpenAPI runtime/session schema 未公开等价的首事件载荷或字段。 | `align-openapi` | `open` |
 | 4 | 2026-04-21 | `octopus-sdk-contracts::PromptCacheEvent` | `contracts/openapi/src/components/schemas/runtime.yaml#MessageUsage` | prompt cache 事件缺失 | SDK 侧已有 `PromptCacheEvent` 与 `CacheBreakpoint/CacheTtl` 最小签名；OpenAPI runtime schema 目前没有对应事件或 message usage 扩展位。 | `align-openapi` | `open` |
+| 5 | 2026-04-21 | `octopus-sdk-model::Surface` | `docs/sdk/11-model-system.md §11.3.2 SurfaceDefinition` / future runtime surface OpenAPI schema | `provider_id` 反向索引字段 | SDK 侧 `Surface` 新增 `provider_id: ProviderId`，用于 catalog 解析与反向索引；`docs/sdk/11` 的 `SurfaceDefinition` 目前未显式声明该字段，后续若对外公开 runtime surface schema 需同步补齐。 | `align-openapi` | `open` |
+| 6 | 2026-04-21 | `octopus-sdk-model::OpenAiChatAdapter` | `contracts/openapi/src/components/schemas/runtime.yaml#MessageUsage` / OpenAI-compatible chat usage payload | `cache_creation_input_tokens / cache_read_input_tokens` 缺失 | OpenAI-compatible chat completion usage 当前只稳定提供 `prompt_tokens / completion_tokens`；SDK 侧在 `Usage` 结构上保留四计数，adapter 统一把两项 cache 计数映射为 `0`。 | `dual-carry` | `open` |
+| 7 | 2026-04-21 | `octopus-sdk-model::ModelRole` | `contracts/openapi/src/**` / `packages/schema/src/**` runtime model routing shapes | role enum 缺口 | W2 SDK 公共面公开 `main / fast / best / plan / compact / vision / web_extract / embedding / eval / subagent_default` 共 10 个角色值；现有 OpenAPI/schema 侧没有等价的 runtime model role 枚举或路由配置载体。 | `align-openapi` | `open` |
+| 8 | 2026-04-21 | `octopus-sdk-model::{SurfaceId, Surface}` | `packages/schema/src/catalog.ts#ModelSurfaceId` | provider-qualified surface id vs generic surface kind | SDK catalog 用 `anthropic.conversation` / `openai.responses` 这类 provider-qualified `SurfaceId` 保证全局唯一；schema 侧 `ModelSurfaceId` 仍是 `conversation / responses / files ...` 的通用枚举，缺少 provider 维度。 | `dual-carry` | `open` |
+| 9 | 2026-04-21 | `octopus-sdk-model::ModelRequest` | `contracts/openapi/src/**` / `packages/schema/src/**` runtime request shapes | `cache_breakpoints` / `cache_control` 缺口 | SDK canonical request 已公开 `cache_breakpoints` 与 `cache_control`，用于 prompt cache / context cache 控制；现有 OpenAPI/schema 请求体没有对应字段或等价结构。 | `align-openapi` | `open` |
 
 **处理方式取值**：`align-openapi`（优先调整 OpenAPI）/ `align-sdk`（调整 SDK）/ `dual-carry`（短期双写 + deadline）/ `no-op`（仅命名差异，文档标注即可）。
 

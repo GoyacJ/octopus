@@ -1,0 +1,25 @@
+[package]
+name = "octopus-sdk-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-stream.workspace = true
+async-trait.workspace = true
+bytes = "1"
+futures = "0.3"
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+wiremock = "0.6"
+
+[lints]
+workspace = true

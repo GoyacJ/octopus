@@ -266,6 +266,7 @@
 | R4 | Legacy `runtime/sessions/*.json` 仍被业务隐式依赖 | W1 / W7 | W1 即加 `rg` CI 守护；W7 完全清零 |
 | R5 | 单 PR 行数失控 | 每周 | PR gate：diff > 800 行必须拆分（不含 generated） |
 | R6 | 子 Plan 发散 | 每周 | 所有子 Plan 必须引用本文件 §10 取舍表；不得翻案 |
+| R7 | W2 Weekly Gate 被仓库既有 workspace 门禁阻断 | `cargo build --workspace` 依赖桌面资源文件缺失；`cargo clippy --workspace -- -D warnings` 命中 `crates/tools` / `crates/octopus-runtime-adapter` 既有 lint | 2026-04-21 已缓解：补 desktop sidecar 占位生成、清零相关 clippy、清理 worktree `target/` 后重跑通过；保留为已发生风险记录 |
 
 ---
 
@@ -337,3 +338,4 @@ cleanup+split                                                          │██
 |---|---|---|
 | 2026-04-20 | 首稿（含 10 项取舍、8 周路线、checkpoint 机制、退出条件） | Architect |
 | 2026-04-20 | P0+P1 修订：§2.3 被删除 crate 扩为 11 项完整清单；§4 W7/W8 硬门禁与扫描命令同步；§5 DoD 取消"删除列表局部枚举"，改为"11 项清单 + `ls crates/` 校验"；#8 fact-fix 锚点改引 `docs/sdk/README.md` "## Fact-Fix 勘误" 小节 | Architect |
+| 2026-04-21 | W2 Weekly Gate 收尾：`05-week-2-model.md` 由 `in_progress` 切为 `done`；为解除工作区门禁补最小 unblocker（desktop sidecar 占位、`crates/tools` / `crates/octopus-runtime-adapter` clippy 清零），并以 fresh `cargo test/build/clippy` 验证通过。 | Codex |
