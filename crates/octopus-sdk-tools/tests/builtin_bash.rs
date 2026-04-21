@@ -77,10 +77,11 @@ fn tool_context(root: &Path) -> ToolContext {
     ToolContext {
         session_id: SessionId("session-1".into()),
         permissions: Arc::new(AllowAll),
-        sandbox: octopus_sdk_tools::SandboxHandle {
-            cwd: root.to_path_buf(),
-            env_allowlist: vec!["PATH".into()],
-        },
+        sandbox: octopus_sdk_tools::SandboxHandle::new(
+            root.to_path_buf(),
+            vec!["PATH".into()],
+            "noop",
+        ),
         session_store: Arc::new(SessionStub),
         secret_vault: Arc::new(SecretStub),
         ask_resolver: Arc::new(AskStub),

@@ -13,6 +13,7 @@ futures = "0.3"
 globset.workspace = true
 ignore.workspace = true
 octopus-sdk-mcp = { path = "../octopus-sdk-mcp" }
+octopus-sdk-sandbox = { path = "../octopus-sdk-sandbox" }
 octopus-sdk-session = { path = "../octopus-sdk-session" }
 octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
 regex = "1"

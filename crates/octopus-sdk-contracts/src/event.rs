@@ -2,8 +2,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::{
-    AskPrompt, ContentBlock, EventId, Message, PromptCacheEvent, RenderBlock, RenderLifecycle,
-    Role, ToolCallId, Usage,
+    AskPrompt, ContentBlock, EndReason, EventId, Message, PromptCacheEvent, RenderBlock,
+    RenderLifecycle, Role, ToolCallId, Usage,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,14 +13,6 @@ pub enum StopReason {
     ToolUse,
     MaxTokens,
     StopSequence,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EndReason {
-    Completed,
-    Interrupted,
-    Error,
 }
 
 #[derive(Debug, Clone, PartialEq)]

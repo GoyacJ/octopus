@@ -13,6 +13,8 @@ mod result;
 mod spec;
 mod tool;
 
+pub use octopus_sdk_contracts::ToolCategory;
+
 pub use constants::*;
 pub use context::*;
 pub use error::*;

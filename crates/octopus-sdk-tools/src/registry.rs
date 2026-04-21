@@ -148,10 +148,7 @@ fn shim_tool_context() -> ToolContext {
     ToolContext {
         session_id: SessionId("sdk-shim".into()),
         permissions: Arc::new(AllowAllPermissionGate),
-        sandbox: SandboxHandle {
-            cwd: working_dir.clone(),
-            env_allowlist: vec!["PATH".into()],
-        },
+        sandbox: SandboxHandle::new(working_dir.clone(), vec!["PATH".into()], "noop"),
         session_store: Arc::new(NoopSessionStore),
         secret_vault: Arc::new(NoopSecretVault),
         ask_resolver: Arc::new(NoopAskResolver),

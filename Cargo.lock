@@ -3351,6 +3351,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-sdk-context"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk-contracts",
+ "octopus-sdk-model",
+ "octopus-sdk-session",
+ "octopus-sdk-tools",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "octopus-sdk-contracts"
 version = "0.2.5"
 dependencies = [
@@ -3360,6 +3379,18 @@ dependencies = [
  "thiserror 1.0.69",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "octopus-sdk-hooks"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-sdk-contracts",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3400,6 +3431,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-sdk-permissions"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-sdk-contracts",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "octopus-sdk-sandbox"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "octopus-sdk-session"
 version = "0.2.5"
 dependencies = [
@@ -3428,6 +3484,7 @@ dependencies = [
  "ignore",
  "octopus-sdk-contracts",
  "octopus-sdk-mcp",
+ "octopus-sdk-sandbox",
  "octopus-sdk-session",
  "regex",
  "reqwest 0.12.28",

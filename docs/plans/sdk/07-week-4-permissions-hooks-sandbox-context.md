@@ -6,7 +6,32 @@
 
 ## Status
 
-状态：`draft`（Plan 起稿 + 关键决策审核通过；进入 Task 1 前切 `in_progress`）。
+状态：`done`（W4 Weekly Gate 完成）。
+
+## Active Work
+
+当前 Task：`Completed`
+
+当前 Step：`done`
+
+### Pre-Task Checklist（Task 11）
+
+- [x] 已阅读本子 Plan 的 `Goal` / `Architecture` / `Scope`。
+- [x] 已阅读 `00-overview.md §1 10 项取舍`，且当前任务未违反。
+- [x] 已阅读 `docs/sdk/*` 中与本 Task 对应的规范章节。
+- [x] 已阅读 Task 段落的 `Files` / `Preconditions` / `Step*` 且无歧义。
+- [x] 已识别本 Task 涉及的 **SDK 对外公共面** 变更（是）。
+  - 若"是"：已确认变更在 `02-crate-topology.md §对外公共面` 有登记项（或计划在本批次内新增登记）。
+- [x] 已识别是否涉及 `contracts/openapi/src/**` 或 `packages/schema/src/**`。
+  - 若"是"：已准备执行 `pnpm openapi:bundle && pnpm schema:generate` 作为验证步骤。
+- [x] 已识别是否涉及 `docs/sdk/14` UI Intent IR 变更（否）。
+- [x] Preconditions 已全部满足；未满足项已在 `Open Questions` 中登记。
+- [x] 当前 git 工作树干净或有明确切分；本批次计划 diff ≤ 800 行（不含 generated）。
+- [x] 已识别所有 `Stop if:` 条款；遇到任一条件 → 立即停止并汇报。
+
+Open Questions：
+
+- 无。
 
 ### 已确认的审核决策（2026-04-21）
 
@@ -168,7 +193,7 @@
 | 11 | `§2.6` `SystemPromptBuilder` | 方法补齐 | `new / with_section / build / fingerprint`；`PromptCtx { session: SessionId, mode: PermissionMode, project_root: PathBuf, tools: &ToolRegistry }` |
 | 12 | `§2.6` 新增类型 | 类型新增 | `SystemPromptSection { id: &'static str, order: u32, body: String }`（`order` 为段排序键；与 `docs/sdk/02 §2.3.2` XML 结构对齐，但以纯文本段承载） |
 | 13 | `§2.6` `Compactor` | 方法补齐 | `new(threshold: f32, strategy: CompactionStrategyTag, provider: Arc<dyn ModelProvider>) -> Self` / `async fn maybe_compact(&self, session: &mut SessionView) -> Result<Option<CompactionResult>, CompactionError>` / `async fn clear_tool_results(&self, session: &mut SessionView) -> u32` / `async fn summarize(&self, session: &mut SessionView) -> Result<CompactionResult, CompactionError>` |
-| 14 | `§2.6` 新增类型 | 类型新增 | `SessionView<'a> { messages: &'a mut Vec<Message>, tokens: u32 }`（W4 薄壳；真实消息游标由 W6 Brain Loop 传入） |
+| 14 | `§2.6` 新增类型 | 类型新增 | `SessionView<'a> { messages: &'a mut Vec<Message>, tokens: u32, tokens_budget: u32, event_ids: Vec<EventId> }`（W4 薄壳；`tokens_budget` 只用于阈值判断，`event_ids` 只用于 `folded_turn_ids` 审计；真实消息游标由 W6 Brain Loop 传入） |
 | 15 | `§2.6` 新增类型 | 类型新增 | `CompactionError { ModelUnavailable, SummaryTooLarge, Aborted, Provider(#[from] ModelError) }` |
 | 16 | `§2.6` `MemoryBackend` trait | 方法保持 | `async fn recall / async fn commit`；方法返回 `Result<_, MemoryError>`（MemoryError 从 contracts re-export） |
 | 17 | `§2.6` `DurableScratchpad` | 方法补齐 | `new(base: PathBuf) -> Self / async fn read(&self, session: &SessionId) -> Result<Option<String>, MemoryError> / async fn write(&self, session: &SessionId, content: &str) -> Result<(), MemoryError>`；路径为 `<base>/runtime/notes/<session_id>.md`，atomic rename |
@@ -201,7 +226,7 @@
 | # | 位置 | 修订类型 | 内容 |
 |---|---|---|---|
 | 31 | `§2.9` `Hook` trait | 方法保持 | `fn name(&self) -> &str` / `async fn on_event(&self, event: &HookEvent) -> HookDecision` |
-| 32 | `§2.9` 新增类型 | 类型新增 | `HookRegistration { hook: Arc<dyn Hook>, source: HookSource, priority: i32 }`、`HookSource { Session, Project, Workspace, Defaults, Plugin { plugin_id: String } }` |
+| 32 | `§2.9` 新增类型 | 类型新增 | `HookRegistration { hook: Arc<dyn Hook>, source: HookSource, priority: i32 }`、`HookSource { Plugin { plugin_id: String }, Workspace, Defaults, Project, Session }` |
 | 33 | `§2.9` `HookRunner` | 方法补齐 | `new / register(name: &str, hook: Arc<dyn Hook>, source: HookSource, priority: i32) / unregister_by_source / async fn run(&self, event: HookEvent) -> Result<HookRunOutcome, HookError>` |
 | 34 | `§2.9` 新增类型 | 类型新增 | `HookRunOutcome { decisions: Vec<(String, HookDecision)>, final_payload: Option<RewritePayload>, aborted: Option<String> }` |
 | 35 | `§2.9` 新增类型 | 类型新增 | `HookError { RewriteNotAllowed { event_kind: &'static str }, InjectNotAllowed { event_kind: &'static str }, HookPanic { name: String }, Serialization(#[from] serde_json::Error) }` |
@@ -213,7 +238,7 @@
 
 ### Task 1: Contracts Level 0 补丁（W4 前置）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-contracts/src/lib.rs`
@@ -265,7 +290,7 @@ Notes:
 
 ### Task 2: `octopus-sdk-permissions` 骨架 + `PermissionMode` 语义
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-permissions/Cargo.toml`
@@ -304,7 +329,7 @@ Notes:
 
 ### Task 3: `octopus-sdk-permissions::PermissionPolicy`（规则 + source 合并）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-permissions/src/policy.rs`
@@ -336,7 +361,7 @@ Step 3:
 
 ### Task 4: `octopus-sdk-permissions::PermissionGate` 真实实现（`canUseTool` 决策链）
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-permissions/src/gate.rs`
@@ -355,7 +380,7 @@ Step 1:
 - Stop if: `category_resolver` 设计发现泄漏 `Tool` trait → 改成 `ToolCategory` 值传入（继续封闭 `sdk-tools` 边界）。
 
 Step 2:
-- Action: 在 `check` 内实现 7 步 `canUseTool` 决策链（见 Architecture）；`RequireAuth` 暂时走 `AskApproval`（`prompt.kind = "require_auth"`），W6 Brain Loop 接入 `SecretVault` 后再回补。
+- Action: 在 `check` 内实现 7 步 `canUseTool` 决策链（见 Architecture）；`RequireAuth` 在 W4 仅保留为 contracts 变体，`check` 若收到该分支会把 prompt 继续交给 broker 占位处理，但不在 W4 内自行判定 OAuth / vendor key 握手。
 - Done when: `tests/can_use_tool_chain.rs` 覆盖 7 步的每一步分支（至少 12 条断言：4 mode × 3 类规则命中 + 兜底）。
 - Verify: `cargo test -p octopus-sdk-permissions --test can_use_tool_chain`。
 - Stop if: 某步需要读取工具 input 的具体字段（例如 Bash 命令前缀）→ 登记到 `02 §5` "W4 Bash 命令级审批延迟到 W8 增强"。
@@ -375,7 +400,7 @@ Step 4:
 
 ### Task 5: `octopus-sdk-sandbox` 骨架 + `SandboxSpec/Handle` 升级
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-sandbox/Cargo.toml`
@@ -417,7 +442,7 @@ Step 4:
 
 ### Task 6: `octopus-sdk-sandbox` 三后端实现
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-sandbox/src/backend/mod.rs`
@@ -470,7 +495,7 @@ Step 6:
 
 ### Task 7: `octopus-sdk-hooks` 骨架 + `HookRunner` 优先级
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-hooks/Cargo.toml`
@@ -509,7 +534,7 @@ Step 4:
 
 ### Task 8: `octopus-sdk-hooks` 8 种 `HookEvent` 的契约覆盖
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-hooks/tests/events_matrix.rs`
@@ -535,7 +560,7 @@ Step 2:
 
 ### Task 9: `octopus-sdk-context::SystemPromptBuilder`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-context/Cargo.toml`
@@ -577,7 +602,7 @@ Step 4:
 
 ### Task 10: `octopus-sdk-context::Compactor` + `MemoryBackend` + `DurableScratchpad`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-context/src/compact.rs`
@@ -622,7 +647,7 @@ Step 5:
 
 ### Task 11: W4 合同测试 + Prompt Cache 稳定性守护
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `crates/octopus-sdk-context/tests/prompt_cache_fingerprint.rs`
@@ -633,7 +658,7 @@ Preconditions:
 - Task 4 / Task 6 Step 5 / Task 8 / Task 9 完成。
 
 Step 1:
-- Action: `prompt_cache_fingerprint.rs` 跑 `SystemPromptBuilder + ToolRegistry` 组合：3 次 `build + fingerprint` 字节一致；然后 `register` 一个新 `Tool`，`fingerprint` 必须变（正向守护：新增工具应失效 cache，这是预期行为）；最后 `unregister`，`fingerprint` 回到初始值（证明排序稳定不依赖注册顺序）。
+- Action: `prompt_cache_fingerprint.rs` 跑 `SystemPromptBuilder + ToolRegistry` 组合：3 次 `build + fingerprint` 字节一致；然后 `register` 一个新 `Tool`，`fingerprint` 必须变（正向守护：新增工具应失效 cache，这是预期行为）；最后恢复到与初始值相同的工具集合，`fingerprint` 回到初始值（证明排序稳定只依赖工具集合、不依赖注册顺序）。
 - Done when: 3 条断言 pass。
 - Verify: `cargo test -p octopus-sdk-context --test prompt_cache_fingerprint`。
 - Stop if: 指纹不回到初始值 → W3 `schemas_sorted` 真实存在顺序泄漏，回 W3 补丁。
@@ -652,7 +677,7 @@ Step 3:
 
 ### Task 12: W4 Weekly Gate 收尾
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/README.md`（W4 状态切 `in_progress → done`）
@@ -698,19 +723,327 @@ Step 3:
 ## Weekly Gate Checklist · W4（执行时勾选）
 
 ```md
-- [ ] 本周 12 个 Task 状态 = `done` 或 明确 `blocked`（带原因）。
-- [ ] `00-overview.md §3 W4 出口状态` 逐条勾选通过（上表 6 行）。
-- [ ] `00-overview.md §3 W4 硬门禁` 命令实际执行过并 pass。
-- [ ] 当周 Checkpoint 无缺失（每批次一条，本文件末尾累积）。
-- [ ] 本周 PR 总 diff 行数分布记录完成（用于预警 R5）。
-- [ ] 未引入 `docs/sdk/*` 与实现的新矛盾；如有 → 追加到 `docs/sdk/README.md ## Fact-Fix 勘误`。
-- [ ] 新公共面符号 = `02-crate-topology.md` 登记；`03-legacy-retirement.md` 同步切状态。
-- [ ] Prompt Cache 相关：`prompt_cache_fingerprint.rs` 绿。
-- [ ] 凭据零暴露：三处合同测试绿。
-- [ ] `cargo build --workspace` 全绿；`cargo clippy --workspace -- -D warnings` 全绿；`cargo test --workspace` 全绿。
-- [ ] 完成本周"变更日志"追加到 `00-overview.md §10`。
-- [ ] `README.md §文档索引` W4 行状态 = `done`。
+- [x] 本周 12 个 Task 状态 = `done` 或 明确 `blocked`（带原因）。
+- [x] `00-overview.md §3 W4 出口状态` 逐条勾选通过（上表 6 行）。
+- [x] `00-overview.md §3 W4 硬门禁` 命令实际执行过并 pass。
+- [x] 当周 Checkpoint 无缺失（每批次一条，本文件末尾累积）。
+- [x] 本周 PR 总 diff 行数分布记录完成（用于预警 R5）。
+- [x] 未引入 `docs/sdk/*` 与实现的新矛盾；如有 → 追加到 `docs/sdk/README.md ## Fact-Fix 勘误`。
+- [x] 新公共面符号 = `02-crate-topology.md` 登记；`03-legacy-retirement.md` 同步切状态。
+- [x] Prompt Cache 相关：`prompt_cache_fingerprint.rs` 绿。
+- [x] 凭据零暴露：三处合同测试绿。
+- [x] `cargo build --workspace` 全绿；`cargo clippy --workspace -- -D warnings` 全绿；`cargo test --workspace` 全绿。
+- [x] 完成本周"变更日志"追加到 `00-overview.md §10`。
+- [x] `README.md §文档索引` W4 行状态 = `done`。
 ```
+
+## Checkpoints
+
+## Checkpoint 2026-04-21 11:31
+
+- Week: `W4`
+- Batch: `Task 1 Step 1 → Step 5`
+- Completed:
+  - 拆分 `octopus-sdk-contracts` 的 `permissions` 模块，补齐 `PermissionOutcome::RequireAuth`。
+  - 新增 `hooks / compaction / memory / tools` Level 0 contracts，并把 `ToolCategory` 下沉到 contracts。
+  - `octopus-sdk-tools` 改为 `pub use octopus_sdk_contracts::ToolCategory`，兼容 W3 调用点。
+  - 回填 `docs/plans/sdk/02-crate-topology.md` 的 `§2.1` W4 补丁清单、`§2.4` 反向修订说明和 `§10` 变更日志。
+- Files changed:
+  - `crates/octopus-sdk-contracts/src/{lib.rs,permissions.rs,hooks.rs,compaction.rs,memory.rs,tools.rs,event.rs}`
+  - `crates/octopus-sdk-contracts/tests/{w4_contracts.rs,serialization_golden.rs,fixtures/session_event/session_ended.json}`
+  - `crates/octopus-sdk-tools/src/{lib.rs,spec.rs,builtin/fs_write.rs}`
+  - `crates/octopus-sdk-session/tests/{sqlite_jsonl.rs,fork_wake.rs}`
+  - `docs/plans/sdk/{README.md,02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo check -p octopus-sdk-contracts` ✅
+  - `cargo test -p octopus-sdk-contracts` ✅
+  - `cargo test -p octopus-sdk-contracts --test w4_contracts` ✅
+  - `cargo clippy -p octopus-sdk-contracts -- -D warnings` ✅
+  - `cargo build -p octopus-sdk-tools -p octopus-sdk-mcp -p octopus-sdk-session -p octopus-sdk-model` ✅
+  - `cargo test -p octopus-sdk-tools --test registry_stability --test partition_concurrency` ✅
+  - `rg 'pub enum PermissionOutcome' crates/octopus-sdk-contracts/src` 命中 1 处 ✅
+  - `rg 'pub enum ToolCategory' crates/octopus-sdk-tools` 无命中 ✅
+  - `rg 'pub use octopus_sdk_contracts::ToolCategory' crates/octopus-sdk-tools/src` 命中 1 处 ✅
+  - `grep -n 'W4' docs/plans/sdk/02-crate-topology.md | wc -l` = `15` ✅
+- Stop conditions: `none`
+- Next step: `Task 2 Step 1`
+
+## Checkpoint 2026-04-21 12:05
+
+- Week: `W4`
+- Batch: `Task 2 Step 1 → Step 3`
+- Completed:
+  - 新建 `octopus-sdk-permissions` crate 骨架，并接入 workspace `default-members`。
+  - `mode.rs` 改为 `pub use octopus_sdk_contracts::PermissionMode;`，补齐 rustdoc。
+  - `tests/mode_semantics.rs` 固化 4 mode × 4 category 共 16 组决策表。
+  - `policy.rs` / `gate.rs` / `broker.rs` 保留 Task 3-4 的实现入口，`02-crate-topology.md §2.7` 同步记录 Task 2 落点。
+- Files changed:
+  - `Cargo.toml`
+  - `crates/octopus-sdk-permissions/{Cargo.toml,src/lib.rs,src/mode.rs,src/policy.rs,src/gate.rs,src/broker.rs,tests/mode_semantics.rs}`
+  - `docs/plans/sdk/02-crate-topology.md`
+- Verification:
+  - `cargo build -p octopus-sdk-permissions` ✅
+  - `cargo test -p octopus-sdk-permissions --test mode_semantics` ✅
+  - `cargo doc -p octopus-sdk-permissions --no-deps` ✅
+  - `cargo check --workspace` ✅
+  - `cargo metadata --no-deps --format-version 1` ✅
+  - `cargo doc -p octopus-sdk-permissions --no-deps 2>&1 | grep -i 'warning: missing documentation'` 为空 ✅
+- Stop conditions: `none`
+- Next step: `Task 3 Step 1`
+
+## Checkpoint 2026-04-21 12:34
+
+- Week: `W4`
+- Batch: `Task 3 Step 1 → Step 3`
+- Completed:
+  - 在 `policy.rs` 落地 `PermissionRule / PermissionRuleSource / PermissionBehavior / PermissionContext / PermissionPolicy`。
+  - `from_sources()` 先按 `source` 优先级排序，`match_rules()` 保持命中顺序稳定。
+  - `evaluate()` 落地同步规则链，按 `deny > allow > ask` 生成 `PermissionOutcome`，`ask` 分支只返回占位 `AskPrompt`。
+  - `02-crate-topology.md §2.7` 与 `§10` 同步回填 Task 3 公共面。
+- Files changed:
+  - `crates/octopus-sdk-permissions/src/{lib.rs,policy.rs}`
+  - `crates/octopus-sdk-permissions/tests/policy_merge.rs`
+  - `docs/plans/sdk/02-crate-topology.md`
+- Verification:
+  - `cargo test -p octopus-sdk-permissions --test policy_merge` ✅
+  - `cargo check -p octopus-sdk-permissions` ✅
+  - `cargo test -p octopus-sdk-permissions` ✅
+  - `rg -n 'PermissionRuleSource' docs/plans/sdk/02-crate-topology.md` 命中 `3` 处 ✅
+- Stop conditions: `none`
+- Next step: `Task 4 Step 1`
+
+## Checkpoint 2026-04-21 13:08
+
+- Week: `W4`
+- Batch: `Task 4 Step 1 → Step 4`
+- Completed:
+  - 新增 `DefaultPermissionGate`，把 `category_resolver`、`PermissionMode`、`PermissionPolicy`、`ApprovalBroker` 串成 `canUseTool` 决策链。
+  - 新增 `ApprovalBroker`，固定 `approval:<call_id>` prompt id、`SessionEvent::Ask` 发射和 `AskAnswer.option_id` 到 `PermissionOutcome` 的映射。
+  - `can_use_tool_chain.rs` 覆盖 deny/allow/bypass/plan/ask/mode fallback 共 12 条路径。
+  - `approval_flow.rs` 覆盖 emit ask、approve、deny、resolver fail 三条审批路径；`02-crate-topology.md §2.7` 与 `§10` 同步回填。
+- Files changed:
+  - `crates/octopus-sdk-permissions/src/{lib.rs,gate.rs,broker.rs}`
+  - `crates/octopus-sdk-permissions/tests/{can_use_tool_chain.rs,approval_flow.rs}`
+  - `docs/plans/sdk/02-crate-topology.md`
+- Verification:
+  - `cargo test -p octopus-sdk-permissions --test can_use_tool_chain` ✅
+  - `cargo test -p octopus-sdk-permissions --test approval_flow` ✅
+  - `cargo check -p octopus-sdk-permissions` ✅
+  - `cargo test -p octopus-sdk-permissions` ✅
+  - `rg -n 'DefaultPermissionGate|ApprovalBroker' docs/plans/sdk/02-crate-topology.md` 命中 `7` 处 ✅
+- Stop conditions: `none`
+- Next step: `Task 5 Step 1`
+
+## Checkpoint 2026-04-21 13:39
+
+- Week: `W4`
+- Batch: `Task 5 Step 1 → Step 4`
+- Completed:
+  - 新建 `octopus-sdk-sandbox` crate 骨架，补齐 `SandboxSpec / NetworkProxy / SandboxCommand / SandboxOutput / SandboxError / SandboxBackend`。
+  - `SandboxHandle` 升级为 `inner: Arc<dyn SandboxHandleInner>`，并提供 `new / from_inner / cwd / env_allowlist / backend_name`。
+  - `sdk-tools` 改为依赖并 re-export `octopus-sdk-sandbox::SandboxHandle`，`shell_bash` 和测试用例切到 getter/constructor 形式。
+  - `02-crate-topology.md §2.8` 与 `§10` 同步回填 Task 5 公共面。
+- Files changed:
+  - `Cargo.toml`
+  - `crates/octopus-sdk-sandbox/{Cargo.toml,src/lib.rs,src/spec.rs,src/handle.rs,tests/spec_handle.rs}`
+  - `crates/octopus-sdk-tools/{Cargo.toml,src/context.rs,src/registry.rs,src/builtin/shell_bash.rs}`
+  - `crates/octopus-sdk-tools/tests/{support/mod.rs,builtin_fs_read.rs,builtin_bash.rs,builtin_fs_write.rs}`
+  - `docs/plans/sdk/02-crate-topology.md`
+- Verification:
+  - `cargo build -p octopus-sdk-sandbox` ✅
+  - `cargo test -p octopus-sdk-sandbox` ✅
+  - `cargo test -p octopus-sdk-tools --test registry_stability --test partition_concurrency` ✅
+  - `cargo test -p octopus-sdk-tools --all-targets` ✅
+  - `cargo build -p octopus-sdk-tools -p octopus-sdk-mcp` ✅
+  - `rg '^  "crates/octopus-sdk-sandbox"' Cargo.toml` 命中 `1` 处 ✅
+- Stop conditions: `none`
+- Next step: `Task 6 Step 1`
+
+## Checkpoint 2026-04-21 15:02
+
+- Week: `W4`
+- Batch: `Task 6 Step 1 → Step 6`
+- Completed:
+  - 新增 `backend/{mod,noop,seatbelt,bubblewrap}.rs`，把 `octopus-sdk-sandbox` 从骨架补到三后端可执行实现。
+  - `NoopBackend` 固化 `env_clear + allowlist env`；`SeatbeltBackend` 固化 `.octopus-seatbelt.sb` profile + `sandbox-exec -f`；`BubblewrapBackend` 固化 `bwrap --die-with-parent --new-session --unshare-all` 参数。
+  - `default_backend_for_host()` 固化 macOS→Seatbelt、Linux→Bubblewrap、Windows→Noop+warn 的主机选择。
+  - 新增 `no_credentials_leak.rs` 合同测试，证明非 allowlist 环境变量不会进沙箱输出或序列化结果；本机 `seatbelt_smoke -- --ignored` 已通过。
+  - `02-crate-topology.md §2.8 / §5 / §10` 同步回填 Task 6 公共面与 Windows AppContainer 延 W8。
+- Files changed:
+  - `crates/octopus-sdk-sandbox/src/{lib.rs,backend/mod.rs,backend/noop.rs,backend/seatbelt.rs,backend/bubblewrap.rs}`
+  - `crates/octopus-sdk-sandbox/tests/{spec_handle.rs,noop_smoke.rs,no_credentials_leak.rs,seatbelt_smoke.rs,bubblewrap_smoke.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-sandbox` ✅
+  - `cargo test -p octopus-sdk-sandbox --test noop_smoke` ✅
+  - `cargo test -p octopus-sdk-sandbox --test no_credentials_leak` ✅
+  - `cargo test -p octopus-sdk-sandbox --test seatbelt_smoke -- --ignored` ✅
+  - `rg -n 'default_backend_for_host|AppContainer' docs/plans/sdk/02-crate-topology.md` ✅
+- Stop conditions: `none`
+- Next step: `Task 7 Step 1`
+
+## Checkpoint 2026-04-21 15:24
+
+- Week: `W4`
+- Batch: `Task 7 Step 1 → Step 4`
+- Completed:
+  - 新建 `octopus-sdk-hooks` crate，`lib.rs` 只暴露 `runner` 模块和 contracts re-export，依赖保持在 hooks 层最小闭包。
+  - `runner.rs` 落地 `Hook / HookSource / HookRegistration / HookRunOutcome / HookError / HookRunner`。
+  - `HookRunner::run()` 固化 `source -> priority -> name` 排序，支持 `Continue / Rewrite / Abort / InjectMessage`，并把 `Rewrite` 和 `InjectMessage` 的事件边界收紧成 runtime error。
+  - `priority.rs` 覆盖 source 顺序、同源 priority/name 稳定性、rewrite 链、abort 短路、inject 事件限制；`02-crate-topology.md §2.9 / §10` 同步回填。
+- Files changed:
+  - `Cargo.toml`
+  - `crates/octopus-sdk-hooks/{Cargo.toml,src/lib.rs,src/runner.rs,tests/priority.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo build -p octopus-sdk-hooks` ✅
+  - `cargo test -p octopus-sdk-hooks --test priority` ✅
+  - `rg -n 'HookSource|HookRunOutcome|HookRunner::run' docs/plans/sdk/02-crate-topology.md` ✅
+- Stop conditions: `none`
+- Next step: `Task 8 Step 1`
+
+## Checkpoint 2026-04-21 15:41
+
+- Week: `W4`
+- Batch: `Task 8 Step 1 → Step 2`
+- Completed:
+  - 新增 `events_matrix.rs`，把 8 种 `HookEvent` 都跑过 `Continue / Abort / Rewrite / InjectMessage` 路径，验证 rewrite 载荷绑定和 inject 事件限制。
+  - 新增 `credential_scrub.rs`，用恶意 `PreToolUse` rewrite 把 `api_key=xxx-secret` 塞进 tool input，再证明审批摘要事件和执行摘要事件都不会把原始 secret 序列化出去。
+  - `HookRunner` 现有的 rewrite/inject 边界足够支撑 Task 8，无需再扩公共面。
+- Files changed:
+  - `crates/octopus-sdk-hooks/tests/{events_matrix.rs,credential_scrub.rs}`
+  - `docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md`
+- Verification:
+  - `cargo test -p octopus-sdk-hooks --test events_matrix` ✅
+  - `cargo test -p octopus-sdk-hooks --test credential_scrub` ✅
+  - `cargo test -p octopus-sdk-hooks` ✅
+- Stop conditions: `none`
+- Next step: `Task 9 Step 1`
+
+## Checkpoint 2026-04-21 16:09
+
+- Week: `W4`
+- Batch: `Task 9 Step 1 → Step 4`
+- Completed:
+  - 新建 `octopus-sdk-context` crate，补齐 `prompt / compact / memory / scratchpad` 四模块与 `prompt_stability.rs`、`scratchpad_atomic.rs` 占位测试文件。
+  - `SystemPromptBuilder` 落地 `new / with_section / build / fingerprint`，固定五段内置 section，并把 `tools_guidance` 锁到 `ToolRegistry::schemas_sorted()` 的 `name / description`。
+  - `PromptCtx` 和 `SystemPromptSection` 已公开；`build()` 按 `order -> id` 排序，`fingerprint()` 固定为 `sha256(build(ctx).join(\"\\n\"))`。
+  - `02-crate-topology.md §2.6 / §10` 同步回填 Task 9 公共面。
+- Files changed:
+  - `Cargo.toml`
+  - `crates/octopus-sdk-context/{Cargo.toml,src/lib.rs,src/prompt.rs,src/compact.rs,src/memory.rs,src/scratchpad.rs,tests/prompt_stability.rs,tests/scratchpad_atomic.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo build -p octopus-sdk-context` ✅
+  - `cargo test -p octopus-sdk-context --test prompt_stability` ✅
+  - `rg -n 'PromptCtx|SystemPromptSection|SystemPromptBuilder' docs/plans/sdk/02-crate-topology.md` ✅
+- Stop conditions: `none`
+- Next step: `Task 10 Step 1`
+
+## Checkpoint 2026-04-21 16:38
+
+- Week: `W4`
+- Batch: `Task 10 Step 1 → Step 5`
+- Completed:
+  - `Compactor` 落地阈值分支、`ClearToolResults`、`Summarize` 和 `Hybrid -> Aborted`；`SessionView` 补了 `tokens_budget + event_ids` 薄字段，满足阈值判断和 `folded_turn_ids` 审计。
+  - `clear_tool_results` 只清 `ContentBlock::ToolResult.content`，不动消息顺序；`summarize` 通过 `ModelProvider::complete` 收集 `TextDelta`，把前半段 turn 折成单条 `System` summary。
+  - `DurableScratchpad` 写入切到 `NamedTempFile + persist` 原子 rename；并发写测试证明最后一次完成的快照可读。
+  - `02-crate-topology.md §2.6 / §10` 与主计划条目 14 已同步回填实际实现。
+- Files changed:
+  - `crates/octopus-sdk-context/{Cargo.toml,src/compact.rs,src/scratchpad.rs}`
+  - `crates/octopus-sdk-context/tests/{compactor_clear_tool_results.rs,compactor_summarize.rs,scratchpad_atomic.rs}`
+  - `docs/plans/sdk/{02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-context --test compactor_clear_tool_results` ✅
+  - `cargo test -p octopus-sdk-context --test compactor_summarize` ✅
+  - `cargo test -p octopus-sdk-context --test scratchpad_atomic` ✅
+  - `cargo test -p octopus-sdk-context` ✅
+- Stop conditions: `none`
+- Next step: `Task 11 Step 1`
+
+## Checkpoint 2026-04-21 16:52
+
+- Week: `W4`
+- Batch: `Task 11 Step 1 → Step 3`
+- Completed:
+  - 新增 `prompt_cache_fingerprint.rs`，验证 `SystemPromptBuilder::fingerprint()` 与 `ToolRegistry::tools_fingerprint()` 的组合哈希在同输入下 3 次稳定一致。
+  - 新增 permissions / hooks 的 `no_credentials_in_events.rs`，分别覆盖审批摘要事件与执行摘要事件，确认 `ToolCallRequest.input` 里的 `secret-xyz` 不会被序列化进事件 JSON。
+  - `00-overview.md §3 W4` 的零凭据硬门禁命令已补成可直接执行的测试命令。
+- Files changed:
+  - `crates/octopus-sdk-context/tests/prompt_cache_fingerprint.rs`
+  - `crates/octopus-sdk-permissions/tests/no_credentials_in_events.rs`
+  - `crates/octopus-sdk-hooks/tests/no_credentials_in_events.rs`
+  - `docs/plans/sdk/{00-overview.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-context --test prompt_cache_fingerprint` ✅
+  - `cargo test -p octopus-sdk-permissions --test no_credentials_in_events` ✅
+  - `cargo test -p octopus-sdk-hooks --test no_credentials_in_events` ✅
+- Stop conditions: `none`
+- Next step: `Task 12 Step 1`
+
+## Checkpoint 2026-04-21 19:05
+
+- Week: `W4`
+- Batch: `Task 12 Step 1 → Step 3`
+- Completed:
+  - 执行完 W4 Weekly Gate，workspace `build / clippy / test` 全绿；期间顺手修了 `octopus-sdk-sandbox`、`octopus-sdk-permissions`、`octopus-sdk-context` 的 7 处 clippy 告警，不改公共语义。
+  - 守护扫描完成：`find docs/plans/sdk -type f -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md'`、`find crates -type f -name '*.rs' -size +800`、`rg "use (runtime|tools|plugins|api)::" crates/octopus-sdk-{permissions,sandbox,hooks,context}` 全部 0 命中。
+  - `README.md`、`00-overview.md`、`02-crate-topology.md`、`03-legacy-retirement.md` 已同步回填 W4 `done` 状态与 legacy 替代状态。
+  - 本批次 diff 统计：`25 files changed, 713 insertions(+), 271 deletions(-)`。
+- Files changed:
+  - `crates/octopus-sdk-sandbox/src/backend/{mod.rs,seatbelt.rs}`
+  - `crates/octopus-sdk-permissions/src/gate.rs`
+  - `crates/octopus-sdk-context/{src/compact.rs,tests/prompt_cache_fingerprint.rs}`
+  - `docs/plans/sdk/{README.md,00-overview.md,02-crate-topology.md,03-legacy-retirement.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo build --workspace` ✅
+  - `cargo clippy --workspace -- -D warnings` ✅
+  - `cargo test --workspace` ✅
+  - `cargo test -p octopus-sdk-permissions -p octopus-sdk-hooks -p octopus-sdk-sandbox --test no_credentials_in_events --test no_credentials_leak` ✅
+  - `find docs/plans/sdk -type f -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md'` → `0` 命中 ✅
+  - `find crates -type f -name '*.rs' -size +800` → `0` 命中 ✅
+  - `rg "use (runtime|tools|plugins|api)::" crates/octopus-sdk-{permissions,sandbox,hooks,context}` → `0` 命中 ✅
+- Stop conditions: `none`
+- Next step: `W5 kickoff`
+
+## Checkpoint 2026-04-21 20:05
+
+- Week: `W4`
+- Batch: `Audit remediation`
+- Completed:
+  - `HookSource::Plugin` 补为 `Plugin { plugin_id: String }`，`HookRunner::unregister_by_source()` 现在可按单插件 source 精确卸载，不再一次清空全部 plugin hooks。
+  - `priority.rs` 新增按 `plugin_id` 精确卸载的契约测试，保持 `source -> priority -> name` 排序语义不变。
+  - `prompt_cache_fingerprint.rs` 的守护语义收紧为“恢复到相同工具集合后指纹回到初始值”，与 `ToolRegistry` 现有“不提供热卸载”公共面保持一致。
+  - W4 plan / `02-crate-topology.md` 同步修正文案：`RequireAuth` 在 W4 仅保留 contracts 变体，不在 `PermissionGate` 内自行判定 auth challenge。
+- Files changed:
+  - `crates/octopus-sdk-hooks/src/runner.rs`
+  - `crates/octopus-sdk-hooks/tests/priority.rs`
+  - `crates/octopus-sdk-context/tests/prompt_cache_fingerprint.rs`
+  - `docs/plans/sdk/{02-crate-topology.md,07-week-4-permissions-hooks-sandbox-context.md}`
+- Verification:
+  - `cargo test -p octopus-sdk-hooks` ✅
+  - `cargo test -p octopus-sdk-context --test prompt_cache_fingerprint` ✅
+- Stop conditions: `none`
+- Next step: `W4 audit re-check`
+
+## Checkpoint 2026-04-21 20:20
+
+- Week: `W4`
+- Batch: `W4 audit re-check`
+- Completed:
+  - 重新核对 `HookSource` 的实现、测试和公共面文档，确认 `Plugin { plugin_id: String }` 已贯通到 `runner.rs`、`priority.rs` 和 `02-crate-topology.md`；`unregister_by_source()` 现在按插件实例精确卸载，未再残留“清空全部 plugin hooks”的旧语义。
+  - 重新核对 `RequireAuth` 的 contracts / gate / plan 文案，确认它在 W4 仍只是 contracts 占位；`DefaultPermissionGate::check()` 不自行生成 OAuth / vendor key challenge，只把已有 prompt 继续交给 broker 占位处理。
+  - 重新核对 prompt cache 守护，确认契约已经与 `ToolRegistry` 的公共面边界一致：新增工具会改变指纹，恢复到相同工具集合后指纹回到初始值；不再隐含要求热卸载。
+  - 跑完 `permissions / sandbox / hooks / context` 四包回归，未发现新的阻断 W4 完整度问题。
+- Files changed:
+  - `docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md`
+- Verification:
+  - `cargo test -p octopus-sdk-permissions -p octopus-sdk-sandbox -p octopus-sdk-hooks -p octopus-sdk-context` ✅
+  - `rg -n --fixed-strings 'HookSource' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md crates/octopus-sdk-hooks/src/runner.rs crates/octopus-sdk-hooks/tests/priority.rs` ✅
+  - `rg -n --fixed-strings 'RequireAuth' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md docs/plans/sdk/02-crate-topology.md crates/octopus-sdk-permissions/src crates/octopus-sdk-contracts/src` ✅
+  - `rg -n --fixed-strings '恢复到与初始值相同的工具集合' docs/plans/sdk/07-week-4-permissions-hooks-sandbox-context.md crates/octopus-sdk-context/tests/prompt_cache_fingerprint.rs` ✅
+- Stop conditions: `none`
+- Next step: `W4 complete`
 
 ## 变更日志
 
@@ -718,3 +1051,4 @@ Step 3:
 |---|---|---|
 | 2026-04-21 | 首稿：W4 完整 Plan（Goal / Architecture / Scope / Risks R1–R11 / 公共面修订清单 36 条 / Task Ledger 12 个 / Exit State 对齐表 / Weekly Gate）。按"层级从低到高"排序（contracts 补丁 → permissions → sandbox → hooks → context → 合同测试 → 收尾）。 | Architect (Claude) |
 | 2026-04-21 | 审核通过：3 项关键决策（D1 `ToolCategory` 下沉 / D2 Compactor 只落 `ClearToolResults` + `Summarize` / D3 Sandbox 3 后端 + Windows Noop fallback）已由 owner 确认，写入 Status §审核决策表。Plan 保持 `draft`，进入 Task 1 前切 `in_progress`。 | Architect (Claude) |
+| 2026-04-21 | 审计收口修订：`HookSource::Plugin` 明确带 `plugin_id`；Task 4 的 `RequireAuth` 文案改为“W4 仅保留 contracts 变体，不自行判定 auth”；Task 11 的 fingerprint 守护改为“恢复相同工具集合”而非强行要求 `ToolRegistry` 提供热卸载。 | Codex |

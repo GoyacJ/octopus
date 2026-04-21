@@ -1,0 +1,17 @@
+[package]
+name = "octopus-sdk-hooks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

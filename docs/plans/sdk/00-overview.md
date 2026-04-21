@@ -160,7 +160,7 @@
   - Bubblewrap / Seatbelt 两个 `SandboxBackend` 最小实现；容器内零凭据。
   - `Compactor`（compaction + tool-result clearing）与 `SystemPromptBuilder` 完成，工具顺序由确定性排序保证。
 - 硬门禁：
-  - 凭据零暴露合同测试：事件日志扫描不得含任何 `API_KEY / TOKEN / BEARER` 明文。
+  - 凭据零暴露合同测试：事件日志扫描不得含任何 `API_KEY / TOKEN / BEARER` 明文。命令：`cargo test -p octopus-sdk-permissions -p octopus-sdk-hooks -p octopus-sdk-sandbox --test no_credentials_in_events --test no_credentials_leak`
   - `cargo test -p octopus-sdk-permissions -p octopus-sdk-hooks -p octopus-sdk-sandbox -p octopus-sdk-context` 全绿。
 
 ### W5 · 子代理 + 插件体系
@@ -341,3 +341,4 @@ cleanup+split                                                          │██
 | 2026-04-21 | W2 Weekly Gate 收尾：`05-week-2-model.md` 由 `in_progress` 切为 `done`；为解除工作区门禁补最小 unblocker（desktop sidecar 占位、`crates/tools` / `crates/octopus-runtime-adapter` clippy 清零），并以 fresh `cargo test/build/clippy` 验证通过。 | Codex |
 | 2026-04-21 | W3 Weekly Gate 收尾：`06-week-3-tools-mcp.md` 由 `in_progress` 切为 `done`；`octopus-sdk-tools` / `octopus-sdk-mcp` 的公共面与契约差异清单完成回填；`capability_runtime/** + capability bridge` 真删后通过 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings` 与双口径守护扫描。 | Codex |
 | 2026-04-21 | W4 Plan 起稿：`07-week-4-permissions-hooks-sandbox-context.md` 由 `pending` 切为 `draft`；4 crate（`octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context`）公共面与 12-Task Ledger 完成；3 项关键决策（`ToolCategory` 反向下沉到 Level 0 / Compactor 首版 `ClearToolResults` + `Summarize` / Sandbox 3 后端 + Windows Noop fallback）在审核中已确认。 | Architect (Claude) |
+| 2026-04-21 | W4 Weekly Gate 收尾：`07-week-4-permissions-hooks-sandbox-context.md` 由 `in_progress` 切为 `done`；4 个 Level 2/3 crate 落地；Level 0 contracts W4 补丁完成；凭据零暴露合同测试与 prompt cache fingerprint 守护通过，且 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test --workspace` 全绿。 | Codex |

@@ -176,7 +176,7 @@ fn fixtures() -> Vec<FixtureCase> {
         fixture_case(
             "session_event/session_ended",
             &SessionEvent::SessionEnded {
-                reason: EndReason::Completed,
+                reason: EndReason::Normal,
             },
         ),
         fixture_case(

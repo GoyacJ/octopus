@@ -100,12 +100,12 @@ async fn run_command(ctx: &ToolContext, command: &str) -> Result<std::process::O
     process
         .arg("-c")
         .arg(command)
-        .current_dir(&ctx.sandbox.cwd)
+        .current_dir(ctx.sandbox.cwd())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_clear()
-        .envs(filtered_env(&ctx.sandbox.env_allowlist));
+        .envs(filtered_env(ctx.sandbox.env_allowlist()));
     process
         .output()
         .await

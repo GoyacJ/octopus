@@ -237,7 +237,7 @@ fn sample_events() -> Vec<SessionEvent> {
         anchor_event_id: EventId("event-4".into()),
     };
     let session_ended = SessionEvent::SessionEnded {
-        reason: EndReason::Completed,
+        reason: EndReason::Normal,
     };
     let assistant_usage = SessionEvent::AssistantMessage(Message {
         role: Role::Assistant,

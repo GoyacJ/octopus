@@ -1,14 +1,9 @@
 use std::{path::PathBuf, sync::Arc};
 
 use octopus_sdk_contracts::{AskResolver, EventSink, PermissionGate, SecretVault, SessionId};
+pub use octopus_sdk_sandbox::SandboxHandle;
 use octopus_sdk_session::SessionStore;
 use tokio_util::sync::CancellationToken;
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SandboxHandle {
-    pub cwd: PathBuf,
-    pub env_allowlist: Vec<String>,
-}
 
 #[derive(Clone)]
 pub struct ToolContext {
@@ -120,10 +115,11 @@ mod tests {
         let context = ToolContext {
             session_id: SessionId("session-1".into()),
             permissions: Arc::new(MockPermissionGate),
-            sandbox: SandboxHandle {
-                cwd: PathBuf::from("/tmp/workspace"),
-                env_allowlist: vec!["PATH".into(), "HOME".into()],
-            },
+            sandbox: SandboxHandle::new(
+                PathBuf::from("/tmp/workspace"),
+                vec!["PATH".into(), "HOME".into()],
+                "noop",
+            ),
             session_store: Arc::new(MockSessionStore),
             secret_vault: Arc::new(MockSecretVault),
             ask_resolver: Arc::new(MockAskResolver),
@@ -133,8 +129,8 @@ mod tests {
         };
 
         assert_eq!(context.session_id.0, "session-1");
-        assert_eq!(context.sandbox.cwd, PathBuf::from("/tmp/workspace"));
-        assert_eq!(context.sandbox.env_allowlist, vec!["PATH", "HOME"]);
+        assert_eq!(context.sandbox.cwd(), PathBuf::from("/tmp/workspace"));
+        assert_eq!(context.sandbox.env_allowlist(), ["PATH", "HOME"]);
         assert_eq!(context.working_dir, PathBuf::from("/tmp/workspace"));
         assert!(!context.cancellation.is_cancelled());
     }

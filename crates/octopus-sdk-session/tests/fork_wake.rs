@@ -50,7 +50,7 @@ async fn test_fork_preserves_prefix() {
         .append(
             &session_id,
             SessionEvent::SessionEnded {
-                reason: EndReason::Completed,
+                reason: EndReason::Normal,
             },
         )
         .await
@@ -135,7 +135,7 @@ async fn test_wake_returns_latest_snapshot() {
         .append(
             &session_id,
             SessionEvent::SessionEnded {
-                reason: EndReason::Completed,
+                reason: EndReason::Normal,
             },
         )
         .await

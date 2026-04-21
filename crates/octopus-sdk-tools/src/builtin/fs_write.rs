@@ -97,6 +97,9 @@ pub(crate) async fn check_permission(
         PermissionOutcome::AskApproval { prompt } => Err(ToolError::Permission {
             message: format!("approval required for {}", prompt.kind),
         }),
+        PermissionOutcome::RequireAuth { prompt } => Err(ToolError::Permission {
+            message: format!("authentication required for {}", prompt.kind),
+        }),
     }
 }
 

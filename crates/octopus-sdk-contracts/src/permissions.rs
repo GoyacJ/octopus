@@ -25,7 +25,7 @@ pub enum PermissionOutcome {
     Allow,
     Deny { reason: String },
     AskApproval { prompt: AskPrompt },
-    // W4 to add: RequireAuth { prompt: AskPrompt }
+    RequireAuth { prompt: AskPrompt },
 }
 
 #[async_trait]
@@ -78,6 +78,35 @@ mod tests {
         assert_eq!(
             value["ask_approval"]["prompt"]["questions"][0]["id"],
             "question-1"
+        );
+    }
+
+    #[test]
+    fn permission_outcome_require_auth_keeps_prompt_payload() {
+        let outcome = PermissionOutcome::RequireAuth {
+            prompt: AskPrompt {
+                kind: "require-auth".into(),
+                questions: vec![AskQuestion {
+                    id: "question-1".into(),
+                    question: "Sign in?".into(),
+                    header: "Auth".into(),
+                    multi_select: false,
+                    options: vec![AskOption {
+                        id: "approve".into(),
+                        label: "Open OAuth".into(),
+                        description: "Allow the tool to request authentication.".into(),
+                        preview: None,
+                        preview_format: None,
+                    }],
+                }],
+            },
+        };
+
+        let value = serde_json::to_value(&outcome).expect("outcome should serialize");
+
+        assert_eq!(
+            value["require_auth"]["prompt"]["questions"][0]["header"],
+            "Auth"
         );
     }
 

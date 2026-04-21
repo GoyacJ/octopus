@@ -1,0 +1,24 @@
+[package]
+name = "octopus-sdk-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+futures = "0.3"
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+octopus-sdk-model = { path = "../octopus-sdk-model" }
+octopus-sdk-session = { path = "../octopus-sdk-session" }
+octopus-sdk-tools = { path = "../octopus-sdk-tools" }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tempfile.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

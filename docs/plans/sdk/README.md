@@ -16,7 +16,7 @@
 | `04-week-1-contracts-session.md` | W1：`octopus-sdk-contracts` + `octopus-sdk-session` | `done` |
 | `05-week-2-model.md` | W2：`octopus-sdk-model`（Provider / Surface / Model 三层） | `done` |
 | `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `done` |
-| `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `draft` |
+| `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `done` |
 | `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `pending` |
 | `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + 端到端最小链路 | `pending` |
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `pending` |
@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-21（W3 Weekly Gate 完成，`06-week-3-tools-mcp.md` = `done`；W4 Plan 起稿完成，`07-week-4-permissions-hooks-sandbox-context.md` = `draft`，等待审核）
+**最后更新**：2026-04-21（W4 Weekly Gate 完成，`07-week-4-permissions-hooks-sandbox-context.md` = `done`；`octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context` 全量落地并通过 workspace build/clippy/test）
