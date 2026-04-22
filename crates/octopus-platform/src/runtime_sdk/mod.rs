@@ -14,6 +14,7 @@ use octopus_core::{
     RuntimeSessionPolicySnapshot, RuntimeSessionSummary, RuntimeTraceContext, RuntimeTraceItem,
     RuntimeUsageSummary,
 };
+use octopus_persistence::Database;
 use octopus_sdk::{EventId, PermissionMode, SessionId};
 use tokio::sync::{broadcast, Mutex};
 
@@ -63,6 +64,10 @@ impl RuntimeSdkPaths {
             fs::create_dir_all(parent)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn database(&self) -> Result<Database, AppError> {
+        Database::open(self.db_path.clone())
     }
 }
 

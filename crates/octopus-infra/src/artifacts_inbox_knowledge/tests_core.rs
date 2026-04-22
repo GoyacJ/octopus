@@ -1,0 +1,478 @@
+    fn workspace_initialization_creates_expected_layout_and_defaults() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = initialize_workspace(temp.path()).expect("workspace initialized");
+
+        for path in [
+            &paths.config_dir,
+            &paths.asset_config_dir,
+            &paths.data_dir,
+            &paths.runtime_dir,
+            &paths.logs_dir,
+            &paths.tmp_dir,
+            &paths.blobs_dir,
+            &paths.artifacts_dir,
+            &paths.knowledge_dir,
+            &paths.inbox_dir,
+            &paths.runtime_state_dir,
+            &paths.runtime_events_dir,
+            &paths.runtime_traces_dir,
+            &paths.runtime_approvals_dir,
+            &paths.runtime_cache_dir,
+            &paths.audit_log_dir,
+            &paths.server_log_dir,
+        ] {
+            assert!(path.exists(), "missing {}", path.display());
+        }
+        assert!(paths.workspace_config.exists());
+        assert!(paths.app_registry_config.exists());
+        assert!(paths.db_path.exists());
+
+        let workspace_toml =
+            std::fs::read_to_string(&paths.workspace_config).expect("workspace toml");
+        assert!(workspace_toml.contains("listen_address = \"127.0.0.1\""));
+        assert!(workspace_toml.contains("bootstrap_status = \"setup_required\""));
+    }
+
+    #[test]
+    fn bundle_exposes_bootstrap_setup_required_state_and_registered_apps() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let bootstrap = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.system_bootstrap())
+            .expect("bootstrap");
+
+        assert!(bootstrap.setup_required);
+        assert!(!bootstrap.owner_ready);
+        assert!(bootstrap
+            .registered_apps
+            .iter()
+            .any(|app| app.id == "octopus-desktop"));
+    }
+
+    #[test]
+    fn workspace_paths_follow_unified_workspace_layout() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+
+        assert_eq!(paths.runtime_state_dir, temp.path().join("runtime/state"));
+        assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
+        assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
+        assert_eq!(paths.db_path, temp.path().join("data/main.db"));
+    }
+
+    #[test]
+    fn observation_service_tracks_project_token_usage_projection() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        for record in [
+            CostLedgerEntry {
+                id: "cost-1".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-1".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 120,
+                unit: "tokens".into(),
+                created_at: 1,
+            },
+            CostLedgerEntry {
+                id: "cost-2".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-2".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "turns".into(),
+                amount: 1,
+                unit: "count".into(),
+                created_at: 2,
+            },
+            CostLedgerEntry {
+                id: "cost-3".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-3".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 5,
+                unit: "tokens".into(),
+                created_at: 3,
+            },
+            CostLedgerEntry {
+                id: "cost-4".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-other".into()),
+                run_id: Some("run-4".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 999,
+                unit: "tokens".into(),
+                created_at: 4,
+            },
+            CostLedgerEntry {
+                id: "cost-5".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-5".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: -50,
+                unit: "tokens".into(),
+                created_at: 5,
+            },
+        ] {
+            runtime
+                .block_on(bundle.observation.append_cost(record))
+                .expect("append cost");
+        }
+
+        let used_tokens = runtime
+            .block_on(bundle.observation.project_used_tokens("proj-redesign"))
+            .expect("project used tokens");
+        assert_eq!(used_tokens, 125);
+        let usage_rows = runtime
+            .block_on(bundle.observation.list_project_token_usage())
+            .expect("project token usage rows");
+        assert_eq!(usage_rows[0].project_id, "proj-other");
+        assert_eq!(usage_rows[0].used_tokens, 999);
+        assert_eq!(usage_rows[1].project_id, "proj-redesign");
+        assert_eq!(usage_rows[1].used_tokens, 125);
+
+        let connection = bundle
+            .paths
+            .database()
+            .expect("database")
+            .acquire()
+            .expect("open sqlite");
+        let stored_used_tokens: i64 = connection
+            .query_row(
+                "SELECT used_tokens FROM project_token_usage_projections WHERE project_id = ?1",
+                ["proj-redesign"],
+                |row| row.get(0),
+            )
+            .expect("stored project used tokens");
+        assert_eq!(stored_used_tokens, 125);
+
+        let reloaded_bundle = build_infra_bundle(temp.path()).expect("reloaded bundle");
+        let reloaded_used_tokens = runtime
+            .block_on(
+                reloaded_bundle
+                    .observation
+                    .project_used_tokens("proj-redesign"),
+            )
+            .expect("reloaded project used tokens");
+        assert_eq!(reloaded_used_tokens, 125);
+    }
+
+    #[test]
+    fn bundle_normalizes_legacy_setup_required_state_when_owner_already_exists() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = initialize_workspace(temp.path()).expect("workspace initialized");
+
+        let connection = paths
+            .database()
+            .expect("database")
+            .acquire()
+            .expect("open sqlite");
+        connection
+            .execute(
+                "INSERT INTO users (id, username, display_name, status, password_hash, password_state, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![
+                    "user-owner",
+                    "owner",
+                    "Workspace Owner",
+                    "active",
+                    "hash",
+                    "set",
+                    1_i64,
+                    1_i64,
+                ],
+            )
+            .expect("insert owner user");
+        connection
+            .execute(
+                "INSERT INTO role_bindings (id, role_id, subject_type, subject_id, effect)
+                 VALUES (?1, ?2, 'user', ?3, 'allow')",
+                rusqlite::params!["binding-user-owner", "owner", "user-owner",],
+            )
+            .expect("insert owner role binding");
+        std::fs::write(
+            &paths.workspace_config,
+            r#"id = "ws-local"
+name = "Octopus Local Workspace"
+slug = "local-workspace"
+deployment = "local"
+bootstrap_status = "setup_required"
+owner_user_id = "user-owner"
+host = "127.0.0.1"
+listen_address = "127.0.0.1"
+default_project_id = "proj-redesign"
+"#,
+        )
+        .expect("write legacy workspace config");
+
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let bootstrap = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.system_bootstrap())
+            .expect("bootstrap");
+
+        assert!(!bootstrap.setup_required);
+        assert!(bootstrap.owner_ready);
+
+        let workspace_toml = std::fs::read_to_string(&paths.workspace_config)
+            .expect("workspace toml after normalize");
+        assert!(workspace_toml.contains("bootstrap_status = \"ready\""));
+    }
+
+    #[test]
+    fn project_assignments_persist_through_create_and_update() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let created = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Assigned Project".into(),
+                description: "Project assignment persistence coverage.".into(),
+                resource_directory: "data/projects/assigned-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                leader_agent_id: None,
+                manager_user_id: None,
+                preset_code: None,
+                assignments: Some(octopus_core::ProjectWorkspaceAssignments {
+                    models: Some(octopus_core::ProjectModelAssignments {
+                        configured_model_ids: vec!["anthropic-primary".into()],
+                        default_configured_model_id: "anthropic-primary".into(),
+                    }),
+                    tools: Some(octopus_core::ProjectToolAssignments {
+                        source_keys: vec!["builtin:bash".into()],
+                        excluded_source_keys: Vec::new(),
+                    }),
+                    agents: Some(octopus_core::ProjectAgentAssignments {
+                        agent_ids: vec!["agent-architect".into()],
+                        team_ids: vec!["team-studio".into()],
+                        excluded_agent_ids: Vec::new(),
+                        excluded_team_ids: Vec::new(),
+                    }),
+                }),
+            }))
+            .expect("created project");
+        assert_eq!(
+            created
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.models.as_ref())
+                .map(|models| models.configured_model_ids.clone()),
+            Some(vec!["anthropic-primary".to_string()])
+        );
+
+        let updated = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.update_project(
+                &created.id,
+                UpdateProjectRequest {
+                    name: "Assigned Project".into(),
+                    description: "Updated assignment persistence coverage.".into(),
+                    status: "active".into(),
+                    resource_directory: created.resource_directory.clone(),
+                    owner_user_id: None,
+                    member_user_ids: None,
+                    permission_overrides: None,
+                    linked_workspace_assets: None,
+                    leader_agent_id: None,
+                    manager_user_id: None,
+                    preset_code: None,
+                    assignments: Some(octopus_core::ProjectWorkspaceAssignments {
+                        models: Some(octopus_core::ProjectModelAssignments {
+                            configured_model_ids: vec!["anthropic-alt".into()],
+                            default_configured_model_id: "anthropic-alt".into(),
+                        }),
+                        tools: Some(octopus_core::ProjectToolAssignments {
+                            source_keys: vec!["builtin:bash".into(), "mcp:ops".into()],
+                            excluded_source_keys: Vec::new(),
+                        }),
+                        agents: Some(octopus_core::ProjectAgentAssignments {
+                            agent_ids: vec!["agent-architect".into()],
+                            team_ids: vec![],
+                            excluded_agent_ids: Vec::new(),
+                            excluded_team_ids: Vec::new(),
+                        }),
+                    }),
+                },
+            ))
+            .expect("updated project");
+        assert_eq!(
+            updated
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.models.as_ref())
+                .map(|models| models.configured_model_ids.clone()),
+            Some(vec!["anthropic-alt".to_string()])
+        );
+
+        let listed = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.list_projects())
+            .expect("listed projects");
+        let persisted = listed
+            .iter()
+            .find(|project| project.id == created.id)
+            .expect("persisted project");
+        assert_eq!(
+            persisted
+                .assignments
+                .as_ref()
+                .and_then(|assignments| assignments.tools.as_ref())
+                .map(|tools| tools.source_keys.clone()),
+            Some(vec!["builtin:bash".to_string(), "mcp:ops".to_string()])
+        );
+    }
+
+    #[test]
+    fn tool_catalog_prefers_higher_priority_skill_roots_and_marks_shadowed_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let codex_skill_dir = bundle.paths.root.join(".codex/skills/help");
+        let claude_skill_dir = bundle.paths.root.join(".claude/skills/help");
+        std::fs::create_dir_all(&codex_skill_dir).expect("codex skill dir");
+        std::fs::create_dir_all(&claude_skill_dir).expect("claude skill dir");
+        std::fs::write(
+            codex_skill_dir.join("SKILL.md"),
+            "---\nname: help\ndescription: Preferred help skill.\n---\n",
+        )
+        .expect("codex skill");
+        std::fs::write(
+            claude_skill_dir.join("SKILL.md"),
+            "---\nname: help\ndescription: Shadowed help skill.\n---\n",
+        )
+        .expect("claude skill");
+
+        let projection = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+
+        let help_entries = projection
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == "skill" && entry.name == "help")
+            .collect::<Vec<_>>();
+        assert_eq!(help_entries.len(), 2);
+        assert!(help_entries.iter().any(|entry| {
+            entry.display_path == ".codex/skills/help/SKILL.md"
+                && entry.active == Some(true)
+                && entry.shadowed_by.is_none()
+        }));
+        assert!(help_entries.iter().any(|entry| {
+            entry.display_path == ".claude/skills/help/SKILL.md"
+                && entry.active == Some(false)
+                && entry.shadowed_by.as_deref() == Some("project-codex")
+        }));
+    }
+
+    #[test]
+    fn tool_catalog_marks_unsupported_mcp_servers_as_attention() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        std::fs::write(
+            bundle.paths.runtime_config_dir.join("workspace.json"),
+            r#"{"mcpServers":{"ops":{"type":"ws","url":"wss://ops.example.test/mcp"}}}"#,
+        )
+        .expect("workspace runtime config");
+
+        let projection = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+
+        let ops = projection
+            .entries
+            .iter()
+            .find(|entry| entry.kind == "mcp" && entry.server_name.as_deref() == Some("ops"))
+            .expect("ops entry");
+        assert_eq!(ops.availability, "attention");
+        assert_eq!(ops.scope.as_deref(), Some("workspace"));
+        assert!(ops
+            .status_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("not supported")));
+    }
+
+    #[test]
+    fn capability_management_projection_matches_tool_catalog_and_tracks_disabled_assets() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let projection = runtime
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+
+        let projection_keys = projection
+            .entries
+            .iter()
+            .map(|entry| entry.source_key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(projection_keys.contains("builtin:bash"));
+
+        let builtin_bash = projection
+            .entries
+            .iter()
+            .find(|entry| entry.source_key == "builtin:bash")
+            .expect("builtin bash entry");
+        assert!(builtin_bash.enabled);
+        assert_eq!(builtin_bash.state, "builtin");
+
+        let updated_projection =
+            runtime
+                .block_on(bundle.workspace.set_capability_asset_disabled(
+                    CapabilityAssetDisablePatch {
+                        source_key: "builtin:bash".into(),
+                        disabled: true,
+                    },
+                ))
+                .expect("disabled tool");
+        assert!(updated_projection
+            .entries
+            .iter()
+            .any(|entry| entry.source_key == "builtin:bash" && entry.disabled));
+
+        let projection_after_disable = runtime
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection after disable");
+        let disabled_bash = projection_after_disable
+            .entries
+            .iter()
+            .find(|entry| entry.source_key == "builtin:bash")
+            .expect("disabled bash entry");
+        assert!(!disabled_bash.enabled);
+        assert_eq!(disabled_bash.state, "disabled");
+
+        let runtime_config_path = bundle.paths.runtime_config_dir.join("workspace.json");
+        if runtime_config_path.exists() {
+            let runtime_document = read_json_file(&runtime_config_path);
+            assert!(
+                runtime_document
+                    .get("toolCatalog")
+                    .and_then(|value| value.get("disabledSourceKeys"))
+                    .is_none(),
+                "runtime config should no longer persist disabledSourceKeys: {runtime_document}"
+            );
+        }
+
+        let asset_state = read_json_file(&bundle.paths.workspace_asset_state_path);
+        assert_eq!(
+            asset_state["assets"]["builtin:bash"]["enabled"],
+            JsonValue::Bool(false)
+        );
+    }

@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use octopus_core::AppError;
+use octopus_persistence::Database;
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePaths {
@@ -166,6 +167,10 @@ impl WorkspacePaths {
 
     pub fn workspace_resources_display_path(&self) -> String {
         "data/resources/workspace".into()
+    }
+
+    pub fn database(&self) -> Result<Database, AppError> {
+        Database::open(self.db_path.clone())
     }
 }
 

@@ -298,3 +298,4 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 | 2026-04-21 | W5 Weekly Gate 收尾：`runtime::plugin_lifecycle`、`plugins::{manifest,hooks,hook_dispatch,lifecycle}` 已切到 `replaced`；`plugins::discovery` 保持 `partial`，`tools::subagent_runtime` 维持 greenfield SDK 覆盖边界；`worker_boot` 继续留在 W7，并明确 W5 只保留 non-source 说明 | Codex |
 | 2026-04-22 | W7 Task 7：11 个 legacy crate 目录已从 workspace 实盘删除；`§9 已退役` 新增目录级完成记录，并声明目录删除态以 `§9` 为准 | Codex |
 | 2026-04-22 | W7 Weekly Gate 收尾：11 个 legacy crate 的删除态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、desktop 全量测试、legacy grep、`ls crates/` 与 Phase 4/8 治理脚本复核通过，W7 目录级退役状态冻结。 | Codex |
+| 2026-04-22 | W8 Weekly Gate 收尾：11 个 legacy crate 目录删除态经 `ls crates/` 复核继续成立；`runtime/sessions/*.json` 生产路径继续 0 命中；repo 级单文件 ≤ 800 行门禁已清零。 | Codex |

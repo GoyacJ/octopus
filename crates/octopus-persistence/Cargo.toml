@@ -1,0 +1,16 @@
+[package]
+name = "octopus-persistence"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+octopus-core = { path = "../octopus-core" }
+rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

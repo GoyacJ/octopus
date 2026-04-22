@@ -7,6 +7,7 @@ mod artifacts_inbox_knowledge;
 mod auth_users;
 mod bootstrap;
 mod infra_state;
+mod persistence;
 mod project_tasks;
 mod projects_teams;
 mod resources_skills;

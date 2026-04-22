@@ -1792,23 +1792,23 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 
 ### 3.2 `octopus-persistence`（新）
 
-- 职责：业务侧 SQLite schema 定义 + migration + repository trait；业务 crate 的 `rusqlite::Connection` 生命周期集中管理。
+- 职责：业务侧 SQLite connection lifecycle + migration registry；业务 crate 的 `rusqlite::Connection` 生命周期集中管理。
 - 公共面：
   ```rust
-  pub struct Database { /* ... */ }
-  impl Database {
-      pub fn open(path: &Path) -> Result<Self, DbError>;
-      pub fn acquire(&self) -> Result<Connection, DbError>;
-      pub fn run_migrations(&self) -> Result<(), DbError>;
+  pub type MigrationFn = fn(&Connection) -> Result<(), AppError>;
+  pub struct Migration {
+      pub key: &'static str,
+      pub apply: MigrationFn,
   }
-  pub mod repositories {
-      pub struct ProjectRepository;
-      pub struct WorkspaceRepository;
-      pub struct TaskRepository;
-      pub struct AccessControlRepository;
-      // ...
+  pub struct Database { /* path + registered migrations */ }
+  impl Database {
+      pub fn open(path: impl Into<PathBuf>) -> Result<Self, AppError>;
+      pub fn with_migrations(self, migrations: &'static [Migration]) -> Self;
+      pub fn acquire(&self) -> Result<Connection, AppError>;
+      pub fn run_migrations(&self) -> Result<(), AppError>;
   }
   ```
+- W8 Task 1 冻结结论：首批公共面只停在 `Database + Migration`。repositories 留待 Task 3 以后按 ownership 再引入，不在当前批次裸增。
 - SDK 的 `SqliteJsonlSessionStore` **不**走本 crate（它在 SDK 侧自持一个独立 Connection pool），避免业务 schema 与 SDK 事件 schema 相互污染。
 
 ### 3.3 `octopus-server`
@@ -1947,7 +1947,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
 - W7 同步删除：`crates/runtime`、`crates/tools`、`crates/plugins`、`crates/api`、`crates/octopus-runtime-adapter`、`crates/commands`、`crates/compat-harness`、`crates/mock-anthropic-service`、`crates/rusty-claude-cli`、`crates/octopus-desktop-backend`、`crates/octopus-model-policy`。
 - W7 当前 `Cargo.toml` 继续使用 `members = ["apps/desktop/src-tauri", "crates/*"]`；目录删完后 workspace 实盘应只剩上述 crate。
-- `default-members` 的现行控制面以 live `Cargo.toml` 为准：`apps/desktop/src-tauri / octopus-core / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除；若 W8 后续决定收敛默认编译闭包，必须同批修改 `Cargo.toml`、本节与 `00-overview.md §3/§5`。
+- `default-members` 的现行控制面以 live `Cargo.toml` 为准：`apps/desktop/src-tauri / octopus-core / octopus-persistence / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除；若 W8 后续决定收敛默认编译闭包，必须同批修改 `Cargo.toml`、本节与 `00-overview.md §3/§5`。
 
 ---
 
@@ -1994,6 +1994,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-21 | W5 Task 8：`§2.11` 回填 `PluginRegistry::{new,register_plugin,get_snapshot}`、`Plugin`、`PluginApi` 与 `PluginLifecycle::run`；明确 tools/hooks 走 runtime registration，skills/model providers 仍停在 metadata | Codex |
 | 2026-04-21 | W5 Task 9：`§2.11` 把 `PluginLifecycle::run` 明确为 `discover/config + supplied plugins` 双输入，并登记 `example_bundled_plugins()`；bundled fixture、deny 过滤和 4 条错误路径合同与当前实现对齐 | Codex |
 | 2026-04-22 | W8 文档审计修复：`§3.2` 明确 `octopus-persistence` 只管理业务侧 SQLite 连接，`SqliteJsonlSessionStore` 继续独立；`§8` 的 `default-members` 改为“以 live `Cargo.toml` 为现行控制面”，并要求未来任何收敛都与 `00-overview.md` / `Cargo.toml` 同批更新。 | Codex |
+| 2026-04-22 | W8 Task 1 冻结：`§3.2` 的首批公共面收窄到 `Database + Migration`，repositories 暂不引入；`§8` 的现行 `default-members` 同步补入 `octopus-persistence`。 | Codex |
 | 2026-04-21 | W5 Task 10：`§2.2` 明确 `plugins_snapshot` 的 helper/store/replay 目标态已经落到双分支实现；`§5` 把差异项改成“SDK store/replay 已落地、OpenAPI/schema 仍待对齐”的状态描述，并把 `plugins_snapshot_stability` 作为回放合同锚点 | Codex |
 | 2026-04-21 | W5 Weekly Gate 收尾：`§2.10 / §2.11 / §5` 的 W5 公共面与合同差异登记完成收口；`plugins_snapshot` 双分支 replay、四源合一守护与 legacy 退役映射已对齐到周收尾状态 | Codex |
 | 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |

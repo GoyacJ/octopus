@@ -1,5 +1,4 @@
 use super::{bootstrap, workspace_paths};
-use rusqlite::Connection;
 
 #[test]
 fn split_modules_expose_workspace_bootstrap_api() {
@@ -16,7 +15,11 @@ fn split_modules_expose_workspace_bootstrap_api() {
 fn workspace_bootstrap_does_not_seed_editable_agents_or_teams_and_drops_legacy_automations() {
     let temp = tempfile::tempdir().expect("tempdir");
     let initialized = bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
-    let connection = Connection::open(&initialized.db_path).expect("db");
+    let connection = initialized
+        .database()
+        .expect("database")
+        .acquire()
+        .expect("db");
 
     let agent_count: i64 = connection
         .query_row("SELECT COUNT(*) FROM agents", [], |row| row.get(0))
@@ -41,7 +44,7 @@ fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
     let paths = workspace_paths::WorkspacePaths::new(temp.path());
     paths.ensure_layout().expect("layout");
 
-    let connection = Connection::open(&paths.db_path).expect("db");
+    let connection = paths.database().expect("database").acquire().expect("db");
     connection
         .execute_batch(
             "
@@ -58,7 +61,7 @@ fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
 
     bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
 
-    let connection = Connection::open(&paths.db_path).expect("db");
+    let connection = paths.database().expect("database").acquire().expect("db");
 
     let memberships_missing = connection
         .prepare("SELECT 1 FROM memberships LIMIT 1")
@@ -89,7 +92,11 @@ fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
 fn workspace_bootstrap_seeds_task_projection_tables_and_task_permission_defaults() {
     let temp = tempfile::tempdir().expect("tempdir");
     let initialized = bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
-    let connection = Connection::open(&initialized.db_path).expect("db");
+    let connection = initialized
+        .database()
+        .expect("database")
+        .acquire()
+        .expect("db");
 
     for table in [
         "project_tasks",
@@ -143,7 +150,7 @@ fn workspace_bootstrap_hard_resets_legacy_sessions_table_shape() {
     let paths = workspace_paths::WorkspacePaths::new(temp.path());
     paths.ensure_layout().expect("layout");
 
-    let connection = Connection::open(&paths.db_path).expect("db");
+    let connection = paths.database().expect("database").acquire().expect("db");
     connection
         .execute_batch(
             "
@@ -164,7 +171,7 @@ fn workspace_bootstrap_hard_resets_legacy_sessions_table_shape() {
 
     bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
 
-    let connection = Connection::open(&paths.db_path).expect("db");
+    let connection = paths.database().expect("database").acquire().expect("db");
     let mut pragma = connection
         .prepare("PRAGMA table_info(sessions)")
         .expect("pragma sessions");

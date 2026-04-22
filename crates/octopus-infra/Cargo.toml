@@ -13,6 +13,7 @@ async-trait.workspace = true
 base64 = "0.22"
 include_dir = "0.7"
 octopus-core = { path = "../octopus-core" }
+octopus-persistence = { path = "../octopus-persistence" }
 octopus-platform = { path = "../octopus-platform" }
 octopus-sdk-mcp = { path = "../octopus-sdk-mcp" }
 octopus-sdk-tools = { path = "../octopus-sdk-tools" }
