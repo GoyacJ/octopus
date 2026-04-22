@@ -10391,7 +10391,7 @@ components:
         iteration:
           type: integer
         kind:
-          $ref: "#/components/schemas/RuntimeEventKind"
+          type: string
         lastExecutionOutcome:
           $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
         lastMediationOutcome:
@@ -10496,6 +10496,15 @@ components:
         - background.paused
         - background.completed
         - background.failed
+        - runtime.session.started
+        - runtime.message.user
+        - runtime.message.assistant
+        - runtime.tool.executed
+        - runtime.render.block
+        - runtime.ask
+        - runtime.checkpoint.created
+        - runtime.session.ended
+        - runtime.session.plugins_snapshot
         - runtime.run.updated
         - runtime.message.created
         - runtime.trace.emitted

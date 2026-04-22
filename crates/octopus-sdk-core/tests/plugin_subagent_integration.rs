@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    sync::Arc,
-};
+use std::{fs, sync::Arc};
 
 use async_trait::async_trait;
 use octopus_sdk_contracts::{
@@ -13,7 +10,8 @@ use octopus_sdk_core::SubmitTurnInput;
 use octopus_sdk_hooks::{Hook, HookSource};
 use octopus_sdk_plugin::{
     Plugin, PluginApi, PluginCompat, PluginComponent, PluginDiscoveryConfig,
-    PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry, PluginToolRegistration,
+    PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry,
+    PluginToolRegistration,
 };
 use octopus_sdk_session::SessionStore;
 use octopus_sdk_tools::{TaskFn, Tool, ToolContext, ToolError, ToolResult, ToolSpec};

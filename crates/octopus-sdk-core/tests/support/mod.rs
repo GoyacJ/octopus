@@ -13,7 +13,7 @@ use octopus_sdk_model::{
     ProviderDescriptor, ProviderId,
 };
 use octopus_sdk_sandbox::NoopBackend;
-use octopus_sdk_session::{SqliteJsonlSessionStore, SessionStore};
+use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
 use octopus_sdk_tools::{builtin::register_builtins, ToolRegistry};
 use tempfile::TempDir;
 
@@ -30,11 +30,7 @@ pub struct StaticAskResolver;
 
 #[async_trait]
 impl AskResolver for StaticAskResolver {
-    async fn resolve(
-        &self,
-        prompt_id: &str,
-        _prompt: &AskPrompt,
-    ) -> Result<AskAnswer, AskError> {
+    async fn resolve(&self, prompt_id: &str, _prompt: &AskPrompt) -> Result<AskAnswer, AskError> {
         Ok(AskAnswer {
             prompt_id: prompt_id.into(),
             option_id: "approve".into(),
@@ -61,11 +57,7 @@ pub struct FixedAskResolver {
 
 #[async_trait]
 impl AskResolver for FixedAskResolver {
-    async fn resolve(
-        &self,
-        prompt_id: &str,
-        _prompt: &AskPrompt,
-    ) -> Result<AskAnswer, AskError> {
+    async fn resolve(&self, prompt_id: &str, _prompt: &AskPrompt) -> Result<AskAnswer, AskError> {
         Ok(AskAnswer {
             prompt_id: prompt_id.into(),
             option_id: self.option_id.into(),
@@ -144,7 +136,10 @@ pub fn temp_store() -> (TempDir, Arc<SqliteJsonlSessionStore>) {
     (root, Arc::new(store))
 }
 
-pub fn runtime_builder(model: Arc<dyn ModelProvider>, store: Arc<dyn SessionStore>) -> AgentRuntimeBuilder {
+pub fn runtime_builder(
+    model: Arc<dyn ModelProvider>,
+    store: Arc<dyn SessionStore>,
+) -> AgentRuntimeBuilder {
     runtime_builder_with_controls(
         model,
         store,

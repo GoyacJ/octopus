@@ -3245,10 +3245,14 @@ name = "octopus-cli"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "crossterm",
  "futures",
  "octopus-sdk",
+ "pulldown-cmark",
  "reqwest 0.12.28",
+ "rustyline",
  "serde_json",
+ "syntect",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -3265,7 +3269,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "octopus-desktop-backend"
+name = "octopus-desktop"
 version = "0.2.5"
 dependencies = [
  "axum",
@@ -3273,7 +3277,6 @@ dependencies = [
  "octopus-core",
  "octopus-infra",
  "octopus-platform",
- "octopus-runtime-adapter",
  "octopus-server",
  "tokio",
 ]
@@ -3335,7 +3338,17 @@ name = "octopus-platform"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "futures",
+ "getrandom 0.2.17",
  "octopus-core",
+ "octopus-sdk",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "tokio",
 ]
 
@@ -3624,11 +3637,12 @@ name = "octopus-server"
 version = "0.2.5"
 dependencies = [
  "async-stream",
+ "async-trait",
  "axum",
  "octopus-core",
  "octopus-infra",
  "octopus-platform",
- "octopus-runtime-adapter",
+ "octopus-sdk",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

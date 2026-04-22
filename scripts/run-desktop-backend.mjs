@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(__dirname, '..')
 const executableName = process.platform === 'win32'
-  ? 'octopus-desktop-backend.exe'
-  : 'octopus-desktop-backend'
+  ? 'octopus-desktop.exe'
+  : 'octopus-desktop'
 const backendBinary = join(repoRoot, 'target', 'debug', executableName)
 
 if (!existsSync(backendBinary)) {

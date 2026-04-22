@@ -316,7 +316,7 @@ fn spawn_sidecar_backend(
 ) -> ShellResult<ManagedBackendChild> {
     let (_rx, child) = app
         .shell()
-        .sidecar("octopus-desktop-backend")
+        .sidecar("octopus-desktop")
         .map_err(|error| AppError::Runtime(error.to_string()))?
         .args([
             "--port",
@@ -398,7 +398,7 @@ fn debug_backend_binary_path(repo_root: &Path) -> PathBuf {
     repo_root
         .join("target")
         .join("debug")
-        .join(executable_name("octopus-desktop-backend"))
+        .join(executable_name("octopus-desktop"))
 }
 
 fn should_spawn_dev_backend(host_state: &HostState, repo_root: &Path) -> bool {
@@ -483,7 +483,7 @@ mod tests {
             repo_root
                 .join("target")
                 .join("debug")
-                .join(executable_name("octopus-desktop-backend")),
+                .join(executable_name("octopus-desktop")),
         );
     }
 }

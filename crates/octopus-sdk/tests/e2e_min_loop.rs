@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use futures::StreamExt;
 use octopus_sdk::{
-    builtin::register_builtins, AgentRuntimeBuilder, AssistantEvent, AskAnswer, AskError,
-    AskPrompt, AskResolver, ContentBlock, EventRange, Message, ModelError, ModelId, ModelProvider,
+    builtin::register_builtins, AgentRuntimeBuilder, AskAnswer, AskError, AskPrompt, AskResolver,
+    AssistantEvent, ContentBlock, EventRange, Message, ModelError, ModelId, ModelProvider,
     ModelRequest, ModelStream, NoopBackend, PermissionGate, PermissionMode, PermissionOutcome,
     PluginRegistry, ProviderDescriptor, ProviderId, Role, SessionEvent, SqliteJsonlSessionStore,
     StartSessionInput, StopReason, SubmitTurnInput, ToolCallRequest, ToolRegistry,
@@ -23,11 +23,7 @@ struct StaticAskResolver;
 
 #[async_trait]
 impl AskResolver for StaticAskResolver {
-    async fn resolve(
-        &self,
-        prompt_id: &str,
-        _prompt: &AskPrompt,
-    ) -> Result<AskAnswer, AskError> {
+    async fn resolve(&self, prompt_id: &str, _prompt: &AskPrompt) -> Result<AskAnswer, AskError> {
         Ok(AskAnswer {
             prompt_id: prompt_id.into(),
             option_id: "approve".into(),
@@ -160,10 +156,9 @@ async fn test_min_loop_events() {
         events.push(event.expect("event should decode"));
     }
 
-    assert!(events.iter().any(|event| matches!(
-        event,
-        SessionEvent::SessionStarted { .. }
-    )));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, SessionEvent::SessionStarted { .. })));
     assert!(events.iter().any(|event| matches!(
         event,
         SessionEvent::ToolExecuted { name, .. } if name == "bash"
@@ -174,5 +169,7 @@ async fn test_min_loop_events() {
             if message.role == Role::Assistant
                 && message.content.iter().any(|block| matches!(block, ContentBlock::Text { text } if text == "final answer"))
     )));
-    assert!(events.iter().any(|event| matches!(event, SessionEvent::Render { .. })));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, SessionEvent::Render { .. })));
 }

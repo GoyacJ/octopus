@@ -26,7 +26,10 @@ async fn test_start_session_writes_snapshot() {
         .expect("snapshot should exist");
 
     assert_eq!(snapshot.working_dir, root.path());
-    assert_eq!(snapshot.permission_mode, octopus_sdk_contracts::PermissionMode::Default);
+    assert_eq!(
+        snapshot.permission_mode,
+        octopus_sdk_contracts::PermissionMode::Default
+    );
     assert_eq!(snapshot.model, "test-model");
     assert_eq!(snapshot.config_snapshot_id, "cfg-1");
     assert_eq!(snapshot.effective_config_hash, "hash-1");
@@ -61,7 +64,10 @@ async fn test_resume_reads_session_store() {
 
     assert_eq!(resumed.session_id, handle.session_id);
     assert_eq!(resumed.working_dir, root.path());
-    assert_eq!(resumed.permission_mode, octopus_sdk_contracts::PermissionMode::Default);
+    assert_eq!(
+        resumed.permission_mode,
+        octopus_sdk_contracts::PermissionMode::Default
+    );
     assert_eq!(resumed.model.0, "test-model");
     assert_eq!(resumed.config_snapshot_id, "cfg-1");
     assert_eq!(resumed.effective_config_hash, "hash-1");

@@ -6,13 +6,13 @@
 
 ## Status
 
-状态：`draft`
+状态：`in_progress`
 
 ## Active Work
 
-当前 Task：`Plan authoring complete`
+当前 Task：`Task 7 · workspace 收口与 11 个 legacy crate 删除`
 
-当前 Step：`W7 task ledger 已冻结，等待首批生产改动启动`
+当前 Step：`Step 1 已审计：`crates/octopus-infra` 仍直接依赖 legacy `runtime` / `tools`，Task 7 暂时 blocked`
 
 ### Pre-Task Checklist（起稿阶段）
 
@@ -32,6 +32,7 @@ Open Questions：
 
 - `10-week-7-business-cutover.md` 在本批次前不存在；本文件先完成文档冻结，再进入代码执行。
 - `/api/v1/runtime/*` 预期保持 transport-compatible；若首批桥接后做不到，必须先走 OpenAPI 源文件更新，再继续 cutover。
+- Task 7 审计新增阻塞项：`crates/octopus-infra/Cargo.toml` 仍声明 `runtime` / `tools` path 依赖，且 `src/resources_skills.rs` 仍使用 legacy runtime config loader、MCP discovery types 与 `tools::mvp_tool_specs()`；在未先迁走这条生产依赖链前，不能删除 `crates/runtime` / `crates/tools`。
 
 ### 已确认的审核决策（2026-04-22）
 
@@ -165,7 +166,7 @@ Open Questions：
 
 ### Task 1: `octopus-platform` SDK bridge 骨架
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-platform/src/lib.rs`
@@ -194,7 +195,7 @@ Step 2:
 
 ### Task 2: config / registry / secret ownership 提升到 `octopus-platform`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-platform/src/lib.rs`
@@ -222,13 +223,18 @@ Step 2:
 
 ### Task 3: `octopus-server` runtime transport 切到 platform bridge
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-server/Cargo.toml`
 - Modify: `crates/octopus-server/src/lib.rs`
+- Create: `crates/octopus-server/src/test_runtime_sdk.rs`
 - Modify: `crates/octopus-server/src/workspace_runtime.rs`
 - Modify: `crates/octopus-server/src/handlers.rs`
+- Modify: `crates/octopus-platform/src/runtime_sdk/mod.rs`
+- Modify: `crates/octopus-platform/src/runtime_sdk/session_bridge.rs`
+- Modify: `crates/octopus-platform/src/runtime_sdk/execution_bridge.rs`
+- Modify: `crates/octopus-platform/src/runtime_sdk/registry_bridge.rs`
 
 Preconditions:
 - Task 1 / Task 2 已通过。
@@ -248,10 +254,13 @@ Step 2:
 
 ### Task 4: `octopus-desktop-backend` 改为 `octopus-desktop`
 
-Status: `pending`
+Status: `done`
 
 Files:
+- Modify: `Cargo.toml`
 - Move: `crates/octopus-desktop-backend` -> `crates/octopus-desktop`
+- Modify: `crates/octopus-platform/Cargo.toml`
+- Modify: `crates/octopus-platform/src/runtime_sdk/builder.rs`
 - Modify: `crates/octopus-desktop/Cargo.toml`
 - Modify: `crates/octopus-desktop/src/main.rs`
 - Modify: `apps/desktop/src-tauri/src/backend.rs`
@@ -259,6 +268,9 @@ Files:
 - Modify: `apps/desktop/src-tauri/tauri.conf.json`
 - Modify: `apps/desktop/src-tauri/capabilities/default.json`
 - Modify: `apps/desktop/src-tauri/tests/shell_contract.rs`
+- Modify: `scripts/prepare-desktop-sidecar.mjs`
+- Modify: `scripts/prepare-desktop-backend.mjs`
+- Modify: `scripts/run-desktop-backend.mjs`
 
 Preconditions:
 - Task 3 已完成 server cutover。
@@ -278,16 +290,17 @@ Step 2:
 
 ### Task 5: `octopus-cli` 收口 `commands` / `rusty-claude-cli`
 
-Status: `pending`
+Status: `done`
 
 Files:
+- Modify: `crates/octopus-cli/Cargo.toml`
 - Modify: `crates/octopus-cli/src/lib.rs`
-- Modify: `crates/octopus-cli/src/main.rs`
 - Modify: `crates/octopus-cli/src/run_once.rs`
 - Create: `crates/octopus-cli/src/automation.rs`
 - Create: `crates/octopus-cli/src/workspace.rs`
 - Create: `crates/octopus-cli/src/project.rs`
 - Create: `crates/octopus-cli/src/config.rs`
+- Create: `crates/octopus-cli/src/init.rs`
 - Create: `crates/octopus-cli/src/render.rs`
 - Create: `crates/octopus-cli/src/input.rs`
 - Modify: `crates/octopus-cli/tests/min_cli.rs`
@@ -310,7 +323,7 @@ Step 2:
 
 ### Task 6: `/api/v1/runtime/*` transport parity 审计与条件式契约更新
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `contracts/openapi/src/**`（如需）
@@ -337,7 +350,7 @@ Step 2:
 
 ### Task 7: workspace 收口与 11 个 legacy crate 删除
 
-Status: `pending`
+Status: `blocked`
 
 Files:
 - Modify: `Cargo.toml`
@@ -397,3 +410,189 @@ Step 1:
 | 日期 | 变更 | 责任人 |
 |---|---|---|
 | 2026-04-22 | 首稿：新建 W7 计划，冻结“platform 持有 SDK bridge、server/desktop/cli 逐层 cutover、最后删除 11 个 legacy crate”的执行顺序；补 Task Ledger、`02` / `03` 回填点与 Weekly Gate 对齐表。 | Codex |
+| 2026-04-22 | Task 1 完成：在 `octopus-platform` 新增 `runtime_sdk/{builder,session_bridge,execution_bridge}`，冻结 `RuntimeSdkDeps / RuntimeSdkFactory / RuntimeSdkBridge` 入口，并补 `runtime_sdk_bridge` 集成测试。 | Codex |
+| 2026-04-22 | Task 2 完成：在 `octopus-platform` 新增 `runtime_sdk/{config_bridge,registry_bridge,secret_vault}`，把 runtime config / model registry / secret ownership 提升到 platform，并补 `runtime_config_bridge` 集成测试。 | Codex |
+| 2026-04-22 | Task 3 完成：`octopus-server` 删除 `octopus-runtime-adapter` dev 依赖，测试夹具改走 platform SDK bridge；同时补 platform bridge 的 permission mode、single-shot generation 与最小 approval flow 映射，保持 server runtime transport 测试绿。 | Codex |
+| 2026-04-22 | Task 4 完成：`octopus-desktop-backend` 改名为 `octopus-desktop`，desktop sidecar 改为调用 `RuntimeSdkFactory::build_live`，并同步更新 Tauri sidecar 路径、shell contract 与本地 sidecar 准备脚本。 | Codex |
+| 2026-04-22 | Task 5 完成：`octopus-cli` 吸收 `commands / rusty-claude-cli` 中剩余的 parser/help、`init / input / render`、agents/skills 发现与安装、最小 direct CLI 分派；同时保持 run path 仍只走 SDK，不重新引入任何 legacy runtime 依赖。 | Codex |
+| 2026-04-22 | Task 6 完成：发现 SDK-backed runtime bridge 已发出新的 session/message/render/checkpoint/plugins snapshot eventType；据此更新 OpenAPI runtime event contract、重新生成 `packages/schema/src/generated.ts`，并用 desktop transport/runtime suite 锁住新枚举与 `kind` 的 string 化。 | Codex |
+
+## Checkpoint 2026-04-22 12:37
+
+- Week: W7
+- Batch: Task 1 Step 1 → Task 1 Step 2
+- Completed:
+  - 在 `octopus-platform` 建立单一 SDK 组装入口 `RuntimeSdkFactory`，把 `AgentRuntimeBuilder` 收口到 platform 内部。
+  - 新增 `RuntimeSdkBridge`，覆盖 `create_session / get_session / list_sessions / submit_turn / list_events` 的最小 DTO 投影。
+  - 补 `runtime_sdk_bridge` 测试，验证 SDK 事件流能投影到现有 runtime DTO。
+- Files changed:
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/lib.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (created)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (created)
+  - `crates/octopus-platform/src/runtime_sdk/session_bridge.rs` (created)
+  - `crates/octopus-platform/src/runtime_sdk/execution_bridge.rs` (created)
+  - `crates/octopus-platform/tests/runtime_sdk_bridge.rs` (created)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+- Verification:
+  - `cargo test -p octopus-platform --test runtime_sdk_bridge` → pass
+  - `cargo clippy -p octopus-platform --test runtime_sdk_bridge -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1：把 `runtime_config / model registry / secret store` 的 ownership 从 `octopus-runtime-adapter` 提升到 `octopus-platform::runtime_sdk/*`
+
+## Checkpoint 2026-04-22 13:10
+
+- Week: W7
+- Batch: Task 2 Step 1 → Task 2 Step 2
+- Completed:
+  - 在 `octopus-platform` 新增 `runtime_sdk/{config_bridge,registry_bridge,secret_vault}`，把 runtime config / model registry / secret ownership 收口到 platform。
+  - `RuntimeSdkFactory` 现在在 platform 内部自持 workspace layout 和 secret vault，不再依赖 `octopus-runtime-adapter`。
+  - 补 `runtime_config_bridge` 测试，覆盖 managed credential 持久化、scope merge 和 catalog snapshot token usage。
+- Files changed:
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/config_bridge.rs` (created)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge.rs` (created)
+  - `crates/octopus-platform/src/runtime_sdk/secret_vault.rs` (created)
+  - `crates/octopus-platform/tests/runtime_sdk_bridge.rs` (modified)
+  - `crates/octopus-platform/tests/runtime_config_bridge.rs` (created)
+- Verification:
+  - `cargo test -p octopus-platform --test runtime_config_bridge` → pass
+  - `cargo test -p octopus-platform --test runtime_sdk_bridge` → pass
+  - `cargo clippy -p octopus-platform --test runtime_config_bridge -- -D warnings` → pass
+  - `rg "octopus_runtime_adapter|octopus-runtime-adapter|RuntimeAdapter" crates/octopus-platform` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1：把 `octopus-server` 的 runtime transport 与测试夹具从 `RuntimeAdapter` 切到 platform SDK bridge
+
+## Checkpoint 2026-04-22 14:05
+
+- Week: W7
+- Batch: Task 3 Step 1 → Task 3 Step 2
+- Completed:
+  - `octopus-server` 删除 `octopus-runtime-adapter` dev 依赖，新增测试专用 `test_runtime_sdk` helper，把 `handlers` 和 `workspace_runtime` 的 runtime 夹具统一切到 `RuntimeSdkFactory`。
+  - platform bridge 补齐 `read-only / workspace-write / danger-full-access` 到 SDK permission mode 的映射，并把 configured model surface 校验接到 session create / generation run。
+  - platform bridge 增加最小 approval flow 投影，覆盖 `waiting_approval -> completed`、`waiting_approval -> waiting_input` 和 chained approval 的第二个 pending approval。
+  - `gemini-2.5-flash` 的内建 registry surface 调整为 single-shot generation，保持 server 侧 generation route 现有测试语义。
+- Files changed:
+  - `crates/octopus-server/Cargo.toml` (modified)
+  - `crates/octopus-server/src/lib.rs` (modified)
+  - `crates/octopus-server/src/test_runtime_sdk.rs` (created)
+  - `crates/octopus-server/src/handlers.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/session_bridge.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/execution_bridge.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-server` → pass
+  - `rg "octopus_runtime_adapter|octopus-runtime-adapter|RuntimeAdapter" crates/octopus-server` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1：把 `octopus-desktop-backend` 的 sidecar crate/binary 改名为 `octopus-desktop`，并切到 platform bridge
+
+## Checkpoint 2026-04-22 14:22
+
+- Week: W7
+- Batch: Task 4 Step 1 → Task 4 Step 2
+- Completed:
+  - `crates/octopus-desktop-backend` 已改名为 `crates/octopus-desktop`，sidecar 入口不再依赖 `octopus-runtime-adapter`，改为通过 `RuntimeSdkFactory::build_live` 从 `octopus-platform` 获取 SDK-backed runtime bridge。
+  - `octopus-platform` 补了 live 默认装配：共用 `SqliteJsonlSessionStore`、runtime secret vault、内建 tool registry、默认 protocol adapters 和 host sandbox backend，避免 desktop sidecar 自己持有 `AgentRuntimeBuilder` 细节。
+  - Tauri sidecar 启动、build placeholder、capability、shell contract 和本地 sidecar 准备脚本全部切到新 binary 名 `octopus-desktop`。
+- Files changed:
+  - `Cargo.toml` (modified)
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (modified)
+  - `crates/octopus-desktop/Cargo.toml` (modified)
+  - `crates/octopus-desktop/src/main.rs` (modified)
+  - `apps/desktop/src-tauri/src/backend.rs` (modified)
+  - `apps/desktop/src-tauri/build.rs` (modified)
+  - `apps/desktop/src-tauri/tauri.conf.json` (modified)
+  - `apps/desktop/src-tauri/capabilities/default.json` (modified)
+  - `apps/desktop/src-tauri/tests/shell_contract.rs` (modified)
+  - `scripts/prepare-desktop-sidecar.mjs` (modified)
+  - `scripts/prepare-desktop-backend.mjs` (modified)
+  - `scripts/run-desktop-backend.mjs` (modified)
+  - `crates/octopus-desktop-backend/Cargo.toml` (deleted via move)
+  - `crates/octopus-desktop-backend/src/main.rs` (deleted via move)
+- Verification:
+  - `cargo build -p octopus-desktop` → pass
+  - `cargo test -p octopus-desktop` → pass
+  - `cargo test -p octopus-desktop-shell --test shell_contract` → pass
+  - `cargo fmt --all` → pass
+  - `rg -n "octopus-desktop-backend" apps/desktop/src-tauri crates/octopus-desktop scripts` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1：盘点 `octopus-cli` 仍依赖 `commands` / `rusty-claude-cli` 的命令入口、输入解析与渲染逻辑
+
+## Checkpoint 2026-04-22 12:40
+
+- Week: W7
+- Batch: Task 5 Step 1 → Task 5 Step 2
+- Completed:
+  - `octopus-cli` 新增 `automation / workspace / config / init / input / render / project` 模块，吸收 legacy CLI 的 slash command parser/help、agents/skills 发现与安装、以及终端输入/渲染能力。
+  - `run_once` 补了最小 direct CLI 分派，保留既有 SDK single-turn run path，同时新增 `init`、`agents`、`skills` 和 `slash` 入口；未迁完的 legacy slash command 只保留识别和明确提示，不复制第二套 runtime。
+  - `octopus-cli` crate 增加对应依赖与测试，CLI 生产代码里对 `commands / rusty-claude-cli / octopus-runtime-adapter` 的文本引用已清零。
+- Files changed:
+  - `crates/octopus-cli/Cargo.toml` (modified)
+  - `crates/octopus-cli/src/lib.rs` (modified)
+  - `crates/octopus-cli/src/run_once.rs` (modified)
+  - `crates/octopus-cli/src/automation.rs` (created)
+  - `crates/octopus-cli/src/workspace.rs` (created)
+  - `crates/octopus-cli/src/project.rs` (created)
+  - `crates/octopus-cli/src/config.rs` (created)
+  - `crates/octopus-cli/src/init.rs` (created)
+  - `crates/octopus-cli/src/input.rs` (created)
+  - `crates/octopus-cli/src/render.rs` (created)
+  - `crates/octopus-cli/tests/min_cli.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-cli` → pass
+  - `cargo fmt --all` → pass
+  - `rg "commands::|rusty_claude_cli|rusty-claude-cli|octopus_runtime_adapter|RuntimeAdapter" crates/octopus-cli` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1：比对 SDK-backed `/api/v1/runtime/*` payload 与现有 OpenAPI/schema，确认是否需要源文件更新
+
+## Checkpoint 2026-04-22 12:47
+
+- Week: W7
+- Batch: Task 6 Step 1 → Task 6 Step 2
+- Completed:
+  - 审计确认 SDK-backed runtime bridge 已发出 `runtime.session.started`、`runtime.message.user`、`runtime.message.assistant`、`runtime.tool.executed`、`runtime.render.block`、`runtime.ask`、`runtime.checkpoint.created`、`runtime.session.ended`、`runtime.session.plugins_snapshot` 等新 eventType，现有 OpenAPI `RuntimeEventKind` 枚举已不足以覆盖。
+  - `contracts/openapi/src/components/schemas/runtime.yaml` 已补 runtime event 枚举，并把 `RuntimeEventEnvelope.kind` 从错误的同枚举约束放宽为 `string`，对齐实际 transport 里 `session.started`、`message.user` 这类 kind alias。
+  - 已重新生成 `contracts/openapi/octopus.openapi.yaml` 与 `packages/schema/src/generated.ts`，并在 desktop contract test 中补断言锁住新增 runtime eventType 和 `kind?: string`。
+- Files changed:
+  - `contracts/openapi/src/components/schemas/runtime.yaml` (modified)
+  - `contracts/openapi/octopus.openapi.yaml` (modified)
+  - `packages/schema/src/generated.ts` (modified)
+  - `apps/desktop/test/openapi-transport.test.ts` (modified)
+- Verification:
+  - `pnpm openapi:bundle` → pass
+  - `pnpm schema:generate` → pass
+  - `pnpm schema:check` → pass
+  - `pnpm -C apps/desktop exec vitest run test/openapi-transport.test.ts` → pass
+  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
+  - `pnpm -C apps/desktop exec vitest run test/tauri-client-runtime.test.ts` → pass
+- Exit state vs plan:
+  - needs source update and landed
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1：守护扫描 legacy crate 剩余引用，确认可以更新 workspace members/default-members 并删除 11 个 legacy crate 目录

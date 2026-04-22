@@ -44,10 +44,9 @@ async fn test_end_turn_without_tools() {
             if message.role == Role::Assistant
                 && message.content.iter().any(|block| matches!(block, ContentBlock::Text { text } if text == "assistant reply"))
     )));
-    assert!(events.iter().any(|event| matches!(
-        event,
-        octopus_sdk_contracts::SessionEvent::Render { .. }
-    )));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, octopus_sdk_contracts::SessionEvent::Render { .. })));
     let snapshot = runtime
         .snapshot(&handle.session_id)
         .await

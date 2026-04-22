@@ -130,24 +130,22 @@ impl AgentRuntimeBuilder {
             .ok_or(RuntimeError::MissingBuilderField {
                 field: "model_provider",
             })?;
-        let secret_vault = self
-            .secret_vault
-            .ok_or(RuntimeError::MissingBuilderField {
-                field: "secret_vault",
-            })?;
-        let tool_registry = self.tool_registry.ok_or(RuntimeError::MissingBuilderField {
-            field: "tool_registry",
+        let secret_vault = self.secret_vault.ok_or(RuntimeError::MissingBuilderField {
+            field: "secret_vault",
         })?;
+        let tool_registry = self
+            .tool_registry
+            .ok_or(RuntimeError::MissingBuilderField {
+                field: "tool_registry",
+            })?;
         let permission_gate = self
             .permission_gate
             .ok_or(RuntimeError::MissingBuilderField {
                 field: "permission_gate",
             })?;
-        let ask_resolver = self
-            .ask_resolver
-            .ok_or(RuntimeError::MissingBuilderField {
-                field: "ask_resolver",
-            })?;
+        let ask_resolver = self.ask_resolver.ok_or(RuntimeError::MissingBuilderField {
+            field: "ask_resolver",
+        })?;
         let sandbox_backend = self
             .sandbox_backend
             .ok_or(RuntimeError::MissingBuilderField {
@@ -155,8 +153,11 @@ impl AgentRuntimeBuilder {
             })?;
         let plugins_snapshot =
             resolve_plugins_snapshot(&self.plugin_registry, self.plugins_snapshot)?;
-        let merged_tools =
-            materialize_tool_registry(&tool_registry, &self.plugin_registry, self.task_fn.as_ref())?;
+        let merged_tools = materialize_tool_registry(
+            &tool_registry,
+            &self.plugin_registry,
+            self.task_fn.as_ref(),
+        )?;
 
         Ok(AgentRuntime::new(Arc::new(RuntimeInner {
             session_store,

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use octopus_sdk_contracts::{AssistantEvent, ContentBlock, Message, Role, SessionEvent, Usage};
 use octopus_sdk_observability::{ReplayTracer, TraceSpan, Tracer, UsageLedger};
-use octopus_sdk_session::{SqliteJsonlSessionStore, SessionStore};
+use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
 
 struct RecordingTracer {
     spans: Mutex<Vec<TraceSpan>>,

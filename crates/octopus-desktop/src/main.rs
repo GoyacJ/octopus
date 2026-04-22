@@ -11,8 +11,7 @@ use octopus_core::{
     DEFAULT_WORKSPACE_ID,
 };
 use octopus_infra::build_infra_bundle;
-use octopus_platform::PlatformServices;
-use octopus_runtime_adapter::RuntimeAdapter;
+use octopus_platform::{PlatformServices, RuntimeSdkFactory};
 use octopus_server::{build_router, ServerState};
 
 #[derive(Debug, Clone)]
@@ -32,12 +31,11 @@ struct BackendArgs {
 async fn main() -> Result<(), AppError> {
     let args = BackendArgs::parse(env::args().skip(1).collect())?;
     let infra = build_infra_bundle(&args.workspace_root)?;
-    let runtime = std::sync::Arc::new(RuntimeAdapter::new(
+    let runtime = RuntimeSdkFactory::build_live(
         DEFAULT_WORKSPACE_ID,
-        infra.paths.clone(),
-        infra.observation.clone(),
-        infra.authorization.clone(),
-    ));
+        args.workspace_root.clone(),
+        "claude-sonnet-4-5",
+    )?;
     let services = PlatformServices {
         workspace: infra.workspace.clone(),
         project_tasks: infra.workspace.clone(),
@@ -85,7 +83,7 @@ async fn main() -> Result<(), AppError> {
 
     let address = SocketAddr::from(([127, 0, 0, 1], args.port));
     log::info!(
-        "starting octopus desktop backend version={} cargo_workspace={} workspace_root={} preferences_path={}",
+        "starting octopus desktop sidecar version={} cargo_workspace={} workspace_root={} preferences_path={}",
         args.app_version,
         args.cargo_workspace,
         args.workspace_root.display(),

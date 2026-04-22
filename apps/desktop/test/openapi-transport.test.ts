@@ -104,6 +104,16 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).toContain('"background.paused"')
     expect(generated).toContain('"background.completed"')
     expect(generated).toContain('"background.failed"')
+    expect(generated).toContain('"runtime.session.started"')
+    expect(generated).toContain('"runtime.message.user"')
+    expect(generated).toContain('"runtime.message.assistant"')
+    expect(generated).toContain('"runtime.tool.executed"')
+    expect(generated).toContain('"runtime.render.block"')
+    expect(generated).toContain('"runtime.ask"')
+    expect(generated).toContain('"runtime.checkpoint.created"')
+    expect(generated).toContain('"runtime.session.ended"')
+    expect(generated).toContain('"runtime.session.plugins_snapshot"')
+    expect(generated).toContain('kind?: string')
   })
 
   it('removes opaque runtime escape hatches from the generated public transport contract', () => {

@@ -21,7 +21,9 @@ impl SqliteJsonlSessionStore {
         range: EventRange,
     ) -> Result<EventStream, SessionError> {
         let records = self.stream_record_events(session_id, range)?;
-        Ok(Box::pin(records.map(|record| record.map(|record| record.event))))
+        Ok(Box::pin(
+            records.map(|record| record.map(|record| record.event)),
+        ))
     }
 
     pub(crate) fn stream_record_events(
@@ -561,8 +563,7 @@ fn projection_needs_repair(
     records: &[JsonlRecord],
     expected: &ExpectedProjection,
 ) -> Result<bool, SessionError> {
-    let Some(row) = load_session_row(connection, session_id)?
-    else {
+    let Some(row) = load_session_row(connection, session_id)? else {
         return Ok(true);
     };
 

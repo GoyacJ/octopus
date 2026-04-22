@@ -11,7 +11,7 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
-          "name": "bin/octopus-desktop-backend",
+          "name": "bin/octopus-desktop",
           "sidecar": true,
           "args": true
         }

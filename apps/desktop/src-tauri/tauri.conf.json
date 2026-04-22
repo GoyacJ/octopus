@@ -33,7 +33,7 @@
     "createUpdaterArtifacts": true,
     "targets": "all",
     "externalBin": [
-      "bin/octopus-desktop-backend"
+      "bin/octopus-desktop"
     ],
     "icon": [
       "icons/32x32.png",

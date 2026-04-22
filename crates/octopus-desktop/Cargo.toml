@@ -1,5 +1,5 @@
 [package]
-name = "octopus-desktop-backend"
+name = "octopus-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,6 +14,5 @@ log.workspace = true
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
 octopus-platform = { path = "../octopus-platform" }
-octopus-runtime-adapter = { path = "../octopus-runtime-adapter" }
 octopus-server = { path = "../octopus-server" }
 tokio.workspace = true

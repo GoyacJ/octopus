@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 5f2e42c5bf95ef057e80a2fd01d65da98bde54de2ad778a02d0acb4a25971706
+// Source hash: af41c9e67017c40c12d0d15f4f95e16861b278ec08c61637b3bca8670676b912
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "5f2e42c5bf95ef057e80a2fd01d65da98bde54de2ad778a02d0acb4a25971706"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "af41c9e67017c40c12d0d15f4f95e16861b278ec08c61637b3bca8670676b912"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -2023,7 +2023,7 @@ export interface RuntimeEventEnvelope {
   freshnessSummary?: RuntimeMemoryFreshnessSummary
   id: string
   iteration?: number
-  kind?: RuntimeEventKind
+  kind?: string
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   lastMediationOutcome?: RuntimeMediationOutcome
   memoryProposal?: RuntimeMemoryProposal
@@ -2049,7 +2049,7 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.delta" | "model.tool_use" | "model.usage" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.delta" | "model.tool_use" | "model.usage" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.cancelled" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "background.started" | "background.paused" | "background.completed" | "background.failed" | "runtime.session.started" | "runtime.message.user" | "runtime.message.assistant" | "runtime.tool.executed" | "runtime.render.block" | "runtime.ask" | "runtime.checkpoint.created" | "runtime.session.ended" | "runtime.session.plugins_snapshot" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
 export type RuntimeExecutionClass = "unsupported" | "single_shot_generation" | "agent_conversation"
 

@@ -16,7 +16,8 @@ pub struct EventRange {
 }
 
 pub type EventStream = Pin<Box<dyn Stream<Item = Result<SessionEvent, SessionError>> + Send>>;
-pub type EventRecordStream = Pin<Box<dyn Stream<Item = Result<SessionRecord, SessionError>> + Send>>;
+pub type EventRecordStream =
+    Pin<Box<dyn Stream<Item = Result<SessionRecord, SessionError>> + Send>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionRecord {

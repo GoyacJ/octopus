@@ -99,9 +99,11 @@ pub(crate) async fn load_transcript(
     }
 
     if !found_anchor {
-        return Err(RuntimeError::Session(octopus_sdk_session::SessionError::Corrupted {
-            reason: "compaction_anchor_event_not_found_during_replay".into(),
-        }));
+        return Err(RuntimeError::Session(
+            octopus_sdk_session::SessionError::Corrupted {
+                reason: "compaction_anchor_event_not_found_during_replay".into(),
+            },
+        ));
     }
 
     Ok(transcript)

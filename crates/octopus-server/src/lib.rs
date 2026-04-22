@@ -1,6 +1,8 @@
 mod dto_mapping;
 mod handlers;
 mod routes;
+#[cfg(test)]
+pub(crate) mod test_runtime_sdk;
 mod workspace_runtime;
 
 use std::{

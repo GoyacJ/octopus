@@ -6192,33 +6192,26 @@ pub(crate) async fn runtime_events(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        collections::HashMap,
-        fs,
-        path::Path,
-        sync::{Arc, Mutex},
-    };
+    use std::{fs, path::Path};
 
     use axum::{
         body::{to_bytes, Body},
         http::{Method, Request, StatusCode},
     };
     use octopus_core::{
-        default_connection_stubs, default_host_state, default_preferences, AccessUserUpsertRequest,
-        CreateProjectDeletionRequestInput, CreateProjectRequest, CreateRuntimeSessionInput,
-        CreateTaskInterventionRequest, CreateTaskRequest, DataPolicyUpsertRequest,
-        DesktopBackendConnection, LaunchTaskRequest, LoginRequest, ProjectDeletionRequest,
+        AccessUserUpsertRequest, CreateProjectDeletionRequestInput, CreateProjectRequest,
+        CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest,
+        DataPolicyUpsertRequest, LaunchTaskRequest, LoginRequest, ProjectDeletionRequest,
         ProjectPermissionOverrides, RegisterBootstrapAdminRequest, RerunTaskRequest,
         ReviewProjectDeletionRequestInput, RoleBindingUpsertRequest, RoleUpsertRequest,
         SubmitRuntimeTurnInput, TaskContextBundle, TaskContextRef, UpdateWorkspaceRequest,
         WorkspaceSummary, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
     };
-    use octopus_infra::build_infra_bundle;
-    use octopus_platform::PlatformServices;
-    use octopus_runtime_adapter::{MockRuntimeModelDriver, RuntimeAdapter};
     use rusqlite::{params, Connection};
     use serde_json::{json, Value};
     use tower::ServiceExt;
+
+    use crate::test_runtime_sdk::test_server_state;
 
     const APPROVAL_AGENT_ID: &str = "agent-task-runtime-approval";
     const APPROVAL_AGENT_REF: &str = "agent:agent-task-runtime-approval";
@@ -6322,54 +6315,6 @@ mod tests {
             })
             .expect("workspace agent");
         format!("agent:{}", agent.id)
-    }
-
-    fn test_server_state(root: &Path) -> ServerState {
-        let infra = build_infra_bundle(root).expect("infra bundle");
-        let runtime = Arc::new(RuntimeAdapter::new_with_executor(
-            DEFAULT_WORKSPACE_ID,
-            infra.paths.clone(),
-            infra.observation.clone(),
-            infra.authorization.clone(),
-            Arc::new(MockRuntimeModelDriver),
-        ));
-        let services = PlatformServices {
-            workspace: infra.workspace.clone(),
-            project_tasks: infra.workspace.clone(),
-            access_control: infra.access_control.clone(),
-            auth: infra.auth.clone(),
-            app_registry: infra.app_registry.clone(),
-            authorization: infra.authorization.clone(),
-            runtime_session: runtime.clone(),
-            runtime_execution: runtime.clone(),
-            runtime_config: runtime.clone(),
-            runtime_registry: runtime,
-            artifact: infra.artifact.clone(),
-            inbox: infra.inbox.clone(),
-            knowledge: infra.knowledge.clone(),
-            observation: infra.observation.clone(),
-        };
-
-        ServerState {
-            services,
-            host_auth_token: "host-test-token".into(),
-            transport_security: "loopback".into(),
-            idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
-            auth_rate_limits: Arc::new(Mutex::new(HashMap::new())),
-            host_state: default_host_state("0.1.0-test".into(), true),
-            host_connections: default_connection_stubs(),
-            host_preferences_path: root.join("config").join("shell-preferences.json"),
-            host_workspace_connections_path: root
-                .join("config")
-                .join("shell-workspace-connections.json"),
-            host_default_preferences: default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
-            backend_connection: DesktopBackendConnection {
-                base_url: Some("http://127.0.0.1:43127".into()),
-                auth_token: Some("desktop-test-token".into()),
-                state: "ready".into(),
-                transport: "http".into(),
-            },
-        }
     }
 
     async fn bootstrap_owner(state: &ServerState) -> SessionRecord {

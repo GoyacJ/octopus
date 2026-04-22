@@ -4,8 +4,8 @@ use futures::future::join_all;
 use octopus_sdk_context::{Compactor, SessionView};
 use octopus_sdk_contracts::{
     CompactionStrategyTag, ContentBlock, EventId, EventSink, HookEvent, HookToolResult, Message,
-    PermissionOutcome,
-    RenderLifecycle, Role, SessionEvent, SessionId, ToolCallRequest, ToolCategory,
+    PermissionOutcome, RenderLifecycle, Role, SessionEvent, SessionId, ToolCallRequest,
+    ToolCategory,
 };
 use octopus_sdk_model::ModelProvider;
 use octopus_sdk_observability::{TraceSpan, TraceValue, Tracer};
@@ -170,7 +170,9 @@ async fn execute_single_tool_call(
             return finalize_tool_denial(ctx, &call, reason).await;
         }
         PermissionOutcome::AskApproval { .. } | PermissionOutcome::RequireAuth { .. } => {
-            return Err(RuntimeError::Hook("approval broker returned unresolved prompt".into()));
+            return Err(RuntimeError::Hook(
+                "approval broker returned unresolved prompt".into(),
+            ));
         }
     };
 
@@ -329,10 +331,7 @@ async fn flush_sink(
     Ok(())
 }
 
-fn tool_result_message(
-    call: &ToolCallRequest,
-    result: &octopus_sdk_tools::ToolResult,
-) -> Message {
+fn tool_result_message(call: &ToolCallRequest, result: &octopus_sdk_tools::ToolResult) -> Message {
     Message {
         role: Role::Tool,
         content: vec![ContentBlock::ToolResult {

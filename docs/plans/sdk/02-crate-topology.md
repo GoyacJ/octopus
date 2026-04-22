@@ -1666,7 +1666,20 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 ### 3.1 `octopus-platform`
 
 - 保留 `AccessControlService / AuthService / AuthorizationService / AppRegistryService / ArtifactService / InboxService / KnowledgeService / ObservationService / ProjectTaskService / WorkspaceService`。
-- **删除**：`runtime.rs`（783 行）——`RuntimeSessionService / RuntimeExecutionService / RuntimeConfigService / ModelRegistryService / RuntimeProjectionService / AutomationService / ToolExecutionService` 全部由 `octopus-sdk` 的 `AgentRuntime` 替代。业务只保留"把业务域对象映射到 `StartSessionInput`"的薄壳，放 `session_bridge.rs`（≤ 300 行）。
+- 保留 `runtime.rs` 里的业务 service trait：`RuntimeSessionService / RuntimeExecutionService / RuntimeConfigService / ModelRegistryService / RuntimeProjectionService / AutomationService / ToolExecutionService`。它们是 platform 暴露给 `octopus-server` / `octopus-desktop` 的薄壳契约，不把 `AgentRuntime` 直接抬到 transport / host。
+- W7 新增 SDK-backed bridge 公共面：
+  ```rust
+  pub struct RuntimeSdkDeps { /* AgentRuntimeBuilder 所需依赖 */ }
+  pub struct RuntimeSdkFactory;
+  impl RuntimeSdkFactory {
+      pub fn new(deps: RuntimeSdkDeps) -> Self;
+      pub fn build(self) -> Result<Arc<RuntimeSdkBridge>, AppError>;
+  }
+  pub struct RuntimeSdkBridge;
+  impl RuntimeSessionService for RuntimeSdkBridge { /* create/get/list/list_events */ }
+  impl RuntimeExecutionService for RuntimeSdkBridge { /* submit_turn */ }
+  ```
+- 责任边界：`octopus-platform` 持有 `AgentRuntimeBuilder` 的组装权，并在 `runtime_sdk/*` 内完成 SDK event → legacy runtime DTO 投影；`octopus-server` / `octopus-desktop` 只消费 `PlatformServices`，不直接持有 `AgentRuntime`。
 
 ### 3.2 `octopus-persistence`（新）
 

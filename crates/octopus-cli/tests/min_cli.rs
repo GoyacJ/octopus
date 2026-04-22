@@ -1,13 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use async_trait::async_trait;
-use octopus_cli::run_once::run_once;
+use octopus_cli::run_once::{main_with_args, run_once};
 use octopus_sdk::{
-    builtin::register_builtins, AgentRuntime, AssistantEvent, AskAnswer, AskError, AskPrompt,
-    AskResolver, ContentBlock, Message, ModelError, ModelId, ModelProvider, ModelRequest,
-    ModelStream, NoopBackend, PermissionGate, PermissionMode, PermissionOutcome, ProviderDescriptor,
-    ProviderId, Role, SecretValue, SessionEvent, SqliteJsonlSessionStore, StartSessionInput,
-    StopReason, ToolCallRequest, ToolRegistry, VaultError,
+    builtin::register_builtins, AgentRuntime, AskAnswer, AskError, AskPrompt, AskResolver,
+    AssistantEvent, ContentBlock, Message, ModelError, ModelId, ModelProvider, ModelRequest,
+    ModelStream, NoopBackend, PermissionGate, PermissionMode, PermissionOutcome,
+    ProviderDescriptor, ProviderId, Role, SecretValue, SessionEvent, SqliteJsonlSessionStore,
+    StartSessionInput, StopReason, ToolCallRequest, ToolRegistry, VaultError,
 };
 
 struct AllowAllGate;
@@ -23,11 +23,7 @@ struct StaticAskResolver;
 
 #[async_trait]
 impl AskResolver for StaticAskResolver {
-    async fn resolve(
-        &self,
-        prompt_id: &str,
-        _prompt: &AskPrompt,
-    ) -> Result<AskAnswer, AskError> {
+    async fn resolve(&self, prompt_id: &str, _prompt: &AskPrompt) -> Result<AskAnswer, AskError> {
         Ok(AskAnswer {
             prompt_id: prompt_id.into(),
             option_id: "approve".into(),
@@ -73,6 +69,11 @@ impl ModelProvider for ScriptedModelProvider {
             catalog_version: "test".into(),
         }
     }
+}
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 #[tokio::test]
@@ -149,4 +150,73 @@ async fn test_run_once_uses_sdk_runtime() {
             content,
         }) if content.iter().any(|block| matches!(block, ContentBlock::Text { text } if text == "cli reply"))
     )));
+}
+
+#[tokio::test]
+async fn main_with_args_supports_init_command() {
+    let _guard = env_lock().lock().expect("env lock should remain available");
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let mut out = Vec::new();
+
+    main_with_args(
+        vec![
+            "octopus-cli".into(),
+            "init".into(),
+            root.path().display().to_string(),
+        ],
+        &mut out,
+    )
+    .await
+    .expect("init command should succeed");
+
+    let rendered = String::from_utf8(out).expect("stdout buffer should stay utf8");
+    assert!(rendered.contains("Init"));
+    assert!(root.path().join("CLAUDE.md").is_file());
+}
+
+#[tokio::test]
+async fn main_with_args_supports_slash_help() {
+    let _guard = env_lock().lock().expect("env lock should remain available");
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let previous_cwd = std::env::current_dir().expect("current dir should resolve");
+    std::env::set_current_dir(root.path()).expect("current dir should switch");
+
+    let mut out = Vec::new();
+    main_with_args(
+        vec!["octopus-cli".into(), "slash".into(), "/help".into()],
+        &mut out,
+    )
+    .await
+    .expect("slash help should succeed");
+
+    std::env::set_current_dir(previous_cwd).expect("current dir should restore");
+
+    let rendered = String::from_utf8(out).expect("stdout buffer should stay utf8");
+    assert!(rendered.contains("Slash commands"));
+    assert!(rendered.contains("/agents"));
+}
+
+#[tokio::test]
+async fn main_with_args_prints_scripted_reply() {
+    let _guard = env_lock().lock().expect("env lock should remain available");
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    std::env::set_var("OCTOPUS_CLI_SCRIPTED_RESPONSE", "cli scripted reply");
+
+    let mut out = Vec::new();
+    let result = main_with_args(
+        vec![
+            "octopus-cli".into(),
+            root.path().display().to_string(),
+            "scripted-model".into(),
+            "hello".into(),
+        ],
+        &mut out,
+    )
+    .await;
+
+    std::env::remove_var("OCTOPUS_CLI_SCRIPTED_RESPONSE");
+    result.expect("scripted cli path should succeed");
+
+    let rendered = String::from_utf8(out).expect("stdout buffer should stay utf8");
+    assert!(rendered.contains("cli scripted reply"));
 }

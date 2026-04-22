@@ -41,7 +41,7 @@ async function stopStaleWindowsDevProcesses() {
   const script = `
 $repoRoot = '${repoRootForPs}'
 $targets = @(
-  'octopus-desktop-backend.exe',
+  'octopus-desktop.exe',
   'octopus-desktop-shell.exe'
 )
 $processes = Get-CimInstance Win32_Process |
@@ -73,7 +73,7 @@ foreach ($process in $processes) {
 
 async function runCargoBuild() {
   const cargoCommand = process.platform === 'win32' ? 'cargo.exe' : 'cargo'
-  const child = spawn(cargoCommand, ['build', '-p', 'octopus-desktop-backend'], {
+  const child = spawn(cargoCommand, ['build', '-p', 'octopus-desktop'], {
     cwd: repoRoot,
     stdio: 'inherit',
   })
@@ -93,13 +93,13 @@ async function main() {
   await stopStaleWindowsDevProcesses()
   await runCargoBuild()
 
-  const source = join(repoRoot, 'target', 'debug', `octopus-desktop-backend${ext}`)
+  const source = join(repoRoot, 'target', 'debug', `octopus-desktop${ext}`)
   const targetDir = join(repoRoot, 'apps', 'desktop', 'src-tauri', 'bin')
-  const target = join(targetDir, `octopus-desktop-backend-${triple}${ext}`)
+  const target = join(targetDir, `octopus-desktop-${triple}${ext}`)
 
   await mkdir(targetDir, { recursive: true })
   await copyFile(source, target)
-  console.log(`Prepared desktop backend binary: ${target}`)
+  console.log(`Prepared desktop sidecar binary: ${target}`)
 }
 
 await main()

@@ -9,7 +9,9 @@ use octopus_sdk_sandbox::SandboxBackend;
 use octopus_sdk_session::{EventRange, EventStream, SessionSnapshot, SessionStore};
 use tokio_util::sync::CancellationToken;
 
-use crate::{brain_loop, RuntimeError, RunHandle, SessionHandle, StartSessionInput, SubmitTurnInput};
+use crate::{
+    brain_loop, RunHandle, RuntimeError, SessionHandle, StartSessionInput, SubmitTurnInput,
+};
 
 #[derive(Clone)]
 pub(crate) struct SessionRuntimeState {

@@ -30,9 +30,9 @@ fn ensure_sidecar_path_exists() {
 
 fn sidecar_name(target: &str) -> String {
     if target.contains("windows") {
-        format!("octopus-desktop-backend-{target}.exe")
+        format!("octopus-desktop-{target}.exe")
     } else {
-        format!("octopus-desktop-backend-{target}")
+        format!("octopus-desktop-{target}")
     }
 }
 
@@ -45,7 +45,7 @@ fn write_placeholder_sidecar(path: &Path) {
     fs::write(
         path,
         "#!/bin/sh\n\
-         echo 'octopus-desktop-backend sidecar has not been prepared. Run pnpm prepare:desktop-backend:sidecar.' >&2\n\
+         echo 'octopus-desktop sidecar has not been prepared. Run pnpm prepare:desktop-backend:sidecar.' >&2\n\
          exit 1\n",
     )
     .expect("placeholder sidecar should be writable");

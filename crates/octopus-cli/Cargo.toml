@@ -7,10 +7,14 @@ publish.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+crossterm = "0.28"
 futures = "0.3"
 octopus-sdk = { path = "../octopus-sdk" }
+pulldown-cmark = "0.13"
 reqwest.workspace = true
+rustyline = "15"
 serde_json.workspace = true
+syntect = "5"
 thiserror.workspace = true
 tokio.workspace = true
 

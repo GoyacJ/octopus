@@ -10,6 +10,7 @@ pub mod knowledge;
 pub mod observation;
 pub mod project;
 pub mod runtime;
+pub mod runtime_sdk;
 pub mod workspace;
 
 pub use access_control::AccessControlService;
@@ -25,6 +26,7 @@ pub use runtime::{
     AutomationService, ModelRegistryService, RuntimeConfigService, RuntimeExecutionService,
     RuntimeProjectionService, RuntimeSessionService, ToolExecutionService,
 };
+pub use runtime_sdk::{RuntimeSdkBridge, RuntimeSdkDeps, RuntimeSdkFactory};
 pub use workspace::WorkspaceService;
 
 #[derive(Clone)]

@@ -109,7 +109,7 @@ fn repo_root() -> PathBuf {
 fn ensure_backend_binary_exists() {
     let status = Command::new("cargo")
         .current_dir(repo_root())
-        .args(["build", "-p", "octopus-desktop-backend"])
+        .args(["build", "-p", "octopus-desktop"])
         .status()
         .expect("backend build should start");
 

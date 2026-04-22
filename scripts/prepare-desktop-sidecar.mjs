@@ -17,20 +17,20 @@ if (!hostLine) {
 
 const targetTriple = hostLine.replace('host: ', '').trim()
 const executableName = process.platform === 'win32'
-  ? 'octopus-desktop-backend.exe'
-  : 'octopus-desktop-backend'
+  ? 'octopus-desktop.exe'
+  : 'octopus-desktop'
 const sidecarName = process.platform === 'win32'
-  ? `octopus-desktop-backend-${targetTriple}.exe`
-  : `octopus-desktop-backend-${targetTriple}`
+  ? `octopus-desktop-${targetTriple}.exe`
+  : `octopus-desktop-${targetTriple}`
 
-execFileSync('cargo', ['build', '-p', 'octopus-desktop-backend', '--release', '--target', targetTriple], {
+execFileSync('cargo', ['build', '-p', 'octopus-desktop', '--release', '--target', targetTriple], {
   cwd: repoRoot,
   stdio: 'inherit',
 })
 
 const sourceBinary = join(repoRoot, 'target', targetTriple, 'release', executableName)
 if (!existsSync(sourceBinary)) {
-  throw new Error(`Built desktop backend binary was not found at ${sourceBinary}`)
+  throw new Error(`Built desktop sidecar binary was not found at ${sourceBinary}`)
 }
 
 const outputDir = join(repoRoot, 'apps', 'desktop', 'src-tauri', 'bin')

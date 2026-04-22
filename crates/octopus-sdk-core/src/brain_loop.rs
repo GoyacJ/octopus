@@ -48,8 +48,9 @@ pub(crate) async fn submit_turn(
             &transcript.messages,
         );
         let stream = inner.model_provider.complete(request).await?;
-        let turn = collect_assistant_turn(stream, inner.tracer.as_ref(), inner.usage_ledger.as_ref())
-            .await?;
+        let turn =
+            collect_assistant_turn(stream, inner.tracer.as_ref(), inner.usage_ledger.as_ref())
+                .await?;
 
         if turn.usage != octopus_sdk_contracts::Usage::default() {
             inner
@@ -159,7 +160,8 @@ async fn maybe_inject_stop_message(
         return Ok(false);
     }
 
-    if let Some(octopus_sdk_contracts::RewritePayload::UserPrompt { message }) = outcome.final_payload
+    if let Some(octopus_sdk_contracts::RewritePayload::UserPrompt { message }) =
+        outcome.final_payload
     {
         let event_id = inner
             .session_store

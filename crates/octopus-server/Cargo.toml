@@ -23,7 +23,8 @@ tower-http.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 octopus-infra = { path = "../octopus-infra" }
-octopus-runtime-adapter = { path = "../octopus-runtime-adapter" }
+octopus-sdk = { path = "../octopus-sdk" }
 tempfile.workspace = true
 tokio-stream.workspace = true
