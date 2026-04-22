@@ -19,7 +19,7 @@
   - 创建 14 个 `octopus-sdk-*` 子 crate + 顶层 `octopus-sdk` re-export。
   - 迁移现有 Anthropic/OpenAI 提供商、内置 15 工具、MCP client、Skill 加载器、权限、钩子、沙箱、上下文压缩、子代理编排、插件 Manifest/Registry、UI Intent IR 产出。
   - 业务侧 `octopus-server` / `octopus-desktop` / `octopus-cli` 接线到新 SDK；`octopus-runtime-adapter` 全量下线。
-  - 启用 `octopus-persistence` 作为全局唯一 SQLite 入口。
+  - 启用 `octopus-persistence` 作为业务侧统一 SQLite 入口。
   - 拆分 `octopus-core/lib.rs`（3861 行）、`octopus-infra/*.rs`（单文件 2–5K 行）按功能切小文件。
 - Out of scope：
   - Rust core 以外的语言 binding（TS/Py）——推迟到 SDK 稳定后的 Phase 2。
@@ -94,7 +94,7 @@
 | Crate | 职责 | 说明 |
 |---|---|---|
 | `octopus-platform` | 域对象与用例层 | 删除目前 `runtime.rs` 783 行的跨 SDK 胶水 |
-| `octopus-persistence`（**新**） | 唯一 SQLite schema + repository | 所有 `rusqlite::Connection` 走这里 |
+| `octopus-persistence`（**新**） | 业务侧 SQLite schema + repository | `octopus-platform / octopus-infra / octopus-server` 的 `rusqlite::Connection` 走这里；`octopus-sdk-session` 自持会话投影连接 |
 | `octopus-server` | Axum + OpenAPI 路由 | `handlers.rs` 4300 行按资源切 10+ 文件 |
 | `octopus-desktop` | Tauri 宿主桥 | 替换 `octopus-desktop-backend` |
 | `octopus-cli` | CLI 入口 | 合并 `rusty-claude-cli` + `commands` |
@@ -193,7 +193,7 @@
 
 - 出口状态：
   - `octopus-server` / `octopus-desktop` / `octopus-cli` 不再依赖任何遗留 crate。
-  - §2.3 列出的 **11 个遗留 crate 目录整体删除**；由于 `Cargo.toml` 使用 `crates/*` 通配，无需手动移除 member；`default-members` 按 `02-crate-topology.md §8` 更新为 5 业务 crate + `apps/desktop/src-tauri`。
+  - §2.3 列出的 **11 个遗留 crate 目录整体删除**；由于 `Cargo.toml` 使用 `crates/*` 通配，无需手动移除 member；`default-members` 与 `02-crate-topology.md §8` / live `Cargo.toml` 保持一致。
   - `/api/v1/runtime/*` 在新 SDK 下行为与 W6 出口状态一致。
 - 硬门禁：
   - `cargo build --workspace` 全绿；`pnpm -C apps/desktop test` 关键 suite 绿。
@@ -204,7 +204,7 @@
 ### W8 · 清理与拆分
 
 - 出口状态：
-  - `crates/octopus-persistence` 上线；`octopus-infra / octopus-server / octopus-sdk-session` 统一走它取 `Connection`。
+  - `crates/octopus-persistence` 上线；`octopus-platform / octopus-infra / octopus-server` 统一走它取 `Connection`；`octopus-sdk-session` 继续自持会话投影连接。
   - `octopus-core/lib.rs` 3861 行按 12 个域切小文件；`octopus-infra/infra_state.rs`（5176）、`agent_assets.rs`（4577）、`projects_teams.rs`（4961）、`access_control.rs`（2983）全部按资源切分，单文件 ≤ 800 行。
   - `octopus-server/handlers.rs`（4300）、`workspace_runtime.rs`（9890）按资源切分。
   - §2.3 列出的 11 个遗留 crate 目录在 W7 已全部删除；本周的验证动作是"grep + `ls crates/` 复核 + 书面 Weekly Gate 勾选"。
@@ -250,7 +250,7 @@
 全部满足方可宣告 SDK 重构完成，否则不得合入主干 release：
 
 1. `octopus-sdk` 作为业务唯一入口：`rg "use (runtime|tools|plugins|api|octopus_runtime_adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service|commands)::" crates/octopus-{platform,persistence,server,desktop,cli} apps/desktop/src-tauri` 无匹配。
-2. §2.3 列出的 **11 个遗留 crate 目录全部不存在**；`Cargo.toml` workspace 使用 `crates/*` 通配无需改动；`default-members` 已按 `02-crate-topology.md §8` 收敛到 5 业务 crate + Tauri app。
+2. §2.3 列出的 **11 个遗留 crate 目录全部不存在**；`Cargo.toml` workspace 使用 `crates/*` 通配无需改动；`default-members` 与 `02-crate-topology.md §8` / live `Cargo.toml` 保持一致。
 3. `ls crates/` 的目录集合与 `02-crate-topology.md §1` 的 15 个 SDK crate + 5 个业务 crate 完全吻合（共 20 个目录）。
 4. 全仓库 `cargo test --workspace` 全绿 + `pnpm -C apps/desktop test` 关键 suite 全绿 + `cargo clippy --workspace -- -D warnings` 全绿。
 5. Prompt cache 基线测试：工具顺序变更守护测试在 CI 中存在并绿。
@@ -354,3 +354,4 @@ cleanup+split                                                          │██
 | 2026-04-21 | W5 三轮审计追补：`plugins_snapshot` 硬门禁改成“首事件优先，必要时退回 `session.plugins_snapshot` 次事件”的显式双分支；W8/DoD 的 800 行守护命令改成真实按行数检查。 | Codex |
 | 2026-04-21 | W5 Weekly Gate 收尾：`08-week-5-subagent-plugin.md` 由 `in_progress` 切为 `done`；2 个 SDK crate（subagent / plugin）落地；Level 0 contracts W5 补丁完成；`plugins_snapshot` replay 合同、四源合一守护与 workspace `build/clippy/test` 全部通过。 | Codex |
 | 2026-04-22 | W7 Weekly Gate 收尾：`10-week-7-business-cutover.md` 由 `in_progress` 切为 `done`。`octopus-server / octopus-desktop / octopus-cli` 已全部切到 SDK 业务链，11 个 legacy crate 目录已删除；`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与 W7 的 legacy grep / `ls crates/` / Phase 4/8 治理守护全部通过。 | Codex |
+| 2026-04-22 | W8 文档审计修复：`octopus-persistence` 的口径收敛为“业务侧统一 SQLite 入口”，`octopus-sdk-session` 保持独立双通道存储；W7/W8 与 DoD 的 `default-members` 口径改为引用 `02-crate-topology.md §8` 与 live `Cargo.toml` 的现行一致性，不再写死“5 业务 crate + Tauri app”。 | Codex |

@@ -1792,7 +1792,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 
 ### 3.2 `octopus-persistence`（新）
 
-- 职责：SQLite schema 定义 + migration + repository trait；所有 `rusqlite::Connection` 生命周期集中管理。
+- 职责：业务侧 SQLite schema 定义 + migration + repository trait；业务 crate 的 `rusqlite::Connection` 生命周期集中管理。
 - 公共面：
   ```rust
   pub struct Database { /* ... */ }
@@ -1947,7 +1947,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
 - W7 同步删除：`crates/runtime`、`crates/tools`、`crates/plugins`、`crates/api`、`crates/octopus-runtime-adapter`、`crates/commands`、`crates/compat-harness`、`crates/mock-anthropic-service`、`crates/rusty-claude-cli`、`crates/octopus-desktop-backend`、`crates/octopus-model-policy`。
 - W7 当前 `Cargo.toml` 继续使用 `members = ["apps/desktop/src-tauri", "crates/*"]`；目录删完后 workspace 实盘应只剩上述 crate。
-- `default-members` 当前为：`apps/desktop/src-tauri / octopus-core / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除。
+- `default-members` 的现行控制面以 live `Cargo.toml` 为准：`apps/desktop/src-tauri / octopus-core / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除；若 W8 后续决定收敛默认编译闭包，必须同批修改 `Cargo.toml`、本节与 `00-overview.md §3/§5`。
 
 ---
 
@@ -1974,7 +1974,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 |---|---|---|
 | 2026-04-20 | 首稿：依赖图、15 crate 公共面草签、命名规约、差异清单/IR 登记表骨架、workspace 变更要点 | Architect |
 | 2026-04-20 | P0 架构修订：`sdk-permissions` 由 Level 3 下调到 Level 2，与 `tools/sandbox/ui-intent/hooks/plugin/mcp` 同层并明文同层协作规则；`SecretVault` trait 下沉到 Level 0 `octopus-sdk-contracts`，门面 crate 改为纯 re-export（去除 trait 定义） | Architect |
-| 2026-04-20 | P1 修订：§1 依赖图补充 "ui-intent → session" 事件回写箭头；§2.12 注明依赖；§8 `default-members` 补齐 `octopus-persistence`（共 5 业务 crate + Tauri app） | Architect |
+| 2026-04-20 | P1 修订：§1 依赖图补充 "ui-intent → session" 事件回写箭头；§2.12 注明依赖；§8 首次补记 `default-members` 目标态草案。 | Architect |
 | 2026-04-21 | W1 执行回填：补齐 `RenderMeta`、ID `new_v4()`、`SecretValue::{new, as_bytes}` 公共面；登记 `SessionStarted` 首事件不变量与 W1↔OpenAPI 差异清单首批条目 | Codex |
 | 2026-04-21 | W2 计划审计回填：`ToolSchema` 下沉到 `§2.1`；`§2.3` 补齐 `ProviderStatus / ContextWindow / ProviderDescriptor / ResponseFormat / ThinkingConfig / CacheControlStrategy / ModelError / FallbackTrigger / DefaultModelProvider::complete_with_fallback` 与 `ModelRequest` 新字段；注明 `ModelRole` 暂不含 `rerank` 的 Fact-Fix 回链 | Codex |
 | 2026-04-21 | W4 Task 1：Level 0 contracts 补丁完成；`PermissionOutcome` 补 `RequireAuth`，新增 `HookEvent / HookDecision / Compaction* / Memory*`，并把 `ToolCategory` 从 `§2.4` 反向下沉到 `§2.1`，`sdk-tools` 以 re-export 保持源兼容 | Codex |
@@ -1993,6 +1993,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-21 | W5 Task 7：`§2.11` 回填 `SDK_PLUGIN_API_VERSION / PluginCompat / PluginManifest / PluginComponent` 12 变体、8 个最小 decl、`PluginDiscoveryConfig::default_roots()` 与 `PluginError` 10 型；Manifest/security/compat 合同与当前实现对齐 | Codex |
 | 2026-04-21 | W5 Task 8：`§2.11` 回填 `PluginRegistry::{new,register_plugin,get_snapshot}`、`Plugin`、`PluginApi` 与 `PluginLifecycle::run`；明确 tools/hooks 走 runtime registration，skills/model providers 仍停在 metadata | Codex |
 | 2026-04-21 | W5 Task 9：`§2.11` 把 `PluginLifecycle::run` 明确为 `discover/config + supplied plugins` 双输入，并登记 `example_bundled_plugins()`；bundled fixture、deny 过滤和 4 条错误路径合同与当前实现对齐 | Codex |
+| 2026-04-22 | W8 文档审计修复：`§3.2` 明确 `octopus-persistence` 只管理业务侧 SQLite 连接，`SqliteJsonlSessionStore` 继续独立；`§8` 的 `default-members` 改为“以 live `Cargo.toml` 为现行控制面”，并要求未来任何收敛都与 `00-overview.md` / `Cargo.toml` 同批更新。 | Codex |
 | 2026-04-21 | W5 Task 10：`§2.2` 明确 `plugins_snapshot` 的 helper/store/replay 目标态已经落到双分支实现；`§5` 把差异项改成“SDK store/replay 已落地、OpenAPI/schema 仍待对齐”的状态描述，并把 `plugins_snapshot_stability` 作为回放合同锚点 | Codex |
 | 2026-04-21 | W5 Weekly Gate 收尾：`§2.10 / §2.11 / §5` 的 W5 公共面与合同差异登记完成收口；`plugins_snapshot` 双分支 replay、四源合一守护与 legacy 退役映射已对齐到周收尾状态 | Codex |
 | 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |
