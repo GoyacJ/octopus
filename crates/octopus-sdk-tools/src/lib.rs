@@ -16,6 +16,9 @@ mod tool;
 
 pub use octopus_sdk_contracts::ToolCategory;
 
+pub use builtin::{
+    builtin_tool_catalog, BuiltinToolCatalog, BuiltinToolMetadata, BuiltinToolPermission,
+};
 pub use constants::*;
 pub use context::*;
 pub use error::*;

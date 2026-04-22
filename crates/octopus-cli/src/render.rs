@@ -276,8 +276,10 @@ impl TerminalRenderer {
         in_code_block: &mut bool,
     ) {
         match event {
-            Event::Start(Tag::Paragraph) => {}
-            Event::End(TagEnd::Paragraph) => output.push('\n'),
+            Event::End(TagEnd::Paragraph)
+            | Event::SoftBreak
+            | Event::HardBreak
+            | Event::End(TagEnd::Item) => output.push('\n'),
             Event::Start(Tag::Heading { level, .. }) => {
                 if !output.ends_with('\n') && !output.is_empty() {
                     output.push('\n');
@@ -299,7 +301,6 @@ impl TerminalRenderer {
                 let rendered = format!("{}", text.with(self.color_theme.inline_code));
                 state.append_raw(output, &rendered);
             }
-            Event::SoftBreak | Event::HardBreak => output.push('\n'),
             Event::Start(Tag::Emphasis) => state.emphasis += 1,
             Event::End(TagEnd::Emphasis) => state.emphasis = state.emphasis.saturating_sub(1),
             Event::Start(Tag::Strong) => state.strong += 1,
@@ -332,7 +333,6 @@ impl TerminalRenderer {
                 output.push_str(&indent);
                 output.push_str(&marker);
             }
-            Event::End(TagEnd::Item) => output.push('\n'),
             Event::Start(Tag::Link { dest_url, .. }) => {
                 state.link_stack.push(LinkState {
                     destination: dest_url.to_string(),
@@ -382,14 +382,12 @@ impl TerminalRenderer {
                     table.in_head = false;
                 }
             }
-            Event::Start(Tag::TableRow) => {}
             Event::End(TagEnd::TableRow) => {
                 if let Some(table) = state.table.as_mut() {
                     table.push_cell();
                     table.finish_row();
                 }
             }
-            Event::Start(Tag::TableCell) => {}
             Event::End(TagEnd::TableCell) => {
                 if let Some(table) = state.table.as_mut() {
                     table.push_cell();
@@ -444,16 +442,14 @@ fn render_table(table: &TableState, border: Color) -> String {
         })
         .collect::<Vec<_>>();
 
-    let border_line = format!(
-        "{}\n",
-        widths
-            .iter()
-            .map(|width| format!("+{}", "-".repeat(width + 2)))
-            .collect::<String>()
-            + "+"
-    );
+    let mut border_line = String::new();
+    for width in &widths {
+        border_line.push('+');
+        border_line.push_str(&"-".repeat(width + 2));
+    }
+    border_line.push_str("+\n");
     let mut output = String::new();
-    output.push_str(&format!("{}", border_line.as_str().with(border)));
+    let _ = write!(output, "{}", border_line.as_str().with(border));
     for (index, row) in rows.iter().enumerate() {
         output.push('|');
         for (cell, width) in row.iter().zip(widths.iter()) {
@@ -461,10 +457,10 @@ fn render_table(table: &TableState, border: Color) -> String {
         }
         output.push('\n');
         if index == 0 && !table.headers.is_empty() {
-            output.push_str(&format!("{}", border_line.as_str().with(border)));
+            let _ = write!(output, "{}", border_line.as_str().with(border));
         }
     }
-    output.push_str(&format!("{}", border_line.as_str().with(border)));
+    let _ = write!(output, "{}", border_line.as_str().with(border));
     output
 }
 

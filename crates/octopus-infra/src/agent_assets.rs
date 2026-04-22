@@ -19,6 +19,7 @@ use octopus_core::{
     BundleAssetDescriptorRecord, DefaultModelStrategy, ExportWorkspaceAgentBundleInput,
     ImportIssue, TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
 };
+use octopus_sdk_tools::builtin_tool_catalog;
 use rusqlite::{params, Connection};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
@@ -1722,21 +1723,22 @@ fn first_paragraph_after_heading(body: &str, heading: &str) -> Option<String> {
 }
 
 fn resolve_builtin_tool_keys(values: Vec<String>, builtin_tool_keys: &[String]) -> Vec<String> {
+    let catalog = builtin_tool_catalog();
     if values.iter().any(|value| value.eq_ignore_ascii_case("ALL")) {
         return builtin_tool_keys.to_vec();
     }
-    let builtin_set = builtin_tool_keys.iter().collect::<BTreeSet<_>>();
+    let builtin_set = builtin_tool_keys.iter().cloned().collect::<BTreeSet<_>>();
+    let mut seen = BTreeSet::new();
     values
         .into_iter()
-        .filter(|value| builtin_set.contains(&value))
+        .filter_map(|value| catalog.resolve(&value).map(|entry| entry.name.to_string()))
+        .filter(|value| builtin_set.contains(value))
+        .filter(|value| seen.insert(value.clone()))
         .collect()
 }
 
 fn builtin_tool_keys() -> Vec<String> {
-    tools::mvp_tool_specs()
-        .iter()
-        .map(|spec| spec.name.to_string())
-        .collect()
+    builtin_tool_catalog().names()
 }
 
 fn hash_text(value: &str) -> String {

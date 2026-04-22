@@ -146,13 +146,13 @@ mod tests {
             "Find things",
             "Precise",
             "You are a researcher",
-            &["read".into()],
+            &["read_file".into()],
             &["skill-research".into()],
         );
 
         assert_eq!(record.manifest_revision, ASSET_MANIFEST_REVISION_V2);
         assert_eq!(record.task_domains, vec!["research"]);
-        assert_eq!(record.capability_policy.builtin_tool_keys, vec!["read"]);
+        assert_eq!(record.capability_policy.builtin_tool_keys, vec!["read_file"]);
         assert_eq!(record.capability_policy.skill_ids, vec!["skill-research"]);
         assert_eq!(record.import_metadata.translation_status, "native");
     }

@@ -8,7 +8,6 @@ default-members = [
   "crates/octopus-core",
   "crates/octopus-platform",
   "crates/octopus-infra",
-  "crates/octopus-runtime-adapter",
   "crates/octopus-server",
   "crates/octopus-desktop",
   "crates/octopus-sdk-contracts",

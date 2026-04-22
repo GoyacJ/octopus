@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 
 import { repoRoot } from './governance-lib.mjs'
 
@@ -90,6 +91,9 @@ async function findViolations({ label, roots, patterns }) {
 
   for (const relativeRoot of roots) {
     const absoluteRoot = path.join(repoRoot, relativeRoot)
+    if (!existsSync(absoluteRoot)) {
+      continue
+    }
     const files = await walk(absoluteRoot)
 
     for (const filePath of files) {

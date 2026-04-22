@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 
 import { repoRoot } from './governance-lib.mjs'
 
@@ -95,11 +96,19 @@ async function collectFiles({ roots = [], files = [] }) {
   const collected = []
 
   for (const relativeRoot of roots) {
-    collected.push(...await walk(path.join(repoRoot, relativeRoot)))
+    const absoluteRoot = path.join(repoRoot, relativeRoot)
+    if (!existsSync(absoluteRoot)) {
+      continue
+    }
+    collected.push(...await walk(absoluteRoot))
   }
 
   for (const relativeFile of files) {
-    collected.push(path.join(repoRoot, relativeFile))
+    const absoluteFile = path.join(repoRoot, relativeFile)
+    if (!existsSync(absoluteFile)) {
+      continue
+    }
+    collected.push(absoluteFile)
   }
 
   return collected

@@ -575,11 +575,11 @@ pub(crate) fn runtime_permission_mode(
         .as_str()
     {
         "" => Ok(default_mode),
-        "default" => Ok(octopus_sdk::PermissionMode::Default),
+        "default" | "auto" | "ask" | "workspace-write" => {
+            Ok(octopus_sdk::PermissionMode::Default)
+        }
         "accept_edits" | "accept-edits" => Ok(octopus_sdk::PermissionMode::AcceptEdits),
-        "plan" => Ok(octopus_sdk::PermissionMode::Plan),
-        "readonly" | "read-only" => Ok(octopus_sdk::PermissionMode::Plan),
-        "auto" | "ask" | "workspace-write" => Ok(octopus_sdk::PermissionMode::Default),
+        "plan" | "readonly" | "read-only" => Ok(octopus_sdk::PermissionMode::Plan),
         "bypass_permissions" | "bypass-permissions" | "bypass" | "danger-full-access" => {
             Ok(octopus_sdk::PermissionMode::BypassPermissions)
         }

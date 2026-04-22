@@ -14,6 +14,7 @@
 - **替代映射必须原子**：禁止"删除旧符号但未指定替代物"的 commit；如确实为废弃（无替代），标记 `deprecate-with-no-successor` 并在 §7 专列理由。
 - **"替代位置"路径是目标态**：本文档"替代位置"一列中出现的 `octopus-platform::{config, governance, host, runtime_config, catalog, secret_vault, bootstrap, memory, session_bridge}` 等子模块，在当前 `octopus-platform/src/` 中**尚不存在**，它们将在 W4–W7 过程中按"业务侧薄壳"原则新建。现状下不存在即属预期，不得据此扫描判定失败。新建时必须遵守 `02-crate-topology.md §3.1` 的业务侧 crate 规约（薄壳 ≤ 300 行 / 不承载 SDK 能力）。
 - **行数基准**：本文档所有代码规模数字取自 2026-04-20 `wc -l` 实测；变动超过 ±10% 时，下一批 PR 必须同步修订本文档。
+- W7 `Task 7` 完成后，目录级退役状态以 `§9 已退役（Completed）` 为准；`§2–§7` 的模块级矩阵保留迁移历史，不再要求逐行把过程态 `pending / partial / replaced` 回写成目录删除态。
 
 ## 1. 总览：退役对象与替代去向
 
@@ -272,7 +273,17 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 
 | 日期 | 移除内容 | 替代位置 | Commit |
 |---|---|---|---|
-| — | — | — | — |
+| 2026-04-22 | `crates/runtime` | `octopus-sdk-session` / `octopus-sdk-context` / `octopus-sdk-permissions` / `octopus-sdk-hooks` / `octopus-sdk-sandbox` / `octopus-sdk-mcp` / `octopus-sdk-tools` | working tree |
+| 2026-04-22 | `crates/tools` | `octopus-sdk-tools` / `octopus-sdk-subagent` | working tree |
+| 2026-04-22 | `crates/plugins` | `octopus-sdk-plugin` / `octopus-sdk-hooks` | working tree |
+| 2026-04-22 | `crates/api` | `octopus-sdk-model` | working tree |
+| 2026-04-22 | `crates/octopus-runtime-adapter` | `octopus-sdk` + `octopus-platform` bridge | working tree |
+| 2026-04-22 | `crates/commands` | `octopus-cli` | working tree |
+| 2026-04-22 | `crates/compat-harness` | deprecate-with-no-successor | working tree |
+| 2026-04-22 | `crates/mock-anthropic-service` | `octopus-sdk-model` tests/fixtures | working tree |
+| 2026-04-22 | `crates/rusty-claude-cli` | `octopus-cli` | working tree |
+| 2026-04-22 | `crates/octopus-desktop-backend` | `crates/octopus-desktop` | working tree |
+| 2026-04-22 | `crates/octopus-model-policy` | `octopus-sdk-model::RoleRouter` | working tree |
 
 ---
 
@@ -285,3 +296,5 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 | 2026-04-20 | P1 修订：§0 增加"目标态路径"说明，明确 `octopus-platform::{config/governance/host/…}` 等子模块属 W4–W7 新建目标态，当前不存在即属预期 | Architect |
 | 2026-04-21 | 审计修复：`§8` 的 Weekly Gate 守护扫描把单文件 ≤ 800 行检查从 `find -size +800` 改为 `wc -l + awk` 行数版，并同步把 W8 特例说明改成引用该命令 | Codex |
 | 2026-04-21 | W5 Weekly Gate 收尾：`runtime::plugin_lifecycle`、`plugins::{manifest,hooks,hook_dispatch,lifecycle}` 已切到 `replaced`；`plugins::discovery` 保持 `partial`，`tools::subagent_runtime` 维持 greenfield SDK 覆盖边界；`worker_boot` 继续留在 W7，并明确 W5 只保留 non-source 说明 | Codex |
+| 2026-04-22 | W7 Task 7：11 个 legacy crate 目录已从 workspace 实盘删除；`§9 已退役` 新增目录级完成记录，并声明目录删除态以 `§9` 为准 | Codex |
+| 2026-04-22 | W7 Weekly Gate 收尾：11 个 legacy crate 的删除态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、desktop 全量测试、legacy grep、`ls crates/` 与 Phase 4/8 治理脚本复核通过，W7 目录级退役状态冻结。 | Codex |

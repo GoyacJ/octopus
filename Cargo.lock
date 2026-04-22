@@ -109,19 +109,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "api"
-version = "0.2.5"
-dependencies = [
- "octopus-model-policy",
- "reqwest 0.12.28",
- "runtime",
- "serde",
- "serde_json",
- "telemetry",
- "tokio",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -856,24 +843,6 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
-]
-
-[[package]]
-name = "commands"
-version = "0.2.5"
-dependencies = [
- "plugins",
- "runtime",
- "serde_json",
-]
-
-[[package]]
-name = "compat-harness"
-version = "0.2.5"
-dependencies = [
- "commands",
- "runtime",
- "tools",
 ]
 
 [[package]]
@@ -2956,15 +2925,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mock-anthropic-service"
-version = "0.2.5"
-dependencies = [
- "api",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "muda"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3315,7 +3275,8 @@ dependencies = [
  "include_dir",
  "octopus-core",
  "octopus-platform",
- "runtime",
+ "octopus-sdk-mcp",
+ "octopus-sdk-tools",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3324,14 +3285,9 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 0.8.2",
- "tools",
  "uuid",
  "zip 2.4.2",
 ]
-
-[[package]]
-name = "octopus-model-policy"
-version = "0.2.5"
 
 [[package]]
 name = "octopus-platform"
@@ -3350,31 +3306,6 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "octopus-runtime-adapter"
-version = "0.2.5"
-dependencies = [
- "api",
- "async-trait",
- "base64 0.22.1",
- "chacha20poly1305",
- "getrandom 0.2.17",
- "octopus-core",
- "octopus-infra",
- "octopus-model-policy",
- "octopus-platform",
- "plugins",
- "reqwest 0.12.28",
- "runtime",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tools",
- "uuid",
 ]
 
 [[package]]
@@ -4053,14 +3984,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "plugins"
-version = "0.2.5"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4572,9 +4495,7 @@ checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "futures-channel",
  "futures-core",
- "futures-util",
  "http",
  "http-body",
  "http-body-util",
@@ -4708,21 +4629,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "runtime"
-version = "0.2.5"
-dependencies = [
- "glob",
- "plugins",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "telemetry",
- "tokio",
- "walkdir",
 ]
 
 [[package]]
@@ -4876,27 +4782,6 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
-
-[[package]]
-name = "rusty-claude-cli"
-version = "0.2.5"
-dependencies = [
- "api",
- "commands",
- "compat-harness",
- "crossterm",
- "mock-anthropic-service",
- "octopus-model-policy",
- "plugins",
- "pulldown-cmark",
- "runtime",
- "rustyline",
- "serde",
- "serde_json",
- "syntect",
- "tokio",
- "tools",
-]
 
 [[package]]
 name = "rustyline"
@@ -6300,22 +6185,6 @@ name = "toml_writer"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
-
-[[package]]
-name = "tools"
-version = "0.2.5"
-dependencies = [
- "api",
- "glob",
- "plugins",
- "reqwest 0.12.28",
- "runtime",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "tokio",
-]
 
 [[package]]
 name = "tower"

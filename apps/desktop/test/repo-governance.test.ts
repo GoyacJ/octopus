@@ -262,8 +262,8 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['check:desktop-release']).toContain('pnpm check:runtime-phase8')
   })
 
-  it('keeps the Phase 8 plan aligned with the compat-only legacy deletion gate', () => {
-    const phaseEightPlan = readRepoFile('docs', 'plans', 'runtime', 'phase-8-legacy-deletion.md')
+  it('keeps the W7 business cutover plan aligned with the legacy deletion gate', () => {
+    const weekSevenPlan = readRepoFile('docs', 'plans', 'sdk', '10-week-7-business-cutover.md')
     const phaseEightScript = readRepoFile('scripts', 'check-runtime-phase8-governance.mjs')
 
     expect(phaseEightScript).toContain('/\\bturn_submit\\b/')
@@ -271,19 +271,13 @@ describe('repository governance', () => {
     expect(phaseEightScript).toContain('/\\bSkillDiscoveryInput\\b/')
     expect(phaseEightScript).toContain('/\\bSkillToolInput\\b/')
     expect(phaseEightScript).not.toContain('/\\bsubmit_turn\\b/')
+    expect(phaseEightScript).toContain("if (!existsSync(absoluteRoot)) {")
 
-    expect(phaseEightPlan).toContain(
-      'rg -n "turn_submit|ExecutionResponse|RuntimeModelExecutor|execute_turn\\\\(" crates/octopus-runtime-adapter/src',
-    )
-    expect(phaseEightPlan).toContain(
-      'rg -n "\\"SkillDiscovery\\"|\\"SkillTool\\"|SkillDiscoveryInput|SkillToolInput|run_skill_discovery|run_skill_tool" crates/tools/src crates/octopus-runtime-adapter/src',
-    )
-    expect(phaseEightPlan).not.toContain(
-      'rg -n "turn_submit|submit_turn\\\\(" crates/octopus-runtime-adapter/src crates/runtime/src',
-    )
-    expect(phaseEightPlan).not.toContain(
-      'rg -n "SkillDiscovery|SkillTool" crates/tools/src crates/octopus-runtime-adapter/src',
-    )
+    expect(weekSevenPlan).toContain('### Task 7: workspace 收口与 11 个 legacy crate 删除')
+    expect(weekSevenPlan).toContain('Action: 跑 W7 守护扫描，确认 legacy 依赖和 legacy 目录都已清零')
+    expect(weekSevenPlan).toContain('Done when: legacy grep 与 `ls crates/` 守护命令全绿。')
+    expect(weekSevenPlan).toContain('Verify: `! rg "(')
+    expect(weekSevenPlan).toContain("! ls crates/ | rg '^(runtime|tools|plugins|api|")
   })
 
   it('documents AI-first API governance through canonical policy docs and local AGENTS files', () => {

@@ -1,4 +1,5 @@
 mod ask_user_question;
+mod catalog;
 mod fs_edit;
 mod fs_glob;
 mod fs_grep;
@@ -16,6 +17,9 @@ use std::sync::Arc;
 use crate::{RegistryError, Tool, ToolRegistry};
 
 pub use ask_user_question::AskUserQuestionTool;
+pub use catalog::{
+    builtin_tool_catalog, BuiltinToolCatalog, BuiltinToolMetadata, BuiltinToolPermission,
+};
 pub use fs_edit::FileEditTool;
 pub use fs_glob::GlobTool;
 pub use fs_grep::GrepTool;

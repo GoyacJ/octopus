@@ -143,13 +143,13 @@ describe('Workspace tools view', () => {
     const mounted = mountApp()
 
     await waitForText(mounted.container, 'bash')
-    expect(mounted.container.textContent).not.toContain('image_query')
+    expect(mounted.container.textContent).not.toContain('web_fetch')
 
     const nextButton = findButton(mounted.container, 'Next')
     expect(nextButton).toBeDefined()
     nextButton!.click()
 
-    await waitForText(mounted.container, 'image_query')
+    await waitForText(mounted.container, 'web_fetch')
 
     mounted.destroy()
   })

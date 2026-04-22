@@ -698,6 +698,23 @@ pub enum ExecBatch<'a> {
     Serial(Vec<&'a ToolCallRequest>),
 }
 
+pub enum BuiltinToolPermission { ReadOnly, WorkspaceWrite, DangerFullAccess }
+
+pub struct BuiltinToolMetadata {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub description: &'static str,
+    pub required_permission: BuiltinToolPermission,
+}
+
+pub struct BuiltinToolCatalog { /* immutable builtin metadata view */ }
+impl BuiltinToolCatalog {
+    pub fn entries(&self) -> &'static [BuiltinToolMetadata];
+    pub fn names(&self) -> Vec<String>;
+    pub fn name_set(&self) -> BTreeSet<String>;
+    pub fn resolve(&self, name: &str) -> Option<&'static BuiltinToolMetadata>;
+}
+
 pub fn partition_tool_calls<'a>(
     calls: &'a [ToolCallRequest],
     registry: &ToolRegistry,
@@ -729,6 +746,7 @@ pub mod builtin {
     impl TaskListTool { pub fn new() -> Self; }
     impl TaskGetTool { pub fn new() -> Self; }
     pub fn register_builtins(registry: &mut ToolRegistry) -> Result<(), RegistryError>;
+    pub fn builtin_tool_catalog() -> BuiltinToolCatalog;
 }
 
 #[async_trait]
@@ -750,6 +768,7 @@ pub const DEFAULT_TOOL_MAX_CONCURRENCY: usize = 10;
 - `ToolCategory` 已在 W4 下沉到 `§2.1 octopus-sdk-contracts`。
 - `octopus-sdk-tools` 保持 `pub use octopus_sdk_contracts::ToolCategory`，现有 call-site 无需改名。
 - 排序稳定性契约不变：`ToolRegistry::schemas_sorted()` 继续按 `category_priority() + name` 排序。
+- W7 补充 builtin catalog 公共面：业务侧 builtin 真相源改为 `builtin_tool_catalog()`，canonical 名固定为 `read_file / write_file / edit_file / glob / grep / bash / web_search / web_fetch / ask_user_question / todo_write / sleep / task / skill / task_list / task_get`；兼容 alias 只保留在 `resolve()`，不再作为 UI/fixture 主名称。
 
 ### 2.5 `octopus-sdk-mcp`（Level 2）
 
@@ -897,7 +916,97 @@ pub struct SdkTransport { /* in-process */ }
 impl SdkTransport {
     pub fn from_directory(directory: Arc<dyn ToolDirectory>) -> Self;
 }
+
+pub struct McpOAuthConfig {
+    pub client_id: Option<String>,
+    pub callback_port: Option<u16>,
+    pub auth_server_metadata_url: Option<String>,
+    pub xaa: Option<bool>,
+}
+pub struct McpStdioServerConfig {
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    pub tool_call_timeout_ms: Option<u64>,
+}
+pub struct McpRemoteServerConfig {
+    pub url: String,
+    pub headers: BTreeMap<String, String>,
+    pub headers_helper: Option<String>,
+    pub oauth: Option<McpOAuthConfig>,
+}
+pub struct McpWebSocketServerConfig {
+    pub url: String,
+    pub headers: BTreeMap<String, String>,
+    pub headers_helper: Option<String>,
+}
+pub struct McpSdkServerConfig { pub name: String }
+pub struct McpManagedProxyServerConfig {
+    pub url: String,
+    pub id: String,
+}
+pub enum McpServerConfig {
+    Stdio(McpStdioServerConfig),
+    Sse(McpRemoteServerConfig),
+    Http(McpRemoteServerConfig),
+    Ws(McpWebSocketServerConfig),
+    Sdk(McpSdkServerConfig),
+    ManagedProxy(McpManagedProxyServerConfig),
+}
+impl McpServerConfig {
+    pub fn endpoint(&self) -> String;
+    pub const fn transport_label(&self) -> &'static str;
+}
+
+pub struct DiscoveredMcpToolDefinition {
+    pub name: String,
+    pub description: Option<String>,
+}
+pub struct DiscoveredMcpPromptDefinition {
+    pub name: String,
+    pub description: Option<String>,
+}
+pub struct DiscoveredMcpResource {
+    pub uri: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub mime_type: Option<String>,
+}
+pub struct ManagedMcpTool {
+    pub server_name: String,
+    pub qualified_name: String,
+    pub raw_name: String,
+    pub tool: DiscoveredMcpToolDefinition,
+}
+pub struct ManagedMcpPrompt {
+    pub server_name: String,
+    pub qualified_name: String,
+    pub raw_name: String,
+    pub prompt: DiscoveredMcpPromptDefinition,
+}
+pub struct DiscoveredMcpServerCapabilities {
+    pub tools: Vec<ManagedMcpTool>,
+    pub prompts: Vec<ManagedMcpPrompt>,
+    pub resources: Vec<DiscoveredMcpResource>,
+    pub status_detail: Option<String>,
+    pub availability: String,
+}
+impl DiscoveredMcpServerCapabilities {
+    pub fn finalize(self) -> Self;
+}
+
+pub fn parse_mcp_servers(document: &serde_json::Map<String, serde_json::Value>) -> BTreeMap<String, McpServerConfig>;
+pub fn parse_mcp_server_config(value: &serde_json::Value) -> Option<McpServerConfig>;
+pub fn mcp_endpoint(config: &McpServerConfig) -> String;
+pub fn qualified_mcp_tool_name(server_name: &str, tool_name: &str) -> String;
+pub fn qualified_mcp_prompt_name(server_name: &str, prompt_name: &str) -> String;
+pub fn qualified_mcp_resource_name(server_name: &str, uri: &str) -> String;
+pub async fn discover_mcp_server_capabilities_best_effort(
+    servers: &BTreeMap<String, McpServerConfig>,
+) -> BTreeMap<String, DiscoveredMcpServerCapabilities>;
 ```
+
+W7 补充：`octopus-sdk-mcp` 对外提供 runtime config 里的 MCP server 解析与 best-effort discovery helper，供 `octopus-infra` / `octopus-platform` 共用，替代业务层继续依赖 legacy `runtime::ScopedMcpServerConfig` / `runtime::McpServerManager`。
 
 ### 2.6 `octopus-sdk-context`（Level 3）
 
@@ -1815,7 +1924,6 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
   apps/desktop/src-tauri,
   crates/octopus-core,
-  crates/octopus-persistence,      # W8 新增
   crates/octopus-platform,
   crates/octopus-infra,             # 保留（W8 按资源拆文件）
   crates/octopus-server,
@@ -1833,13 +1941,13 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   crates/octopus-sdk-hooks,
   crates/octopus-sdk-subagent,
   crates/octopus-sdk-plugin,
-  crates/octopus-sdk-ui-intent,
   crates/octopus-sdk-observability,
   crates/octopus-sdk-core,
   crates/telemetry,                 # 保留；W6 被 observability 引用后评估是否并入
   ```
 - W7 同步删除：`crates/runtime`、`crates/tools`、`crates/plugins`、`crates/api`、`crates/octopus-runtime-adapter`、`crates/commands`、`crates/compat-harness`、`crates/mock-anthropic-service`、`crates/rusty-claude-cli`、`crates/octopus-desktop-backend`、`crates/octopus-model-policy`。
-- `default-members` 列五个业务 crate + Tauri app：`apps/desktop/src-tauri / octopus-core / octopus-persistence / octopus-platform / octopus-server / octopus-desktop`。保证 `cargo build --default-members` 的可编译闭包完整（`octopus-server` 依赖 `octopus-persistence`，后者必须在 default 列中）。
+- W7 当前 `Cargo.toml` 继续使用 `members = ["apps/desktop/src-tauri", "crates/*"]`；目录删完后 workspace 实盘应只剩上述 crate。
+- `default-members` 当前为：`apps/desktop/src-tauri / octopus-core / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除。
 
 ---
 
@@ -1889,3 +1997,4 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-21 | W5 Weekly Gate 收尾：`§2.10 / §2.11 / §5` 的 W5 公共面与合同差异登记完成收口；`plugins_snapshot` 双分支 replay、四源合一守护与 legacy 退役映射已对齐到周收尾状态 | Codex |
 | 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |
 | 2026-04-22 | W6 审计收口：`§2.14` builder 从 `PermissionPolicy` / `with_subagent_orchestrator(...)` 收敛为当前可装配执行链的 `PermissionGate / AskResolver / PluginsSnapshot / TaskFn / Tracer`；`build()` 明确不做 plugin discover；`cancel()` 语义收窄到当前进程内 active run；`§2.9` 增记 hooks source order 若偏离 `session > project > plugin > workspace > defaults` 则阻断 W6 plugin hook 接线 | Codex |
+| 2026-04-22 | W7 Weekly Gate 收尾：`§2.4 / §2.5` 的 builtin catalog 与 MCP discovery 公共面已被业务侧实用；`§8` 的 workspace 目标态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、legacy grep 与 `ls crates/` 守护复核通过。 | Codex |

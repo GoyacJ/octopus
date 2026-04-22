@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Write as _,
     io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
@@ -328,7 +329,7 @@ fn execute_slash_command(input: &str, cwd: &Path) -> Result<String, CliError> {
             let suggestions = suggest_slash_commands(&name, 3);
             let mut message = format!("Unknown slash command `/{name}`.");
             if !suggestions.is_empty() {
-                message.push_str(&format!("\n\nDid you mean {}?", suggestions.join(", ")));
+                let _ = write!(message, "\n\nDid you mean {}?", suggestions.join(", "));
             }
             message.push_str("\n\n");
             message.push_str(&render_slash_command_help());

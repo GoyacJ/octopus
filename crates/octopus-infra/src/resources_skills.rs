@@ -6,6 +6,12 @@ use octopus_core::{
     McpServerPackageManifest, SkillPackageManifest, WorkspaceToolCatalogEntry,
     WorkspaceToolConsumerSummary,
 };
+use octopus_sdk_mcp::{
+    discover_mcp_server_capabilities_best_effort, mcp_endpoint as sdk_mcp_endpoint,
+    parse_mcp_server_config, parse_mcp_servers, qualified_mcp_resource_name,
+    DiscoveredMcpServerCapabilities, McpServerConfig,
+};
+use octopus_sdk_tools::{builtin_tool_catalog, BuiltinToolPermission};
 
 use crate::{
     agent_assets::BuiltinSkillAsset,
@@ -16,6 +22,7 @@ use crate::{
 };
 
 const BUILTIN_SKILL_SOURCE_ORIGIN: &str = "builtin_bundle";
+const REQUIRED_CONFIGURED_MODEL_FIELDS: &[&str] = &["providerId", "modelId", "name"];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -102,12 +109,11 @@ pub(super) struct SkillCatalogEntry {
     pub(super) shadowed_by: Option<String>,
 }
 
-pub(super) fn normalize_required_permission(permission: runtime::PermissionMode) -> Option<String> {
+pub(super) fn normalize_required_permission(permission: BuiltinToolPermission) -> Option<String> {
     match permission {
-        runtime::PermissionMode::ReadOnly => Some("readonly".into()),
-        runtime::PermissionMode::WorkspaceWrite => Some("workspace-write".into()),
-        runtime::PermissionMode::DangerFullAccess => Some("danger-full-access".into()),
-        runtime::PermissionMode::Prompt | runtime::PermissionMode::Allow => None,
+        BuiltinToolPermission::ReadOnly => Some("readonly".into()),
+        BuiltinToolPermission::WorkspaceWrite => Some("workspace-write".into()),
+        BuiltinToolPermission::DangerFullAccess => Some("danger-full-access".into()),
     }
 }
 
@@ -749,41 +755,6 @@ pub(super) fn unquote_frontmatter_value(value: &str) -> String {
         .to_string()
 }
 
-pub(super) fn load_workspace_runtime_config(
-    paths: &WorkspacePaths,
-) -> Result<runtime::RuntimeConfig, AppError> {
-    let workspace_config_path = paths.runtime_config_dir.join("workspace.json");
-    let exists = workspace_config_path.exists();
-    let document = if exists {
-        let contents = fs::read_to_string(&workspace_config_path)?;
-        if contents.trim().is_empty() {
-            Some(BTreeMap::new())
-        } else {
-            let parsed = runtime::JsonValue::parse(&contents)
-                .map_err(|error| AppError::runtime(format!("invalid runtime config: {error}")))?;
-            let object = parsed.as_object().ok_or_else(|| {
-                AppError::invalid_input(format!(
-                    "{} must contain a top-level JSON object",
-                    workspace_config_path.display()
-                ))
-            })?;
-            Some(object.clone())
-        }
-    } else {
-        None
-    };
-
-    runtime::ConfigLoader::new(&paths.root, &paths.runtime_config_dir)
-        .load_from_documents(&[runtime::ConfigDocument {
-            source: runtime::ConfigSource::Project,
-            path: workspace_config_path,
-            exists,
-            loaded: document.is_some(),
-            document,
-        }])
-        .map_err(|error| AppError::runtime(error.to_string()))
-}
-
 pub(super) fn load_workspace_runtime_document(
     paths: &WorkspacePaths,
 ) -> Result<serde_json::Map<String, serde_json::Value>, AppError> {
@@ -814,25 +785,36 @@ pub(super) fn load_runtime_document(
 }
 
 pub(super) fn validate_workspace_runtime_document(
-    paths: &WorkspacePaths,
     document: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), AppError> {
-    let rendered = serde_json::to_string(&serde_json::Value::Object(document.clone()))?;
-    let parsed = runtime::JsonValue::parse(&rendered)
-        .map_err(|error| AppError::invalid_input(format!("invalid runtime config: {error}")))?;
-    let object = parsed
-        .as_object()
-        .cloned()
-        .ok_or_else(|| AppError::invalid_input("workspace runtime config must be a JSON object"))?;
-    runtime::ConfigLoader::new(&paths.root, &paths.runtime_config_dir)
-        .load_from_documents(&[runtime::ConfigDocument {
-            source: runtime::ConfigSource::Project,
-            path: paths.runtime_config_dir.join("workspace.json"),
-            exists: true,
-            loaded: true,
-            document: Some(object),
-        }])
-        .map_err(|error| AppError::invalid_input(error.to_string()))?;
+    if let Some(mcp_servers) = document.get("mcpServers") {
+        mcp_servers.as_object().ok_or_else(|| {
+            AppError::invalid_input("invalid runtime config: mcpServers must be a JSON object")
+        })?;
+    }
+
+    if let Some(configured_models) = document.get("configuredModels") {
+        let Some(configured_models) = configured_models.as_object() else {
+            return Err(AppError::invalid_input(
+                "invalid runtime config: configuredModels must be a JSON object",
+            ));
+        };
+        for (configured_model_id, entry) in configured_models {
+            let Some(entry_object) = entry.as_object() else {
+                return Err(AppError::invalid_input(format!(
+                    "invalid runtime config: configuredModels.{configured_model_id} must be a JSON object"
+                )));
+            };
+            for field in REQUIRED_CONFIGURED_MODEL_FIELDS {
+                if entry_object.get(*field).and_then(serde_json::Value::as_str).is_none() {
+                    return Err(AppError::invalid_input(format!(
+                        "invalid runtime config: configuredModels.{configured_model_id}.{field} is required"
+                    )));
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -1597,7 +1579,7 @@ pub(super) fn ensure_top_level_object<'a>(
     ensure_object_value(value, key)
 }
 
-pub(super) fn mcp_scope_label(_scope: runtime::ConfigSource) -> &'static str {
+pub(super) fn mcp_scope_label() -> &'static str {
     "workspace"
 }
 
@@ -1623,147 +1605,10 @@ fn extract_mcp_server_configs(
     Ok(servers)
 }
 
-fn string_map_from_json(value: Option<&serde_json::Value>) -> BTreeMap<String, String> {
-    value
-        .and_then(|item| item.as_object())
-        .map(|object| {
-            object
-                .iter()
-                .filter_map(|(key, value)| {
-                    value.as_str().map(|item| (key.clone(), item.to_string()))
-                })
-                .collect::<BTreeMap<_, _>>()
-        })
-        .unwrap_or_default()
-}
-
-fn mcp_oauth_config_from_json(
-    value: Option<&serde_json::Value>,
-) -> Option<runtime::McpOAuthConfig> {
-    let object = value?.as_object()?;
-    Some(runtime::McpOAuthConfig {
-        client_id: object
-            .get("clientId")
-            .and_then(|item| item.as_str())
-            .map(ToOwned::to_owned),
-        callback_port: object
-            .get("callbackPort")
-            .and_then(|item| item.as_u64())
-            .and_then(|item| u16::try_from(item).ok()),
-        auth_server_metadata_url: object
-            .get("authServerMetadataUrl")
-            .and_then(|item| item.as_str())
-            .map(ToOwned::to_owned),
-        xaa: object.get("xaa").and_then(|item| item.as_bool()),
-    })
-}
-
-fn scoped_mcp_server_config_from_document(
-    scope: runtime::ConfigSource,
-    value: &serde_json::Value,
-) -> Option<runtime::ScopedMcpServerConfig> {
-    let object = value.as_object()?;
-    let config = match object.get("type").and_then(|item| item.as_str()) {
-        Some("stdio") => runtime::McpServerConfig::Stdio(runtime::McpStdioServerConfig {
-            command: object.get("command")?.as_str()?.to_string(),
-            args: object
-                .get("args")
-                .and_then(|item| item.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.as_str().map(ToOwned::to_owned))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-            env: string_map_from_json(object.get("env")),
-            tool_call_timeout_ms: object
-                .get("toolCallTimeoutMs")
-                .and_then(|item| item.as_u64()),
-        }),
-        Some("sse") => runtime::McpServerConfig::Sse(runtime::McpRemoteServerConfig {
-            url: object.get("url")?.as_str()?.to_string(),
-            headers: string_map_from_json(object.get("headers")),
-            headers_helper: object
-                .get("headersHelper")
-                .and_then(|item| item.as_str())
-                .map(ToOwned::to_owned),
-            oauth: mcp_oauth_config_from_json(object.get("oauth")),
-        }),
-        Some("http") => runtime::McpServerConfig::Http(runtime::McpRemoteServerConfig {
-            url: object.get("url")?.as_str()?.to_string(),
-            headers: string_map_from_json(object.get("headers")),
-            headers_helper: object
-                .get("headersHelper")
-                .and_then(|item| item.as_str())
-                .map(ToOwned::to_owned),
-            oauth: mcp_oauth_config_from_json(object.get("oauth")),
-        }),
-        Some("ws") => runtime::McpServerConfig::Ws(runtime::McpWebSocketServerConfig {
-            url: object.get("url")?.as_str()?.to_string(),
-            headers: string_map_from_json(object.get("headers")),
-            headers_helper: object
-                .get("headersHelper")
-                .and_then(|item| item.as_str())
-                .map(ToOwned::to_owned),
-        }),
-        Some("sdk") => runtime::McpServerConfig::Sdk(runtime::McpSdkServerConfig {
-            name: object.get("name")?.as_str()?.to_string(),
-        }),
-        Some("claudeai-proxy") => {
-            runtime::McpServerConfig::ManagedProxy(runtime::McpManagedProxyServerConfig {
-                url: object.get("url")?.as_str()?.to_string(),
-                id: object.get("id")?.as_str()?.to_string(),
-            })
-        }
-        _ => return None,
-    };
-
-    Some(runtime::ScopedMcpServerConfig { scope, config })
-}
-
 fn mcp_endpoint_from_document(config: &serde_json::Value) -> String {
-    let Some(object) = config.as_object() else {
-        return String::new();
-    };
-    match object.get("type").and_then(|value| value.as_str()) {
-        Some("stdio") => {
-            let command = object
-                .get("command")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default();
-            let args = object
-                .get("args")
-                .and_then(|value| value.as_array())
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.as_str().map(ToOwned::to_owned))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            if args.is_empty() {
-                format!("stdio: {command}")
-            } else {
-                format!("stdio: {command} {}", args.join(" "))
-            }
-        }
-        Some("sdk") => object
-            .get("name")
-            .and_then(|value| value.as_str())
-            .map(|name| format!("sdk: {name}"))
-            .unwrap_or_default(),
-        Some("http") | Some("sse") | Some("ws") | Some("managed_proxy") => object
-            .get("url")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default()
-            .to_string(),
-        _ => object
-            .get("url")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default()
-            .to_string(),
-    }
+    parse_mcp_server_config(config)
+        .map(|config| sdk_mcp_endpoint(&config))
+        .unwrap_or_default()
 }
 
 fn tool_consumer_summary(
@@ -1917,119 +1762,14 @@ fn build_tool_consumer_maps(
     }
 }
 
-pub(super) fn mcp_endpoint(config: &runtime::McpServerConfig) -> String {
-    match config {
-        runtime::McpServerConfig::Stdio(config) => {
-            if config.args.is_empty() {
-                format!("stdio: {}", config.command)
-            } else {
-                format!("stdio: {} {}", config.command, config.args.join(" "))
-            }
-        }
-        runtime::McpServerConfig::Sse(config) | runtime::McpServerConfig::Http(config) => {
-            config.url.clone()
-        }
-        runtime::McpServerConfig::Ws(config) => config.url.clone(),
-        runtime::McpServerConfig::Sdk(config) => format!("sdk: {}", config.name),
-        runtime::McpServerConfig::ManagedProxy(config) => config.url.clone(),
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct DiscoveredMcpServerCapabilities {
-    tools: Vec<runtime::ManagedMcpTool>,
-    prompts: Vec<runtime::ManagedMcpPrompt>,
-    resources: Vec<runtime::McpResource>,
-    status_detail: Option<String>,
-    availability: String,
-}
-
-impl DiscoveredMcpServerCapabilities {
-    fn finalize(mut self) -> Self {
-        if self.availability.is_empty() {
-            self.availability = if self.status_detail.is_some() {
-                "attention".into()
-            } else if self.tools.is_empty() && self.prompts.is_empty() && self.resources.is_empty()
-            {
-                "configured".into()
-            } else {
-                "healthy".into()
-            };
-        }
-        self
-    }
-}
-
 fn mcp_resource_capability_id(server_name: &str, uri: &str) -> String {
-    format!(
-        "mcp_resource__{}__{}",
-        server_name,
-        uri.replace(|ch: char| !ch.is_ascii_alphanumeric(), "_")
-    )
+    qualified_mcp_resource_name(server_name, uri)
 }
 
 async fn discover_mcp_server_capabilities(
-    servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
+    servers: &BTreeMap<String, McpServerConfig>,
 ) -> BTreeMap<String, DiscoveredMcpServerCapabilities> {
-    let mut discovered = servers
-        .keys()
-        .cloned()
-        .map(|server_name| (server_name, DiscoveredMcpServerCapabilities::default()))
-        .collect::<BTreeMap<_, _>>();
-
-    let mut manager = runtime::McpServerManager::from_servers(servers);
-    let discovery_report = manager.discover_tools_best_effort().await;
-
-    for tool in discovery_report.tools {
-        discovered
-            .entry(tool.server_name.clone())
-            .or_default()
-            .tools
-            .push(tool);
-    }
-
-    for failure in discovery_report.failed_servers {
-        let entry = discovered.entry(failure.server_name).or_default();
-        entry.status_detail = Some(failure.error);
-        entry.availability = "attention".into();
-    }
-
-    for unsupported in discovery_report.unsupported_servers {
-        let entry = discovered.entry(unsupported.server_name).or_default();
-        entry.status_detail = Some(unsupported.reason);
-        entry.availability = "attention".into();
-    }
-
-    for server_name in servers.keys() {
-        let Some(entry) = discovered.get_mut(server_name) else {
-            continue;
-        };
-        if entry.status_detail.is_some() {
-            continue;
-        }
-
-        match manager.discover_prompts_for_server(server_name).await {
-            Ok(prompts) => entry.prompts = prompts,
-            Err(error) => {
-                entry.status_detail = Some(error.to_string());
-                entry.availability = "attention".into();
-                continue;
-            }
-        }
-
-        match manager.list_resources(server_name).await {
-            Ok(resources) => entry.resources = resources.resources,
-            Err(error) => {
-                entry.status_detail = Some(error.to_string());
-                entry.availability = "attention".into();
-            }
-        }
-    }
-
-    discovered
-        .into_iter()
-        .map(|(server_name, capabilities)| (server_name, capabilities.finalize()))
-        .collect()
+    discover_mcp_server_capabilities_best_effort(servers).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2343,7 +2083,7 @@ impl InfraWorkspaceService {
         &self,
         document: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), AppError> {
-        validate_workspace_runtime_document(&self.state.paths, &document)?;
+        validate_workspace_runtime_document(&document)?;
         write_workspace_runtime_document(&self.state.paths, &document)
     }
 
@@ -2399,11 +2139,8 @@ impl InfraWorkspaceService {
                 let parsed = configs
                     .iter()
                     .filter_map(|(server_name, config)| {
-                        scoped_mcp_server_config_from_document(
-                            runtime::ConfigSource::Project,
-                            config,
-                        )
-                        .map(|parsed| (server_name.clone(), parsed))
+                        parse_mcp_server_config(config)
+                            .map(|parsed| (server_name.clone(), parsed))
                     })
                     .collect::<BTreeMap<_, _>>();
                 (project_id.clone(), parsed)
@@ -2430,7 +2167,7 @@ impl InfraWorkspaceService {
         );
         let mut entries = Vec::new();
 
-        for spec in tools::mvp_tool_specs() {
+        for spec in builtin_tool_catalog().entries() {
             let source_key = format!("builtin:{}", spec.name);
             let capability_id = format!("builtin-{}", spec.name);
             entries.push(WorkspaceToolCatalogEntry {
@@ -2576,11 +2313,12 @@ impl InfraWorkspaceService {
             });
         }
 
-        let runtime_config = load_workspace_runtime_config(&self.state.paths)?;
+        let workspace_runtime_document = load_workspace_runtime_document(&self.state.paths)?;
+        let workspace_mcp_servers = parse_mcp_servers(&workspace_runtime_document);
         let workspace_mcp_capabilities =
-            discover_mcp_server_capabilities(runtime_config.mcp().servers()).await;
+            discover_mcp_server_capabilities(&workspace_mcp_servers).await;
 
-        for (server_name, scoped_config) in runtime_config.mcp().servers() {
+        for (server_name, config) in &workspace_mcp_servers {
             let source_key = mcp_source_key("workspace", None, server_name);
             append_mcp_catalog_entries(
                 &mut entries,
@@ -2596,18 +2334,16 @@ impl InfraWorkspaceService {
                 Some("workspace".into()),
                 None,
                 Some("Workspace".into()),
-                mcp_scope_label(scoped_config.scope),
+                mcp_scope_label(),
                 server_name,
-                &mcp_endpoint(&scoped_config.config),
+                &sdk_mcp_endpoint(config),
                 clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
                 workspace_mcp_capabilities.get(server_name),
                 "Configured MCP server.",
             );
         }
 
-        let managed_workspace_servers = runtime_config
-            .mcp()
-            .servers()
+        let managed_workspace_servers = workspace_mcp_servers
             .keys()
             .cloned()
             .collect::<std::collections::HashSet<_>>();
@@ -2617,8 +2353,7 @@ impl InfraWorkspaceService {
             .iter()
             .filter(|asset| !managed_workspace_servers.contains(&asset.server_name))
             .filter_map(|asset| {
-                scoped_mcp_server_config_from_document(runtime::ConfigSource::Local, &asset.config)
-                    .map(|config| (asset.server_name.clone(), config))
+                parse_mcp_server_config(&asset.config).map(|config| (asset.server_name.clone(), config))
             })
             .collect::<BTreeMap<_, _>>();
         let builtin_mcp_capabilities = discover_mcp_server_capabilities(&builtin_mcp_servers).await;

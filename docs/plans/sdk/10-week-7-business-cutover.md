@@ -6,13 +6,13 @@
 
 ## Status
 
-状态：`in_progress`
+状态：`done`
 
 ## Active Work
 
-当前 Task：`Task 7A · 解除 octopus-infra 对 legacy runtime/tools 的生产依赖`
+当前 Task：`Task 8 · W7 Weekly Gate 与文档收口（done）`
 
-当前 Step：`补 Task 7A 计划：builtin catalog 统一到 SDK 命名/语义；runtime config / MCP discovery 先脱离 legacy，再回到 Task 7 做物理删除`
+当前 Step：`W7 Weekly Gate 已通过；计划、总控与退役文档已收口`
 
 ### Pre-Task Checklist（起稿阶段）
 
@@ -354,7 +354,7 @@ Step 2:
 
 ### Task 7A: `octopus-infra` 脱 legacy `runtime/tools` 生产依赖
 
-Status: `in_progress`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-infra/Cargo.toml`
@@ -391,7 +391,7 @@ Step 3:
 
 ### Task 7: workspace 收口与 11 个 legacy crate 删除
 
-Status: `blocked`
+Status: `done`
 
 Files:
 - Modify: `Cargo.toml`
@@ -429,7 +429,7 @@ Step 2:
 
 ### Task 8: W7 Weekly Gate 与文档收口
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/10-week-7-business-cutover.md`
@@ -459,6 +459,9 @@ Step 1:
 | 2026-04-22 | Task 5 完成：`octopus-cli` 吸收 `commands / rusty-claude-cli` 中剩余的 parser/help、`init / input / render`、agents/skills 发现与安装、最小 direct CLI 分派；同时保持 run path 仍只走 SDK，不重新引入任何 legacy runtime 依赖。 | Codex |
 | 2026-04-22 | Task 6 完成：发现 SDK-backed runtime bridge 已发出新的 session/message/render/checkpoint/plugins snapshot eventType；据此更新 OpenAPI runtime event contract、重新生成 `packages/schema/src/generated.ts`，并用 desktop transport/runtime suite 锁住新枚举与 `kind` 的 string 化。 | Codex |
 | 2026-04-22 | Task 7 blocked 处理决策：确认 builtin catalog 统一到 SDK 命名/语义，不另开并行 Plan；在本文件内新增 `Task 7A`，先解除 `octopus-infra` 对 legacy `runtime/tools` 的生产依赖，再回到 Task 7 做 crate 删除。 | Codex |
+| 2026-04-22 | Task 7A 完成：`octopus-infra` 已切到 `octopus-sdk-tools` builtin catalog 与 `octopus-sdk-mcp` config/discovery helper，`runtime/tools` 生产依赖从 `Cargo.toml` 与正常依赖树中清零；同时回填 `02-crate-topology.md §2.4 / §2.5`。 | Codex |
+| 2026-04-22 | Task 7 完成：workspace `default-members` 已删掉 legacy sidecar；11 个 legacy crate 目录已物理删除；剩余 `apps/desktop` 治理测试已改成对齐当前 Phase 8 gate 与 W7 守护扫描，legacy grep / `ls crates/` / governance script 全绿。 | Codex |
+| 2026-04-22 | Task 8 完成：W7 Weekly Gate 已通过；`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与受影响 crate 回归全绿；`README`、`00`、`02`、`03` 已同步切到 W7 收尾状态。 | Codex |
 
 ## Checkpoint 2026-04-22 12:37
 
@@ -658,3 +661,112 @@ Step 1:
   - Task 7 仍 blocked，但阻塞已具化为 `Task 7A` 的实现前置
 - Next:
   - Task 7A Step 1：把 builtin catalog 与 desktop fixture / project tool grant 从 legacy builtin 名单切到 SDK 对齐实现
+
+## Checkpoint 2026-04-22 14:21
+
+- Week: W7
+- Batch: Task 7A Step 1 → Task 7A Step 3
+- Completed:
+  - `octopus-sdk-tools` 新增 builtin catalog 公共面，固定 canonical builtin 名与 `required_permission` 元数据，并在 `octopus-infra::agent_assets` 中接管 builtin alias 归一化。
+  - `octopus-sdk-mcp` 新增 runtime config MCP server 解析、qualified catalog id 与 best-effort capability discovery helper；`octopus-infra::resources_skills` 已切掉对 legacy `runtime::ConfigLoader / RuntimeConfig / ScopedMcpServerConfig / McpServerManager` 的生产依赖。
+  - desktop fixtures/tests 已改成 SDK canonical builtin 名；`octopus-infra` 的正常依赖树与 `Cargo.toml` 均不再声明 legacy `runtime/tools`。
+- Files changed:
+  - `crates/octopus-sdk-tools/src/builtin/catalog.rs` (created)
+  - `crates/octopus-sdk-tools/src/builtin/mod.rs` (modified)
+  - `crates/octopus-sdk-tools/src/lib.rs` (modified)
+  - `crates/octopus-sdk-mcp/src/discovery.rs` (created)
+  - `crates/octopus-sdk-mcp/src/lib.rs` (modified)
+  - `crates/octopus-infra/Cargo.toml` (modified)
+  - `crates/octopus-infra/src/agent_assets.rs` (modified)
+  - `crates/octopus-infra/src/resources_skills.rs` (modified)
+  - `crates/octopus-infra/src/agent_bundle/shared.rs` (modified)
+  - `apps/desktop/test/support/workspace-fixture-state.ts` (modified)
+  - `apps/desktop/test/tools-view.test.ts` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-tools` → pass
+  - `cargo test -p octopus-sdk-mcp` → pass
+  - `cargo test -p octopus-infra resources_skills -- --nocapture` → pass
+  - `cargo test -p octopus-server` → pass
+  - `pnpm -C apps/desktop exec vitest run test/catalog-store.test.ts` → pass
+  - `pnpm -C apps/desktop exec vitest run test/tools-view.test.ts` → pass
+  - `pnpm -C apps/desktop exec vitest run test/project-setup.test.ts` → pass
+  - `cargo tree -p octopus-infra -e normal` → no `runtime v0.2.5` / `tools v0.2.5`
+  - `rg -n 'runtime = \{ path = "../runtime" \}|tools = \{ path = "../tools" \}' crates/octopus-infra/Cargo.toml` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1：更新 workspace `default-members` 并删除 11 个 legacy crate 目录
+
+## Checkpoint 2026-04-22 14:29
+
+- Week: W7
+- Batch: Task 7 Step 1 → Task 7 Step 2
+- Completed:
+  - `Cargo.toml` 的 `default-members` 已移除 `crates/octopus-runtime-adapter`，11 个 legacy crate 目录已从 workspace 物理删除。
+  - `apps/desktop/test/repo-governance.test.ts` 已改成校验当前 W7 计划与 Phase 8 gate 的接线关系，不再在 `apps/` 内硬编码已删除目录路径。
+  - W7 守护扫描已确认 `crates/` 与 `apps/` 中不再残留本周定义的 legacy crate 名，Phase 4 / Phase 8 治理脚本也都通过。
+- Files changed:
+  - `Cargo.toml` (modified)
+  - `apps/desktop/test/repo-governance.test.ts` (modified)
+  - `docs/plans/sdk/10-week-7-business-cutover.md` (modified)
+- Verification:
+  - `cargo build --workspace` → pass
+  - `pnpm -C apps/desktop exec vitest run test/repo-governance.test.ts` → pass
+  - `rg -n '(octopus_runtime_adapter|octopus-runtime-adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service)' crates apps` → 0 matches
+  - `node scripts/check-runtime-phase8-governance.mjs` → pass
+  - `node scripts/check-runtime-phase4-governance.mjs` → pass
+  - `ls crates | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'` → 0 matches
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 8 Step 1：执行 W7 Weekly Gate，并同步回填 `README.md` / `00-overview.md`
+
+## Checkpoint 2026-04-22 14:42
+
+- Week: W7
+- Batch: Task 8 Step 1
+- Completed:
+  - W7 Weekly Gate 的硬门禁已实际执行完成：workspace build、workspace clippy、desktop 全量测试全部通过。
+  - 为消掉 Weekly Gate 暴露的 lint，已做三处等价修正：`DiscoveredMcpServerCapabilities` 改成派生 `Default`；CLI markdown/table/slash command 渲染改成更直接的字符串写入；runtime permission mode 别名分支合并但语义不变。
+  - W7 计划、`README`、`00-overview.md`、`02-crate-topology.md`、`03-legacy-retirement.md` 已同步收口到周完成状态。
+- Files changed:
+  - `crates/octopus-sdk-mcp/src/discovery.rs` (modified)
+  - `crates/octopus-cli/src/render.rs` (modified)
+  - `crates/octopus-cli/src/run_once.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/session_bridge.rs` (modified)
+  - `docs/plans/sdk/10-week-7-business-cutover.md` (modified)
+  - `docs/plans/sdk/README.md` (modified)
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/03-legacy-retirement.md` (modified)
+- Verification:
+  - `cargo build --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `pnpm -C apps/desktop test` → pass
+  - `cargo test -p octopus-sdk-mcp -p octopus-cli -p octopus-platform` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - W7 complete；下一个可执行项是 W8 计划起步
+
+## Weekly Summary · W7
+
+- Exit state: matches
+- Hard gate: pass
+- Invariants:
+  - 1. Prompt cache stability: green
+  - 2. Credentials zero-leak: green
+  - 3. Config snapshot: green
+  - 4. Session dual-channel: green
+  - 5. UI Intent IR pipeline: green
+  - 6. Narrow interfaces (4 traits): green
+- Open questions opened this week: 1
+- Closed this week: 1
+- Next week kick-off ready: yes
