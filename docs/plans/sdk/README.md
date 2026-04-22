@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-22（W6 子 Plan `09-week-6-core-loop.md` 完成：`octopus-sdk-observability / octopus-sdk-core / octopus-sdk / octopus-cli` 已落地，Weekly Gate 与外层 E2E/CLI 门禁通过）
+**最后更新**：2026-04-22（W6 子 Plan `09-week-6-core-loop.md` 完成：补齐 `resume()` 真实恢复、summarize checkpoint replay、权限审批链，`octopus-sdk-observability / octopus-sdk-core / octopus-sdk / octopus-cli` 已通过 Weekly Gate、E2E、CLI、workspace build/clippy）

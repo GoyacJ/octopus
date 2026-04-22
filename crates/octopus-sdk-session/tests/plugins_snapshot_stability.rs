@@ -17,8 +17,12 @@ async fn test_append_session_started() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-embedded".into(),
             "hash-embedded".into(),
+            8_192,
             Some(plugins_snapshot.clone()),
         )
         .await
@@ -51,8 +55,12 @@ async fn test_append_session_plugins_snapshot() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-fallback".into(),
             "hash-fallback".into(),
+            8_192,
             None,
         )
         .await
@@ -126,8 +134,12 @@ async fn test_snapshot_replay_embedded() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-replay-a".into(),
             "hash-replay-a".into(),
+            8_192,
             Some(plugins_snapshot.clone()),
         )
         .await
@@ -158,8 +170,12 @@ async fn test_snapshot_replay_second_event() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-replay-b".into(),
             "hash-replay-b".into(),
+            8_192,
             None,
         )
         .await

@@ -9,10 +9,14 @@ use std::{
 };
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{EventId, PluginsSnapshot, SessionEvent, SessionId, SubagentSpec};
+use octopus_sdk_contracts::{
+    EventId, PermissionMode, PluginsSnapshot, SessionEvent, SessionId, SubagentSpec,
+};
 use rusqlite::Connection;
 
-use crate::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
+use crate::{
+    EventRange, EventRecordStream, EventStream, SessionError, SessionSnapshot, SessionStore,
+};
 
 #[derive(Debug, Clone)]
 pub struct SqliteJsonlSessionStore {
@@ -59,15 +63,23 @@ impl SessionStore for SqliteJsonlSessionStore {
     async fn append_session_started(
         &self,
         id: &SessionId,
+        working_dir: PathBuf,
+        permission_mode: PermissionMode,
+        model: String,
         config_snapshot_id: String,
         effective_config_hash: String,
+        token_budget: u32,
         plugins_snapshot: Option<PluginsSnapshot>,
     ) -> Result<EventId, SessionError> {
         self.append_event(
             id,
             SessionEvent::SessionStarted {
+                working_dir: working_dir.to_string_lossy().into_owned(),
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot,
             },
         )
@@ -85,8 +97,12 @@ impl SessionStore for SqliteJsonlSessionStore {
         self.append_event(
             &child_id,
             SessionEvent::SessionStarted {
+                working_dir: parent.working_dir.to_string_lossy().into_owned(),
+                permission_mode: parent.permission_mode,
+                model: parent.model,
                 config_snapshot_id: parent.config_snapshot_id,
                 effective_config_hash: parent.effective_config_hash,
+                token_budget: parent.token_budget,
                 plugins_snapshot: Some(parent.plugins_snapshot),
             },
         )?;
@@ -96,6 +112,14 @@ impl SessionStore for SqliteJsonlSessionStore {
 
     async fn stream(&self, id: &SessionId, range: EventRange) -> Result<EventStream, SessionError> {
         self.stream_events(id, range)
+    }
+
+    async fn stream_records(
+        &self,
+        id: &SessionId,
+        range: EventRange,
+    ) -> Result<EventRecordStream, SessionError> {
+        self.stream_record_events(id, range)
     }
 
     async fn snapshot(&self, id: &SessionId) -> Result<SessionSnapshot, SessionError> {
@@ -131,4 +155,25 @@ pub(crate) fn now_millis() -> i64 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock should be after unix epoch")
         .as_millis() as i64
+}
+
+pub(crate) fn serialize_permission_mode(mode: PermissionMode) -> &'static str {
+    match mode {
+        PermissionMode::Default => "default",
+        PermissionMode::AcceptEdits => "accept_edits",
+        PermissionMode::BypassPermissions => "bypass_permissions",
+        PermissionMode::Plan => "plan",
+    }
+}
+
+pub(crate) fn deserialize_permission_mode(value: &str) -> Result<PermissionMode, SessionError> {
+    match value {
+        "default" => Ok(PermissionMode::Default),
+        "accept_edits" => Ok(PermissionMode::AcceptEdits),
+        "bypass_permissions" => Ok(PermissionMode::BypassPermissions),
+        "plan" => Ok(PermissionMode::Plan),
+        _ => Err(SessionError::Corrupted {
+            reason: format!("unknown_permission_mode:{value}"),
+        }),
+    }
 }

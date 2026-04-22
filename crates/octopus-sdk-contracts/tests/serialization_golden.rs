@@ -110,8 +110,12 @@ fn fixtures() -> Vec<FixtureCase> {
         fixture_case(
             "session_event/session_started",
             &SessionEvent::SessionStarted {
+                working_dir: "/tmp/octopus".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                model: "main".into(),
                 config_snapshot_id: "cfg-2026-04-21".into(),
                 effective_config_hash: "sha256:abc123".into(),
+                token_budget: 8192,
                 plugins_snapshot: Some(plugins_snapshot.clone()),
             },
         ),
@@ -190,6 +194,14 @@ fn fixtures() -> Vec<FixtureCase> {
             &SessionEvent::Checkpoint {
                 id: "checkpoint-1".into(),
                 anchor_event_id,
+                compaction: Some(octopus_sdk_contracts::CompactionResult {
+                    summary: "Earlier turns summarized.".into(),
+                    folded_turn_ids: vec![EventId("event-1".into()), EventId("event-2".into())],
+                    tool_results_cleared: 0,
+                    tokens_before: 12_288,
+                    tokens_after: 4_096,
+                    strategy: octopus_sdk_contracts::CompactionStrategyTag::Summarize,
+                }),
             },
         ),
         fixture_case(

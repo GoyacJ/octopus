@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::SessionError;
 
-use super::{event_kind, now_millis, SqliteJsonlSessionStore};
+use super::{event_kind, now_millis, serialize_permission_mode, SqliteJsonlSessionStore};
 
 impl SqliteJsonlSessionStore {
     pub(crate) fn append_event(
@@ -76,8 +76,12 @@ impl SqliteJsonlSessionStore {
         }
 
         let SessionEvent::SessionStarted {
+            working_dir,
+            permission_mode,
+            model,
             config_snapshot_id,
             effective_config_hash,
+            token_budget,
             plugins_snapshot,
         } = event
         else {
@@ -93,20 +97,28 @@ impl SqliteJsonlSessionStore {
             "
             INSERT INTO sessions (
                 session_id,
+                working_dir,
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot_json,
                 head_event_id,
                 usage_json,
                 created_at,
                 updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ",
             params![
                 session_id.0,
+                working_dir,
+                serialize_permission_mode(*permission_mode),
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 serialize_plugins_snapshot(plugins_snapshot.as_ref())?,
                 event_id.0,
                 usage_json,
@@ -130,25 +142,37 @@ impl SqliteJsonlSessionStore {
 
         match event {
             SessionEvent::SessionStarted {
+                working_dir,
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot,
             } => {
                 transaction.execute(
                     "
                     UPDATE sessions
-                    SET config_snapshot_id = ?2,
-                        effective_config_hash = ?3,
-                        plugins_snapshot_json = ?4,
-                        head_event_id = ?5,
-                        usage_json = ?6,
-                        updated_at = ?7
+                    SET working_dir = ?2,
+                        permission_mode = ?3,
+                        model = ?4,
+                        config_snapshot_id = ?5,
+                        effective_config_hash = ?6,
+                        token_budget = ?7,
+                        plugins_snapshot_json = ?8,
+                        head_event_id = ?9,
+                        usage_json = ?10,
+                        updated_at = ?11
                     WHERE session_id = ?1
                     ",
                     params![
                         session_id.0,
+                        working_dir,
+                        serialize_permission_mode(*permission_mode),
+                        model,
                         config_snapshot_id,
                         effective_config_hash,
+                        token_budget,
                         serialize_plugins_snapshot(plugins_snapshot.as_ref())?,
                         event_id.0,
                         usage_json,

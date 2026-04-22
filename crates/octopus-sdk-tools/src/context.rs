@@ -92,8 +92,12 @@ mod tests {
         async fn append_session_started(
             &self,
             _id: &SessionId,
+            _working_dir: std::path::PathBuf,
+            _permission_mode: octopus_sdk_contracts::PermissionMode,
+            _model: String,
             _config_snapshot_id: String,
             _effective_config_hash: String,
+            _token_budget: u32,
             _plugins_snapshot: Option<octopus_sdk_contracts::PluginsSnapshot>,
         ) -> Result<EventId, SessionError> {
             Err(SessionError::NotFound)

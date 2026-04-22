@@ -166,8 +166,12 @@ fn test_runtime() -> TestRuntime {
 
     futures::executor::block_on(store.append_session_started(
         &parent_session,
+        std::path::PathBuf::from("."),
+        octopus_sdk_contracts::PermissionMode::Default,
+        "main".into(),
         "cfg-parent".into(),
         "hash-parent".into(),
+        8_192,
         Some(sample_plugins_snapshot()),
     ))
     .expect("parent session should start");

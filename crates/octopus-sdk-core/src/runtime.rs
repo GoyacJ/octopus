@@ -58,12 +58,24 @@ impl AgentRuntime {
         input: StartSessionInput,
     ) -> Result<SessionHandle, RuntimeError> {
         let session_id = input.session_id.unwrap_or_else(SessionId::new_v4);
+        let state = SessionRuntimeState {
+            working_dir: input.working_dir.clone(),
+            permission_mode: input.permission_mode,
+            model: input.model.clone(),
+            config_snapshot_id: input.config_snapshot_id.clone(),
+            effective_config_hash: input.effective_config_hash.clone(),
+            token_budget: input.token_budget,
+        };
         self.inner
             .session_store
             .append_session_started(
                 &session_id,
+                input.working_dir.clone(),
+                input.permission_mode,
+                input.model.0.clone(),
                 input.config_snapshot_id.clone(),
                 input.effective_config_hash.clone(),
+                input.token_budget,
                 Some(self.inner.plugins_snapshot.clone()),
             )
             .await?;
@@ -71,31 +83,13 @@ impl AgentRuntime {
             .sessions
             .lock()
             .await
-            .insert(
-                session_id.0.clone(),
-                SessionRuntimeState {
-                    working_dir: input.working_dir.clone(),
-                    permission_mode: input.permission_mode,
-                    model: input.model.clone(),
-                    config_snapshot_id: input.config_snapshot_id.clone(),
-                    effective_config_hash: input.effective_config_hash.clone(),
-                    token_budget: input.token_budget,
-                },
-            );
+            .insert(session_id.0.clone(), state.clone());
         self.inner.tracer.record(
             TraceSpan::new("session_started")
                 .with_field("session_id", TraceValue::String(session_id.0.clone())),
         );
 
-        Ok(SessionHandle {
-            session_id,
-            working_dir: input.working_dir,
-            permission_mode: input.permission_mode,
-            model: input.model,
-            config_snapshot_id: input.config_snapshot_id,
-            effective_config_hash: input.effective_config_hash,
-            token_budget: input.token_budget,
-        })
+        Ok(session_handle(session_id, &state))
     }
 
     pub async fn submit_turn(&self, input: SubmitTurnInput) -> Result<RunHandle, RuntimeError> {
@@ -131,31 +125,21 @@ impl AgentRuntime {
 
     pub async fn resume(&self, session_id: &SessionId) -> Result<SessionHandle, RuntimeError> {
         let snapshot = self.inner.session_store.wake(session_id).await?;
-        let state = self
-            .inner
+        let state = SessionRuntimeState {
+            working_dir: snapshot.working_dir.clone(),
+            permission_mode: snapshot.permission_mode,
+            model: ModelId(snapshot.model.clone()),
+            config_snapshot_id: snapshot.config_snapshot_id.clone(),
+            effective_config_hash: snapshot.effective_config_hash.clone(),
+            token_budget: snapshot.token_budget,
+        };
+        self.inner
             .sessions
             .lock()
             .await
-            .get(&session_id.0)
-            .cloned()
-            .unwrap_or(SessionRuntimeState {
-                working_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-                permission_mode: PermissionMode::Default,
-                model: ModelId("main".into()),
-                config_snapshot_id: snapshot.config_snapshot_id.clone(),
-                effective_config_hash: snapshot.effective_config_hash.clone(),
-                token_budget: 8_192,
-            });
+            .insert(session_id.0.clone(), state.clone());
 
-        Ok(SessionHandle {
-            session_id: snapshot.id,
-            working_dir: state.working_dir,
-            permission_mode: state.permission_mode,
-            model: state.model,
-            config_snapshot_id: state.config_snapshot_id,
-            effective_config_hash: state.effective_config_hash,
-            token_budget: state.token_budget,
-        })
+        Ok(session_handle(snapshot.id, &state))
     }
 
     pub async fn events(
@@ -185,5 +169,17 @@ impl AgentRuntime {
             .snapshot(session_id)
             .await
             .map_err(RuntimeError::from)
+    }
+}
+
+fn session_handle(session_id: SessionId, state: &SessionRuntimeState) -> SessionHandle {
+    SessionHandle {
+        session_id,
+        working_dir: state.working_dir.clone(),
+        permission_mode: state.permission_mode,
+        model: state.model.clone(),
+        config_snapshot_id: state.config_snapshot_id.clone(),
+        effective_config_hash: state.effective_config_hash.clone(),
+        token_budget: state.token_budget,
     }
 }

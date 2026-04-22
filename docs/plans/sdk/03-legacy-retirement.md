@@ -137,7 +137,7 @@ adapter 侧 `octopus-runtime-adapter/src/model_runtime/drivers/*`（`anthropic_m
 
 | 职责域 | 相关文件（示例） | 替代位置 | 迁移周 | 状态 |
 |---|---|---|---|---|
-| **Agent Runtime Core（Brain Loop）** | `agent_runtime_core.rs`（6024）、`subrun_orchestrator.rs`（288）、`team_runtime.rs`（918）、`workflow_runtime.rs`（367）、`background_runtime.rs`、`handoff_runtime.rs`、`mailbox_runtime.rs`、`worker_runtime.rs`、`run_context.rs` | `octopus-sdk-core::AgentRuntime`（单体循环）+ `octopus-sdk-subagent::{OrchestratorWorkers, GeneratorEvaluator}`（团队/工作流编排以通用模式落地，不再区分 `team/workflow/worker/handoff/mailbox` 四套 runtime） | W5（subagent）+ W6（core） | pending |
+| **Agent Runtime Core（Brain Loop）** | `agent_runtime_core.rs`（6024）、`subrun_orchestrator.rs`（288）、`team_runtime.rs`（918）、`workflow_runtime.rs`（367）、`background_runtime.rs`、`handoff_runtime.rs`、`mailbox_runtime.rs`、`worker_runtime.rs`、`run_context.rs` | `octopus-sdk-core::AgentRuntime`（单体循环）+ `octopus-sdk-subagent::{OrchestratorWorkers, GeneratorEvaluator}`（团队/工作流编排以通用模式落地，不再区分 `team/workflow/worker/handoff/mailbox` 四套 runtime） | W5（subagent）+ W6（core） | partial/replaced |
 | **Model Runtime** | `model_runtime/mod.rs` + `drivers/*` + `driver.rs / driver_registry.rs / conversation_driver.rs / generation_driver.rs / auth.rs / request_policy.rs / simple_completion.rs / stream_bridge.rs / canonical_model_policy.rs`、`model_budget.rs`（499） | `octopus-sdk-model::{ModelProvider, ProtocolAdapter, Provider, Surface, Model, RoleRouter, FallbackPolicy}` | W2 | pending |
 | **Session / Persistence** | `persistence.rs`（2593）、`session_service.rs`（437）、`session_policy.rs`（124）、`snapshot_store.rs`、`adapter_state.rs`、`actor_context.rs`、`actor_manifest.rs`（621）、`adapter_test_support.rs`（584） | `octopus-sdk-session::SqliteJsonlSessionStore` + `octopus-platform::session_bridge`（业务域会话薄壳） | W1 + W7 | pending |
 | **Capability Bridge** | `capability_executor_bridge.rs`（298）、`capability_planner_bridge.rs`（593）、`capability_state.rs` | **无**（整套删除；取舍 #2） | W3 | done |
@@ -145,7 +145,7 @@ adapter 侧 `octopus-runtime-adapter/src/model_runtime/drivers/*`（`anthropic_m
 | **Memory** | `memory_runtime.rs`、`memory_selector.rs`（485）、`memory_writer.rs`（802）、`memory_runtime_tests.rs`（851） | `octopus-sdk-context::MemoryBackend`（trait，默认实现 `DurableScratchpad`）+ 业务侧 `octopus-platform::memory`（知识库 / 记忆提议业务语义） | W4 | replaced |
 | **Config Snapshot / Runtime Config** | `runtime_config.rs`（790）、`config_service.rs`（1021）、`runtime_config_tests.rs`（993） | `octopus-platform::runtime_config`（业务侧，文件为主）+ `octopus-sdk-session`（snapshot 落首事件） | W7 | pending |
 | **Model Registry** | `registry.rs`（673）、`registry_baseline.rs`（936）、`registry_overrides.rs`（737）、`registry_parse.rs`、`registry_resolution.rs` | `octopus-sdk-model::ModelCatalog`（静态默认 + 覆写层）+ `octopus-platform::catalog`（workspace 覆写面） | W2 | pending |
-| **Execution Events / Event Bus** | `execution_events.rs`（1829）、`event_bus.rs`、`execution_service.rs`、`execution_target.rs`、`trace_context.rs` | `octopus-sdk-contracts::SessionEvent` + `octopus-sdk-observability::Tracer` | W6 | pending |
+| **Execution Events / Event Bus** | `execution_events.rs`（1829）、`event_bus.rs`、`execution_service.rs`、`execution_target.rs`、`trace_context.rs` | `octopus-sdk-contracts::SessionEvent` + `octopus-sdk-observability::Tracer` | W6 | partial |
 | **Secret Store** | `secret_store.rs`（371）、`auth_mediation.rs` | `octopus-sdk::SecretVault` 的业务侧默认实现（SQLite 加密存储）→ 放 `octopus-platform::secret_vault` | W2 | pending |
 | **Tests** | `*_tests.rs`（多个，几千到几万行） | 随对应模块迁入 SDK tests/ 或业务 tests/；拆分到 ≤ 800 行 | 对应周 | pending |
 

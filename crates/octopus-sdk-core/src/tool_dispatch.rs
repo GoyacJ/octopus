@@ -3,18 +3,23 @@ use std::sync::{Arc, Mutex};
 use futures::future::join_all;
 use octopus_sdk_context::{Compactor, SessionView};
 use octopus_sdk_contracts::{
-    ContentBlock, EventSink, HookEvent, HookToolResult, Message, PermissionOutcome,
+    CompactionStrategyTag, ContentBlock, EventId, EventSink, HookEvent, HookToolResult, Message,
+    PermissionOutcome,
     RenderLifecycle, Role, SessionEvent, SessionId, ToolCallRequest, ToolCategory,
 };
 use octopus_sdk_model::ModelProvider;
 use octopus_sdk_observability::{TraceSpan, TraceValue, Tracer};
+use octopus_sdk_permissions::ApprovalBroker;
 use octopus_sdk_plugin::PluginRegistry;
 use octopus_sdk_sandbox::{SandboxBackend, SandboxSpec};
 use octopus_sdk_session::SessionStore;
 use octopus_sdk_tools::{partition_tool_calls, ExecBatch, ToolContext, ToolError, ToolRegistry};
 use tokio_util::sync::CancellationToken;
 
-use crate::{session_boot::message_event, RuntimeError};
+use crate::{
+    session_boot::{message_event, TranscriptState},
+    RuntimeError,
+};
 
 #[derive(Clone, Default)]
 pub(crate) struct BufferedEventSink {
@@ -60,7 +65,7 @@ pub(crate) struct DispatchContext<'a> {
 pub(crate) async fn execute_tool_round(
     ctx: DispatchContext<'_>,
     calls: &[ToolCallRequest],
-    transcript: &mut Vec<Message>,
+    transcript: &mut TranscriptState,
 ) -> Result<(), RuntimeError> {
     let batches = partition_tool_calls(calls, ctx.tool_registry);
 
@@ -72,19 +77,21 @@ pub(crate) async fn execute_tool_round(
                     .map(|call| execute_single_tool_call(&ctx, call.clone()));
                 for outcome in join_all(futures).await {
                     let tool_message = outcome?;
-                    ctx.session_store
+                    let event_id = ctx
+                        .session_store
                         .append(ctx.session_id, message_event(tool_message.clone()))
                         .await?;
-                    transcript.push(tool_message);
+                    transcript.push(event_id, tool_message);
                 }
             }
             ExecBatch::Serial(batch_calls) => {
                 for call in batch_calls {
                     let tool_message = execute_single_tool_call(&ctx, call.clone()).await?;
-                    ctx.session_store
+                    let event_id = ctx
+                        .session_store
                         .append(ctx.session_id, message_event(tool_message.clone()))
                         .await?;
-                    transcript.push(tool_message);
+                    transcript.push(event_id, tool_message);
                 }
             }
         }
@@ -119,9 +126,17 @@ async fn execute_single_tool_call(
     let category = tool.spec().category;
     let call = run_pre_tool_hook(ctx, original_call, category).await?;
 
-    let permission_outcome = ctx.permissions.check(&call).await;
     let event_sink = BufferedEventSink::new();
-    flush_sink(ctx.session_store.as_ref(), ctx.session_id, &event_sink).await?;
+    let permission_outcome = match ctx.permissions.check(&call).await {
+        PermissionOutcome::AskApproval { prompt } | PermissionOutcome::RequireAuth { prompt } => {
+            let broker =
+                ApprovalBroker::new(Arc::new(event_sink.clone()), Arc::clone(&ctx.ask_resolver));
+            let outcome = broker.request_approval(&call, prompt).await;
+            flush_sink(ctx.session_store.as_ref(), ctx.session_id, &event_sink).await?;
+            outcome
+        }
+        outcome => outcome,
+    };
 
     let result = match permission_outcome {
         PermissionOutcome::Allow => {
@@ -154,11 +169,8 @@ async fn execute_single_tool_call(
         PermissionOutcome::Deny { reason } => {
             return finalize_tool_denial(ctx, &call, reason).await;
         }
-        PermissionOutcome::AskApproval { prompt } | PermissionOutcome::RequireAuth { prompt } => {
-            return Err(RuntimeError::UnresolvedPrompt {
-                name: call.name.clone(),
-                kind: prompt.kind,
-            });
+        PermissionOutcome::AskApproval { .. } | PermissionOutcome::RequireAuth { .. } => {
+            return Err(RuntimeError::Hook("approval broker returned unresolved prompt".into()));
         }
     };
 
@@ -336,22 +348,30 @@ async fn maybe_compact_transcript(
     plugin_registry: &Arc<PluginRegistry>,
     session_id: &SessionId,
     session_store: &dyn SessionStore,
-    transcript: &mut Vec<Message>,
+    transcript: &mut TranscriptState,
     token_budget: u32,
 ) -> Result<(), RuntimeError> {
-    let estimated_tokens = estimate_tokens(transcript);
+    let estimated_tokens = estimate_tokens(&transcript.messages);
+    let event_ids = std::mem::take(&mut transcript.event_ids);
     let mut view = SessionView {
-        messages: transcript,
+        messages: &mut transcript.messages,
         tokens: estimated_tokens,
         tokens_budget: token_budget,
-        event_ids: Vec::new(),
+        event_ids,
     };
-    let compactor = Compactor::new(1.1, octopus_sdk_contracts::CompactionStrategyTag::Summarize, Arc::clone(model_provider));
+    let compactor = Compactor::new(
+        1.1,
+        octopus_sdk_contracts::CompactionStrategyTag::Summarize,
+        Arc::clone(model_provider),
+    );
     if let Some(result) = compactor
         .maybe_compact(&mut view)
         .await
         .map_err(|error| RuntimeError::Hook(error.to_string()))?
     {
+        if matches!(result.strategy, CompactionStrategyTag::Summarize) {
+            persist_compaction_checkpoint(session_store, session_id, &mut view, &result).await?;
+        }
         let _ = plugin_registry
             .hooks()
             .run(HookEvent::PostCompact {
@@ -359,8 +379,35 @@ async fn maybe_compact_transcript(
                 result,
             })
             .await;
-        let _ = session_store;
     }
+    transcript.event_ids = view.event_ids;
+    Ok(())
+}
+
+async fn persist_compaction_checkpoint(
+    session_store: &dyn SessionStore,
+    session_id: &SessionId,
+    view: &mut SessionView<'_>,
+    result: &octopus_sdk_contracts::CompactionResult,
+) -> Result<(), RuntimeError> {
+    let Some(anchor_event_id) = result.folded_turn_ids.last().cloned() else {
+        return Ok(());
+    };
+    let checkpoint_event_id = session_store
+        .append(
+            session_id,
+            SessionEvent::Checkpoint {
+                id: format!("checkpoint:{}", EventId::new_v4().0),
+                anchor_event_id,
+                compaction: Some(result.clone()),
+            },
+        )
+        .await?;
+
+    if let Some(summary_event_id) = view.event_ids.first_mut() {
+        *summary_event_id = checkpoint_event_id;
+    }
+
     Ok(())
 }
 

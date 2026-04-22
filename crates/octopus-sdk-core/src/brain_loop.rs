@@ -10,7 +10,7 @@ use octopus_sdk_observability::{TraceSpan, TraceValue};
 use crate::{
     assistant_projection::{collect_assistant_turn, text_render_block, usage_message},
     runtime::{RuntimeInner, SessionRuntimeState},
-    session_boot::{load_transcript, message_event},
+    session_boot::{load_transcript, message_event, TranscriptState},
     tool_dispatch::{execute_tool_round, DispatchContext},
     RuntimeError, SubmitTurnInput,
 };
@@ -45,7 +45,7 @@ pub(crate) async fn submit_turn(
             &input.session_id,
             &inner.tool_registry,
             &inner.prompt_builder,
-            &transcript,
+            &transcript.messages,
         );
         let stream = inner.model_provider.complete(request).await?;
         let turn = collect_assistant_turn(stream, inner.tracer.as_ref(), inner.usage_ledger.as_ref())
@@ -65,7 +65,7 @@ pub(crate) async fn submit_turn(
                 .append(&input.session_id, message_event(message.clone()))
                 .await?;
             last_assistant_event_id = Some(event_id.clone());
-            transcript.push(message);
+            transcript.push(event_id.clone(), message);
 
             if !turn.rendered_text.is_empty() {
                 inner
@@ -134,7 +134,7 @@ pub(crate) async fn submit_turn(
 async fn maybe_inject_stop_message(
     inner: &RuntimeInner,
     session_id: &octopus_sdk_contracts::SessionId,
-    transcript: &mut Vec<Message>,
+    transcript: &mut TranscriptState,
     _last_assistant_event_id: Option<octopus_sdk_contracts::EventId>,
 ) -> Result<bool, RuntimeError> {
     let outcome = inner
@@ -161,11 +161,11 @@ async fn maybe_inject_stop_message(
 
     if let Some(octopus_sdk_contracts::RewritePayload::UserPrompt { message }) = outcome.final_payload
     {
-        inner
+        let event_id = inner
             .session_store
             .append(session_id, message_event(message.clone()))
             .await?;
-        transcript.push(message);
+        transcript.push(event_id, message);
         return Ok(true);
     }
 

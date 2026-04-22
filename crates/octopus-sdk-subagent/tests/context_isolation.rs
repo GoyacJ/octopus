@@ -295,8 +295,12 @@ fn test_runtime_with_turns(turns: Vec<Vec<AssistantEvent>>, tool_names: Vec<&str
 
     futures::executor::block_on(store.append_session_started(
         &parent_session,
+        std::path::PathBuf::from("."),
+        octopus_sdk_contracts::PermissionMode::Default,
+        "main".into(),
         "cfg-parent".into(),
         "hash-parent".into(),
+        8_192,
         Some(sample_plugins_snapshot()),
     ))
     .expect("parent session should start");

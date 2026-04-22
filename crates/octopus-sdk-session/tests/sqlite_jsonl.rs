@@ -193,8 +193,12 @@ async fn collect_stream(stream: octopus_sdk_session::EventStream) -> Vec<Session
 
 fn sample_events() -> Vec<SessionEvent> {
     let session_started = SessionEvent::SessionStarted {
+        working_dir: ".".into(),
+        permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+        model: "main".into(),
         config_snapshot_id: "cfg-1".into(),
         effective_config_hash: "hash-1".into(),
+        token_budget: 8_192,
         plugins_snapshot: Some(sample_plugins_snapshot()),
     };
     let user_message = SessionEvent::UserMessage(Message {
@@ -239,6 +243,7 @@ fn sample_events() -> Vec<SessionEvent> {
     let checkpoint = SessionEvent::Checkpoint {
         id: "checkpoint-1".into(),
         anchor_event_id: EventId("event-4".into()),
+        compaction: None,
     };
     let session_ended = SessionEvent::SessionEnded {
         reason: EndReason::Normal,

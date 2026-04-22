@@ -197,6 +197,7 @@ impl OrchestratorWorkers {
                         SessionEvent::Checkpoint {
                             id: "subagent_budget_exceeded".into(),
                             anchor_event_id: checkpoint_anchor_event_id,
+                            compaction: None,
                         },
                     )
                     .await

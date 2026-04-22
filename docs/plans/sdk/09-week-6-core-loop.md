@@ -388,6 +388,111 @@ Step 2:
   - `rg "octopus_runtime_adapter|octopus-runtime-adapter|RuntimeAdapter" crates/octopus-sdk* crates/octopus-cli`
 - Stop if: Weekly Gate 任一硬门禁无法归因或无法通过。
 
+### Task 9: `resume()` 真实恢复运行态
+
+Status: `done`
+
+Files:
+- Modify: `crates/octopus-sdk-contracts/src/event.rs`
+- Modify: `crates/octopus-sdk-session/src/{store.rs,snapshot.rs,sqlite/*}`
+- Modify: `crates/octopus-sdk-core/src/runtime.rs`
+- Modify: `crates/octopus-sdk-core/tests/session_boot.rs`
+- Modify: `crates/octopus-sdk-contracts/tests/{serialization_golden.rs,fixtures/session_event/*}`
+
+Preconditions:
+- Task 8 完成；当前 W6 门禁全绿。
+- 本批不触碰 `contracts/openapi/**` 与 `packages/schema/**`。
+
+Step 1:
+- Action: 扩 `SessionEvent::SessionStarted`、`SessionSnapshot`、`SessionStore::append_session_started(...)`，把 `working_dir / permission_mode / model / token_budget` 持久化到首事件与 SQLite projection。
+- Done when: fresh runtime 只靠 `SessionStore::wake()` 就能拿到恢复 `submit_turn()` 所需的全部运行态，不再依赖默认占位值。
+- Verify: `cargo test -p octopus-sdk-session && cargo test -p octopus-sdk-contracts --test serialization_golden`
+- Stop if: 扩首事件字段后出现无法在同批 golden fixture 中收口的序列化冲突。
+
+Step 2:
+- Action: 让 `resume()` 基于持久化 snapshot 重建 `SessionRuntimeState` 并回填 `inner.sessions`，新增跨 runtime 的恢复回归测试。
+- Done when: 新 runtime 执行 `resume()` 后可继续 `submit_turn()`，不再报 `SessionStateMissing`。
+- Verify: `cargo test -p octopus-sdk-core --test session_boot`
+- Stop if: `resume()` 仍需要读业务侧 config/runtime loader 才能工作。
+
+### Task 10: compaction 持久化与 replay
+
+Status: `done`
+
+Files:
+- Modify: `crates/octopus-sdk-session/src/{store.rs,sqlite/mod.rs,sqlite/stream.rs}`
+- Modify: `crates/octopus-sdk-core/src/{session_boot.rs,brain_loop.rs,tool_dispatch.rs}`
+- Modify: `crates/octopus-sdk-core/tests/min_loop.rs`
+
+Preconditions:
+- Task 9 完成，fresh runtime 已能仅靠 `SessionStore::wake()` 恢复运行态。
+- `SessionEvent::Checkpoint` 已包含 `compaction` 字段，允许把折叠结果写回事件流。
+
+Step 1:
+- Action: 在 `SessionStore` 增加 `stream_records()` 最小内部面，SQLite 实现返回真实 `event_id + payload`，保持原 `stream()` 契约不变。
+- Done when: core replay 侧能拿到历史消息对应的真实 `event_id`，不再为 compaction anchor 生成临时占位值。
+- Verify: `cargo test -p octopus-sdk-session`
+- Stop if: 需要打破现有 facade/trait 公共面，导致外部 crate 跟着改接口。
+
+Step 2:
+- Action: core transcript 改为维护 `messages + event_ids`，在 `maybe_compact_transcript()` 里把 summarize 结果写成 `Checkpoint { compaction: Some(...) }`，并在 `resume()` replay 时用最新 summarize checkpoint 合成 summary system message、跳过被折叠前缀。
+- Done when: fresh runtime `resume()` 后继续 `submit_turn()`，模型请求包含 summary，而不再回放被 fold 的原始前缀消息。
+- Verify: `cargo test -p octopus-sdk-core --test min_loop -- --exact test_resume_replays_compaction_summary_instead_of_folded_prefix`
+- Stop if: replay 语义需要把 `ClearToolResults` 与 summarize 一并设计，超出 W6 收口范围。
+
+### Task 11: `AskResolver` 接入权限审批链
+
+Status: `done`
+
+Files:
+- Modify: `crates/octopus-sdk-core/src/tool_dispatch.rs`
+- Modify: `crates/octopus-sdk-core/tests/{min_loop.rs,support/mod.rs}`
+
+Preconditions:
+- Task 5 的 tool dispatch 主路径已稳定。
+- `octopus-sdk-permissions::ApprovalBroker` 已可独立 emit `SessionEvent::Ask` 并把 resolver 结果映射回 `PermissionOutcome`。
+
+Step 1:
+- Action: 在 core tool dispatch 中接住 `PermissionOutcome::{AskApproval,RequireAuth}`，通过 `ApprovalBroker + AskResolver` 完成询问与落库，不再直接报 `RuntimeError::UnresolvedPrompt`。
+- Done when: approval/auth prompt 会落成 `SessionEvent::Ask`，resolver 返回 `approve` 时继续执行工具，返回拒绝时转成 denial tool result 并继续 loop。
+- Verify: `cargo test -p octopus-sdk-core --test min_loop -- --exact test_permission_approval_executes_tool_after_approve`
+- Stop if: 审批链必须引入新的业务态 prompt store，无法在 SDK 内闭合。
+
+Step 2:
+- Action: 增加拒绝 / auth 路径回归测试，确认 denied tool 不执行但事件流仍完整。
+- Done when: `AskApproval` 与 `RequireAuth` 两条路径都有回归测试，且 denial 结果不会静默丢失。
+- Verify: `cargo test -p octopus-sdk-core --test min_loop -- --exact test_permission_denial_returns_tool_error_without_execution`
+- Stop if: 测试只能通过修改 builtin tool 权限策略本身成立，而不是 core 审批接线问题。
+
+### Task 12: W6 文档与门禁最终收口
+
+Status: `done`
+
+Files:
+- Modify: `docs/plans/sdk/{09-week-6-core-loop.md,03-legacy-retirement.md,README.md}`
+- Modify: `crates/octopus-sdk-subagent/src/orchestrator.rs`
+
+Preconditions:
+- Task 9–11 完成。
+- `cargo test -p octopus-sdk-core --test {session_boot,min_loop}` 已全绿。
+
+Step 1:
+- Action: 回填 W6 子 Plan、legacy retirement map、SDK 计划索引，把 `resume / compaction replay / approval chain` 的收口状态写回控制面。
+- Done when: `09-week-6-core-loop.md` 不再保留 `pending` 的执行任务，`03-legacy-retirement.md` 与 `README.md` 状态和实际代码一致。
+- Verify: `rg -n "Status: \`pending\`|W6" docs/plans/sdk/{09-week-6-core-loop.md,03-legacy-retirement.md,README.md}`
+- Stop if: 文档状态与门禁结果冲突，无法给出单一结论。
+
+Step 2:
+- Action: 执行 W6 最终门禁，补齐 `Checkpoint.compaction` 相关的 build/clippy 兼容修复，确认 workspace 层面无残留红灯。
+- Done when: `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test -p octopus-sdk-core`、`cargo test -p octopus-sdk --test e2e_min_loop`、`cargo test -p octopus-cli --test min_cli` 全绿。
+- Verify:
+  - `cargo build --workspace`
+  - `cargo clippy --workspace -- -D warnings`
+  - `cargo test -p octopus-sdk-core`
+  - `cargo test -p octopus-sdk --test e2e_min_loop`
+  - `cargo test -p octopus-cli --test min_cli`
+- Stop if: 需要为通过门禁引入 W7 cutover 级别的业务接线。
+
 ## 变更日志
 
 | 日期 | 变更 | 责任人 |
@@ -397,3 +502,4 @@ Step 2:
 | 2026-04-22 | 执行启动：W6 状态切到 `in_progress`，Task 1 进入执行态；首批先修 `HookRunner` source 顺序，作为 plugin hook 接线前置条件。 | Codex |
 | 2026-04-22 | 实施完成：落地 `octopus-sdk-observability / octopus-sdk-core / octopus-sdk / octopus-cli`，补齐 builder/runtime/brain loop/plugin-subagent/CLI 最小入口与对应测试；同步回填 `02-crate-topology.md`、`03-legacy-retirement.md`、`README.md`。 | Codex |
 | 2026-04-22 | Weekly Gate 收尾：`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo test -p octopus-sdk-observability --test usage_replay`、`cargo test -p octopus-sdk-core --test {builder_contract,session_boot,min_loop,plugin_subagent_integration}`、`cargo test -p octopus-sdk --test e2e_min_loop`、`cargo test -p octopus-cli --lib --test min_cli` 全绿；legacy `RuntimeAdapter` 守护扫描对新 SDK crate 为 0 命中。 | Codex |
+| 2026-04-22 | 收口补齐：`SessionStarted` / `SessionSnapshot` 持久化补上 `working_dir / permission_mode / model / token_budget`；`resume()` 改为真实恢复运行态；新增 `stream_records()` 与 summarize checkpoint replay；tool dispatch 接入 `ApprovalBroker + AskResolver`；最终通过 `cargo test -p octopus-sdk-contracts --test serialization_golden`、`cargo test -p octopus-sdk-session`、`cargo test -p octopus-sdk-core`、`cargo test -p octopus-sdk --test e2e_min_loop`、`cargo test -p octopus-cli --test min_cli`、`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`。 | Codex |

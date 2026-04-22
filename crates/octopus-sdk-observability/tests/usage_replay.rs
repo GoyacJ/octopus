@@ -39,8 +39,12 @@ async fn test_replay_tracer_usage() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-1".into(),
             "hash-1".into(),
+            8_192,
             Some(octopus_sdk_contracts::PluginsSnapshot::default()),
         )
         .await

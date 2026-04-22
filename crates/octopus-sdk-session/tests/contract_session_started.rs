@@ -52,8 +52,12 @@ async fn session_started_fields_roundtrip_into_snapshot() {
     store
         .append_session_started(
             &session_id,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-contract".into(),
             "hash-contract".into(),
+            8_192,
             Some(plugins_snapshot.clone()),
         )
         .await

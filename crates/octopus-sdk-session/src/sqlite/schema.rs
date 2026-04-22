@@ -5,8 +5,12 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), rusqlite::Error>
         "
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
+            working_dir TEXT NOT NULL DEFAULT '.',
+            permission_mode TEXT NOT NULL DEFAULT 'default',
+            model TEXT NOT NULL DEFAULT 'main',
             config_snapshot_id TEXT NOT NULL,
             effective_config_hash TEXT NOT NULL,
+            token_budget INTEGER NOT NULL DEFAULT 8192,
             plugins_snapshot_json TEXT NOT NULL DEFAULT '{\"api_version\":\"\",\"plugins\":[]}',
             head_event_id TEXT NOT NULL,
             usage_json TEXT NOT NULL,
@@ -32,6 +36,30 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), rusqlite::Error>
     if !has_column(connection, "sessions", "plugins_snapshot_json")? {
         connection.execute(
             "ALTER TABLE sessions ADD COLUMN plugins_snapshot_json TEXT NOT NULL DEFAULT '{\"api_version\":\"\",\"plugins\":[]}'",
+            [],
+        )?;
+    }
+    if !has_column(connection, "sessions", "working_dir")? {
+        connection.execute(
+            "ALTER TABLE sessions ADD COLUMN working_dir TEXT NOT NULL DEFAULT '.'",
+            [],
+        )?;
+    }
+    if !has_column(connection, "sessions", "permission_mode")? {
+        connection.execute(
+            "ALTER TABLE sessions ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default'",
+            [],
+        )?;
+    }
+    if !has_column(connection, "sessions", "model")? {
+        connection.execute(
+            "ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT 'main'",
+            [],
+        )?;
+    }
+    if !has_column(connection, "sessions", "token_budget")? {
+        connection.execute(
+            "ALTER TABLE sessions ADD COLUMN token_budget INTEGER NOT NULL DEFAULT 8192",
             [],
         )?;
     }

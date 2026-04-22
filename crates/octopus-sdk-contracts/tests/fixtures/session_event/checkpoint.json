@@ -1,5 +1,16 @@
 {
   "anchor_event_id": "event-anchor",
+  "compaction": {
+    "folded_turn_ids": [
+      "event-1",
+      "event-2"
+    ],
+    "strategy": "summarize",
+    "summary": "Earlier turns summarized.",
+    "tokens_after": 4096,
+    "tokens_before": 12288,
+    "tool_results_cleared": 0
+  },
   "id": "checkpoint-1",
   "kind": "checkpoint"
 }

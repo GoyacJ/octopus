@@ -20,8 +20,12 @@ async fn test_fork_preserves_prefix() {
         .append(
             &session_id,
             SessionEvent::SessionStarted {
+                working_dir: ".".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                model: "main".into(),
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                token_budget: 8_192,
                 plugins_snapshot: Some(plugins_snapshot.clone()),
             },
         )
@@ -45,6 +49,7 @@ async fn test_fork_preserves_prefix() {
             SessionEvent::Checkpoint {
                 id: "checkpoint-fork".into(),
                 anchor_event_id: message_id.clone(),
+                compaction: None,
             },
         )
         .await
@@ -75,8 +80,12 @@ async fn test_fork_preserves_prefix() {
         forked_events,
         vec![
             SessionEvent::SessionStarted {
+                working_dir: ".".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                model: "main".into(),
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                token_budget: 8_192,
                 plugins_snapshot: Some(plugins_snapshot.clone()),
             },
             SessionEvent::UserMessage(Message {
@@ -88,6 +97,7 @@ async fn test_fork_preserves_prefix() {
             SessionEvent::Checkpoint {
                 id: "checkpoint-fork".into(),
                 anchor_event_id: message_id,
+                compaction: None,
             },
         ]
     );
@@ -109,8 +119,12 @@ async fn test_wake_returns_latest_snapshot() {
         .append(
             &session_id,
             SessionEvent::SessionStarted {
+                working_dir: ".".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                model: "main".into(),
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                token_budget: 8_192,
                 plugins_snapshot: Some(plugins_snapshot.clone()),
             },
         )
@@ -134,6 +148,7 @@ async fn test_wake_returns_latest_snapshot() {
             SessionEvent::Checkpoint {
                 id: "checkpoint-wake".into(),
                 anchor_event_id,
+                compaction: None,
             },
         )
         .await
@@ -171,8 +186,12 @@ async fn test_wake_rejects_checkpoint_with_missing_anchor() {
         .append(
             &session_id,
             SessionEvent::SessionStarted {
+                working_dir: ".".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                model: "main".into(),
                 config_snapshot_id: "cfg-fork".into(),
                 effective_config_hash: "hash-fork".into(),
+                token_budget: 8_192,
                 plugins_snapshot: Some(sample_plugins_snapshot()),
             },
         )
@@ -184,6 +203,7 @@ async fn test_wake_rejects_checkpoint_with_missing_anchor() {
             SessionEvent::Checkpoint {
                 id: "checkpoint-wake".into(),
                 anchor_event_id: EventId("missing-anchor".into()),
+                compaction: None,
             },
         )
         .await

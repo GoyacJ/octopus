@@ -2,6 +2,8 @@
   "config_snapshot_id": "cfg-2026-04-21",
   "effective_config_hash": "sha256:abc123",
   "kind": "session_started",
+  "model": "main",
+  "permission_mode": "default",
   "plugins_snapshot": {
     "api_version": "1.0.0",
     "plugins": [
@@ -14,5 +16,7 @@
         "version": "0.1.0"
       }
     ]
-  }
+  },
+  "token_budget": 8192,
+  "working_dir": "/tmp/octopus"
 }

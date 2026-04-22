@@ -236,8 +236,12 @@ async fn test_evaluator_runs_in_independent_child_session() {
     store
         .append_session_started(
             &parent_session,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-parent".into(),
             "hash-parent".into(),
+            8_192,
             Some(PluginsSnapshot::default()),
         )
         .await

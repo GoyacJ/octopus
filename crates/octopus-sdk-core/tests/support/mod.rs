@@ -43,6 +43,37 @@ impl AskResolver for StaticAskResolver {
     }
 }
 
+pub struct FixedPermissionGate {
+    pub outcome: PermissionOutcome,
+}
+
+#[async_trait]
+impl PermissionGate for FixedPermissionGate {
+    async fn check(&self, _call: &ToolCallRequest) -> PermissionOutcome {
+        self.outcome.clone()
+    }
+}
+
+pub struct FixedAskResolver {
+    pub option_id: &'static str,
+    pub text: &'static str,
+}
+
+#[async_trait]
+impl AskResolver for FixedAskResolver {
+    async fn resolve(
+        &self,
+        prompt_id: &str,
+        _prompt: &AskPrompt,
+    ) -> Result<AskAnswer, AskError> {
+        Ok(AskAnswer {
+            prompt_id: prompt_id.into(),
+            option_id: self.option_id.into(),
+            text: self.text.into(),
+        })
+    }
+}
+
 pub struct StaticSecretVault;
 
 #[async_trait]
@@ -114,6 +145,20 @@ pub fn temp_store() -> (TempDir, Arc<SqliteJsonlSessionStore>) {
 }
 
 pub fn runtime_builder(model: Arc<dyn ModelProvider>, store: Arc<dyn SessionStore>) -> AgentRuntimeBuilder {
+    runtime_builder_with_controls(
+        model,
+        store,
+        Arc::new(AllowAllGate),
+        Arc::new(StaticAskResolver),
+    )
+}
+
+pub fn runtime_builder_with_controls(
+    model: Arc<dyn ModelProvider>,
+    store: Arc<dyn SessionStore>,
+    permission_gate: Arc<dyn PermissionGate>,
+    ask_resolver: Arc<dyn AskResolver>,
+) -> AgentRuntimeBuilder {
     let mut tool_registry = ToolRegistry::new();
     register_builtins(&mut tool_registry).expect("builtins should register");
 
@@ -122,8 +167,8 @@ pub fn runtime_builder(model: Arc<dyn ModelProvider>, store: Arc<dyn SessionStor
         .with_model_provider(model)
         .with_secret_vault(Arc::new(StaticSecretVault))
         .with_tool_registry(tool_registry)
-        .with_permission_gate(Arc::new(AllowAllGate))
-        .with_ask_resolver(Arc::new(StaticAskResolver))
+        .with_permission_gate(permission_gate)
+        .with_ask_resolver(ask_resolver)
         .with_sandbox_backend(Arc::new(NoopBackend))
 }
 

@@ -110,8 +110,12 @@ async fn test_parent_session_events_do_not_include_secret_after_hook_and_permiss
     store
         .append_session_started(
             &parent_session,
+            std::path::PathBuf::from("."),
+            octopus_sdk_contracts::PermissionMode::Default,
+            "main".into(),
             "cfg-parent".into(),
             "hash-parent".into(),
+            8_192,
             Some(PluginsSnapshot::default()),
         )
         .await

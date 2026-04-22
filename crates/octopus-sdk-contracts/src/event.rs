@@ -2,8 +2,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::{
-    AskPrompt, ContentBlock, EndReason, EventId, Message, PluginsSnapshot, PromptCacheEvent,
-    RenderBlock, RenderLifecycle, Role, ToolCallId, Usage,
+    AskPrompt, CompactionResult, ContentBlock, EndReason, EventId, Message, PermissionMode,
+    PluginsSnapshot, PromptCacheEvent, RenderBlock, RenderLifecycle, Role, ToolCallId, Usage,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,8 +136,12 @@ impl<'de> Deserialize<'de> for AssistantEvent {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum SessionEventRepr {
     SessionStarted {
+        working_dir: String,
+        permission_mode: PermissionMode,
+        model: String,
         config_snapshot_id: String,
         effective_config_hash: String,
+        token_budget: u32,
         plugins_snapshot: Option<PluginsSnapshot>,
     },
     SessionPluginsSnapshot {
@@ -167,6 +171,7 @@ enum SessionEventRepr {
     Checkpoint {
         id: String,
         anchor_event_id: EventId,
+        compaction: Option<CompactionResult>,
     },
     SessionEnded {
         reason: EndReason,
@@ -176,8 +181,12 @@ enum SessionEventRepr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionEvent {
     SessionStarted {
+        working_dir: String,
+        permission_mode: PermissionMode,
+        model: String,
         config_snapshot_id: String,
         effective_config_hash: String,
+        token_budget: u32,
         plugins_snapshot: Option<PluginsSnapshot>,
     },
     SessionPluginsSnapshot {
@@ -201,6 +210,7 @@ pub enum SessionEvent {
     Checkpoint {
         id: String,
         anchor_event_id: EventId,
+        compaction: Option<CompactionResult>,
     },
     SessionEnded {
         reason: EndReason,
@@ -215,12 +225,20 @@ impl From<&SessionEvent> for SessionEventRepr {
     fn from(value: &SessionEvent) -> Self {
         match value {
             SessionEvent::SessionStarted {
+                working_dir,
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot,
             } => Self::SessionStarted {
+                working_dir: working_dir.clone(),
+                permission_mode: *permission_mode,
+                model: model.clone(),
                 config_snapshot_id: config_snapshot_id.clone(),
                 effective_config_hash: effective_config_hash.clone(),
+                token_budget: *token_budget,
                 plugins_snapshot: plugins_snapshot.clone(),
             },
             SessionEvent::SessionPluginsSnapshot { plugins_snapshot } => {
@@ -257,9 +275,11 @@ impl From<&SessionEvent> for SessionEventRepr {
             SessionEvent::Checkpoint {
                 id,
                 anchor_event_id,
+                compaction,
             } => Self::Checkpoint {
                 id: id.clone(),
                 anchor_event_id: anchor_event_id.clone(),
+                compaction: compaction.clone(),
             },
             SessionEvent::SessionEnded { reason } => Self::SessionEnded {
                 reason: reason.clone(),
@@ -272,12 +292,20 @@ impl From<SessionEventRepr> for SessionEvent {
     fn from(value: SessionEventRepr) -> Self {
         match value {
             SessionEventRepr::SessionStarted {
+                working_dir,
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot,
             } => Self::SessionStarted {
+                working_dir,
+                permission_mode,
+                model,
                 config_snapshot_id,
                 effective_config_hash,
+                token_budget,
                 plugins_snapshot,
             },
             SessionEventRepr::SessionPluginsSnapshot { plugins_snapshot } => {
@@ -305,9 +333,11 @@ impl From<SessionEventRepr> for SessionEvent {
             SessionEventRepr::Checkpoint {
                 id,
                 anchor_event_id,
+                compaction,
             } => Self::Checkpoint {
                 id,
                 anchor_event_id,
+                compaction,
             },
             SessionEventRepr::SessionEnded { reason } => Self::SessionEnded { reason },
         }
@@ -344,8 +374,12 @@ mod tests {
     #[test]
     fn session_started_serializes_kind_before_payload_fields() {
         let event = SessionEvent::SessionStarted {
+            working_dir: "/tmp/octopus".into(),
+            permission_mode: crate::PermissionMode::Default,
+            model: "main".into(),
             config_snapshot_id: "cfg-1".into(),
             effective_config_hash: "hash-1".into(),
+            token_budget: 8_192,
             plugins_snapshot: Some(sample_plugins_snapshot()),
         };
 
@@ -430,6 +464,7 @@ mod tests {
         sink.emit(SessionEvent::Checkpoint {
             id: "checkpoint-1".into(),
             anchor_event_id: EventId("event-1".into()),
+            compaction: None,
         });
     }
 }
