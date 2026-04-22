@@ -80,7 +80,6 @@ pub(crate) struct RuntimeSdkState {
     pub(crate) workspace_id: String,
     pub(crate) workspace_root: PathBuf,
     pub(crate) paths: RuntimeSdkPaths,
-    pub(crate) database: Database,
     pub(crate) default_model: String,
     pub(crate) default_permission_mode: PermissionMode,
     pub(crate) default_token_budget: u32,

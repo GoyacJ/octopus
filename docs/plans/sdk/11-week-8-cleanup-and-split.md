@@ -10,9 +10,9 @@
 
 ## Active Work
 
-当前 Task：`Completed`
+当前 Task：`Task 9`
 
-当前 Step：`done`
+当前 Step：`completed`
 
 Open Questions：
 
@@ -701,3 +701,38 @@ Step 1:
   - <none>
 - Next:
   - W8 complete
+
+## Checkpoint 2026-04-23 03:09
+
+- Week: W8
+- Batch: Task 9 Step 1 · post-audit closeout
+- Completed:
+  - 修复 post-audit 暴露的拆分回归：`octopus-platform::runtime_sdk::secret_vault` 恢复 `Connection` 导入并改为复用传入的 `Database`；`octopus-server` 清掉错误 re-export、补回 `runtime_events` 模块装配、修正 host notification 路径 fallback；`octopus-infra` 的 bootstrap/load/test 路径全部切回当前 `octopus-persistence` API。
+  - 删除未挂载的孤儿文件 `crates/octopus-infra/src/persistence/schema.rs` 后，repo 级 Rust `<=800` 行门禁保持 0 命中；`workspace_runtime` 测试装配改为 `tests` + `tests_legacy` 双包装器，恢复拆分后的 server 测试面。
+  - W8 计划重新验收通过，本文档状态切回 `done`。
+- Files changed:
+  - `crates/octopus-platform/src/runtime_sdk/secret_vault.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-server/src/lib.rs` (modified)
+  - `crates/octopus-server/src/handlers/host.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/mod.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/runtime_sessions.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests/mod.rs` (modified)
+  - `crates/octopus-infra/src/bootstrap.rs` (modified)
+  - `crates/octopus-infra/src/infra_state.rs` (modified)
+  - `crates/octopus-infra/src/lib.rs` (modified)
+  - `crates/octopus-infra/src/persistence/schema.rs` (deleted)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `cargo test --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `pnpm -C apps/desktop test` → pass
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - <none>

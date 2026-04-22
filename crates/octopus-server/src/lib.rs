@@ -83,13 +83,6 @@ use serde::Deserialize;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
-pub(crate) use auth_limits::{
-    auth_rate_limit_key, check_auth_rate_limit, clear_auth_failures, record_auth_failure,
-};
-pub(crate) use server_audit::{
-    append_audit_event, append_session_audit, audit_resource_label, workspace_id_for_audit,
-};
-
 #[derive(Clone)]
 pub struct ServerState {
     pub services: PlatformServices,

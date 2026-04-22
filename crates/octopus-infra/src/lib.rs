@@ -78,7 +78,6 @@ use zip::ZipArchive;
 use access_control::*;
 use auth_users::*;
 use infra_state::*;
-use persistence::*;
 use resources_skills::*;
 
 pub use bootstrap::{build_infra_bundle, initialize_workspace};

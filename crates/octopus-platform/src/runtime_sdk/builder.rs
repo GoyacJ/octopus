@@ -1,7 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use octopus_persistence::Database;
 use octopus_sdk::{
     default_backend_for_host, register_builtins, AgentRuntimeBuilder, AnthropicMessagesAdapter,
     AskAnswer, AskError, AskPrompt, AskResolver, DefaultModelProvider, GeminiNativeAdapter,
@@ -100,8 +99,7 @@ impl RuntimeSdkFactory {
         let workspace_id = workspace_id.into();
         let paths = RuntimeSdkPaths::new(&workspace_root);
         paths.ensure_layout()?;
-        let database = Database::open(&paths.db_path)
-            .map_err(|error| octopus_core::AppError::database(error.to_string()))?;
+        let database = paths.database()?;
         let secret_vault = RuntimeSecretVault::open(&workspace_id, &paths, database.clone())?;
         let session_store = Arc::new(
             SqliteJsonlSessionStore::open(&paths.db_path, &workspace_root.join("runtime/events"))
@@ -130,23 +128,21 @@ impl RuntimeSdkFactory {
             tracer: Arc::new(NoopTracer),
             task_fn: None,
         })
-        .build_with_parts(paths, database, secret_vault)
+        .build_with_parts(paths, secret_vault)
     }
 
     pub fn build(self) -> Result<Arc<RuntimeSdkBridge>, octopus_core::AppError> {
         let paths = RuntimeSdkPaths::new(&self.deps.workspace_root);
         paths.ensure_layout()?;
-        let database = Database::open(&paths.db_path)
-            .map_err(|error| octopus_core::AppError::database(error.to_string()))?;
+        let database = paths.database()?;
         let secret_vault =
             RuntimeSecretVault::open(&self.deps.workspace_id, &paths, database.clone())?;
-        self.build_with_parts(paths, database, secret_vault)
+        self.build_with_parts(paths, secret_vault)
     }
 
     fn build_with_parts(
         self,
         paths: RuntimeSdkPaths,
-        database: Database,
         secret_vault: Arc<RuntimeSecretVault>,
     ) -> Result<Arc<RuntimeSdkBridge>, octopus_core::AppError> {
         let RuntimeSdkDeps {
@@ -191,7 +187,6 @@ impl RuntimeSdkFactory {
             workspace_id,
             workspace_root,
             paths,
-            database,
             default_model: default_model.0,
             default_permission_mode,
             default_token_budget,

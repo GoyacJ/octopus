@@ -15,7 +15,7 @@ use getrandom::getrandom;
 use octopus_core::{timestamp_now, AppError};
 use octopus_persistence::{Database, Migration};
 use octopus_sdk::{SecretValue, SecretVault, VaultError};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use super::RuntimeSdkPaths;
 
@@ -101,7 +101,7 @@ impl RuntimeSecretVault {
         database: Database,
     ) -> Result<RuntimeSecretVaultBackend, AppError> {
         let master_key = Self::load_or_create_master_key(&paths.runtime_secret_master_key_path)?;
-        let database = paths.database()?.with_migrations(RUNTIME_SECRET_MIGRATIONS);
+        let database = database.with_migrations(RUNTIME_SECRET_MIGRATIONS);
         database.run_migrations()?;
 
         Ok(RuntimeSecretVaultBackend::Sqlite {

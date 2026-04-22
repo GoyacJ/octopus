@@ -359,7 +359,7 @@ pub(crate) fn host_notifications_db_path(state: &ServerState) -> PathBuf {
     state
         .host_preferences_path
         .parent()
-        .unwrap_or_else(|| StdPath::new("."))
+        .unwrap_or_else(|| std::path::Path::new("."))
         .join("data/main.db")
 }
 

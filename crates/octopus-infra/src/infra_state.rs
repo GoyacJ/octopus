@@ -1,8 +1,4 @@
 use super::*;
-use crate::persistence::{
-    backfill_default_project_assignments, backfill_project_governance,
-    backfill_project_resource_directories, map_db_error,
-};
 use crate::project_tasks::{
     load_project_task_interventions, load_project_task_runs, load_project_task_scheduler_claims,
     load_project_tasks,
@@ -283,8 +279,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let database = open_workspace_database(&paths).expect("database handle");
-        crate::initialize_database(&database).expect("database");
+        crate::initialize_database(&paths).expect("database");
 
         let connection = paths.database().expect("database").acquire().expect("db");
         let mut statement = connection
@@ -314,9 +309,8 @@ mod tests {
         paths.ensure_layout().expect("layout");
         super::initialize_workspace_config(&paths).expect("workspace config");
         super::initialize_app_registry(&paths).expect("app registry");
-        let database = open_workspace_database(&paths).expect("database handle");
-        crate::initialize_database(&database).expect("database");
-        crate::seed_defaults(&database, &paths).expect("seed defaults");
+        crate::initialize_database(&paths).expect("database");
+        crate::seed_defaults(&paths).expect("seed defaults");
 
         let connection = paths.database().expect("database").acquire().expect("db");
         connection
@@ -461,8 +455,7 @@ mod tests {
             )
             .expect("insert project task scheduler claim");
 
-        let database = open_workspace_database(&paths).expect("database handle");
-        let state = load_state(paths, database).expect("load state");
+        let state = load_state(paths).expect("load state");
 
         let project_tasks = state.project_tasks.lock().expect("project tasks lock");
         assert_eq!(project_tasks.len(), 1);

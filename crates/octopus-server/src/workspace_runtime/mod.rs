@@ -31,11 +31,16 @@ mod project_runtime;
 mod projects;
 mod resource_auth;
 mod resources;
+mod runtime_events;
 mod runtime_sessions;
 mod tasks;
 mod tasks_support;
 mod workspace;
 #[cfg(test)]
+#[path = "tests.rs"]
+mod tests_legacy;
+#[cfg(test)]
+#[path = "tests/mod.rs"]
 mod tests;
 
 use activity_dashboard::*;
@@ -52,6 +57,7 @@ pub(crate) use profile_deliverables::*;
 pub(crate) use project_runtime::*;
 pub(crate) use projects::*;
 pub(crate) use resources::*;
+pub(crate) use runtime_events::*;
 pub(crate) use runtime_sessions::*;
 pub(crate) use tasks::*;
 pub(crate) use workspace::*;
