@@ -99,7 +99,7 @@ async fn test_source_ordering() {
     assert_eq!(outcome.aborted, None);
     assert_eq!(
         *record.lock().expect("record lock should work"),
-        vec!["plugin", "workspace", "defaults", "project", "session"]
+        vec!["session", "project", "plugin", "workspace", "defaults"]
     );
 }
 

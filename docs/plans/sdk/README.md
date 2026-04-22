@@ -18,7 +18,7 @@
 | `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `done` |
 | `07-week-4-permissions-hooks-sandbox-context.md` | W4：权限 / 钩子 / 沙箱 / 上下文工程 | `done` |
 | `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `done` |
-| `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + 端到端最小链路 | `pending` |
+| `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + `octopus-sdk` / `octopus-cli` 最小链路 | `done` |
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `pending` |
 | `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `pending` |
 
@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-21（W5 Weekly Gate 完成：`08-week-5-subagent-plugin.md` = `done`；`octopus-sdk-subagent` / `octopus-sdk-plugin` 两个 SDK crate 落地，`plugins_snapshot` replay 合同与四源合一守护已收口）
+**最后更新**：2026-04-22（W6 子 Plan `09-week-6-core-loop.md` 完成：`octopus-sdk-observability / octopus-sdk-core / octopus-sdk / octopus-cli` 已落地，Weekly Gate 与外层 E2E/CLI 门禁通过）

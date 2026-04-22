@@ -3241,6 +3241,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-cli"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "octopus-core"
 version = "0.2.5"
 dependencies = [
@@ -3351,6 +3365,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-sdk"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk-contracts",
+ "octopus-sdk-core",
+ "octopus-sdk-model",
+ "octopus-sdk-observability",
+ "octopus-sdk-permissions",
+ "octopus-sdk-plugin",
+ "octopus-sdk-sandbox",
+ "octopus-sdk-session",
+ "octopus-sdk-tools",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "octopus-sdk-context"
 version = "0.2.5"
 dependencies = [
@@ -3379,6 +3413,31 @@ dependencies = [
  "thiserror 1.0.69",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "octopus-sdk-core"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk-context",
+ "octopus-sdk-contracts",
+ "octopus-sdk-hooks",
+ "octopus-sdk-model",
+ "octopus-sdk-observability",
+ "octopus-sdk-permissions",
+ "octopus-sdk-plugin",
+ "octopus-sdk-sandbox",
+ "octopus-sdk-session",
+ "octopus-sdk-tools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -3428,6 +3487,21 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "wiremock",
+]
+
+[[package]]
+name = "octopus-sdk-observability"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "futures",
+ "octopus-sdk-contracts",
+ "octopus-sdk-session",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

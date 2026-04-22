@@ -43,7 +43,7 @@
 |---|---|---|---|---|
 | `session.rs` | `Session / ConversationMessage / ContentBlock / MessageRole / SessionCompaction / SessionFork / SessionError` | `octopus-sdk-contracts`（数据 IR）+ `octopus-sdk-session`（Store） | W1 | pending |
 | `session_control.rs`（879） | `SessionStore`（旧 trait）、会话控制 | `octopus-sdk-session::SqliteJsonlSessionStore` | W1 | pending |
-| `conversation.rs` + `conversation/*` | `ConversationRuntime / ApiClient(旧) / ApiRequest / AssistantEvent / PromptCacheEvent / RuntimeError / StaticToolExecutor / ToolError / ToolExecutionOutcome / ToolExecutor / TurnSummary / AutoCompactionEvent` | `octopus-sdk-core::AgentRuntime`（Brain Loop）+ `octopus-sdk-contracts::AssistantEvent` | W6 | pending |
+| `conversation.rs` + `conversation/*` | `ConversationRuntime / ApiClient(旧) / ApiRequest / AssistantEvent / PromptCacheEvent / RuntimeError / StaticToolExecutor / ToolError / ToolExecutionOutcome / ToolExecutor / TurnSummary / AutoCompactionEvent` | `octopus-sdk-core::AgentRuntime`（Brain Loop）+ `octopus-sdk-contracts::AssistantEvent` | W6 | partial/replaced |
 | `prompt.rs`（803） | `load_system_prompt / SystemPromptBuilder / ProjectContext / ContextFile / PromptBuildError / FRONTIER_MODEL_NAME / SYSTEM_PROMPT_DYNAMIC_BOUNDARY / prepend_bullets` | `octopus-sdk-context::SystemPromptBuilder` | W4 | replaced |
 | `compact.rs` + `summary_compression.rs` | `compact_session / estimate_session_tokens / format_compact_summary / get_compact_continuation_message / should_compact / CompactionConfig / CompactionResult / compress_summary_text` | `octopus-sdk-context::Compactor` | W4 | replaced |
 | `config.rs` + `config_merge.rs` + `config_patch.rs` + `config_secrets.rs` + `config_sources.rs` + `config/` | `ConfigDocument / ConfigEntry / ConfigError / ConfigLoader / ConfigSource / RuntimeConfig / RuntimeFeatureConfig / RuntimeHookConfig / RuntimePermissionRuleConfig / RuntimePluginConfig / ResolvedPermissionMode / apply_config_patch / CLAW_SETTINGS_SCHEMA_NAME` | `octopus-platform::config`（业务侧运行时配置服务）；SDK 只消费由业务注入的 `AgentRuntimeBuilder` 字段，不持有 config loader | W7 | pending |
@@ -56,7 +56,7 @@
 | `plugin_lifecycle.rs` | `PluginLifecycle / PluginLifecycleEvent / PluginState / DegradedMode / DiscoveryResult / PluginHealthcheck / ResourceInfo / ServerHealth / ServerStatus / ToolInfo` | `octopus-sdk-plugin::{PluginLifecycle, PluginRegistry}` | W5 | replaced |
 | `sandbox.rs` | `SandboxConfig / SandboxStatus / SandboxRequest / SandboxDetectionInputs / build_linux_sandbox_command / detect_container_environment / resolve_sandbox_status / LinuxSandboxCommand / ContainerEnvironment / FilesystemIsolationMode` | `octopus-sdk-sandbox::{SandboxSpec, SandboxBackend, BubblewrapBackend, SeatbeltBackend}` | W4 | replaced |
 | `oauth.rs` | `OAuthTokenSet / OAuth* / PkceChallengeMethod / PkceCodePair / save_oauth_credentials / load_oauth_credentials / clear_oauth_credentials / credentials_path / code_challenge_s256 / generate_pkce_pair / generate_state / loopback_redirect_uri / parse_oauth_callback_query / parse_oauth_callback_request_target` | `octopus-sdk::SecretVault` 实现 + 业务侧 `octopus-platform::auth`（OAuth flow 业务侧执行，vault 存 token） | W2（与模型认证耦合）W4（与凭据零暴露合约同时验证） | pending |
-| `usage.rs` | `TokenUsage / UsageTracker / ModelPricing / UsageCostEstimate / pricing_for_model / format_usd` | `octopus-sdk-observability::UsageLedger` + `octopus-sdk-contracts::Usage` | W6 | pending |
+| `usage.rs` | `TokenUsage / UsageTracker / ModelPricing / UsageCostEstimate / pricing_for_model / format_usd` | `octopus-sdk-observability::UsageLedger` + `octopus-sdk-contracts::Usage` | W6 | partial |
 | `task_packet.rs` + `task_registry.rs` | `TaskPacket / ValidatedPacket / validate_packet / TaskPacketValidationError` | `octopus-platform`（业务域 task）；SDK 不承担业务任务包语义 | W7 | pending |
 | `lane_events.rs` | `LaneEvent / LaneCommitProvenance / LaneEventBlocker / LaneEventName / LaneEventStatus / LaneFailureClass / dedupe_superseded_commit_events` | `octopus-platform::governance`（业务域） | W7 | pending |
 | `recovery_recipes.rs` | `RecoveryRecipe / RecoveryContext / RecoveryEvent / RecoveryResult / RecoveryStep / EscalationPolicy / FailureScenario / attempt_recovery / recipe_for` | `octopus-sdk-core`（内部失败处理；不作为公共面暴露） | W6 | pending |
@@ -159,9 +159,13 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
     .with_model_provider(platform.catalog.build_provider()?)
     .with_secret_vault(platform.secret_vault.clone())
     .with_tool_registry(build_tool_registry(&config))
-    .with_permission_policy(policy_from(&config))
+    .with_permission_gate(platform.permissions.gate())
+    .with_ask_resolver(platform.approvals.ask_resolver())
     .with_sandbox_backend(sandbox_backend_for_host())
     .with_plugin_registry(platform.plugins.registry())
+    .with_plugins_snapshot(platform.plugins.snapshot())
+    .with_tracer(platform.observability.tracer())
+    .with_task_fn(platform.subagents.task_fn())
     .build()?;
 ```
 
@@ -173,11 +177,11 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
 
 | 模块 | 替代位置 |
 |---|---|
-| `command_parser.rs` | `octopus-cli::parser` |
+| `command_parser.rs` | W6 仅落 `octopus-cli::run_once::main_with_args` 最小入口；完整 parser 留 W7 cutover |
 | `automation_commands.rs`（1030） | `octopus-cli::automation` |
 | `workspace_commands.rs`（1098） | `octopus-cli::workspace` |
 | `project_commands.rs` | `octopus-cli::project` |
-| `runtime_commands.rs` | `octopus-cli::runtime`（仅保留薄命令，业务逻辑经 SDK） |
+| `runtime_commands.rs` | `octopus-cli::run_once`（W6 最小单会话单回合）；完整 runtime 命令面留 W7 |
 | `config_commands.rs` | `octopus-cli::config` |
 
 ### 7.2 `crates/compat-harness`（W7 删除，无替代）
@@ -190,7 +194,7 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
 
 ### 7.4 `crates/rusty-claude-cli`（W6 合并为 `octopus-cli`）
 
-`claw` binary 保留；`src/init.rs / input.rs / render.rs / main.rs` 逐文件迁入 `octopus-cli/src/`。依赖从 `api/runtime/tools/plugins/commands/compat-harness` 切换到 `octopus-sdk`。
+`claw` binary 保留。W6 已先落 `octopus-cli/src/{main.rs,run_once.rs}` 的最小 run path，并切到 `octopus-sdk`；`init.rs / input.rs / render.rs` 等全量 CLI 语义留 W7 继续平移。
 
 ### 7.5 `crates/octopus-desktop-backend`（W7 改名 `octopus-desktop`）
 

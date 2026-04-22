@@ -133,7 +133,7 @@ PostToolUse hooks        （可 rewrite output / 追加副作用）
 
 ## 7.6 Hook 配置源（Source）
 
-同权限：`session > project > workspace > defaults`。
+同权限：`session > project > plugin > workspace > defaults`。
 
 配置示例（`.agent/hooks.yaml`）：
 
@@ -193,7 +193,7 @@ Hook 的**注册来源**与 §7.6 的**优先级**是两个正交维度。按来
 | **workspace** | `config/runtime/workspace.json` 或 `workspace.hooks.*` | 与工作区同寿命 | 管理员层面的合规/审计 |
 | **plugin** | 插件 manifest 的 `hooks` 字段 | 随插件启用/禁用一并激活或回收 | 由第三方扩展功能自带的守护行为 |
 
-- **Plugin 来源的 hook** 与 §7.6 的优先级叠加：插件声明的 hook 在合并后参与同一条优先级链，不享受"插件默认胜出"。
+- **Plugin 来源的 hook** 与 §7.6 的优先级叠加：插件声明的 hook 在合并后参与同一条优先级链，插入在 `project` 与 `workspace` 之间，不享受"插件默认胜出"。
 - 当插件被禁用时，其注册的所有 hook **必须**一并回收；不允许遗留"孤立 hook"。
 - 插件不得直接写 `packages/hooks` 的内部实现；它只能通过 Plugin API 声明 hook（见 [12 §12.3 扩展点全景](./12-plugin-system.md)、[12 §12.5 Manifest 规范](./12-plugin-system.md) 与 [12 §12.8.4 Register](./12-plugin-system.md)）。
 

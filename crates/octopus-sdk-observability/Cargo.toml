@@ -1,0 +1,22 @@
+[package]
+name = "octopus-sdk-observability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+futures = "0.3"
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+octopus-sdk-session = { path = "../octopus-sdk-session" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

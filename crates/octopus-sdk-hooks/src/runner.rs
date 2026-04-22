@@ -197,11 +197,11 @@ fn allows_inject(event: &HookEvent) -> bool {
 
 fn source_rank(source: &HookSource) -> u8 {
     match source {
-        HookSource::Plugin { .. } => 0,
-        HookSource::Workspace => 1,
-        HookSource::Defaults => 2,
-        HookSource::Project => 3,
-        HookSource::Session => 4,
+        HookSource::Session => 0,
+        HookSource::Project => 1,
+        HookSource::Plugin { .. } => 2,
+        HookSource::Workspace => 3,
+        HookSource::Defaults => 4,
     }
 }
 

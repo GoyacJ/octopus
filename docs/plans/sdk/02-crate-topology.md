@@ -1199,7 +1199,7 @@ impl HookRunner {
 }
 ```
 
-> W4 Task 7 回填：`HookRunner` 已落最小执行器，按 `source -> priority -> name` 排序，并把 `Rewrite` 仅绑定到 `PreToolUse / PostToolUse / UserPromptSubmit / PreCompact`，`InjectMessage` 仅绑定到 `Stop / UserPromptSubmit`。W5 叠加 plugin source 后，来源优先级固定为 `session > project > plugin > workspace > defaults`；同来源内再按 `priority -> name` 排序。
+> W4 Task 7 回填：`HookRunner` 已落最小执行器，按 `source -> priority -> name` 排序，并把 `Rewrite` 仅绑定到 `PreToolUse / PostToolUse / UserPromptSubmit / PreCompact`，`InjectMessage` 仅绑定到 `Stop / UserPromptSubmit`。W5 叠加 plugin source 后，来源优先级固定为 `session > project > plugin > workspace > defaults`；同来源内再按 `priority -> name` 排序。若实现侧 `source_rank()` 偏离此顺序，W6 plugin hook 接线不得继续推进，直到 hooks crate 校回该顺序。
 
 ### 2.10 `octopus-sdk-subagent`（Level 3）
 
@@ -1538,16 +1538,29 @@ pub fn new_diff(/* ... */) -> RenderBlock;
 **职责**：Tracing / usage ledger / replay。
 
 ```rust
-pub struct TraceSpan { /* id / parent_id / name / start_ns / end_ns / attrs */ }
-
-pub trait Tracer: Send + Sync {
-    fn start(&self, name: &str) -> TraceSpan;
-    fn record(&self, span: &TraceSpan, attr: (&str, TraceValue));
-    fn end(&self, span: TraceSpan);
+pub enum TraceValue { String(String), I64(i64), U64(u64), Bool(bool), Json(serde_json::Value) }
+pub struct TraceSpan { pub name: String, pub fields: BTreeMap<String, TraceValue> }
+impl TraceSpan {
+    pub fn new(name: impl Into<String>) -> Self;
+    pub fn with_field(self, key: impl Into<String>, value: TraceValue) -> Self;
 }
 
-pub struct UsageLedger { /* token / cost 累计 */ }
-pub struct ReplayTracer { /* 从 SessionStore 回放事件到 tracer */ }
+pub trait Tracer: Send + Sync {
+    fn record(&self, span: TraceSpan);
+}
+
+pub struct NoopTracer;
+pub struct UsageLedger { /* sessions_started / assistant_messages / tool_calls / asks / renders / model_usage */ }
+pub struct UsageLedgerSnapshot { pub model_usage: Usage, /* ... */ }
+pub struct ReplayTracer;
+impl ReplayTracer {
+    pub async fn replay_session(
+        store: &dyn SessionStore,
+        session_id: &SessionId,
+        tracer: &dyn Tracer,
+        usage_ledger: &UsageLedger,
+    ) -> Result<(), ReplayError>;
+}
 ```
 
 ### 2.14 `octopus-sdk-core`（Level 4）
@@ -1557,11 +1570,42 @@ pub struct ReplayTracer { /* 从 SessionStore 回放事件到 tracer */ }
 ```rust
 pub struct AgentRuntime { /* private fields */ }
 impl AgentRuntime {
+    pub fn builder() -> AgentRuntimeBuilder;
     pub async fn start_session(&self, input: StartSessionInput) -> Result<SessionHandle, RuntimeError>;
-    pub async fn submit_turn(&self, session: &SessionId, msg: Message) -> Result<RunHandle, RuntimeError>;
+    pub async fn submit_turn(&self, input: SubmitTurnInput) -> Result<RunHandle, RuntimeError>;
     pub async fn resume(&self, session: &SessionId) -> Result<SessionHandle, RuntimeError>;
-    pub async fn cancel(&self, session: &SessionId) -> Result<(), RuntimeError>;
-    pub fn events(&self, session: &SessionId) -> EventStream;
+    pub async fn cancel(&self, run: &RunId) -> bool;
+    pub async fn events(&self, session: &SessionId, range: EventRange) -> Result<EventStream, RuntimeError>;
+}
+
+pub struct StartSessionInput {
+    pub session_id: Option<SessionId>,
+    pub working_dir: PathBuf,
+    pub permission_mode: PermissionMode,
+    pub model: ModelId,
+    pub config_snapshot_id: String,
+    pub effective_config_hash: String,
+    pub token_budget: u32,
+}
+
+pub struct SubmitTurnInput {
+    pub session_id: SessionId,
+    pub message: Message,
+}
+
+pub struct SessionHandle {
+    pub session_id: SessionId,
+    pub working_dir: PathBuf,
+    pub permission_mode: PermissionMode,
+    pub model: ModelId,
+    pub config_snapshot_id: String,
+    pub effective_config_hash: String,
+    pub token_budget: u32,
+}
+
+pub struct RunHandle {
+    pub run_id: RunId,
+    pub session_id: SessionId,
 }
 
 pub struct AgentRuntimeBuilder { /* ... */ }
@@ -1571,28 +1615,49 @@ impl AgentRuntimeBuilder {
     pub fn with_model_provider(self, provider: Arc<dyn ModelProvider>) -> Self;
     pub fn with_secret_vault(self, vault: Arc<dyn SecretVault>) -> Self;
     pub fn with_tool_registry(self, registry: ToolRegistry) -> Self;
-    pub fn with_permission_policy(self, policy: PermissionPolicy) -> Self;
+    pub fn with_permission_gate(self, gate: Arc<dyn PermissionGate>) -> Self;
+    pub fn with_ask_resolver(self, resolver: Arc<dyn AskResolver>) -> Self;
     pub fn with_sandbox_backend(self, backend: Arc<dyn SandboxBackend>) -> Self;
-    pub fn with_plugin_registry(self, registry: PluginRegistry) -> Self;
+    pub fn with_plugin_registry(self, registry: PluginRegistry) -> Self; // pre-populated; build() 不做 discover
+    pub fn with_plugins_snapshot(self, snapshot: PluginsSnapshot) -> Self;
+    pub fn with_tracer(self, tracer: Arc<dyn Tracer>) -> Self;
+    pub fn with_task_fn(self, task_fn: Arc<dyn TaskFn>) -> Self;
     pub fn build(self) -> Result<AgentRuntime, RuntimeError>;
 }
 ```
+
+> W6 收口语义：`build()` 只消费已注入的 registry/snapshot/gate/task_fn，不负责 `PluginLifecycle::run(...)`、manifest discover、磁盘扫描或 config loader。runtime 内部可围绕 `SessionStore` 物化 `EventSink`。
+
+> W6 `cancel()` 只承诺取消当前进程内由该 runtime 跟踪的 active run；跨重启恢复后的 run-control 合同延后到 session/runtime contracts 具备显式运行态事件后再冻结。
 
 ### 2.15 `octopus-sdk`（Level 5，门面）
 
 **职责**：业务唯一入口；受控 re-export。**禁止**在本 crate 内定义新 trait / struct / fn；仅允许 `pub use` 与 `//!` 文档。
 
 ```rust
-pub use octopus_sdk_contracts::*;    // 含 SecretVault / SecretValue / VaultError
+pub use octopus_sdk_contracts::*;
 pub use octopus_sdk_core::{
     AgentRuntime, AgentRuntimeBuilder,
-    StartSessionInput, SessionHandle, RunHandle, RuntimeError,
+    StartSessionInput, SubmitTurnInput, SessionHandle, RunHandle, RuntimeError,
 };
-pub use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
-pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthKind};
+pub use octopus_sdk_model::{
+    AnthropicMessagesAdapter, DefaultModelProvider, GeminiNativeAdapter, ModelCatalog,
+    ModelError, ModelId, ModelProvider, ModelRequest, ModelStream,
+    OpenAiChatAdapter, OpenAiResponsesAdapter, ProtocolAdapter, ProtocolFamily,
+    ProviderDescriptor, ProviderId, VendorNativeAdapter,
+};
+pub use octopus_sdk_observability::{
+    NoopTracer, ReplayTracer, TraceSpan, TraceValue, Tracer, UsageLedger, UsageLedgerSnapshot,
+};
+pub use octopus_sdk_permissions::DefaultPermissionGate;
+pub use octopus_sdk_plugin::{PluginDiscoveryConfig, PluginLifecycle, PluginRegistry};
+pub use octopus_sdk_sandbox::{default_backend_for_host, NoopBackend, SandboxBackend};
+pub use octopus_sdk_session::{EventRange, SessionSnapshot, SessionStore, SqliteJsonlSessionStore};
+pub use octopus_sdk_tools::{builtin, RegistryError, TaskFn, ToolRegistry};
+pub use octopus_sdk_tools::builtin::register_builtins;
 ```
 
-**不允许 re-export**：`Tool` trait、`McpClient`、`HookRunner`、`Compactor`、`PermissionGate`、`SandboxBackend`、`PluginRegistry`。这些是 SDK 内部构造；业务层通过 Builder 注入而非直接持有。
+> W6 实际收口：facade 不定义新符号，但为了让 CLI / host 在不直连 `octopus-sdk-core` 的前提下完成最小装配，临时同批 re-export 了 builder 所需的 model/provider、sandbox、plugin、tool、observability 组装类型。是否进一步收窄到更小宿主面，留到 W7 切业务入口后再评估。
 
 ---
 
@@ -1810,3 +1875,4 @@ pub use octopus_sdk_model::{ModelProvider, ProviderId, ModelId, ModelRole, AuthK
 | 2026-04-21 | W5 Task 10：`§2.2` 明确 `plugins_snapshot` 的 helper/store/replay 目标态已经落到双分支实现；`§5` 把差异项改成“SDK store/replay 已落地、OpenAPI/schema 仍待对齐”的状态描述，并把 `plugins_snapshot_stability` 作为回放合同锚点 | Codex |
 | 2026-04-21 | W5 Weekly Gate 收尾：`§2.10 / §2.11 / §5` 的 W5 公共面与合同差异登记完成收口；`plugins_snapshot` 双分支 replay、四源合一守护与 legacy 退役映射已对齐到周收尾状态 | Codex |
 | 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |
+| 2026-04-22 | W6 审计收口：`§2.14` builder 从 `PermissionPolicy` / `with_subagent_orchestrator(...)` 收敛为当前可装配执行链的 `PermissionGate / AskResolver / PluginsSnapshot / TaskFn / Tracer`；`build()` 明确不做 plugin discover；`cancel()` 语义收窄到当前进程内 active run；`§2.9` 增记 hooks source order 若偏离 `session > project > plugin > workspace > defaults` 则阻断 W6 plugin hook 接线 | Codex |

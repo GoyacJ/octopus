@@ -1,0 +1,27 @@
+[package]
+name = "octopus-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
+octopus-sdk-core = { path = "../octopus-sdk-core" }
+octopus-sdk-model = { path = "../octopus-sdk-model" }
+octopus-sdk-observability = { path = "../octopus-sdk-observability" }
+octopus-sdk-permissions = { path = "../octopus-sdk-permissions" }
+octopus-sdk-plugin = { path = "../octopus-sdk-plugin" }
+octopus-sdk-sandbox = { path = "../octopus-sdk-sandbox" }
+octopus-sdk-session = { path = "../octopus-sdk-session" }
+octopus-sdk-tools = { path = "../octopus-sdk-tools" }
+
+[dev-dependencies]
+async-trait.workspace = true
+futures = "0.3"
+serde_json.workspace = true
+tokio.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
