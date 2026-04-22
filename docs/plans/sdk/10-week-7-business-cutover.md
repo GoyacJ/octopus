@@ -10,9 +10,9 @@
 
 ## Active Work
 
-当前 Task：`Task 7 · workspace 收口与 11 个 legacy crate 删除`
+当前 Task：`Task 7A · 解除 octopus-infra 对 legacy runtime/tools 的生产依赖`
 
-当前 Step：`Step 1 已审计：`crates/octopus-infra` 仍直接依赖 legacy `runtime` / `tools`，Task 7 暂时 blocked`
+当前 Step：`补 Task 7A 计划：builtin catalog 统一到 SDK 命名/语义；runtime config / MCP discovery 先脱离 legacy，再回到 Task 7 做物理删除`
 
 ### Pre-Task Checklist（起稿阶段）
 
@@ -32,11 +32,11 @@ Open Questions：
 
 - `10-week-7-business-cutover.md` 在本批次前不存在；本文件先完成文档冻结，再进入代码执行。
 - `/api/v1/runtime/*` 预期保持 transport-compatible；若首批桥接后做不到，必须先走 OpenAPI 源文件更新，再继续 cutover。
-- Task 7 审计新增阻塞项：`crates/octopus-infra/Cargo.toml` 仍声明 `runtime` / `tools` path 依赖，且 `src/resources_skills.rs` 仍使用 legacy runtime config loader、MCP discovery types 与 `tools::mvp_tool_specs()`；在未先迁走这条生产依赖链前，不能删除 `crates/runtime` / `crates/tools`。
+- Task 7 阻塞项已转入 `Task 7A`：`crates/octopus-infra/Cargo.toml` 仍声明 `runtime` / `tools` path 依赖，且 `src/resources_skills.rs` 仍使用 legacy runtime config loader、MCP discovery types 与 `tools::mvp_tool_specs()`；在 `Task 7A` 完成前，Task 7 不进入物理删除。
 
 ### 已确认的审核决策（2026-04-22）
 
-下列 4 项作为 W7 起稿决策先冻结。执行期若需变更，必须在本文件 §变更日志追加专项条目，或回写 `docs/sdk/README.md ## Fact-Fix 勘误`。
+下列 6 项作为 W7 起稿决策先冻结。执行期若需变更，必须在本文件 §变更日志追加专项条目，或回写 `docs/sdk/README.md ## Fact-Fix 勘误`。
 
 | # | 决策点 | 确认结论 | 关联章节 |
 |---|---|---|---|
@@ -44,6 +44,8 @@ Open Questions：
 | D2 | `/api/v1/runtime/*` 契约策略 | **默认保持传输兼容**。只有在 SDK 输出无法安全映射回当前 transport DTO 时，才允许改 `contracts/openapi/src/**`，并且必须走 `openapi:bundle → schema:generate`。 | Scope / Task 3 / Task 6 |
 | D3 | 桌面宿主形态 | **继续保留 loopback HTTP sidecar 模型**。W7 只把 sidecar 从 `octopus-desktop-backend` 改到 `octopus-desktop`，不把 Tauri 宿主改成直持 `AgentRuntime`。 | Architecture / Task 4 |
 | D4 | CLI 范围 | `octopus-cli` 的最小 SDK run path 已在 W6 完成。W7 只补 **删除 `commands` / `rusty-claude-cli` 所需的剩余命令与渲染面**，不再实现第二套 runtime。 | Scope / Task 5 |
+| D5 | builtin tool catalog 统一策略 | **业务侧 builtin catalog 统一到 SDK 命名与语义，不再为 UI / fixture 维持 legacy builtin 名单。** 若 `octopus-sdk-tools` 现有 metadata 不足以支撑 catalog / permission 展示，允许在 `Task 7A` 内补最小公共面，并同批回填 `02-crate-topology.md §2.*`。 | Scope / Task 7A / Task 7 |
+| D6 | MCP discovery 缺口处理 | **若 `octopus-sdk-mcp` 现状不足以表达当前 workspace MCP catalog 的 availability / statusDetail / prompts / resources 语义，先补 SDK 或 platform 侧薄适配，再继续 crate 删除。** 不把 discovery 语义漂移混进 Task 7 的删除批次。 | Risks / Task 7A |
 
 ## Goal
 
@@ -95,6 +97,8 @@ Open Questions：
 | R6 | `/api/v1/runtime/*` 若因 SDK-backed output 需要新增字段，必须同步 OpenAPI 和 schema。 | 任何 HTTP payload 差异都先改 `contracts/openapi/src/**`，禁止直接改生成物或先改 server 再补文档。 | #3 |
 | R7 | `Cargo.toml default-members` 当前仍含 `octopus-runtime-adapter` 与 `octopus-desktop-backend`。 | 只有在 legacy crate 目录真正删除后，才一次性更新到 W7 目标形态；中间状态不要半切。 | #11 |
 | R8 | `octopus-cli` 已无 legacy runtime 依赖，但 legacy commands 目录仍在 workspace 中。 | CLI 迁移与 crate 删除要绑定在同一周完成；不要留下“功能在新 crate，源码还在旧 crate”的双写状态。 | #8 |
+| R9 | 业务侧 builtin names / requiredPermission 目前依赖 `tools::mvp_tool_specs()` 与 desktop fixtures；若直接删 legacy，会先破工具目录、项目授权推导与 agent asset 选择。 | `Task 7A` 必须把 builtin catalog 真相源改到 SDK 对齐实现，并同批更新 fixture / tests / policy 使用点。 | #8 / #11 |
+| R10 | `octopus-sdk-mcp` 目前只有底层 manager/client，尚无 legacy `discover_tools_best_effort` 的直接替代。 | `Task 7A` 先补 platform/SDK discovery adapter，再移除 `runtime::McpServerManager` 依赖。 | #2 / #8 |
 
 ## 承 W6 / 启 W8 的契约链
 
@@ -157,10 +161,10 @@ Open Questions：
 
 | `00-overview.md §3` 条目 | 本周落点 | 验证 |
 |---|---|---|
-| `octopus-server` / `octopus-desktop` / `octopus-cli` 不再依赖任何 legacy crate | Task 3 / Task 4 / Task 5 / Task 7 | `rg "(octopus_runtime_adapter|octopus-runtime-adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service)" crates/ apps/` |
+| `octopus-server` / `octopus-desktop` / `octopus-cli` 不再依赖任何 legacy crate | Task 3 / Task 4 / Task 5 / Task 7A / Task 7 | `rg "(octopus_runtime_adapter|octopus-runtime-adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service)" crates/ apps/` |
 | 11 个 legacy crate 目录整体删除 | Task 7 | `ls crates/ | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'` |
 | `/api/v1/runtime/*` 在新 SDK 下行为与 W6 一致 | Task 3 / Task 6 | `cargo test -p octopus-server` + `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` |
-| workspace build / clippy / desktop suite 通过 | Task 7 / Task 8 | `cargo build --workspace` / `cargo clippy --workspace -- -D warnings` / `pnpm -C apps/desktop test` |
+| workspace build / clippy / desktop suite 通过 | Task 7A / Task 7 / Task 8 | `cargo build --workspace` / `cargo clippy --workspace -- -D warnings` / `pnpm -C apps/desktop test` |
 
 ## Task Ledger
 
@@ -348,6 +352,43 @@ Step 2:
 - Verify: `pnpm -C apps/desktop exec vitest run test/openapi-transport.test.ts && pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts && pnpm -C apps/desktop exec vitest run test/tauri-client-runtime.test.ts`
 - Stop if: 前端失败暴露的是旧 contract 历史债，而不是本批 cutover 引入的回归。
 
+### Task 7A: `octopus-infra` 脱 legacy `runtime/tools` 生产依赖
+
+Status: `in_progress`
+
+Files:
+- Modify: `crates/octopus-infra/Cargo.toml`
+- Modify: `crates/octopus-infra/src/resources_skills.rs`
+- Modify: `crates/octopus-infra/src/agent_assets.rs`
+- Modify: `crates/octopus-platform/src/runtime_sdk/**`（如需抽共享 runtime config / MCP discovery helper）
+- Modify: `crates/octopus-sdk-mcp/src/**`（如需补 discovery adapter）
+- Modify: `crates/octopus-sdk-tools/src/**`（如需补 builtin metadata 公共面）
+- Modify: `apps/desktop/src/**`（仅 builtin name / permission 展示与选择面受影响时）
+- Modify: `apps/desktop/test/**`
+- Modify: `docs/plans/sdk/02-crate-topology.md`（仅在新增 SDK 公共面时）
+
+Preconditions:
+- Task 3 / Task 4 / Task 5 / Task 6 已全部通过。
+- 已确认 builtin tool catalog 统一到 SDK 命名与语义，不再为兼容旧 fixture 保留 legacy 名称。
+
+Step 1:
+- Action: 把 `octopus-infra` 的 builtin catalog 与 `builtin_tool_keys()` 从 `tools::mvp_tool_specs()` 切到 SDK 对齐实现；若 `octopus-sdk-tools` 缺 `required_permission` 等 catalog 所需 metadata，同批补最小公共面，并更新 desktop fixture / tests / project tool grant 使用的 builtin 名称。
+- Done when: `octopus-infra` 不再依赖 `tools` 生成 builtin catalog，workspace tools / project tool grant / agent asset 选择都只认 SDK builtin 名单，且 `requiredPermission` 仍可稳定投影到现有 schema/UI。
+- Verify: `cargo test -p octopus-infra resources_skills -- --nocapture && pnpm -C apps/desktop exec vitest run test/catalog-store.test.ts && pnpm -C apps/desktop exec vitest run test/tools-view.test.ts && pnpm -C apps/desktop exec vitest run test/project-setup.test.ts`
+- Stop if: 为保留现有 UI/schema 行为，必须新增超出 builtin metadata 的大范围 SDK 公共契约，或需要同时改 OpenAPI / schema 字段形状。
+
+Step 2:
+- Action: 把 `octopus-infra` 中 runtime config 读取/校验、MCP config 解析与 capability discovery 从 legacy `runtime::*` 迁到 platform/SDK helper；若 `octopus-sdk-mcp` 缺少当前所需的 best-effort discovery 语义，先补薄适配层，再替换 `runtime::McpServerManager`。
+- Done when: `resources_skills.rs` 不再使用 `runtime::ConfigLoader`、`runtime::RuntimeConfig`、`runtime::ScopedMcpServerConfig`、`runtime::McpServerManager` 等 legacy 类型，但 workspace MCP catalog 仍保持当前 transport/schema 形状。
+- Verify: `cargo test -p octopus-infra resources_skills -- --nocapture && cargo test -p octopus-server`
+- Stop if: MCP catalog 现有 `availability / statusDetail / resourceUri / toolNames` 语义无法在内部适配层保住，必须先改 server transport contract。
+
+Step 3:
+- Action: 从 `crates/octopus-infra/Cargo.toml` 移除 `runtime` / `tools` 依赖，并跑守护扫描确认这条非 legacy 生产链已切断，再把 Active Work 切回 Task 7。
+- Done when: `octopus-infra` 生产代码和依赖图都不再引用 legacy `runtime` / `tools`，Task 7 的阻塞前置被清空。
+- Verify: `! cargo tree -p octopus-infra -e normal | rg ' (runtime|tools) v0\\.2\\.5' && ! rg 'runtime = \\{ path = "../runtime" \\}|tools = \\{ path = "../tools" \\}' crates/octopus-infra/Cargo.toml`
+- Stop if: 除 `octopus-infra` 外还暴露新的非删除目标生产依赖链，但其 ownership 不清楚。
+
 ### Task 7: workspace 收口与 11 个 legacy crate 删除
 
 Status: `blocked`
@@ -371,6 +412,7 @@ Files:
 
 Preconditions:
 - Task 3 / Task 4 / Task 5 / Task 6 已全部通过。
+- Task 7A 已完成。
 - 守护扫描已证明生产代码不再引用 legacy crate。
 
 Step 1:
@@ -382,7 +424,7 @@ Step 1:
 Step 2:
 - Action: 跑 W7 守护扫描，确认 legacy 依赖和 legacy 目录都已清零，并同步回填 `02` / `03` / `README`。
 - Done when: legacy grep 与 `ls crates/` 守护命令全绿。
-- Verify: `rg "(octopus_runtime_adapter|octopus-runtime-adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service)" crates/ apps/ && ls crates/ | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'`
+- Verify: `! rg "(octopus_runtime_adapter|octopus-runtime-adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service)" crates/ apps/ && ! ls crates/ | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'`
 - Stop if: legacy crate 删除后出现无法归因到本批次的 workspace 失败。
 
 ### Task 8: W7 Weekly Gate 与文档收口
@@ -397,7 +439,7 @@ Files:
 - Modify: `docs/plans/sdk/00-overview.md`
 
 Preconditions:
-- Task 1–7 全部完成或明确 blocked。
+- Task 1–7A 全部完成或明确 blocked。
 
 Step 1:
 - Action: 按 `01-ai-execution-protocol.md` 跑 W7 Weekly Gate，全量补 checkpoint、状态、变更日志与总控摘要。
@@ -416,6 +458,7 @@ Step 1:
 | 2026-04-22 | Task 4 完成：`octopus-desktop-backend` 改名为 `octopus-desktop`，desktop sidecar 改为调用 `RuntimeSdkFactory::build_live`，并同步更新 Tauri sidecar 路径、shell contract 与本地 sidecar 准备脚本。 | Codex |
 | 2026-04-22 | Task 5 完成：`octopus-cli` 吸收 `commands / rusty-claude-cli` 中剩余的 parser/help、`init / input / render`、agents/skills 发现与安装、最小 direct CLI 分派；同时保持 run path 仍只走 SDK，不重新引入任何 legacy runtime 依赖。 | Codex |
 | 2026-04-22 | Task 6 完成：发现 SDK-backed runtime bridge 已发出新的 session/message/render/checkpoint/plugins snapshot eventType；据此更新 OpenAPI runtime event contract、重新生成 `packages/schema/src/generated.ts`，并用 desktop transport/runtime suite 锁住新枚举与 `kind` 的 string 化。 | Codex |
+| 2026-04-22 | Task 7 blocked 处理决策：确认 builtin catalog 统一到 SDK 命名/语义，不另开并行 Plan；在本文件内新增 `Task 7A`，先解除 `octopus-infra` 对 legacy `runtime/tools` 的生产依赖，再回到 Task 7 做 crate 删除。 | Codex |
 
 ## Checkpoint 2026-04-22 12:37
 
@@ -596,3 +639,22 @@ Step 1:
   - none
 - Next:
   - Task 7 Step 1：守护扫描 legacy crate 剩余引用，确认可以更新 workspace members/default-members 并删除 11 个 legacy crate 目录
+
+## Checkpoint 2026-04-22 13:33
+
+- Week: W7
+- Batch: Task 7 blocked 分析 → Task 7A 计划补充
+- Completed:
+  - 确认不新增并行 Plan 文件，把 Task 7 的 unblock 子任务并回现有 W7 控制文档。
+  - 冻结两条执行决策：builtin catalog 统一到 SDK 命名/语义；MCP discovery 若有 SDK 缺口，先补 SDK/platform 适配层，再继续删除批次。
+  - 新增 `Task 7A`，把 `octopus-infra` 脱离 legacy `runtime/tools` 的 builtin catalog、runtime config、MCP discovery 三块前置收口拆成可执行步骤，并把原 Task 7 改为依赖 `Task 7A`。
+- Files changed:
+  - `docs/plans/sdk/10-week-7-business-cutover.md` (modified)
+- Verification:
+  - `rg -n "D5|D6|Task 7A|Task 7 blocked 处理决策" docs/plans/sdk/10-week-7-business-cutover.md` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - Task 7 仍 blocked，但阻塞已具化为 `Task 7A` 的实现前置
+- Next:
+  - Task 7A Step 1：把 builtin catalog 与 desktop fixture / project tool grant 从 legacy builtin 名单切到 SDK 对齐实现
