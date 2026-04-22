@@ -13,7 +13,7 @@ use chacha20poly1305::{
 };
 use getrandom::getrandom;
 use octopus_core::{timestamp_now, AppError};
-use octopus_persistence::{Database, MigrationProfile};
+use octopus_persistence::{Database, Migration};
 use octopus_sdk::{SecretValue, SecretVault, VaultError};
 use rusqlite::{params, OptionalExtension};
 
@@ -23,6 +23,27 @@ const IN_MEMORY_SECRET_STORE_ENV: &str = "OCTOPUS_TEST_USE_IN_MEMORY_SECRET_STOR
 const RUNTIME_SECRET_KEY_VERSION: i64 = 1;
 const RUNTIME_SECRET_MASTER_KEY_BYTES: usize = 32;
 const RUNTIME_SECRET_NONCE_BYTES: usize = 24;
+
+fn create_runtime_secret_records_table(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS runtime_secret_records (
+                reference TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                ciphertext BLOB NOT NULL,
+                nonce BLOB NOT NULL,
+                key_version INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );",
+        )
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+static RUNTIME_SECRET_MIGRATIONS: &[Migration] = &[Migration {
+    key: "0001-runtime-secret-records",
+    apply: create_runtime_secret_records_table,
+}];
 
 enum RuntimeSecretVaultBackend {
     Memory {
@@ -80,9 +101,8 @@ impl RuntimeSecretVault {
         database: Database,
     ) -> Result<RuntimeSecretVaultBackend, AppError> {
         let master_key = Self::load_or_create_master_key(&paths.runtime_secret_master_key_path)?;
-        database
-            .run_migrations(MigrationProfile::RuntimeSecrets)
-            .map_err(|error| AppError::database(error.to_string()))?;
+        let database = paths.database()?.with_migrations(RUNTIME_SECRET_MIGRATIONS);
+        database.run_migrations()?;
 
         Ok(RuntimeSecretVaultBackend::Sqlite {
             database,
@@ -173,8 +193,7 @@ impl RuntimeSecretVault {
                 let now = i64::try_from(timestamp_now())
                     .map_err(|_| AppError::runtime("runtime secret timestamp overflow"))?;
                 database
-                    .acquire()
-                    .map_err(|error| AppError::database(error.to_string()))?
+                    .acquire()?
                     .execute(
                         "INSERT INTO runtime_secret_records
                          (reference, workspace_id, ciphertext, nonce, key_version, created_at, updated_at)
@@ -214,8 +233,7 @@ impl RuntimeSecretVault {
                 master_key,
             } => {
                 let record = database
-                    .acquire()
-                    .map_err(|error| AppError::database(error.to_string()))?
+                    .acquire()?
                     .query_row(
                         "SELECT ciphertext, nonce, key_version
                          FROM runtime_secret_records
@@ -269,8 +287,7 @@ impl RuntimeSecretVault {
             }
             RuntimeSecretVaultBackend::Sqlite { database, .. } => {
                 database
-                    .acquire()
-                    .map_err(|error| AppError::database(error.to_string()))?
+                    .acquire()?
                     .execute(
                         "DELETE FROM runtime_secret_records WHERE reference = ?1 AND workspace_id = ?2",
                         params![reference, &self.workspace_id],

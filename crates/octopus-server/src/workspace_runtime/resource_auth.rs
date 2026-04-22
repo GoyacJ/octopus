@@ -1,58 +1,6 @@
 use super::*;
-use crate::dto_mapping::metric_record;
-use octopus_core::{
-    AuditRecord, AuthorizationRequest, CancelRuntimeSubrunInput, CapabilityManagementProjection,
-    ConversationRecord, CostLedgerEntry, CreateDeliverableVersionInput,
-    CreateProjectDeletionRequestInput, CreateProjectPromotionRequestInput,
-    CreateRuntimeSessionInput, CreateTaskInterventionRequest, CreateTaskRequest, DeliverableDetail,
-    DeliverableVersionContent, DeliverableVersionSummary, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ForkDeliverableInput, KnowledgeEntryRecord,
-    LaunchTaskRequest, PetDashboardSummary, ProjectDashboardBreakdownItem,
-    ProjectDashboardConversationInsight, ProjectDashboardRankingItem, ProjectDashboardSnapshot,
-    ProjectDashboardSummary, ProjectDashboardTrendPoint, ProjectDashboardUserStat,
-    ProjectDeletionRequest, ProjectPromotionRequest, ProjectTaskInterventionRecord,
-    ProjectTaskRecord, ProjectTaskRunRecord, ProjectTokenUsageRecord, PromoteDeliverableInput,
-    ProtectedResourceDescriptor, RerunTaskRequest, ResolveRuntimeAuthChallengeInput,
-    ResolveRuntimeMemoryProposalInput, ReviewProjectDeletionRequestInput,
-    ReviewProjectPromotionRequestInput, RunRuntimeGenerationInput, RuntimeGenerationResult,
-    RuntimeMessage, RuntimeRunSnapshot, TaskAnalyticsSummary, TaskContextBundle, TaskDetail,
-    TaskInterventionRecord, TaskRunSummary, TaskStateTransitionSummary, TaskSummary,
-    UpdateTaskRequest, UpdateWorkspaceRequest,
-};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-fn strip_runtime_transport_escape_hatches(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            map.remove("payload");
-            if let Some(serde_json::Value::Object(checkpoint)) = map.get_mut("checkpoint") {
-                checkpoint.remove("serializedSession");
-                checkpoint.remove("compactionMetadata");
-            }
-            for child in map.values_mut() {
-                strip_runtime_transport_escape_hatches(child);
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for child in items {
-                strip_runtime_transport_escape_hatches(child);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn visible_inbox_items(
-    user_id: &str,
-    items: Vec<octopus_core::InboxItemRecord>,
-) -> Vec<octopus_core::InboxItemRecord> {
-    items
-        .into_iter()
-        .filter(|item| item.target_user_id == user_id)
-        .collect()
-}
-
-fn runtime_transport_payload<T: serde::Serialize>(
+pub(super) fn runtime_transport_payload<T: serde::Serialize>(
     value: &T,
     request_id: &str,
 ) -> Result<serde_json::Value, ApiError> {
@@ -65,10 +13,10 @@ fn runtime_transport_payload<T: serde::Serialize>(
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceDirectoryBrowserQuery {
-    path: Option<String>,
+    pub(super) path: Option<String>,
 }
 
-fn capability_authorization_request(
+pub(super) fn capability_authorization_request(
     subject_id: &str,
     capability: &str,
     project_id: Option<&str>,
@@ -94,7 +42,7 @@ fn capability_authorization_request(
     }
 }
 
-fn optional_transport_project_id(project_id: &str) -> Option<String> {
+pub(super) fn optional_transport_project_id(project_id: &str) -> Option<String> {
     let project_id = project_id.trim();
     if project_id.is_empty() {
         None
@@ -103,7 +51,7 @@ fn optional_transport_project_id(project_id: &str) -> Option<String> {
     }
 }
 
-fn resolved_fork_target_project_id(
+pub(super) fn resolved_fork_target_project_id(
     requested_project_id: Option<&str>,
     source_project_id: &str,
 ) -> Option<String> {
@@ -114,7 +62,7 @@ fn resolved_fork_target_project_id(
         .or_else(|| optional_transport_project_id(source_project_id))
 }
 
-fn deliverable_conversation_record(
+pub(super) fn deliverable_conversation_record(
     workspace_id: &str,
     detail: &octopus_core::RuntimeSessionDetail,
 ) -> ConversationRecord {
@@ -130,7 +78,7 @@ fn deliverable_conversation_record(
     }
 }
 
-fn precise_tool_resource_type(kind: &str) -> &'static str {
+pub(super) fn precise_tool_resource_type(kind: &str) -> &'static str {
     match kind.trim() {
         "builtin" => "tool.builtin",
         "mcp" => "tool.mcp",
@@ -138,7 +86,7 @@ fn precise_tool_resource_type(kind: &str) -> &'static str {
     }
 }
 
-fn merge_protected_resource_descriptor(
+pub(super) fn merge_protected_resource_descriptor(
     defaults: ProtectedResourceDescriptor,
     metadata: Option<&ProtectedResourceDescriptor>,
 ) -> ProtectedResourceDescriptor {
@@ -175,7 +123,7 @@ fn merge_protected_resource_descriptor(
     }
 }
 
-async fn protected_resource_metadata(
+pub(super) async fn protected_resource_metadata(
     state: &ServerState,
     resource_type: &str,
     resource_id: &str,
@@ -189,7 +137,7 @@ async fn protected_resource_metadata(
         .find(|record| record.resource_type == resource_type && record.id == resource_id))
 }
 
-fn authorization_request_from_descriptor(
+pub(super) fn authorization_request_from_descriptor(
     session: &SessionRecord,
     capability: &str,
     descriptor: ProtectedResourceDescriptor,
@@ -208,7 +156,7 @@ fn authorization_request_from_descriptor(
     )
 }
 
-async fn resource_authorization_request(
+pub(super) async fn resource_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -235,7 +183,7 @@ async fn resource_authorization_request(
     ))
 }
 
-fn resource_input_authorization_request(
+pub(super) fn resource_input_authorization_request(
     session: &SessionRecord,
     capability: &str,
     project_id: Option<&str>,
@@ -255,14 +203,14 @@ fn resource_input_authorization_request(
     )
 }
 
-fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourceRecord) -> bool {
+pub(super) fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourceRecord) -> bool {
     match record.visibility.as_str() {
         "private" => record.owner_user_id == session.user_id,
         _ => true,
     }
 }
 
-fn knowledge_visibility_allows(session: &SessionRecord, record: &KnowledgeRecord) -> bool {
+pub(super) fn knowledge_visibility_allows(session: &SessionRecord, record: &KnowledgeRecord) -> bool {
     if record.scope == "personal" {
         return record.owner_user_id.as_deref() == Some(session.user_id.as_str());
     }
@@ -273,12 +221,12 @@ fn knowledge_visibility_allows(session: &SessionRecord, record: &KnowledgeRecord
     }
 }
 
-fn knowledge_relevant_to_project_context(record: &KnowledgeRecord, project_id: &str) -> bool {
+pub(super) fn knowledge_relevant_to_project_context(record: &KnowledgeRecord, project_id: &str) -> bool {
     record.project_id.as_deref() == Some(project_id)
         || matches!(record.scope.as_str(), "workspace" | "personal")
 }
 
-fn knowledge_entry_record(record: KnowledgeRecord) -> octopus_core::KnowledgeEntryRecord {
+pub(super) fn knowledge_entry_record(record: KnowledgeRecord) -> octopus_core::KnowledgeEntryRecord {
     octopus_core::KnowledgeEntryRecord {
         id: record.id,
         workspace_id: record.workspace_id,
@@ -292,11 +240,11 @@ fn knowledge_entry_record(record: KnowledgeRecord) -> octopus_core::KnowledgeEnt
     }
 }
 
-fn agent_visible_in_generic_catalog(record: &AgentRecord) -> bool {
+pub(super) fn agent_visible_in_generic_catalog(record: &AgentRecord) -> bool {
     record.asset_role != "pet"
 }
 
-async fn ensure_visible_resource(
+pub(super) async fn ensure_visible_resource(
     state: &ServerState,
     headers: &HeaderMap,
     session: &SessionRecord,
@@ -317,7 +265,7 @@ async fn ensure_visible_resource(
     }
 }
 
-async fn knowledge_authorization_request(
+pub(super) async fn knowledge_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -344,7 +292,7 @@ async fn knowledge_authorization_request(
     ))
 }
 
-async fn agent_authorization_request(
+pub(super) async fn agent_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -371,7 +319,7 @@ async fn agent_authorization_request(
     ))
 }
 
-fn agent_input_authorization_request(
+pub(super) fn agent_input_authorization_request(
     session: &SessionRecord,
     capability: &str,
     input: &UpsertAgentInput,
@@ -391,7 +339,7 @@ fn agent_input_authorization_request(
     )
 }
 
-async fn ensure_capability_session(
+pub(super) async fn ensure_capability_session(
     state: &ServerState,
     headers: &HeaderMap,
     capability: &str,
@@ -418,7 +366,7 @@ async fn ensure_capability_session(
     .await
 }
 
-async fn ensure_project_delete_review_session(
+pub(super) async fn ensure_project_delete_review_session(
     state: &ServerState,
     headers: &HeaderMap,
     project_id: &str,
@@ -453,7 +401,7 @@ async fn ensure_project_delete_review_session(
     Ok(session)
 }
 
-async fn tool_record_authorization_request(
+pub(super) async fn tool_record_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -481,7 +429,7 @@ async fn tool_record_authorization_request(
     ))
 }
 
-async fn skill_authorization_request(
+pub(super) async fn skill_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -524,7 +472,7 @@ async fn skill_authorization_request(
     }
 }
 
-async fn mcp_server_authorization_request(
+pub(super) async fn mcp_server_authorization_request(
     state: &ServerState,
     session: &SessionRecord,
     capability: &str,
@@ -567,108 +515,3 @@ async fn mcp_server_authorization_request(
     }
 }
 
-mod activity_records;
-mod agent_routes;
-mod catalog_routes;
-mod deliverable_routes;
-mod pet_routes;
-mod project_dashboard;
-mod project_inputs;
-mod project_routes;
-mod project_scope;
-mod resource_routes;
-mod runtime_actions;
-mod runtime_config;
-mod runtime_events;
-mod runtime_sessions;
-mod task_helpers;
-mod task_routes;
-mod user_routes;
-mod workspace_routes;
-
-pub(crate) use activity_records::{
-    list_activity_records, list_conversation_records, workspace_activity_from_audit,
-};
-pub(crate) use agent_routes::{
-    copy_project_agent_from_builtin_route, copy_project_team_from_builtin_route,
-    copy_workspace_agent_from_builtin_route, copy_workspace_team_from_builtin_route, create_agent,
-    create_team, delete_agent, delete_team, export_agent_bundle_route,
-    export_project_agent_bundle_route, import_agent_bundle_route,
-    import_project_agent_bundle_route, link_project_agent, link_project_team, list_agents,
-    list_project_agent_links, list_project_team_links, list_teams,
-    preview_import_agent_bundle_route, preview_import_project_agent_bundle_route,
-    unlink_project_agent, unlink_project_team, update_agent, update_team,
-};
-pub(crate) use catalog_routes::{
-    copy_workspace_mcp_server_to_managed_route, copy_workspace_skill_to_managed_route, create_tool,
-    create_workspace_mcp_server_route, create_workspace_skill_route, delete_tool,
-    delete_workspace_mcp_server_route, delete_workspace_skill_route,
-    get_workspace_mcp_server_route, get_workspace_skill_file_route, get_workspace_skill_route,
-    get_workspace_skill_tree_route, import_workspace_skill_archive_route,
-    import_workspace_skill_folder_route, list_tools, update_tool,
-    update_workspace_mcp_server_route, update_workspace_skill_file_route,
-    update_workspace_skill_route, workspace_capability_asset_disable,
-    workspace_capability_management_projection, workspace_catalog_models,
-    workspace_provider_credentials,
-};
-pub(crate) use deliverable_routes::{
-    create_deliverable_version, fork_deliverable, get_deliverable_detail,
-    get_deliverable_version_content, knowledge, list_deliverable_versions, promote_deliverable,
-    workspace_deliverables,
-};
-pub(crate) use pet_routes::{
-    bind_project_pet_conversation, bind_workspace_pet_conversation, project_pet_snapshot,
-    save_project_pet_presence, save_workspace_pet_presence, workspace_pet_dashboard,
-    workspace_pet_snapshot,
-};
-pub(crate) use project_dashboard::project_dashboard;
-pub(crate) use project_inputs::{validate_create_project_request, validate_update_project_request};
-pub(crate) use project_routes::{
-    approve_project_deletion_request, create_project, create_project_deletion_request,
-    create_project_promotion_request, delete_project, list_project_deletion_requests,
-    list_project_promotion_requests, reject_project_deletion_request, update_project,
-};
-pub(crate) use project_scope::{
-    ensure_project_owner, ensure_project_owner_session, load_project_runtime_document,
-    lookup_project, resolve_project_granted_scope, validate_create_project_leader,
-    validate_project_runtime_leader, validate_updated_project_leader,
-};
-pub(crate) use resource_routes::{
-    create_project_resource, create_project_resource_folder, create_workspace_resource,
-    delete_project_resource, delete_workspace_resource, get_resource_content, get_resource_detail,
-    import_project_resource, import_workspace_resource, list_resource_children,
-    list_workspace_filesystem_directories, list_workspace_promotion_requests, project_deliverables,
-    project_knowledge, project_resources, promote_resource, review_project_promotion_request,
-    update_project_resource, update_workspace_resource, workspace_knowledge, workspace_resources,
-};
-pub(crate) use runtime_actions::{
-    cancel_runtime_subrun, resolve_runtime_approval, resolve_runtime_auth_challenge,
-    resolve_runtime_memory_proposal, submit_runtime_turn,
-};
-pub(crate) use runtime_config::{
-    get_project_runtime_config_route, get_runtime_config, get_user_runtime_config_route,
-    probe_runtime_configured_model_route, runtime_bootstrap, save_project_runtime_config_route,
-    save_runtime_config_route, save_user_runtime_config_route,
-    validate_project_runtime_config_route, validate_runtime_config_route,
-    validate_user_runtime_config_route,
-};
-pub(crate) use runtime_events::runtime_events;
-pub(crate) use runtime_sessions::{
-    create_runtime_session, delete_runtime_session, derive_runtime_owner_permission_ceiling,
-    get_runtime_session, list_runtime_sessions, run_runtime_generation,
-};
-pub(crate) use task_routes::{
-    create_project_task, create_project_task_intervention, get_project_task_detail,
-    launch_project_task, list_project_task_runs, list_project_tasks, rerun_project_task,
-    update_project_task,
-};
-pub(crate) use user_routes::{
-    change_current_user_password_route, current_user_profile_route, inbox,
-    update_current_user_profile_route,
-};
-pub(crate) use workspace_routes::{
-    projects, update_workspace_route, workspace, workspace_overview,
-};
-
-#[cfg(test)]
-mod tests;

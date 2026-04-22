@@ -6,18 +6,17 @@
 
 ## Status
 
-状态：`in_progress`
+状态：`done`
 
 ## Active Work
 
-当前 Task：`Task 6 · 拆 octopus-infra 的 state / repository 大文件`
+当前 Task：`Completed`
 
-当前 Step：`Batch 6 进行中：infra_state.rs 的 bootstrap / schema / persistence cluster 已抽到 persistence/schema.rs；下一步继续拆 load_state / loaders / defaults，并把 infra_state 相关文件压到 ≤ 800`
+当前 Step：`done`
 
 Open Questions：
 
-- `octopus-persistence` 的首批公共面先冻结为 `Database + MigrationProfile`；若 Batch 2–3 暴露额外共享 helper，再增量登记。
-- repo 级 `*.rs <= 800` 仍以执行当周实测为准；`octopus-platform` / `octopus-cli` 当前已纳入 scope，不因示例列表缺省而豁免。
+- <none>
 
 ## Goal
 
@@ -273,7 +272,7 @@ Step 3:
 
 ### Task 6: 拆 `octopus-infra::infra_state`
 
-Status: `in_progress`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-infra/src/infra_state.rs`
@@ -299,7 +298,7 @@ Step 2:
 
 ### Task 7: 拆 `octopus-infra` 的 access / project / asset 大文件
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-infra/src/access_control.rs`
@@ -333,7 +332,7 @@ Step 3:
 
 ### Task 8: 清零剩余 >800 行文件
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-infra/src/resources_skills.rs`
@@ -373,7 +372,7 @@ Step 2:
 
 ### Task 9: W8 Weekly Gate 与文档收口
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/11-week-8-cleanup-and-split.md`
@@ -398,223 +397,307 @@ Step 1:
 |---|---|---|
 | 2026-04-22 | 首稿：新建 W8 计划，冻结“先持久化 ownership、再按 ownership 拆文件、最后跑 repo 级 ≤800 行门禁”的执行顺序；把 `octopus-persistence` / `default-members` / `sdk-session` 三处控制面冲突显式登记为 Task 1 前置。 | Codex |
 | 2026-04-22 | 文档审计修复：补齐 `Non-goal / 公共面变更登记 / 退役登记` 三个必备章节；把 `octopus-sdk-session` 冻结为独立于 `octopus-persistence`；把 `Connection::open` 守护改成只扫生产路径，不把 `split_module_tests.rs` / `test_runtime_sdk.rs` 误算进门禁。 | Codex |
-| 2026-04-22 | Batch 1：`README` / W8 状态切到 `in_progress`；`octopus-persistence` 最小公共面冻结为 `Database::{open, acquire, run_migrations}` + `MigrationProfile::{RuntimeSecrets, HostNotifications}`，先覆盖当前 direct-open 资源。 | Codex |
-| 2026-04-22 | Batch 2–3：`octopus-platform`、`octopus-server`、`octopus-infra` 的生产 direct-open 路径已切到 `octopus-persistence`；`tool_catalog_marks_unsupported_mcp_servers_as_attention` 恢复 `not supported` 语义并通过 workspace 测试。 | Codex |
-| 2026-04-22 | Batch 4：`crates/octopus-core/src/lib.rs` 已拆为 `app / host / auth / workspace / pet / resources / catalog / access / runtime_* / artifacts / audit / host_helpers` 等稳定模块；`lib.rs` 收敛到 41 行且外部 import 面保持 `pub use` 兼容。 | Codex |
-| 2026-04-23 | Batch 5 Step 1：`crates/octopus-server/src/handlers.rs` 已替换为 `src/handlers/` 目录，按 `host / system / access / app` 资源簇拆出模块；`access` 进一步细分为 `definitions / authorization / permissions / protected_resources / routes_*`，`cargo test -p octopus-server` 继续通过。 | Codex |
-| 2026-04-23 | Batch 5 Step 2（进行中）：`workspace_runtime.rs` 已先拆出 `runtime_config.rs`、`runtime_sessions.rs`、`runtime_actions.rs`、`runtime_events.rs` 四个 runtime 资源模块；`routes.rs` 继续经 `use crate::workspace_runtime::*` 绑定，`cargo test -p octopus-server` 与 `vitest test/runtime-store.test.ts` 通过。 | Codex |
-| 2026-04-23 | Batch 6 Step 1（进行中）：把 `infra_state.rs` 的 database bootstrap / schema migration / legacy cleanup / backfill cluster 抽到 `crates/octopus-infra/src/persistence/schema.rs`，`cargo test -p octopus-infra` 通过；但 `infra_state.rs` 仍 2651 行、`persistence/schema.rs` 2543 行，Task 6 继续。 | Codex |
+| 2026-04-22 | Task 1 执行完成：`octopus-persistence` 首批公共面冻结为 `Database + Migration`；新增 crate 骨架与迁移账本；`Cargo.toml` / `README.md` / `02-crate-topology.md` 同批补入 `octopus-persistence` 的 live 控制面。 | Codex |
+| 2026-04-22 | Task 2 执行完成：`octopus-platform::runtime_sdk` 与 `octopus-server` host notifications 改走 `octopus-persistence::Database`；`secret_vault` 与 host notifications 的建表迁移收口到 migration registry；`Connection::open` 已从平台 runtime_sdk 和 server 生产路径移除。 | Codex |
+| 2026-04-22 | Task 3 执行完成：`octopus-infra` 的生产 SQLite 入口统一改走 `WorkspacePaths::database()` + `octopus-persistence`；新增 `src/persistence/` 边界；清掉 `octopus-infra/src` 内所有 `Connection::open` 命中，并修正一处跟随 MCP discovery 演进而失效的内联测试。 | Codex |
+| 2026-04-22 | Task 4 执行完成：`octopus-core/src/lib.rs` 按 app / host / workspace / model catalog / capability / access control / runtime config / runtime memory / runtime session / operations 等 domain 拆成稳定模块；`lib.rs` 收敛为 `mod` + `pub use`，公共导出面保持不变；`octopus-core` 全部相关文件已落到 W8 的 ≤800 行门禁内。 | Codex |
+| 2026-04-22 | Task 5 执行完成：`octopus-server` 的 `handlers.rs`、`workspace_runtime.rs`、`lib.rs` 已按 resource/runtime ownership 拆成子模块；修复 `lib.rs` helper split 的可见性与边界串位；`cargo test -p octopus-server`、`apps/desktop` 的 `runtime-store.test.ts`、以及 `octopus-server` 行数门禁全部通过。 | Codex |
+| 2026-04-22 | Task 6 执行完成：`octopus-infra::infra_state` 已按 `config / startup / schema / loaders / defaults / pet` 拆成子模块，根模块只保留状态结构、常量、重导出与定向测试；`cargo test -p octopus-infra` 与 `infra_state*` 行数门禁全部通过。 | Codex |
+| 2026-04-22 | Task 7 执行完成：`octopus-infra::{access_control,projects_teams,agent_assets}` 已按 access/project+team+resource/asset parse+catalog+runtime+export ownership 拆成子模块；`projects_teams` 根模块收敛为 trait 委托层，`agent_assets` 根模块收敛为 types + include 装配层；定向测试与 `cargo test -p octopus-infra` 全量回归全部通过。 | Codex |
+| 2026-04-22 | Task 8 执行完成：`octopus-infra` 的 residual offenders 已清零；`octopus-cli::{automation,workspace}` 与 `octopus-platform::runtime_sdk::{registry_bridge,config_bridge}` 已按 command/runtime ownership 拆成子模块，`cargo test -p octopus-cli`、`cargo test -p octopus-platform` 与 repo 级 `octopus-cli + octopus-platform` 行数门禁全部通过。 | Codex |
+| 2026-04-22 | Task 9 执行完成：W8 Weekly Gate 通过；`cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test`、legacy 目录复核、`runtime/sessions/*.json` 守护与 repo 级 ≤800 行门禁全部通过；`README.md` 中 W8 行切为 `done`。 | Codex |
 
-## Checkpoint 2026-04-22 16:40
+## Checkpoint 2026-04-22 16:20
 
 - Week: W8
-- Batch: Task 1 Step 1 → Task 3 Step 2
+- Batch: Task 1 Step 1 → Task 1 Step 2
 - Completed:
-  - `octopus-persistence` 最小公共面已落地并冻结为 `Database::{open, acquire, run_migrations}` + `MigrationProfile::{RuntimeSecrets, HostNotifications}`
-  - `octopus-platform::runtime_sdk::{secret_vault,registry_bridge}` 已切到 `Database`
-  - `octopus-server` host notifications 路径已切到 `Database`
-  - `octopus-infra` 的 workspace database bootstrap / load / seed 已切到 `Database`
-  - `octopus-sdk-mcp` / `octopus-infra` 已恢复 unsupported MCP `status_detail` 包含 `not supported` 的既有语义
+  - 冻结 `octopus-persistence` 首批公共面为 `Database + Migration`，不提前引入 repositories。
+  - 新建 `crates/octopus-persistence` 最小骨架，带迁移账本和幂等测试。
+  - 同步 `Cargo.toml`、`docs/plans/sdk/README.md`、`docs/plans/sdk/02-crate-topology.md`、W8 计划状态。
 - Files changed:
-  - `Cargo.toml`
-  - `crates/octopus-persistence/**`
-  - `crates/octopus-platform/src/runtime_sdk/{builder.rs,mod.rs,registry_bridge.rs,secret_vault.rs}`
-  - `crates/octopus-server/src/{handlers.rs,lib.rs,test_runtime_sdk.rs}`
-  - `crates/octopus-desktop/src/main.rs`
-  - `crates/octopus-infra/src/{bootstrap.rs,infra_state.rs,lib.rs,persistence/mod.rs,resources_skills.rs}`
-  - `crates/octopus-sdk-mcp/src/discovery.rs`
+  - `Cargo.toml` (modified)
+  - `docs/plans/sdk/README.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+  - `crates/octopus-persistence/Cargo.toml` (+added)
+  - `crates/octopus-persistence/src/lib.rs` (+added)
+  - `crates/octopus-persistence/src/database.rs` (+added)
+  - `crates/octopus-persistence/src/migrations.rs` (+added)
+  - `crates/octopus-persistence/tests/database.rs` (+added)
 - Verification:
-  - `cargo test -p octopus-persistence -p octopus-platform -p octopus-server -p octopus-infra --quiet` → pass
-  - `rg -n 'Connection::open\\(' crates/octopus-platform/src/runtime_sdk crates/octopus-server/src crates/octopus-infra/src --glob '!**/tests/**' --glob '!**/test_*.rs' --glob '!**/*tests.rs' --glob '!**/split_module_tests.rs'` → 0 hits
+  - `rg -n "octopus-persistence|SqliteJsonlSessionStore|default-members|5 业务 crate" docs/plans/sdk/{00-overview.md,02-crate-topology.md,README.md} Cargo.toml` → pass
+  - `cargo test -p octopus-persistence` → pass
+  - `cargo clippy -p octopus-persistence -- -D warnings` → pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-22 18:05
+
+- Week: W8
+- Batch: Task 2 Step 1 → Task 2 Step 2
+- Completed:
+  - `octopus-platform::runtime_sdk` 改为通过 `Database` 获取连接；`runtime_secret_records` 建表逻辑登记为迁移。
+  - `octopus-server` host notifications 改为通过 `Database` 获取连接；`notifications` 建表逻辑登记为迁移。
+  - `octopus-platform` / `octopus-server` 新增 `octopus-persistence` 依赖并完成回归验证。
+- Files changed:
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/secret_vault.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge.rs` (modified)
+  - `crates/octopus-server/Cargo.toml` (modified)
+  - `crates/octopus-server/src/handlers.rs` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `cargo test -p octopus-platform` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-server` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo clippy -p octopus-platform -p octopus-server -- -D warnings` → pass
+  - `rg -n "Connection::open\\(" crates/octopus-platform/src/runtime_sdk` → 0 hits
+  - `rg -n "Connection::open\\(" crates/octopus-server/src/{handlers.rs,lib.rs,routes.rs,test_runtime_sdk.rs}` → 0 hits
+  - `rg -n "Connection::open\\(" crates/octopus-server/src/workspace_runtime.rs` → 2 inline-test hits only
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-22 21:55
+
+- Week: W8
+- Batch: Task 3 Step 1 → Task 3 Step 2
+- Completed:
+  - `InfraState::open_db()`、`initialize_database()`、seed/load 路径已统一经 `WorkspacePaths::database()` + `octopus-persistence` 取连接和跑 migration。
+  - `octopus-infra` 新增 `src/persistence/` 边界，收口 workspace database 入口。
+  - 清掉 `octopus-infra/src` 内所有 `Connection::open` 命中；内联测试统一改走 `database().acquire()`。
+  - 修正 `tool_catalog_marks_unsupported_mcp_servers_as_attention`，让测试断言回到当前实际“不支持 transport=ws”语义。
+- Files changed:
+  - `crates/octopus-infra/Cargo.toml` (modified)
+  - `crates/octopus-infra/src/lib.rs` (modified)
+  - `crates/octopus-infra/src/infra_state.rs` (modified)
+  - `crates/octopus-infra/src/workspace_paths.rs` (modified)
+  - `crates/octopus-infra/src/persistence/mod.rs` (+added)
+  - `crates/octopus-infra/src/persistence/database.rs` (+added)
+  - `crates/octopus-infra/src/split_module_tests.rs` (modified)
+  - `crates/octopus-infra/src/agent_assets.rs` (modified)
+  - `crates/octopus-infra/src/artifacts_inbox_knowledge.rs` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo clippy -p octopus-infra -- -D warnings` → pass
+  - `rg -n "Connection::open\\(" crates/octopus-infra/src --glob '!**/tests/**' --glob '!**/test_*.rs' --glob '!**/*tests.rs' --glob '!**/split_module_tests.rs'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-22 23:05
+
+- Week: W8
+- Batch: Task 4 Step 1 → Task 4 Step 2
+- Completed:
+  - `octopus-core/src/lib.rs` 已按 domain 拆成 `app / host / workspace / model_catalog / capability_management / access_control / runtime_config / runtime_memory / runtime_session / operations` 等子模块。
+  - `lib.rs` 收敛为 `mod` + `pub use`，保持既有公共导出面不变，不引入新的裸 public surface。
+  - `octopus-core` 新旧文件全部通过 W8 行数守护，`lib.rs` 已降到 80 行以内。
+- Files changed:
+  - `crates/octopus-core/src/lib.rs` (modified)
+  - `crates/octopus-core/src/app.rs` (+added)
+  - `crates/octopus-core/src/host.rs` (+added)
+  - `crates/octopus-core/src/workspace.rs` (+added)
+  - `crates/octopus-core/src/model_catalog.rs` (+added)
+  - `crates/octopus-core/src/capability_management.rs` (+added)
+  - `crates/octopus-core/src/access_control.rs` (+added)
+  - `crates/octopus-core/src/runtime_config.rs` (+added)
+  - `crates/octopus-core/src/runtime_memory.rs` (+added)
+  - `crates/octopus-core/src/runtime_session.rs` (+added)
+  - `crates/octopus-core/src/operations.rs` (+added)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-core` → pass
+  - `find crates/octopus-core -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 01:05
+
+- Week: W8
+- Batch: Task 7 Step 1 → Task 7 Step 3
+- Completed:
+  - `access_control.rs` 已按 defaults / loaders / resolve / summaries / system_roles / service_members / service_governance / tests 拆分，根模块保留稳定入口。
+  - `projects_teams.rs` 已按 project、resource、agent+team、workspace admin 与 helper/test 边界拆分；根模块改成 `WorkspaceService` 委托层，子模块落成 `*_impl` 方法。
+  - `agent_assets.rs` 已按 parse、builtin catalog、frontmatter/normalize、asset state/id、record/action、runtime doc+persistence、export、tests 拆分，根路径保持稳定。
+- Files changed:
+  - `crates/octopus-infra/src/access_control.rs` (modified)
+  - `crates/octopus-infra/src/access_control/` (+added, split modules and tests)
+  - `crates/octopus-infra/src/projects_teams.rs` (modified)
+  - `crates/octopus-infra/src/projects_teams/` (+added, split service/helper/test modules)
+  - `crates/octopus-infra/src/agent_assets.rs` (modified)
+  - `crates/octopus-infra/src/agent_assets/` (+added, split modules and tests)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `cargo fmt --package octopus-infra` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra access_control -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra projects_teams -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra agent_assets -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra` → pass
+  - `find crates/octopus-infra -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → only Task 8 residual offenders remain: `resources_skills.rs`, `auth_users.rs`, `artifacts_inbox_knowledge.rs`, `project_tasks.rs`, `agent_bundle/import.rs`
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 8 Step 1
+
+## Checkpoint 2026-04-22 16:47
+
+- Week: W8
+- Batch: Task 5 Step 1 → Task 5 Step 3
+- Completed:
+  - `crates/octopus-server/src/handlers/`、`workspace_runtime/`、`lib.rs` 的拆分已收口，主文件保留组装/导出，resource/runtime 逻辑落到对应子模块。
+  - 修复 `lib.rs` helper split 后的可见性断点，把跨模块使用的 auth/audit/http/runtime/session helpers 改回 `pub(crate)`。
+  - 清掉 `auth_rate_limit.rs` 中误混入的 audit helper，恢复 `audit_support.rs` 与 rate-limit 模块的真实边界。
+  - 补装 worktree 的 pnpm 依赖后，`apps/desktop/test/runtime-store.test.ts` 回归通过。
+- Files changed:
+  - `crates/octopus-server/src/auth_rate_limit.rs` (modified)
+  - `crates/octopus-server/src/audit_support.rs` (modified)
+  - `crates/octopus-server/src/http_support.rs` (modified)
+  - `crates/octopus-server/src/runtime_support.rs` (modified)
+  - `crates/octopus-server/src/session_auth.rs` (modified)
+  - `crates/octopus-server/src/lib_tests.rs` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-server --no-run` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-server` → pass
+  - `pnpm install --frozen-lockfile` → pass
+  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
+  - `find crates/octopus-server -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-22 17:16
+
+- Week: W8
+- Batch: Task 6 Step 1 → Task 6 Step 2
+- Completed:
+  - `crates/octopus-infra/src/infra_state.rs` 已收敛为根模块，保留状态结构、常量、重导出和定向测试。
+  - 新增 `infra_state/{startup,schema_*,loaders_*,defaults,pet,config}.rs`，把 bootstrap、schema/migration、loaders、defaults、pet projection 拆到独立 ownership 模块。
+  - 保持 `crate::infra_state::...` 访问路径不变，避免连带改动 `bootstrap.rs`、`agent_assets.rs`、`projects_teams.rs`、`auth_users.rs` 等调用点。
+- Files changed:
+  - `crates/octopus-infra/src/infra_state.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/config.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/defaults.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/loaders_assets.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/loaders_core.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/loaders_projects.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/loaders_runtime.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/pet.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/schema_assets.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_access.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_core.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_runtime.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_projects.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_resources.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_runtime.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/schema_support.rs` (+added)
+  - `crates/octopus-infra/src/infra_state/startup.rs` (+added)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-infra` → pass
+  - `find crates/octopus-infra/src/infra_state* -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 7 Step 1
+
+## Checkpoint 2026-04-22 22:17
+
+- Week: W8
+- Batch: Task 8 Step 1 → Task 8 Step 2
+- Completed:
+  - `octopus-infra` 的 residual offenders 已清零，`resources_skills.rs`、`auth_users.rs`、`artifacts_inbox_knowledge.rs`、`project_tasks.rs`、`agent_bundle/import.rs` 全部拆到子模块。
+  - `octopus-cli::{automation,workspace}` 已按 command / output / parse / test ownership 拆分，根模块收敛为装配层。
+  - `octopus-platform::runtime_sdk::{registry_bridge,config_bridge}` 已按 runtime bridge ownership 拆分，跨 sibling 共用方法统一收口为 `pub(crate)`。
+- Files changed:
+  - `crates/octopus-infra/src/resources_skills.rs` (modified)
+  - `crates/octopus-infra/src/resources_skills/` (+added, split modules and tests)
+  - `crates/octopus-infra/src/auth_users.rs` (modified)
+  - `crates/octopus-infra/src/auth_users/` (+added, split modules and tests)
+  - `crates/octopus-infra/src/artifacts_inbox_knowledge.rs` (modified)
+  - `crates/octopus-infra/src/artifacts_inbox_knowledge/` (+added, split modules and tests)
+  - `crates/octopus-infra/src/project_tasks.rs` (modified)
+  - `crates/octopus-infra/src/project_tasks/` (+added, split modules and tests)
+  - `crates/octopus-infra/src/agent_bundle/import.rs` (modified)
+  - `crates/octopus-infra/src/agent_bundle/import/` (+added, split modules and tests)
+  - `crates/octopus-cli/src/automation.rs` (modified)
+  - `crates/octopus-cli/src/automation/` (+added, split modules and tests)
+  - `crates/octopus-cli/src/workspace.rs` (modified)
+  - `crates/octopus-cli/src/workspace/` (+added, split modules and tests)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge/` (+added, split modules)
+  - `crates/octopus-platform/src/runtime_sdk/config_bridge.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/config_bridge/` (+added, split modules)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `cargo fmt --package octopus-cli` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-cli automation -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-cli workspace -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-cli` → pass
+  - `cargo fmt --package octopus-platform` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-platform registry_bridge -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-platform config_bridge -- --nocapture` → pass
+  - `CARGO_TARGET_DIR=/Users/goya/Work/weilaizhihuigu/super-agent/octopus/target cargo test -p octopus-platform` → pass
+  - `find crates/octopus-platform crates/octopus-cli -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - Task 9 Step 1
+
+## Checkpoint 2026-04-22 22:28
+
+- Week: W8
+- Batch: Task 9 Step 1
+- Completed:
+  - W8 Weekly Gate 已全量通过，workspace Rust、desktop test、legacy 目录复核、`runtime/sessions/*.json` 守护与 repo 级 ≤800 行门禁全部收口。
+  - `cargo clippy --workspace -- -D warnings` 暴露的 5 处拆分后遗留项已修复：3 处 SQL raw string、2 处 `needless_question_mark`，以及 `project_runtime` helper 可见性收回到文件私有。
+  - `docs/plans/sdk/README.md` 的 W8 行已切到 `done`，`00-overview.md` 与 `03-legacy-retirement.md` 已补 weekly gate 变更日志。
+- Files changed:
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_access.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_core.rs` (modified)
+  - `crates/octopus-infra/src/infra_state/schema_bootstrap_runtime.rs` (modified)
+  - `crates/octopus-infra/src/projects_teams/service_projects.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/project_runtime.rs` (modified)
+  - `docs/plans/sdk/README.md` (modified)
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/03-legacy-retirement.md` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
   - `cargo test --workspace` → pass
   - `cargo clippy --workspace -- -D warnings` → pass
   - `pnpm -C apps/desktop test` → pass
-  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
+  - `rg "runtime/sessions/.*\\.json" crates/ --glob '!**/tests/**' --glob '!**/fixtures/**'` → 0 hits
+  - `ls crates/ | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'` → 0 hits
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
 - Exit state vs plan:
   - matches
 - Blockers:
-  - none
+  - <none>
 - Next:
-  - Task 4 Step 1：按 domain 拆 `crates/octopus-core/src/lib.rs`
-
-## Checkpoint 2026-04-22 17:20
-
-- Week: W8
-- Batch: Task 4 Step 1 → Step 2
-- Completed:
-  - `crates/octopus-core/src/lib.rs` 已按 domain 拆为稳定子模块，`lib.rs` 只保留 `mod` + `pub use`
-  - `octopus-core` 的公共导出路径保持不变，未触发外部 import 改写
-  - `crates/octopus-core/src/lib.rs` 已从 3807 行降到 41 行
-- Files changed:
-  - `crates/octopus-core/src/lib.rs`
-  - `crates/octopus-core/src/{app.rs,host.rs,auth.rs,workspace.rs,pet.rs,resources.rs,catalog.rs,access.rs,runtime_config.rs,runtime_memory.rs,runtime_capabilities.rs,runtime_session.rs,runtime_bootstrap.rs,artifacts.rs,audit.rs,host_helpers.rs}`
-- Verification:
-  - `cargo test -p octopus-core` → pass
-  - `find crates/octopus-core -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
-  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → `octopus-core` 已清零，剩余 offenders 集中在 `octopus-server` / `octopus-infra` / `octopus-platform` / `octopus-cli`
-- Exit state vs plan:
-  - matches
-- Blockers:
-  - none
-- Next:
-  - Task 5 Step 1：按资源拆 `crates/octopus-server/src/handlers.rs`
-
-## Checkpoint 2026-04-23 00:28 CST
-
-- Week: W8
-- Batch: Task 5 Step 1
-- Completed:
-  - `crates/octopus-server/src/handlers.rs` 已替换为 `crates/octopus-server/src/handlers/` 目录
-  - host 路由已拆到 `handlers/host.rs`
-  - system auth/bootstrap 路由已拆到 `handlers/system.rs`
-  - app registry 路由已拆到 `handlers/app.rs`
-  - access control 路由与 helper 已拆到 `handlers/access/{definitions,authorization,permissions,protected_resources,routes_management,routes_session}.rs`
-  - `routes.rs` 继续通过 `use crate::handlers::*` 绑定，未改 `/api/v1/*` path、payload、auth
-- Files changed:
-  - `crates/octopus-server/src/handlers/mod.rs`
-  - `crates/octopus-server/src/handlers/host.rs`
-  - `crates/octopus-server/src/handlers/system.rs`
-  - `crates/octopus-server/src/handlers/app.rs`
-  - `crates/octopus-server/src/handlers/access/**`
-  - `docs/plans/sdk/11-week-8-cleanup-and-split.md`
-- Verification:
-  - `cargo test -p octopus-server` → pass
-  - `cargo fmt --package octopus-server` → pass
-  - `find crates/octopus-server/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 仅剩 `workspace_runtime.rs` 9840、`lib.rs` 927
-- Exit state vs plan:
-  - Task 5 Step 1 完成；Task 5 仍处于 `in_progress`
-- Blockers:
-  - none
-- Next:
-  - Task 5 Step 2：按 `/api/v1/runtime/*` 资源族拆 `crates/octopus-server/src/workspace_runtime.rs`
-
-## Checkpoint 2026-04-23 00:43 CST
-
-- Week: W8
-- Batch: Task 5 Step 2（runtime 资源族第一批）
-- Completed:
-  - `crates/octopus-server/src/workspace_runtime/` 已新增 `runtime_config.rs`、`runtime_sessions.rs`、`runtime_actions.rs`、`runtime_events.rs`
-  - `/api/v1/runtime/*` 的 config、session/generation、turn/approval/auth/subrun/memory-proposal、events/SSE 路由已从 `workspace_runtime.rs` 主文件抽到对应模块
-  - `derive_runtime_owner_permission_ceiling` 已随 runtime session 模块抽出，并保持 task 路径复用
-  - `routes.rs` 无需改 path / payload / auth 绑定，仍通过 `use crate::workspace_runtime::*` 使用同名 handler
-- Files changed:
-  - `crates/octopus-server/src/workspace_runtime.rs`
-  - `crates/octopus-server/src/workspace_runtime/{runtime_config.rs,runtime_sessions.rs,runtime_actions.rs,runtime_events.rs}`
-  - `crates/octopus-server/src/lib.rs`
-- Verification:
-  - `cargo fmt --package octopus-server` → pass
-  - `cargo test -p octopus-server` → pass
-  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
-  - `find crates/octopus-server/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 仍剩 `workspace_runtime.rs` 9118、`lib.rs` 927
-- Exit state vs plan:
-  - Task 5 Step 2 已完成 runtime 资源族第一批拆分，但 `workspace_runtime.rs` 与测试尚未降到门禁内，Task 5 继续 `in_progress`
-- Blockers:
-  - none
-- Next:
-  - 继续拆 `workspace_runtime.rs` 的 workspace / project / task / resource / knowledge / agent / deliverable 簇，并把超长测试从主文件外挪到 `workspace_runtime/tests/`
-
-## Checkpoint 2026-04-23 01:09 CST
-
-- Week: W8
-- Batch: Task 5 Step 2（workspace/project/dashboard 第二批）
-- Completed:
-  - `crates/octopus-server/src/workspace_runtime/` 已新增 `activity_records.rs`、`workspace_routes.rs`、`project_inputs.rs`、`project_routes.rs`、`project_scope.rs`、`project_dashboard.rs`
-  - `workspace` / `workspace_overview` / `projects` 路由、project request validate、project CRUD + promotion/deletion routes、project dashboard 与对应 project scope / activity helper 已从 `workspace_runtime.rs` 主文件抽出
-  - `routes.rs` 仍保持 `use crate::workspace_runtime::*` 绑定，不改 path / payload / auth / transport 合同
-- Files changed:
-  - `crates/octopus-server/src/workspace_runtime.rs`
-  - `crates/octopus-server/src/workspace_runtime/{activity_records.rs,workspace_routes.rs,project_inputs.rs,project_routes.rs,project_scope.rs,project_dashboard.rs}`
-  - `docs/plans/sdk/11-week-8-cleanup-and-split.md`
-- Verification:
-  - `cargo fmt --package octopus-server` → pass
-  - `cargo test -p octopus-server` → pass
-  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
-  - `find crates/octopus-server/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 仍剩 `workspace_runtime.rs` 7652、`lib.rs` 922
-- Exit state vs plan:
-  - Task 5 Step 2 继续 `in_progress`；`workspace_runtime.rs` 主文件已从 9118 降到 7652，但 task/resource/catalog/deliverable 与测试拆分尚未完成
-- Blockers:
-  - none
-- Next:
-  - 继续拆 `workspace_runtime.rs` 的 task/resource/catalog/deliverable 簇
-  - 把 `#[cfg(test)] mod tests` 改成 `workspace_runtime/tests/` 多文件模块，避免新测试文件再次超 800 行
-
-## Checkpoint 2026-04-23 01:22 CST
-
-- Week: W8
-- Batch: Task 5 Step 2（task + resource/knowledge/pet 第三批）
-- Completed:
-  - `crates/octopus-server/src/workspace_runtime/` 已新增 `task_helpers.rs`、`task_routes.rs`、`resource_routes.rs`、`pet_routes.rs`
-  - project task validate/helper、task route、workspace/project resource route、workspace/project knowledge route、pet snapshot/dashboard/presence/binding route 已从 `workspace_runtime.rs` 主文件抽出
-  - `project_dashboard.rs` 已改为直接依赖 `task_helpers::task_summary_from_record`，避免 helper 再导出带来的 unused-import 警告
-  - `routes.rs` 仍保持 `use crate::workspace_runtime::*` 绑定，不改 path / payload / auth / transport 合同
-- Files changed:
-  - `crates/octopus-server/src/workspace_runtime.rs`
-  - `crates/octopus-server/src/workspace_runtime/{task_helpers.rs,task_routes.rs,resource_routes.rs,pet_routes.rs,project_dashboard.rs}`
-  - `docs/plans/sdk/11-week-8-cleanup-and-split.md`
-- Verification:
-  - `cargo fmt --package octopus-server` → pass
-  - `cargo test -p octopus-server` → pass
-  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
-  - `find crates/octopus-server/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 仍剩 `workspace_runtime.rs` 5876、`lib.rs` 922
-- Exit state vs plan:
-  - Task 5 Step 2 继续 `in_progress`；`workspace_runtime.rs` 主文件已从 7652 降到 5876，但 agent/catalog/profile/inbox/deliverable 与测试拆分尚未完成
-- Blockers:
-  - none
-- Next:
-  - 继续拆 `workspace_runtime.rs` 的 agent / team / catalog / profile / inbox / deliverable 簇
-  - 把 `#[cfg(test)] mod tests` 改成 `workspace_runtime/tests/` 多文件模块，避免测试本身成为新的超限文件
-
-## Checkpoint 2026-04-23 01:42 CST
-
-- Week: W8
-- Batch: Task 5 Step 2 → Step 3（agent/catalog/user/deliverable + tests + lib 收口）
-- Completed:
-  - `crates/octopus-server/src/workspace_runtime/` 已新增 `agent_routes.rs`、`catalog_routes.rs`、`user_routes.rs`、`deliverable_routes.rs`
-  - agent / team / catalog / personal-center / inbox / deliverable 路由已从 `workspace_runtime.rs` 主文件抽出；workspace resource promotion review 继续并回 `resource_routes.rs`
-  - `workspace_runtime.rs` 的内联 `#[cfg(test)] mod tests` 已改为 `workspace_runtime/tests/` 多文件模块，拆成 `support.rs`、`workspace.rs`、`project_deletion.rs`、`inbox.rs`、`validation.rs`、`project_scope.rs`、`runtime_generation.rs`、`task_routes.rs`、`task_runtime_approval.rs`、`task_mutations.rs`、`transport.rs`
-  - `crates/octopus-server/src/lib.rs` 已把审计与认证限流 helper 收口到 `server_audit.rs`、`auth_limits.rs`，主文件只保留装配与共享入口
-  - `routes.rs` 继续通过 `use crate::workspace_runtime::*` / `use crate::handlers::*` 绑定，未改 `/api/v1/*` path、payload、auth、runtime transport 合同
-- Files changed:
-  - `crates/octopus-server/src/lib.rs`
-  - `crates/octopus-server/src/{auth_limits.rs,server_audit.rs}`
-  - `crates/octopus-server/src/workspace_runtime.rs`
-  - `crates/octopus-server/src/workspace_runtime/{agent_routes.rs,catalog_routes.rs,user_routes.rs,deliverable_routes.rs}`
-  - `crates/octopus-server/src/workspace_runtime/tests/{mod.rs,support.rs,workspace.rs,project_deletion.rs,inbox.rs,validation.rs,project_scope.rs,runtime_generation.rs,task_routes.rs,task_runtime_approval.rs,task_mutations.rs,transport.rs}`
-  - `docs/plans/sdk/11-week-8-cleanup-and-split.md`
-- Verification:
-  - `cargo fmt --package octopus-server` → pass
-  - `cargo test -p octopus-server` → pass
-  - `pnpm -C apps/desktop exec vitest run test/runtime-store.test.ts` → pass
-  - `find crates/octopus-server/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
-- Exit state vs plan:
-  - Task 5 Step 2 与 Step 3 均完成；`crates/octopus-server/src/{lib.rs,handlers.rs,workspace_runtime.rs}` 与新增子模块全部进入 W8 行数门禁内
-- Blockers:
-  - none
-- Next:
-  - Task 6：拆 `crates/octopus-infra/src/infra_state.rs`，优先抽 bootstrap / schema / persistence cluster，再处理 ownership 相邻的大文件
-
-## Checkpoint 2026-04-23 02:16 CST
-
-- Week: W8
-- Batch: Task 6 Step 1（schema / bootstrap / backfill 第一批）
-- Completed:
-  - `crates/octopus-infra/src/persistence/` 已新增 `schema.rs`，先接管 `initialize_database`、`seed_defaults`、列迁移 helper、legacy cleanup、project governance / assignment backfill
-  - `crates/octopus-infra/src/infra_state.rs` 只保留 state 结构、config/default helper、`load_state` 与各类 record loader；`load_state` 已改为走 `persistence` 提供的 backfill helper
-  - `agent_assets` 测试改为直接从 crate root 引用 schema helper，避免继续耦合 `infra_state` 内部模块路径
-- Files changed:
-  - `crates/octopus-infra/src/infra_state.rs`
-  - `crates/octopus-infra/src/persistence/{mod.rs,schema.rs}`
-  - `crates/octopus-infra/src/agent_assets.rs`
-  - `docs/plans/sdk/11-week-8-cleanup-and-split.md`
-- Verification:
-  - `cargo fmt --package octopus-infra` → pass
-  - `cargo test -p octopus-infra` → pass
-  - `find crates/octopus-infra/src -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 仍剩 `projects_teams.rs 4965`、`agent_assets.rs 4585`、`access_control.rs 2983`、`infra_state.rs 2651`、`persistence/schema.rs 2543`、`resources_skills.rs 2605`、`auth_users.rs 1870`、`artifacts_inbox_knowledge.rs 1114`、`project_tasks.rs 977`、`agent_bundle/import.rs 961`
-  - `wc -l crates/octopus-infra/src/infra_state.rs crates/octopus-infra/src/persistence/schema.rs` → `infra_state.rs 2651`、`persistence/schema.rs 2543`
-- Exit state vs plan:
-  - Task 6 Step 1 继续 `in_progress`；第一批 ownership 已拆出，但 `infra_state` 相关文件还远高于 W8 行数门禁
-- Blockers:
-  - none
-- Next:
-  - 继续把 `load_state`、`load_*` loaders、默认值与 pet projection 从 `infra_state.rs` 按 ownership 再拆一层
-  - 避免把 `persistence/schema.rs` 变成新的单体文件，优先按 `bootstrap` / `migrations` / `backfill` 再细分
+  - W8 complete

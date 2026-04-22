@@ -65,6 +65,10 @@ impl RuntimeSdkPaths {
         }
         Ok(())
     }
+
+    pub(crate) fn database(&self) -> Result<Database, AppError> {
+        Database::open(self.db_path.clone())
+    }
 }
 
 #[derive(Clone)]

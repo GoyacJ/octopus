@@ -20,7 +20,7 @@
 | `08-week-5-subagent-plugin.md` | W5：子代理编排 + 插件体系 | `done` |
 | `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + `octopus-sdk` / `octopus-cli` 最小链路 | `done` |
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `done` |
-| `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `in_progress` |
+| `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `done` |
 
 > 本索引随周计划产出逐步更新 `状态`。预登记周计划可保持 `pending` 且暂未建文件；文件创建后按 `draft → in_progress → blocked/done` 流转。
 
@@ -45,4 +45,4 @@
 
 ---
 
-**最后更新**：2026-04-22（W7 子 Plan `10-week-7-business-cutover.md` 已完成 Weekly Gate；W8 子 Plan `11-week-8-cleanup-and-split.md` 状态 `in_progress`，Task 1–4 已完成，当前进入 Task 5 的 `octopus-server` 拆分）
+**最后更新**：2026-04-22（W8 子 Plan `11-week-8-cleanup-and-split.md` 已完成 Weekly Gate，当前状态 `done`）

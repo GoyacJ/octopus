@@ -1,6 +1,4 @@
 use super::*;
-use octopus_core::{AvatarUploadPayload, WorkspaceSummary};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +60,13 @@ pub(crate) struct RegisterBootstrapAdminRequestPayload {
     mapped_directory: Option<String>,
 }
 
+pub(crate) async fn healthcheck(
+    State(state): State<ServerState>,
+    _headers: HeaderMap,
+) -> Result<Json<HealthcheckStatus>, ApiError> {
+    Ok(Json(build_healthcheck_status(&state)))
+}
+
 pub(crate) async fn system_bootstrap(
     State(state): State<ServerState>,
 ) -> Result<Json<octopus_core::SystemBootstrapStatus>, ApiError> {
@@ -98,6 +103,7 @@ async fn build_enterprise_session_summary(
         principal,
     })
 }
+
 
 async fn audit_auth_event(
     state: &ServerState,
@@ -156,6 +162,7 @@ async fn record_auth_failure_event(
     }
     Ok(())
 }
+
 
 pub(crate) async fn system_auth_status(
     State(state): State<ServerState>,

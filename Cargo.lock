@@ -3295,9 +3295,9 @@ dependencies = [
 name = "octopus-persistence"
 version = "0.2.5"
 dependencies = [
+ "octopus-core",
  "rusqlite",
  "tempfile",
- "thiserror 1.0.69",
 ]
 
 [[package]]

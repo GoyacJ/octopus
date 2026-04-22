@@ -1,52 +1,67 @@
-use octopus_persistence::{Database, MigrationProfile};
+use octopus_core::AppError;
+use octopus_persistence::{Database, Migration};
+use rusqlite::Connection;
+use tempfile::tempdir;
 
-#[test]
-fn acquire_enables_foreign_keys() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let database = Database::open(&temp.path().join("data/main.db")).expect("database");
-    let connection = database.acquire().expect("connection");
-    let foreign_keys: i64 = connection
-        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-        .expect("pragma");
-    assert_eq!(foreign_keys, 1);
+fn create_widgets_table(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS widgets (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL
+            );",
+        )
+        .map_err(|error| AppError::database(error.to_string()))
 }
 
+static TEST_MIGRATIONS: &[Migration] = &[Migration {
+    key: "0001-create-widgets",
+    apply: create_widgets_table,
+}];
+
 #[test]
-fn runtime_secret_profile_creates_runtime_secret_records_table() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let database = Database::open(&temp.path().join("data/main.db")).expect("database");
+fn open_creates_parent_layout_and_runs_registered_migrations() {
+    let temp = tempdir().expect("tempdir");
+    let path = temp.path().join("data").join("main.db");
 
-    database
-        .run_migrations(MigrationProfile::RuntimeSecrets)
-        .expect("migrations");
+    let database = Database::open(&path)
+        .expect("open")
+        .with_migrations(TEST_MIGRATIONS);
 
-    let connection = database.acquire().expect("connection");
-    let exists: String = connection
+    database.run_migrations().expect("migrate");
+
+    assert!(path.exists());
+
+    let connection = database.acquire().expect("acquire");
+    let table_exists: String = connection
         .query_row(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runtime_secret_records'",
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'widgets'",
             [],
             |row| row.get(0),
         )
-        .expect("table exists");
-    assert_eq!(exists, "runtime_secret_records");
+        .expect("widgets table");
+    assert_eq!(table_exists, "widgets");
 }
 
 #[test]
-fn host_notifications_profile_creates_notifications_table() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let database = Database::open(&temp.path().join("data/main.db")).expect("database");
+fn run_migrations_is_idempotent() {
+    let temp = tempdir().expect("tempdir");
+    let path = temp.path().join("data").join("main.db");
 
-    database
-        .run_migrations(MigrationProfile::HostNotifications)
-        .expect("migrations");
+    let database = Database::open(&path)
+        .expect("open")
+        .with_migrations(TEST_MIGRATIONS);
 
-    let connection = database.acquire().expect("connection");
-    let exists: String = connection
+    database.run_migrations().expect("first migrate");
+    database.run_migrations().expect("second migrate");
+
+    let connection = database.acquire().expect("acquire");
+    let count: i64 = connection
         .query_row(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'notifications'",
+            "SELECT COUNT(*) FROM __octopus_persistence_migrations WHERE key = '0001-create-widgets'",
             [],
             |row| row.get(0),
         )
-        .expect("table exists");
-    assert_eq!(exists, "notifications");
+        .expect("migration count");
+    assert_eq!(count, 1);
 }

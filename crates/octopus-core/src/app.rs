@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use thiserror::Error;
 
 pub const DEFAULT_WORKSPACE_ID: &str = "ws-local";
@@ -66,10 +68,13 @@ pub fn normalize_runtime_permission_mode_label(value: &str) -> Option<&'static s
     }
 }
 
-pub trait PreferencesPort: Send + Sync {
-    fn load_preferences(&self) -> Result<crate::ShellPreferences, AppError>;
-    fn save_preferences(
-        &self,
-        preferences: &crate::ShellPreferences,
-    ) -> Result<crate::ShellPreferences, AppError>;
+#[must_use]
+pub fn timestamp_now() -> u64 {
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX)
 }

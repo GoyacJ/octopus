@@ -3,33 +3,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rusqlite::Connection;
-use thiserror::Error;
+use octopus_core::AppError;
+use rusqlite::{params, Connection};
 
-use crate::migrations::{run_migration_profile, MigrationProfile};
+use crate::migrations::Migration;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Database {
     path: PathBuf,
-}
-
-#[derive(Debug, Error)]
-pub enum DbError {
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("sqlite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
+    migrations: &'static [Migration],
 }
 
 impl Database {
-    pub fn open(path: &Path) -> Result<Self, DbError> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, AppError> {
+        let path = path.into();
+        ensure_parent_dir(&path)?;
         Ok(Self {
-            path: path.to_path_buf(),
+            path,
+            migrations: &[],
         })
+    }
+
+    #[must_use]
+    pub fn with_migrations(mut self, migrations: &'static [Migration]) -> Self {
+        self.migrations = migrations;
+        self
     }
 
     #[must_use]
@@ -37,15 +35,55 @@ impl Database {
         &self.path
     }
 
-    pub fn acquire(&self) -> Result<Connection, DbError> {
-        let connection = Connection::open(&self.path)?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
-        Ok(connection)
+    pub fn acquire(&self) -> Result<Connection, AppError> {
+        Connection::open(&self.path).map_err(|error| AppError::database(error.to_string()))
     }
 
-    pub fn run_migrations(&self, profile: MigrationProfile) -> Result<(), DbError> {
+    pub fn run_migrations(&self) -> Result<(), AppError> {
         let connection = self.acquire()?;
-        run_migration_profile(&connection, profile)?;
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS __octopus_persistence_migrations (
+                    key TEXT PRIMARY KEY NOT NULL,
+                    applied_at INTEGER NOT NULL
+                );",
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        for migration in self.migrations {
+            let already_applied = connection
+                .query_row(
+                    "SELECT 1 FROM __octopus_persistence_migrations WHERE key = ?1",
+                    params![migration.key],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|_| true)
+                .or_else(|error| match error {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(false),
+                    other => Err(other),
+                })
+                .map_err(|error| AppError::database(error.to_string()))?;
+            if already_applied {
+                continue;
+            }
+
+            (migration.apply)(&connection)?;
+            connection
+                .execute(
+                    "INSERT INTO __octopus_persistence_migrations (key, applied_at)
+                     VALUES (?1, unixepoch())",
+                    params![migration.key],
+                )
+                .map_err(|error| AppError::database(error.to_string()))?;
+        }
+
         Ok(())
     }
+}
+
+fn ensure_parent_dir(path: &Path) -> Result<(), AppError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(())
 }

@@ -1,5 +1,31 @@
 use super::*;
 
+fn create_host_notifications_table(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS notifications (
+                id TEXT PRIMARY KEY NOT NULL,
+                scope_kind TEXT NOT NULL,
+                scope_owner_id TEXT,
+                level TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                read_at INTEGER,
+                toast_visible_until INTEGER,
+                route_to TEXT,
+                action_label TEXT
+            );",
+        )
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+static HOST_NOTIFICATION_MIGRATIONS: &[Migration] = &[Migration {
+    key: "0001-host-notifications",
+    apply: create_host_notifications_table,
+}];
+
 pub(crate) fn load_host_preferences(state: &ServerState) -> Result<ShellPreferences, ApiError> {
     match fs::read_to_string(&state.host_preferences_path) {
         Ok(raw) => {
@@ -329,15 +355,20 @@ pub(crate) fn delete_host_workspace_connection(
     Ok(())
 }
 
+pub(crate) fn host_notifications_db_path(state: &ServerState) -> PathBuf {
+    state
+        .host_preferences_path
+        .parent()
+        .unwrap_or_else(|| StdPath::new("."))
+        .join("data/main.db")
+}
+
 pub(crate) fn open_host_notifications_db(state: &ServerState) -> Result<Connection, ApiError> {
-    state
-        .host_notifications_db
-        .run_migrations(octopus_persistence::MigrationProfile::HostNotifications)
-        .map_err(|error| ApiError::from(AppError::database(error.to_string())))?;
-    state
-        .host_notifications_db
-        .acquire()
-        .map_err(|error| ApiError::from(AppError::database(error.to_string())))
+    let database = Database::open(host_notifications_db_path(state))
+        .map(|database| database.with_migrations(HOST_NOTIFICATION_MIGRATIONS))
+        .map_err(ApiError::from)?;
+    database.run_migrations().map_err(ApiError::from)?;
+    database.acquire().map_err(ApiError::from)
 }
 
 pub(crate) fn list_host_notifications(

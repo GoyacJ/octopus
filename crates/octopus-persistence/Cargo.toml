@@ -9,8 +9,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+octopus-core = { path = "../octopus-core" }
 rusqlite.workspace = true
-thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
