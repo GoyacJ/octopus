@@ -41,6 +41,11 @@ fn open_creates_parent_layout_and_runs_registered_migrations() {
         )
         .expect("widgets table");
     assert_eq!(table_exists, "widgets");
+
+    let foreign_keys: i64 = connection
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .expect("foreign keys pragma");
+    assert_eq!(foreign_keys, 1);
 }
 
 #[test]

@@ -36,7 +36,10 @@ impl Database {
     }
 
     pub fn acquire(&self) -> Result<Connection, AppError> {
-        Connection::open(&self.path).map_err(|error| AppError::database(error.to_string()))
+        let connection =
+            Connection::open(&self.path).map_err(|error| AppError::database(error.to_string()))?;
+        configure_connection(&connection)?;
+        Ok(connection)
     }
 
     pub fn run_migrations(&self) -> Result<(), AppError> {
@@ -85,5 +88,12 @@ fn ensure_parent_dir(path: &Path) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    Ok(())
+}
+
+fn configure_connection(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .map_err(|error| AppError::database(error.to_string()))?;
     Ok(())
 }

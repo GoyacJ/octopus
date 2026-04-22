@@ -355,18 +355,15 @@ pub(crate) fn delete_host_workspace_connection(
     Ok(())
 }
 
-pub(crate) fn host_notifications_db_path(state: &ServerState) -> PathBuf {
+fn host_notifications_database(state: &ServerState) -> Database {
     state
-        .host_preferences_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join("data/main.db")
+        .host_notifications_db
+        .clone()
+        .with_migrations(HOST_NOTIFICATION_MIGRATIONS)
 }
 
 pub(crate) fn open_host_notifications_db(state: &ServerState) -> Result<Connection, ApiError> {
-    let database = Database::open(host_notifications_db_path(state))
-        .map(|database| database.with_migrations(HOST_NOTIFICATION_MIGRATIONS))
-        .map_err(ApiError::from)?;
+    let database = host_notifications_database(state);
     database.run_migrations().map_err(ApiError::from)?;
     database.acquire().map_err(ApiError::from)
 }

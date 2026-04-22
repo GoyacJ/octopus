@@ -406,6 +406,7 @@ Step 1:
 | 2026-04-22 | Task 7 执行完成：`octopus-infra::{access_control,projects_teams,agent_assets}` 已按 access/project+team+resource/asset parse+catalog+runtime+export ownership 拆成子模块；`projects_teams` 根模块收敛为 trait 委托层，`agent_assets` 根模块收敛为 types + include 装配层；定向测试与 `cargo test -p octopus-infra` 全量回归全部通过。 | Codex |
 | 2026-04-22 | Task 8 执行完成：`octopus-infra` 的 residual offenders 已清零；`octopus-cli::{automation,workspace}` 与 `octopus-platform::runtime_sdk::{registry_bridge,config_bridge}` 已按 command/runtime ownership 拆成子模块，`cargo test -p octopus-cli`、`cargo test -p octopus-platform` 与 repo 级 `octopus-cli + octopus-platform` 行数门禁全部通过。 | Codex |
 | 2026-04-22 | Task 9 执行完成：W8 Weekly Gate 通过；`cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test`、legacy 目录复核、`runtime/sessions/*.json` 守护与 repo 级 ≤800 行门禁全部通过；`README.md` 中 W8 行切为 `done`。 | Codex |
+| 2026-04-23 | 审计闭环补齐：`octopus-persistence::Database` 统一打开业务侧 SQLite `foreign_keys=ON`，补上对应测试；`octopus-server` 的 host notifications 改为只复用 `ServerState.host_notifications_db`，不再在 handler 内按路径重新 `Database::open(...)`；W8 重新复核通过。 | Codex |
 
 ## Checkpoint 2026-04-22 16:20
 
@@ -729,6 +730,34 @@ Step 1:
   - `cargo test --workspace` → pass
   - `cargo clippy --workspace -- -D warnings` → pass
   - `pnpm -C apps/desktop test` → pass
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - <none>
+- Next:
+  - <none>
+
+## Checkpoint 2026-04-23 03:40
+
+- Week: W8
+- Batch: Task 9 Step 1 · audit closure
+- Completed:
+  - `octopus-persistence::Database` 统一配置业务侧 SQLite 连接 pragma，当前收口到 `foreign_keys=ON`，补齐“统一 pragma”这条 W8 控制面职责。
+  - `octopus-server` 的 host notifications 数据库入口改为只复用 `ServerState.host_notifications_db`，移除 handler 内基于 `host_preferences_path` 的重开库路径。
+  - 重新跑 W8 周门禁并复核 `Connection::open` 守护、legacy 删除态、`runtime/sessions/*.json` 守护与 repo 级行数门禁，全部通过。
+- Files changed:
+  - `crates/octopus-persistence/src/database.rs` (modified)
+  - `crates/octopus-persistence/tests/database.rs` (modified)
+  - `crates/octopus-server/src/handlers/host.rs` (modified)
+  - `docs/plans/sdk/11-week-8-cleanup-and-split.md` (modified)
+- Verification:
+  - `cargo test --workspace` → pass
+  - `cargo clippy --workspace -- -D warnings` → pass
+  - `pnpm -C apps/desktop test` → pass
+  - `rg -n "Connection::open\\(" crates/octopus-platform/src/runtime_sdk crates/octopus-server/src crates/octopus-infra/src --glob '!**/tests/**' --glob '!**/test_*.rs' --glob '!**/*tests.rs' --glob '!**/split_module_tests.rs'` → 0 hits
+  - `rg "runtime/sessions/.*\\.json" crates/ --glob '!**/tests/**' --glob '!**/fixtures/**'` → 0 hits
+  - `ls crates/ | rg '^(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)$'` → 0 hits
   - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` → 0 hits
 - Exit state vs plan:
   - matches
