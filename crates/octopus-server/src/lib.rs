@@ -1,15 +1,15 @@
-mod auth_rate_limit;
 mod audit_support;
+mod auth_rate_limit;
 mod dto_mapping;
 mod handlers;
 mod http_support;
+#[cfg(test)]
+mod lib_tests;
 mod routes;
 mod runtime_support;
 mod session_auth;
 #[cfg(test)]
 pub(crate) mod test_runtime_sdk;
-#[cfg(test)]
-mod lib_tests;
 mod workspace_runtime;
 
 use std::{
@@ -223,10 +223,9 @@ const HEADER_WORKSPACE_ID: &str = "x-workspace-id";
 const HEADER_IDEMPOTENCY_KEY: &str = "idempotency-key";
 const HEADER_LAST_EVENT_ID: &str = "last-event-id";
 
-
-pub(crate) use auth_rate_limit::*;
 pub(crate) use audit_support::*;
+pub(crate) use auth_rate_limit::*;
 pub(crate) use http_support::*;
+pub use routes::build_router;
 pub(crate) use runtime_support::*;
 pub(crate) use session_auth::*;
-pub use routes::build_router;

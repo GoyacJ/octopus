@@ -87,8 +87,7 @@ async fn workspace_summary_patch_route_updates_workspace_settings() {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("workspace update body");
-    let workspace: WorkspaceSummary =
-        serde_json::from_slice(&body).expect("workspace update json");
+    let workspace: WorkspaceSummary = serde_json::from_slice(&body).expect("workspace update json");
     assert_eq!(workspace.name, "Workspace Rebuilt");
     assert_eq!(
         workspace.mapped_directory.as_deref(),

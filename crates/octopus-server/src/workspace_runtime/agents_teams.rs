@@ -513,4 +513,3 @@ pub(crate) async fn unlink_project_team(
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

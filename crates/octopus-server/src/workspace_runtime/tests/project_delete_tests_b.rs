@@ -129,8 +129,7 @@ async fn inbox_route_returns_only_current_users_project_delete_items() {
     let temp = tempfile::tempdir().expect("tempdir");
     let state = test_server_state(temp.path());
     let owner_session = bootstrap_owner(&state).await;
-    let approver_session =
-        create_user_session(&state, "inbox-approver", "Inbox Approver").await;
+    let approver_session = create_user_session(&state, "inbox-approver", "Inbox Approver").await;
     let app = crate::routes::build_router(state.clone());
 
     let project = state
@@ -266,4 +265,3 @@ async fn inbox_route_returns_only_current_users_project_delete_items() {
     assert_eq!(approver_items.len(), 1);
     assert_eq!(approver_items[0].target_user_id, approver_session.user_id);
 }
-

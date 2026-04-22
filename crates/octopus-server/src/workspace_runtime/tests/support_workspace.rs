@@ -313,4 +313,3 @@ pub(super) fn write_runtime_workspace_config_with_generation_model(root: &Path) 
     )
     .expect("write runtime config");
 }
-

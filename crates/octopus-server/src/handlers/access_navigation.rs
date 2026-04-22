@@ -355,7 +355,10 @@ pub(super) async fn build_access_feature_definitions(
         .collect())
 }
 
-pub(super) fn org_unit_ancestor_closure(org_units: &[OrgUnitRecord], org_unit_id: &str) -> BTreeSet<String> {
+pub(super) fn org_unit_ancestor_closure(
+    org_units: &[OrgUnitRecord],
+    org_unit_id: &str,
+) -> BTreeSet<String> {
     let parent_by_id = org_units
         .iter()
         .map(|unit| (unit.id.as_str(), unit.parent_id.as_deref()))
@@ -545,4 +548,3 @@ pub(super) async fn build_current_authorization_snapshot(
         resource_action_grants,
     })
 }
-

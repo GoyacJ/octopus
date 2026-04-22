@@ -429,4 +429,3 @@ pub(crate) async fn create_project_task_intervention(
     }
     Ok(Json(task_intervention_from_record(&record)))
 }
-

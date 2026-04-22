@@ -104,7 +104,6 @@ async fn build_enterprise_session_summary(
     })
 }
 
-
 async fn audit_auth_event(
     state: &ServerState,
     actor_id: &str,
@@ -162,7 +161,6 @@ async fn record_auth_failure_event(
     }
     Ok(())
 }
-
 
 pub(crate) async fn system_auth_status(
     State(state): State<ServerState>,

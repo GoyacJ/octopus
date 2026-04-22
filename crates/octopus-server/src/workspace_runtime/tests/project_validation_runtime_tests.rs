@@ -479,8 +479,7 @@ async fn project_scope_uses_live_workspace_inheritance() {
             record.status == "active"
                 && agent_visible_in_generic_catalog(record)
                 && (record.project_id.as_deref() == Some(DEFAULT_PROJECT_ID)
-                    || (record.project_id.is_none()
-                        && record.id != excluded_workspace_agent.id))
+                    || (record.project_id.is_none() && record.id != excluded_workspace_agent.id))
         })
         .map(|record| record.id.clone())
         .collect::<BTreeSet<_>>();
@@ -584,4 +583,3 @@ async fn project_scope_uses_live_workspace_inheritance() {
         "tool breakdown should reflect live workspace tool source keys"
     );
 }
-

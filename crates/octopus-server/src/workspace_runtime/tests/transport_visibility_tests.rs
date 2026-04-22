@@ -14,7 +14,6 @@ fn generic_agent_catalog_filter_excludes_pet_records() {
     assert_eq!(visible[0].asset_role, "default");
 }
 
-
 #[test]
 fn runtime_session_detail_transport_preserves_phase_four_fields_without_escape_hatches() {
     let json =

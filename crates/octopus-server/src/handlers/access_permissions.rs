@@ -695,7 +695,6 @@ pub(super) fn default_permission_definitions() -> Vec<PermissionDefinition> {
     ]
 }
 
-
 pub(crate) async fn list_access_permission_definitions(
     State(state): State<ServerState>,
     headers: HeaderMap,

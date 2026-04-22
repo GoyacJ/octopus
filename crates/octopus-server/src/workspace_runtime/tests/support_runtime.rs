@@ -468,7 +468,6 @@ pub(super) fn sample_runtime_session_detail() -> octopus_core::RuntimeSessionDet
     }
 }
 
-
 pub(super) fn sample_runtime_event() -> octopus_core::RuntimeEventEnvelope {
     octopus_core::RuntimeEventEnvelope {
         id: "evt-1".into(),
@@ -486,4 +485,3 @@ pub(super) fn sample_runtime_event() -> octopus_core::RuntimeEventEnvelope {
         ..Default::default()
     }
 }
-

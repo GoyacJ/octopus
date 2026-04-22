@@ -60,7 +60,10 @@ pub(super) fn recommended_access_section(section_grants: &[AccessSectionGrant]) 
         .unwrap_or_else(|| "members".into())
 }
 
-pub(super) fn has_allowed_access_section(section_grants: &[AccessSectionGrant], section: &str) -> bool {
+pub(super) fn has_allowed_access_section(
+    section_grants: &[AccessSectionGrant],
+    section: &str,
+) -> bool {
     section_grants
         .iter()
         .any(|grant| grant.section == section && grant.allowed)
@@ -260,4 +263,3 @@ pub(super) fn build_access_role_presets() -> Vec<AccessRolePreset> {
         },
     ]
 }
-

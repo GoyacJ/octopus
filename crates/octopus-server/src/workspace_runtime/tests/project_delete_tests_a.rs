@@ -584,4 +584,3 @@ async fn project_delete_request_approve_route_allows_project_scoped_admin_review
     );
     assert_eq!(approved.status, "approved");
 }
-

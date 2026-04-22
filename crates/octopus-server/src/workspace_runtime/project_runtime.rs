@@ -203,7 +203,10 @@ pub(super) async fn resolve_project_granted_scope(
     })
 }
 
-pub(super) fn merge_runtime_config_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
+pub(super) fn merge_runtime_config_patch(
+    target: &mut serde_json::Value,
+    patch: &serde_json::Value,
+) {
     match patch {
         serde_json::Value::Object(patch_map) => {
             if !target.is_object() {
@@ -250,7 +253,9 @@ pub(super) async fn load_project_runtime_document(
     Ok(document)
 }
 
-pub(super) fn normalize_runtime_string_set(value: Option<&serde_json::Value>) -> Option<BTreeSet<String>> {
+pub(super) fn normalize_runtime_string_set(
+    value: Option<&serde_json::Value>,
+) -> Option<BTreeSet<String>> {
     let values = value.and_then(serde_json::Value::as_array)?;
     Some(
         values
@@ -398,7 +403,6 @@ pub(super) async fn validate_project_runtime_leader(
         &runtime_disables,
     )
 }
-
 
 pub(crate) async fn runtime_bootstrap(
     State(state): State<ServerState>,
@@ -573,7 +577,6 @@ pub(crate) async fn save_project_runtime_config_route(
             .await?,
     ))
 }
-
 
 pub(crate) async fn get_user_runtime_config_route(
     State(state): State<ServerState>,

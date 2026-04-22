@@ -554,4 +554,3 @@ pub(crate) async fn delete_tool(
     state.services.workspace.delete_tool(&tool_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

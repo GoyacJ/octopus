@@ -23,4 +23,3 @@ pub(crate) async fn knowledge(
     }
     Ok(Json(visible))
 }
-

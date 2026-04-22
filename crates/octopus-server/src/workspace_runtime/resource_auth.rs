@@ -203,14 +203,20 @@ pub(super) fn resource_input_authorization_request(
     )
 }
 
-pub(super) fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourceRecord) -> bool {
+pub(super) fn resource_visibility_allows(
+    session: &SessionRecord,
+    record: &WorkspaceResourceRecord,
+) -> bool {
     match record.visibility.as_str() {
         "private" => record.owner_user_id == session.user_id,
         _ => true,
     }
 }
 
-pub(super) fn knowledge_visibility_allows(session: &SessionRecord, record: &KnowledgeRecord) -> bool {
+pub(super) fn knowledge_visibility_allows(
+    session: &SessionRecord,
+    record: &KnowledgeRecord,
+) -> bool {
     if record.scope == "personal" {
         return record.owner_user_id.as_deref() == Some(session.user_id.as_str());
     }
@@ -221,12 +227,17 @@ pub(super) fn knowledge_visibility_allows(session: &SessionRecord, record: &Know
     }
 }
 
-pub(super) fn knowledge_relevant_to_project_context(record: &KnowledgeRecord, project_id: &str) -> bool {
+pub(super) fn knowledge_relevant_to_project_context(
+    record: &KnowledgeRecord,
+    project_id: &str,
+) -> bool {
     record.project_id.as_deref() == Some(project_id)
         || matches!(record.scope.as_str(), "workspace" | "personal")
 }
 
-pub(super) fn knowledge_entry_record(record: KnowledgeRecord) -> octopus_core::KnowledgeEntryRecord {
+pub(super) fn knowledge_entry_record(
+    record: KnowledgeRecord,
+) -> octopus_core::KnowledgeEntryRecord {
     octopus_core::KnowledgeEntryRecord {
         id: record.id,
         workspace_id: record.workspace_id,
@@ -514,4 +525,3 @@ pub(super) async fn mcp_server_authorization_request(
         )),
     }
 }
-

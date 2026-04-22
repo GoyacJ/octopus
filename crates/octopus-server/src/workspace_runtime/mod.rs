@@ -35,29 +35,29 @@ mod runtime_events;
 mod runtime_sessions;
 mod tasks;
 mod tasks_support;
-mod workspace;
-#[cfg(test)]
-#[path = "tests.rs"]
-mod tests_legacy;
 #[cfg(test)]
 #[path = "tests/mod.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests_legacy;
+mod workspace;
 
 use activity_dashboard::*;
-use project_runtime::*;
-use resource_auth::*;
-use runtime_sessions::*;
-use tasks_support::*;
 pub(crate) use activity_dashboard::*;
 pub(crate) use agents_teams::*;
 pub(crate) use catalog::*;
 pub(crate) use knowledge::*;
 pub(crate) use knowledge_pet::*;
 pub(crate) use profile_deliverables::*;
+use project_runtime::*;
 pub(crate) use project_runtime::*;
 pub(crate) use projects::*;
+use resource_auth::*;
 pub(crate) use resources::*;
 pub(crate) use runtime_events::*;
+use runtime_sessions::*;
 pub(crate) use runtime_sessions::*;
 pub(crate) use tasks::*;
+use tasks_support::*;
 pub(crate) use workspace::*;

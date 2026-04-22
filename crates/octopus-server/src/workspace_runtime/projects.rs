@@ -130,7 +130,6 @@ pub(crate) fn validate_update_project_request(
     })
 }
 
-
 pub(crate) async fn create_project(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -496,7 +495,6 @@ pub(crate) async fn project_dashboard(
     }))
 }
 
-
 pub(crate) async fn list_workspace_promotion_requests(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -579,4 +577,3 @@ pub(crate) async fn ensure_project_owner_session(
     let session = authenticate_session(state, headers).await?;
     ensure_project_owner(state, &session, project_id).await
 }
-

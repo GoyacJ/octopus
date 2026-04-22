@@ -503,4 +503,3 @@ pub(crate) async fn delete_project_resource(
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

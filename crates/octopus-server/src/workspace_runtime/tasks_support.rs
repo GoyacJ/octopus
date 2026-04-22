@@ -6,7 +6,9 @@ pub(super) fn trim_optional_task_input(value: Option<String>) -> Option<String> 
         .filter(|item| !item.is_empty())
 }
 
-pub(super) fn normalize_task_context_bundle_input(mut bundle: TaskContextBundle) -> TaskContextBundle {
+pub(super) fn normalize_task_context_bundle_input(
+    mut bundle: TaskContextBundle,
+) -> TaskContextBundle {
     bundle.refs = bundle
         .refs
         .into_iter()
@@ -149,7 +151,9 @@ pub(super) fn task_run_summary_from_record(record: &ProjectTaskRunRecord) -> Tas
     }
 }
 
-pub(super) fn task_intervention_from_record(record: &ProjectTaskInterventionRecord) -> TaskInterventionRecord {
+pub(super) fn task_intervention_from_record(
+    record: &ProjectTaskInterventionRecord,
+) -> TaskInterventionRecord {
     TaskInterventionRecord {
         id: record.id.clone(),
         task_id: record.task_id.clone(),
@@ -582,4 +586,3 @@ pub(super) fn sync_task_record_from_run(
         ..task.clone()
     }
 }
-

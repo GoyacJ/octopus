@@ -293,7 +293,9 @@ pub(super) fn build_tool_ranking(
     rows.into_iter().take(8).collect()
 }
 
-pub(super) fn build_model_breakdown(cost_entries: &[CostLedgerEntry]) -> Vec<ProjectDashboardBreakdownItem> {
+pub(super) fn build_model_breakdown(
+    cost_entries: &[CostLedgerEntry],
+) -> Vec<ProjectDashboardBreakdownItem> {
     let mut grouped = BTreeMap::<String, u64>::new();
     for record in cost_entries {
         let key = record
@@ -499,4 +501,3 @@ pub(crate) async fn list_activity_records(
         .map(|record| workspace_activity_from_audit(&record))
         .collect())
 }
-

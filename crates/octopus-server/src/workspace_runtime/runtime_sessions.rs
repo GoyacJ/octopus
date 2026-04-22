@@ -410,4 +410,3 @@ pub(crate) async fn resolve_runtime_memory_proposal(
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
-

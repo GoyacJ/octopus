@@ -250,7 +250,6 @@ pub(crate) fn resolve_project_module_permission<'a>(
     }
 }
 
-
 pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     value.strip_prefix("Bearer ").map(ToOwned::to_owned)

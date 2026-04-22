@@ -89,4 +89,3 @@ pub(crate) async fn workspace_overview(
         recent_activity: recent_activity.into_iter().take(8).collect(),
     }))
 }
-

@@ -16,4 +16,3 @@ pub(crate) async fn register_app(
     ensure_authorized_session(&state, &headers, "app_registry.write", None).await?;
     Ok(Json(state.services.app_registry.register_app(app).await?))
 }
-

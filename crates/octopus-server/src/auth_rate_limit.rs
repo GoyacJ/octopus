@@ -59,10 +59,7 @@ pub(crate) fn check_auth_rate_limit(
     Ok(None)
 }
 
-pub(crate) fn record_auth_failure(
-    state: &ServerState,
-    key: &str,
-) -> Result<Option<u64>, ApiError> {
+pub(crate) fn record_auth_failure(state: &ServerState, key: &str) -> Result<Option<u64>, ApiError> {
     let now = timestamp_now();
     let mut rate_limits = state
         .auth_rate_limits

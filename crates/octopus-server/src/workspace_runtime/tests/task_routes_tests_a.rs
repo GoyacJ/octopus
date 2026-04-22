@@ -326,9 +326,8 @@ async fn project_task_routes_approve_intervention_keeps_waiting_when_runtime_cha
         Json(CreateTaskRequest {
             title: "Review chained approvals".into(),
             goal: "Keep the task blocked until the second approval is resolved.".into(),
-            brief:
-                "Approve the team spawn first, then wait for workflow continuation approval."
-                    .into(),
+            brief: "Approve the team spawn first, then wait for workflow continuation approval."
+                .into(),
             default_actor_ref: CHAINED_APPROVAL_TEAM_REF.into(),
             schedule_spec: None,
             context_bundle: TaskContextBundle::default(),
@@ -618,4 +617,3 @@ async fn project_task_routes_approve_with_explicit_approval_id_does_not_fall_bac
     );
     assert_eq!(detail.intervention_history.len(), 0);
 }
-
