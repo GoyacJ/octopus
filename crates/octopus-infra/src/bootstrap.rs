@@ -5,14 +5,16 @@ pub fn initialize_workspace(root: impl Into<PathBuf>) -> Result<WorkspacePaths, 
     paths.ensure_layout()?;
     initialize_workspace_config(&paths)?;
     initialize_app_registry(&paths)?;
-    initialize_database(&paths)?;
-    seed_defaults(&paths)?;
+    let database = open_workspace_database(&paths)?;
+    initialize_database(&database)?;
+    seed_defaults(&database, &paths)?;
     Ok(paths)
 }
 
 pub fn build_infra_bundle(root: impl Into<PathBuf>) -> Result<InfraBundle, AppError> {
     let paths = initialize_workspace(root)?;
-    let state = Arc::new(load_state(paths.clone())?);
+    let database = open_workspace_database(&paths)?;
+    let state = Arc::new(load_state(paths.clone(), database)?);
 
     Ok(InfraBundle {
         paths: paths.clone(),

@@ -3468,16 +3468,16 @@ fn export_avatar_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build_infra_bundle;
-    use crate::catalog_hash_id;
-    use crate::infra_state::{
-        ensure_agent_record_columns, ensure_bundle_asset_descriptor_columns,
-        ensure_pet_agent_extension_columns, ensure_team_record_columns,
+    use crate::{
+        build_infra_bundle, catalog_hash_id, ensure_agent_record_columns,
+        ensure_bundle_asset_descriptor_columns, ensure_pet_agent_extension_columns,
+        ensure_team_record_columns,
     };
     use octopus_core::{
         ExportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundleInput,
         ImportWorkspaceAgentBundlePreviewInput,
     };
+    use octopus_persistence::Database;
     use octopus_platform::AuthService;
 
     fn encoded_file(relative_path: &str, content: &str) -> WorkspaceDirectoryUploadEntry {
@@ -3506,6 +3506,13 @@ mod tests {
             data_base64: BASE64_STANDARD.encode(content.as_bytes()),
             byte_size: content.len() as u64,
         }
+    }
+
+    fn open_test_db(paths: &WorkspacePaths) -> Connection {
+        Database::open(&paths.db_path)
+            .expect("database")
+            .acquire()
+            .expect("db")
     }
 
     fn ensure_test_tables(connection: &Connection) {
@@ -3756,7 +3763,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let mut record = test_agent_record(
@@ -3794,7 +3801,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         connection
@@ -3881,7 +3888,7 @@ mod tests {
             ))
             .expect("bootstrap owner");
 
-        let connection = Connection::open(bundle.paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&bundle.paths);
         connection
             .execute(
                 "INSERT INTO users (
@@ -3983,7 +3990,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let preview = crate::agent_bundle::preview_import(
@@ -4022,7 +4029,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let preview = crate::agent_bundle::preview_import(
@@ -4061,7 +4068,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let agent_id = "agent-1";
@@ -4106,7 +4113,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let leader = test_agent_record(
@@ -4192,7 +4199,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let project_id = "project-finance";
@@ -4248,7 +4255,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
@@ -4341,7 +4348,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
         paths.ensure_layout().expect("layout");
-        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        let connection = open_test_db(&paths);
         ensure_test_tables(&connection);
 
         let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
@@ -4442,7 +4449,7 @@ mod tests {
         let source_temp = tempfile::tempdir().expect("source tempdir");
         let source_paths = WorkspacePaths::new(source_temp.path());
         source_paths.ensure_layout().expect("source layout");
-        let source_connection = Connection::open(source_paths.db_path.clone()).expect("source db");
+        let source_connection = open_test_db(&source_paths);
         ensure_test_tables(&source_connection);
 
         let skill_slug = "managed-roundtrip";
@@ -4544,8 +4551,7 @@ mod tests {
         destination_paths
             .ensure_layout()
             .expect("destination layout");
-        let destination_connection =
-            Connection::open(destination_paths.db_path.clone()).expect("destination db");
+        let destination_connection = open_test_db(&destination_paths);
         ensure_test_tables(&destination_connection);
 
         crate::agent_bundle::execute_import(

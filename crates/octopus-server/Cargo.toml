@@ -12,6 +12,7 @@ workspace = true
 async-stream.workspace = true
 axum.workspace = true
 octopus-core = { path = "../octopus-core" }
+octopus-persistence = { path = "../octopus-persistence" }
 octopus-platform = { path = "../octopus-platform" }
 reqwest.workspace = true
 rusqlite.workspace = true

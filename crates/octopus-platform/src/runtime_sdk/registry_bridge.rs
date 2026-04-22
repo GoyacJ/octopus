@@ -7,7 +7,6 @@ use octopus_core::{
     ModelRegistryDiagnostics, ModelRegistryRecord, ModelSurfaceBinding, ProviderRegistryRecord,
     RuntimeExecutionClass, RuntimeExecutionProfile, SurfaceDescriptor,
 };
-use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 use crate::runtime::{ModelRegistryService, RuntimeConfigService};
@@ -695,7 +694,7 @@ fn build_default_selections(
 pub(crate) fn load_configured_model_usage_map(
     bridge: &RuntimeSdkBridge,
 ) -> Result<HashMap<String, u64>, AppError> {
-    let connection = match Connection::open(&bridge.state.paths.db_path) {
+    let connection = match bridge.state.database.acquire() {
         Ok(connection) => connection,
         Err(error) => return Err(AppError::database(error.to_string())),
     };

@@ -1,6 +1,8 @@
+mod auth_limits;
 mod dto_mapping;
 mod handlers;
 mod routes;
+mod server_audit;
 #[cfg(test)]
 pub(crate) mod test_runtime_sdk;
 mod workspace_runtime;
@@ -8,7 +10,7 @@ mod workspace_runtime;
 use std::{
     collections::HashMap,
     env, fs,
-    path::{Path as StdPath, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -68,6 +70,7 @@ use octopus_core::{
     WorkspaceSkillDocument, WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument,
     WorkspaceSummary,
 };
+use octopus_persistence::Database;
 use octopus_platform::PlatformServices;
 use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -75,9 +78,17 @@ use serde::Deserialize;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
+pub(crate) use auth_limits::{
+    auth_rate_limit_key, check_auth_rate_limit, clear_auth_failures, record_auth_failure,
+};
+pub(crate) use server_audit::{
+    append_audit_event, append_session_audit, audit_resource_label, workspace_id_for_audit,
+};
+
 #[derive(Clone)]
 pub struct ServerState {
     pub services: PlatformServices,
+    pub host_notifications_db: Database,
     pub host_auth_token: String,
     pub transport_security: String,
     pub idempotency_cache: Arc<Mutex<HashMap<String, serde_json::Value>>>,
@@ -207,11 +218,6 @@ impl IntoResponse for ApiError {
         }
         response
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct EventsQuery {
-    after: Option<String>,
 }
 
 const HEADER_REQUEST_ID: &str = "x-request-id";
@@ -723,145 +729,6 @@ fn normalize_project_scope(project_id: &str) -> Option<&str> {
     } else {
         Some(project_id)
     }
-}
-
-const AUTH_RATE_LIMIT_WINDOW_SECONDS: u64 = 10 * 60;
-const AUTH_RATE_LIMIT_MAX_FAILURES: usize = 5;
-const AUTH_RATE_LIMIT_LOCK_SECONDS: u64 = 15 * 60;
-
-async fn workspace_id_for_audit(state: &ServerState) -> Result<String, ApiError> {
-    Ok(state.services.workspace.workspace_summary().await?.id)
-}
-
-fn audit_resource_label(resource_type: &str, resource_id: Option<&str>) -> String {
-    resource_id
-        .map(|id| format!("{resource_type}:{id}"))
-        .unwrap_or_else(|| resource_type.to_string())
-}
-
-async fn append_audit_event(
-    state: &ServerState,
-    workspace_id: &str,
-    project_id: Option<String>,
-    actor_type: &str,
-    actor_id: &str,
-    action: &str,
-    resource: &str,
-    outcome: &str,
-) -> Result<(), ApiError> {
-    state
-        .services
-        .observation
-        .append_audit(AuditRecord {
-            id: format!("audit-{}", Uuid::new_v4()),
-            workspace_id: workspace_id.to_string(),
-            project_id,
-            actor_type: actor_type.to_string(),
-            actor_id: actor_id.to_string(),
-            action: action.to_string(),
-            resource: resource.to_string(),
-            outcome: outcome.to_string(),
-            created_at: timestamp_now(),
-        })
-        .await?;
-    Ok(())
-}
-
-async fn append_session_audit(
-    state: &ServerState,
-    session: &SessionRecord,
-    action: &str,
-    resource: &str,
-    outcome: &str,
-    project_id: Option<String>,
-) -> Result<(), ApiError> {
-    append_audit_event(
-        state,
-        &session.workspace_id,
-        project_id,
-        "user",
-        &session.user_id,
-        action,
-        resource,
-        outcome,
-    )
-    .await
-}
-
-fn auth_source_fingerprint(headers: &HeaderMap) -> String {
-    [
-        "x-forwarded-for",
-        "x-real-ip",
-        "cf-connecting-ip",
-        "user-agent",
-    ]
-    .iter()
-    .find_map(|name| {
-        headers
-            .get(*name)
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    })
-    .unwrap_or_else(|| "unknown".into())
-}
-
-fn auth_rate_limit_key(workspace_id: &str, username: &str, headers: &HeaderMap) -> String {
-    format!(
-        "{workspace_id}:{}:{}",
-        username.trim().to_lowercase(),
-        auth_source_fingerprint(headers)
-    )
-}
-
-fn check_auth_rate_limit(state: &ServerState, key: &str) -> Result<Option<u64>, ApiError> {
-    let now = timestamp_now();
-    let mut rate_limits = state
-        .auth_rate_limits
-        .lock()
-        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
-    let Some(entry) = rate_limits.get_mut(key) else {
-        return Ok(None);
-    };
-    entry
-        .failed_attempts
-        .retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
-    if let Some(locked_until) = entry.locked_until {
-        if locked_until > now {
-            return Ok(Some(locked_until));
-        }
-        entry.locked_until = None;
-        entry.failed_attempts.clear();
-    }
-    Ok(None)
-}
-
-fn record_auth_failure(state: &ServerState, key: &str) -> Result<Option<u64>, ApiError> {
-    let now = timestamp_now();
-    let mut rate_limits = state
-        .auth_rate_limits
-        .lock()
-        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
-    let entry = rate_limits.entry(key.to_string()).or_default();
-    entry
-        .failed_attempts
-        .retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
-    entry.failed_attempts.push(now);
-    if entry.failed_attempts.len() >= AUTH_RATE_LIMIT_MAX_FAILURES {
-        let locked_until = now + AUTH_RATE_LIMIT_LOCK_SECONDS;
-        entry.locked_until = Some(locked_until);
-        entry.failed_attempts.clear();
-        return Ok(Some(locked_until));
-    }
-    Ok(None)
-}
-
-fn clear_auth_failures(state: &ServerState, key: &str) -> Result<bool, ApiError> {
-    let mut rate_limits = state
-        .auth_rate_limits
-        .lock()
-        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
-    Ok(rate_limits.remove(key).is_some())
 }
 
 fn is_sensitive_capability(capability: &str) -> bool {

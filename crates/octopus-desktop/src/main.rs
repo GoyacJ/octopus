@@ -11,6 +11,7 @@ use octopus_core::{
     DEFAULT_WORKSPACE_ID,
 };
 use octopus_infra::build_infra_bundle;
+use octopus_persistence::Database;
 use octopus_platform::{PlatformServices, RuntimeSdkFactory};
 use octopus_server::{build_router, ServerState};
 
@@ -52,8 +53,17 @@ async fn main() -> Result<(), AppError> {
         knowledge: infra.knowledge.clone(),
         observation: infra.observation.clone(),
     };
+    let host_notifications_db = Database::open(
+        &args
+            .preferences_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("data/main.db"),
+    )
+    .map_err(|error| AppError::database(error.to_string()))?;
     let router = build_router(ServerState {
         services,
+        host_notifications_db,
         host_auth_token: args.auth_token.clone(),
         transport_security: "loopback".into(),
         idempotency_cache: Arc::new(Mutex::new(HashMap::new())),

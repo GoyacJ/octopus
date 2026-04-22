@@ -7,6 +7,7 @@ mod artifacts_inbox_knowledge;
 mod auth_users;
 mod bootstrap;
 mod infra_state;
+mod persistence;
 mod project_tasks;
 mod projects_teams;
 mod resources_skills;
@@ -77,6 +78,7 @@ use zip::ZipArchive;
 use access_control::*;
 use auth_users::*;
 use infra_state::*;
+use persistence::*;
 use resources_skills::*;
 
 pub use bootstrap::{build_infra_bundle, initialize_workspace};

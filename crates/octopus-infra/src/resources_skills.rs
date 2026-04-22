@@ -806,7 +806,11 @@ pub(super) fn validate_workspace_runtime_document(
                 )));
             };
             for field in REQUIRED_CONFIGURED_MODEL_FIELDS {
-                if entry_object.get(*field).and_then(serde_json::Value::as_str).is_none() {
+                if entry_object
+                    .get(*field)
+                    .and_then(serde_json::Value::as_str)
+                    .is_none()
+                {
                     return Err(AppError::invalid_input(format!(
                         "invalid runtime config: configuredModels.{configured_model_id}.{field} is required"
                     )));
@@ -1769,7 +1773,30 @@ fn mcp_resource_capability_id(server_name: &str, uri: &str) -> String {
 async fn discover_mcp_server_capabilities(
     servers: &BTreeMap<String, McpServerConfig>,
 ) -> BTreeMap<String, DiscoveredMcpServerCapabilities> {
-    discover_mcp_server_capabilities_best_effort(servers).await
+    let mut supported = BTreeMap::new();
+    let mut discovered = BTreeMap::new();
+
+    for (server_name, config) in servers {
+        if matches!(config, McpServerConfig::Stdio(_)) {
+            supported.insert(server_name.clone(), config.clone());
+            continue;
+        }
+
+        discovered.insert(
+            server_name.clone(),
+            DiscoveredMcpServerCapabilities {
+                availability: "attention".into(),
+                status_detail: Some(format!(
+                    "transport {} is not supported by capability management discovery",
+                    config.transport_label()
+                )),
+                ..DiscoveredMcpServerCapabilities::default()
+            },
+        );
+    }
+
+    discovered.extend(discover_mcp_server_capabilities_best_effort(&supported).await);
+    discovered
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2139,8 +2166,7 @@ impl InfraWorkspaceService {
                 let parsed = configs
                     .iter()
                     .filter_map(|(server_name, config)| {
-                        parse_mcp_server_config(config)
-                            .map(|parsed| (server_name.clone(), parsed))
+                        parse_mcp_server_config(config).map(|parsed| (server_name.clone(), parsed))
                     })
                     .collect::<BTreeMap<_, _>>();
                 (project_id.clone(), parsed)
@@ -2353,7 +2379,8 @@ impl InfraWorkspaceService {
             .iter()
             .filter(|asset| !managed_workspace_servers.contains(&asset.server_name))
             .filter_map(|asset| {
-                parse_mcp_server_config(&asset.config).map(|config| (asset.server_name.clone(), config))
+                parse_mcp_server_config(&asset.config)
+                    .map(|config| (asset.server_name.clone(), config))
             })
             .collect::<BTreeMap<_, _>>();
         let builtin_mcp_capabilities = discover_mcp_server_capabilities(&builtin_mcp_servers).await;

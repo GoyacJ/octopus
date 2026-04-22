@@ -10,6 +10,7 @@ use octopus_core::{
     DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
 };
 use octopus_infra::build_infra_bundle;
+use octopus_persistence::Database;
 use octopus_platform::{PlatformServices, RuntimeSdkDeps, RuntimeSdkFactory};
 use octopus_sdk::{
     register_builtins, AskAnswer, AskError, AskPrompt, AskResolver, AssistantEvent, ModelError,
@@ -113,9 +114,12 @@ pub(crate) fn test_server_state(root: &Path) -> ServerState {
         knowledge: infra.knowledge.clone(),
         observation: infra.observation.clone(),
     };
+    let host_notifications_db =
+        Database::open(&root.join("data").join("main.db")).expect("host notifications database");
 
     ServerState {
         services,
+        host_notifications_db,
         host_auth_token: "host-test-token".into(),
         transport_security: "loopback".into(),
         idempotency_cache: Arc::new(Mutex::new(HashMap::new())),

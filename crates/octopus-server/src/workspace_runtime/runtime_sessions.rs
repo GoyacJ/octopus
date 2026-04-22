@@ -1,0 +1,194 @@
+use super::*;
+
+pub(crate) async fn list_runtime_sessions(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<octopus_core::RuntimeSessionSummary>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "runtime.session.read",
+        None,
+        Some("runtime.session"),
+        None,
+    )
+    .await?;
+    Ok(Json(state.services.runtime_session.list_sessions().await?))
+}
+
+pub(crate) async fn create_runtime_session(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<octopus_core::CreateRuntimeSessionInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let project_id = input
+        .project_id
+        .as_deref()
+        .and_then(normalize_project_scope)
+        .map(str::to_string);
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.session.read",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
+    let idempotency_scope = idempotency_key(&headers).map(|key| {
+        idempotency_scope(
+            &session,
+            "runtime.create_session",
+            &input.conversation_id,
+            &key,
+        )
+    });
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let input = octopus_core::CreateRuntimeSessionInput {
+        project_id: project_id.clone(),
+        ..input
+    };
+    let owner_permission_ceiling =
+        derive_runtime_owner_permission_ceiling(&state, &session, project_id.as_deref()).await?;
+
+    let detail = state
+        .services
+        .runtime_session
+        .create_session_with_owner_ceiling(input, &session.user_id, Some(&owner_permission_ceiling))
+        .await?;
+    if let Some(scope) = idempotency_scope.as_deref() {
+        let payload = runtime_transport_payload(&detail, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
+    }
+
+    let payload = runtime_transport_payload(&detail, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn run_runtime_generation(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(mut input): Json<RunRuntimeGenerationInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    normalize_runtime_generation_input(&mut input)?;
+    let project_id = input
+        .project_id
+        .as_deref()
+        .and_then(normalize_project_scope)
+        .map(str::to_string);
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.submit_turn",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
+    let result: RuntimeGenerationResult = state
+        .services
+        .runtime_execution
+        .run_generation(
+            RunRuntimeGenerationInput {
+                project_id,
+                ..input
+            },
+            &session.user_id,
+        )
+        .await?;
+    let payload = runtime_transport_payload(&result, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn derive_runtime_owner_permission_ceiling(
+    state: &ServerState,
+    session: &SessionRecord,
+    project_id: Option<&str>,
+) -> Result<String, ApiError> {
+    let workspace = state.services.workspace.workspace_summary().await?;
+    let workspace_owner = workspace.owner_user_id.as_deref();
+
+    let Some(project_id) = project_id else {
+        return Ok(if workspace_owner == Some(session.user_id.as_str()) {
+            octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into()
+        } else {
+            octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into()
+        });
+    };
+
+    let project = lookup_project(state, project_id).await?;
+    if workspace_owner == Some(session.user_id.as_str()) || project.owner_user_id == session.user_id
+    {
+        return Ok(octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into());
+    }
+    if !project
+        .member_user_ids
+        .iter()
+        .any(|user_id| user_id == &session.user_id)
+    {
+        return Ok(octopus_core::RUNTIME_PERMISSION_READ_ONLY.into());
+    }
+    if resolve_project_module_permission(&workspace, &project, "tools") == "deny" {
+        return Ok(octopus_core::RUNTIME_PERMISSION_READ_ONLY.into());
+    }
+    Ok(octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into())
+}
+
+pub(crate) async fn get_runtime_session(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    ensure_capability_session(
+        &state,
+        &headers,
+        "runtime.session.read",
+        project_id.as_deref(),
+        Some("runtime.session"),
+        Some(&session_id),
+    )
+    .await?;
+    let detail = state
+        .services
+        .runtime_session
+        .get_session(&session_id)
+        .await?;
+    let payload = runtime_transport_payload(&detail, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn delete_runtime_session(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    ensure_capability_session(
+        &state,
+        &headers,
+        "runtime.session.read",
+        project_id.as_deref(),
+        Some("runtime.session"),
+        Some(&session_id),
+    )
+    .await?;
+    state
+        .services
+        .runtime_session
+        .delete_session(&session_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -244,6 +244,7 @@ mod tests {
         RegisterBootstrapAdminRequest, ReviewProjectDeletionRequestInput, RoleBindingUpsertRequest,
         RoleUpsertRequest, UpdateProjectRequest,
     };
+    use octopus_persistence::Database;
     use octopus_platform::{
         AccessControlService, AuthService, InboxService, ObservationService, WorkspaceService,
     };
@@ -262,6 +263,13 @@ mod tests {
             file_name: "avatar.png".into(),
             byte_size: 8,
         }
+    }
+
+    fn open_test_db(paths: &WorkspacePaths) -> Connection {
+        Database::open(&paths.db_path)
+            .expect("database")
+            .acquire()
+            .expect("open sqlite")
     }
 
     #[test]
@@ -408,7 +416,7 @@ mod tests {
         assert_eq!(usage_rows[1].project_id, "proj-redesign");
         assert_eq!(usage_rows[1].used_tokens, 125);
 
-        let connection = Connection::open(&bundle.paths.db_path).expect("open sqlite");
+        let connection = open_test_db(&bundle.paths);
         let stored_used_tokens: i64 = connection
             .query_row(
                 "SELECT used_tokens FROM project_token_usage_projections WHERE project_id = ?1",
@@ -434,7 +442,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = initialize_workspace(temp.path()).expect("workspace initialized");
 
-        let connection = Connection::open(&paths.db_path).expect("open sqlite");
+        let connection = open_test_db(&paths);
         connection
             .execute(
                 "INSERT INTO users (id, username, display_name, status, password_hash, password_state, created_at, updated_at)

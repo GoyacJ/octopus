@@ -13,6 +13,7 @@ axum.workspace = true
 log.workspace = true
 octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
+octopus-persistence = { path = "../octopus-persistence" }
 octopus-platform = { path = "../octopus-platform" }
 octopus-server = { path = "../octopus-server" }
 tokio.workspace = true

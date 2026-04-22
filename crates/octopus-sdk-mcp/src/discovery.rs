@@ -367,7 +367,7 @@ fn client_for_server(
             ))
         }
         unsupported => Err(format!(
-            "transport {} is not supported by SDK MCP discovery",
+            "transport {} is not supported by SDK MCP discovery (not supported transport)",
             unsupported.transport_label()
         )),
     }

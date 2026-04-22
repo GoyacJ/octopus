@@ -1792,24 +1792,26 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 
 ### 3.2 `octopus-persistence`（新）
 
-- 职责：业务侧 SQLite schema 定义 + migration + repository trait；业务 crate 的 `rusqlite::Connection` 生命周期集中管理。
+- 职责：W8 先冻结为业务侧 SQLite 最小统一入口，集中管理 connection lifecycle、统一 pragma、migration profile，与当前消除生产 direct-open 所需的资源 helper；不在本周推进全量 repository trait / DTO 下沉。
 - 公共面：
   ```rust
   pub struct Database { /* ... */ }
   impl Database {
       pub fn open(path: &Path) -> Result<Self, DbError>;
       pub fn acquire(&self) -> Result<Connection, DbError>;
-      pub fn run_migrations(&self) -> Result<(), DbError>;
+      pub fn run_migrations(&self, profile: MigrationProfile) -> Result<(), DbError>;
   }
-  pub mod repositories {
-      pub struct ProjectRepository;
-      pub struct WorkspaceRepository;
-      pub struct TaskRepository;
-      pub struct AccessControlRepository;
-      // ...
+  pub enum MigrationProfile {
+      RuntimeSecrets,
+      HostNotifications,
   }
   ```
-- SDK 的 `SqliteJsonlSessionStore` **不**走本 crate（它在 SDK 侧自持一个独立 Connection pool），避免业务 schema 与 SDK 事件 schema 相互污染。
+- 当前资源收口：
+  - `octopus-platform::runtime_sdk::secret_vault`
+  - `octopus-platform::runtime_sdk::registry_bridge`
+  - `octopus-server` host notifications
+  - `octopus-infra` workspace database bootstrap / load / seed 路径
+- SDK 的 `SqliteJsonlSessionStore` **不**走本 crate，继续保持 SDK 侧独立双通道语义，避免业务 schema 与 SDK 事件 schema 相互污染。
 
 ### 3.3 `octopus-server`
 
@@ -1947,7 +1949,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
 - W7 同步删除：`crates/runtime`、`crates/tools`、`crates/plugins`、`crates/api`、`crates/octopus-runtime-adapter`、`crates/commands`、`crates/compat-harness`、`crates/mock-anthropic-service`、`crates/rusty-claude-cli`、`crates/octopus-desktop-backend`、`crates/octopus-model-policy`。
 - W7 当前 `Cargo.toml` 继续使用 `members = ["apps/desktop/src-tauri", "crates/*"]`；目录删完后 workspace 实盘应只剩上述 crate。
-- `default-members` 的现行控制面以 live `Cargo.toml` 为准：`apps/desktop/src-tauri / octopus-core / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除；若 W8 后续决定收敛默认编译闭包，必须同批修改 `Cargo.toml`、本节与 `00-overview.md §3/§5`。
+- `default-members` 的现行控制面以 live `Cargo.toml` 为准：`apps/desktop/src-tauri / octopus-core / octopus-persistence / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-sdk-contracts / octopus-sdk-model / octopus-sdk-session / octopus-sdk-tools / octopus-sdk-mcp / octopus-sdk-permissions / octopus-sdk-sandbox / octopus-sdk-hooks / octopus-sdk-context / octopus-sdk-subagent / octopus-sdk-plugin / octopus-sdk-observability / octopus-sdk-core / octopus-sdk`。`octopus-runtime-adapter` 已从 default 列移除；若 W8 后续决定收敛默认编译闭包，必须同批修改 `Cargo.toml`、本节与 `00-overview.md §3/§5`。
 
 ---
 

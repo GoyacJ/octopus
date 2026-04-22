@@ -94,7 +94,7 @@
 | Crate | 职责 | 说明 |
 |---|---|---|
 | `octopus-platform` | 域对象与用例层 | 删除目前 `runtime.rs` 783 行的跨 SDK 胶水 |
-| `octopus-persistence`（**新**） | 业务侧 SQLite schema + repository | `octopus-platform / octopus-infra / octopus-server` 的 `rusqlite::Connection` 走这里；`octopus-sdk-session` 自持会话投影连接 |
+| `octopus-persistence`（**新**） | 业务侧 SQLite 入口 | 负责 connection lifecycle、统一 pragma、migration profile 与当前 direct-open 资源 helper；`octopus-platform / octopus-infra / octopus-server` 统一走这里，`octopus-sdk-session` 继续自持会话投影连接 |
 | `octopus-server` | Axum + OpenAPI 路由 | `handlers.rs` 4300 行按资源切 10+ 文件 |
 | `octopus-desktop` | Tauri 宿主桥 | 替换 `octopus-desktop-backend` |
 | `octopus-cli` | CLI 入口 | 合并 `rusty-claude-cli` + `commands` |

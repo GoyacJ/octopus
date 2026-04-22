@@ -6,6 +6,7 @@ members = [
 default-members = [
   "apps/desktop/src-tauri",
   "crates/octopus-core",
+  "crates/octopus-persistence",
   "crates/octopus-platform",
   "crates/octopus-infra",
   "crates/octopus-server",

@@ -13,8 +13,9 @@ use chacha20poly1305::{
 };
 use getrandom::getrandom;
 use octopus_core::{timestamp_now, AppError};
+use octopus_persistence::{Database, MigrationProfile};
 use octopus_sdk::{SecretValue, SecretVault, VaultError};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, OptionalExtension};
 
 use super::RuntimeSdkPaths;
 
@@ -28,7 +29,7 @@ enum RuntimeSecretVaultBackend {
         secrets: Mutex<HashMap<String, Vec<u8>>>,
     },
     Sqlite {
-        db_path: std::path::PathBuf,
+        database: Database,
         master_key: [u8; RUNTIME_SECRET_MASTER_KEY_BYTES],
     },
     Unavailable {
@@ -45,12 +46,13 @@ impl RuntimeSecretVault {
     pub(crate) fn open(
         workspace_id: &str,
         paths: &RuntimeSdkPaths,
+        database: Database,
     ) -> Result<std::sync::Arc<Self>, AppError> {
         if std::env::var_os(IN_MEMORY_SECRET_STORE_ENV).is_some() {
             return Ok(std::sync::Arc::new(Self::in_memory(workspace_id)));
         }
 
-        match Self::sqlite_backend(paths) {
+        match Self::sqlite_backend(paths, database) {
             Ok(backend) => Ok(std::sync::Arc::new(Self {
                 workspace_id: workspace_id.to_string(),
                 backend,
@@ -73,26 +75,17 @@ impl RuntimeSecretVault {
         }
     }
 
-    fn sqlite_backend(paths: &RuntimeSdkPaths) -> Result<RuntimeSecretVaultBackend, AppError> {
+    fn sqlite_backend(
+        paths: &RuntimeSdkPaths,
+        database: Database,
+    ) -> Result<RuntimeSecretVaultBackend, AppError> {
         let master_key = Self::load_or_create_master_key(&paths.runtime_secret_master_key_path)?;
-        let connection = Connection::open(&paths.db_path)
-            .map_err(|error| AppError::database(error.to_string()))?;
-        connection
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS runtime_secret_records (
-                    reference TEXT PRIMARY KEY,
-                    workspace_id TEXT NOT NULL,
-                    ciphertext BLOB NOT NULL,
-                    nonce BLOB NOT NULL,
-                    key_version INTEGER NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
-                );",
-            )
+        database
+            .run_migrations(MigrationProfile::RuntimeSecrets)
             .map_err(|error| AppError::database(error.to_string()))?;
 
         Ok(RuntimeSecretVaultBackend::Sqlite {
-            db_path: paths.db_path.clone(),
+            database,
             master_key,
         })
     }
@@ -173,13 +166,14 @@ impl RuntimeSecretVault {
                 Ok(())
             }
             RuntimeSecretVaultBackend::Sqlite {
-                db_path,
+                database,
                 master_key,
             } => {
                 let (ciphertext, nonce) = Self::encrypt(master_key, value)?;
                 let now = i64::try_from(timestamp_now())
                     .map_err(|_| AppError::runtime("runtime secret timestamp overflow"))?;
-                Connection::open(db_path)
+                database
+                    .acquire()
                     .map_err(|error| AppError::database(error.to_string()))?
                     .execute(
                         "INSERT INTO runtime_secret_records
@@ -216,10 +210,11 @@ impl RuntimeSecretVault {
                 .get(reference)
                 .cloned()),
             RuntimeSecretVaultBackend::Sqlite {
-                db_path,
+                database,
                 master_key,
             } => {
-                let record = Connection::open(db_path)
+                let record = database
+                    .acquire()
                     .map_err(|error| AppError::database(error.to_string()))?
                     .query_row(
                         "SELECT ciphertext, nonce, key_version
@@ -272,8 +267,9 @@ impl RuntimeSecretVault {
                     .remove(reference);
                 Ok(())
             }
-            RuntimeSecretVaultBackend::Sqlite { db_path, .. } => {
-                Connection::open(db_path)
+            RuntimeSecretVaultBackend::Sqlite { database, .. } => {
+                database
+                    .acquire()
                     .map_err(|error| AppError::database(error.to_string()))?
                     .execute(
                         "DELETE FROM runtime_secret_records WHERE reference = ?1 AND workspace_id = ?2",

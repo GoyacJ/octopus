@@ -3236,6 +3236,7 @@ dependencies = [
  "log",
  "octopus-core",
  "octopus-infra",
+ "octopus-persistence",
  "octopus-platform",
  "octopus-server",
  "tokio",
@@ -3274,6 +3275,7 @@ dependencies = [
  "base64 0.22.1",
  "include_dir",
  "octopus-core",
+ "octopus-persistence",
  "octopus-platform",
  "octopus-sdk-mcp",
  "octopus-sdk-tools",
@@ -3290,6 +3292,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-persistence"
+version = "0.2.5"
+dependencies = [
+ "rusqlite",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "octopus-platform"
 version = "0.2.5"
 dependencies = [
@@ -3299,6 +3310,7 @@ dependencies = [
  "futures",
  "getrandom 0.2.17",
  "octopus-core",
+ "octopus-persistence",
  "octopus-sdk",
  "reqwest 0.12.28",
  "rusqlite",
@@ -3572,6 +3584,7 @@ dependencies = [
  "axum",
  "octopus-core",
  "octopus-infra",
+ "octopus-persistence",
  "octopus-platform",
  "octopus-sdk",
  "reqwest 0.12.28",
