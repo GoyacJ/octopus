@@ -601,7 +601,14 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
         <img src="/logo.png" class="h-8 w-8 rounded-[var(--radius-m)] object-cover" alt="Octopus logo" />
         <div class="truncate text-[14px] font-semibold text-text-primary">Octopus</div>
       </div>
-      <UiButton variant="ghost" size="icon" data-testid="sidebar-collapse" class="h-8 w-8" @click="shell.toggleLeftSidebar()">
+      <UiButton
+        variant="ghost"
+        size="icon"
+        data-testid="sidebar-collapse"
+        class="h-8 w-8"
+        :aria-label="t('topbar.leftSidebar')"
+        @click="shell.toggleLeftSidebar()"
+      >
         <PanelLeftClose :size="16" />
       </UiButton>
     </div>

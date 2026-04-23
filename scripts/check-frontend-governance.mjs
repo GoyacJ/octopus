@@ -3,9 +3,13 @@ import path from 'node:path'
 
 const rootDir = path.resolve(import.meta.dirname, '..')
 const desktopSrcDir = path.join(rootDir, 'apps/desktop/src')
+const packagesUiSrcDir = path.join(rootDir, 'packages/ui/src')
+const sharedUiComponentsDir = path.join(packagesUiSrcDir, 'components')
 const businessViewDir = path.join(desktopSrcDir, 'views')
 const businessLayoutDir = path.join(desktopSrcDir, 'components/layout')
+const rootTailwindConfigPath = path.join(rootDir, 'tailwind.config.js')
 const ignoredSegments = new Set(['node_modules', '.git', 'dist', 'target', '.turbo'])
+const arbitraryPixelTextSizeRegex = /text-\[[0-9]+px\]/g
 const disallowedUiLibraries = [
   'reka-ui',
   'shadcn-vue',
@@ -21,7 +25,7 @@ const disallowedUiLibraries = [
 const scopedStyleHardLimit = 120
 const forbiddenVisualPatternTokens = ['hero', 'panel', 'card', 'toolbar', 'dialog', 'ranking', 'timeline', 'metric', 'shell']
 const nativeFormControlRegex = /<\s*(input|select|textarea|button)\b/g
-const allowedTokenRoundedRegex = /^rounded-\[var\(--radius-(?:xs|s|m|l|xl|full)\)\]$/
+const allowedTokenRoundedRegex = /^rounded-\[var\(--radius-(?:xs|s|m|l|xl|2xl|full)\)\]$/
 const visualDriftChecks = [
   {
     label: 'uses page-private accent color classes',
@@ -87,6 +91,15 @@ const businessVisualDriftChecks = [
     regex: /rounded-xl border border-border-subtle p-(?:4|5)\b/g,
   },
 ]
+const tokenRegressionChecks = [
+  {
+    label: 'reintroduces the removed glass alias',
+    regex: /--bg-glass\b|\b(?:bg|text|border|ring)-glass\b|\bglass:\s*['"]/g,
+  },
+]
+const sharedUiTypographyDebtAllowlist = {
+  'packages/ui/src/components/UiCodeEditor.vue': ['text-[10px]', 'text-[13px]'],
+}
 
 const legacyAllowlist = {
   'apps/desktop/src/components/layout/ConversationTabsBar.vue': {
@@ -205,7 +218,7 @@ function collectMatches(content, check, limit = 8) {
 
   while ((match = regex.exec(content))) {
     const value = match[0]
-    if (check.allow?.(value)) {
+    if (check.allow?.(value, check.context)) {
       continue
     }
     matches.add(value)
@@ -219,6 +232,10 @@ function collectMatches(content, check, limit = 8) {
 
 function isBusinessSurfaceFile(filePath) {
   return filePath.startsWith(businessViewDir) || filePath.startsWith(businessLayoutDir)
+}
+
+function isSharedUiComponentFile(filePath) {
+  return filePath.startsWith(sharedUiComponentsDir) && filePath.endsWith('.vue')
 }
 
 async function main() {
@@ -257,12 +274,45 @@ async function main() {
       }
     }
 
-    const shouldCheckVisualDrift = filePath.startsWith(desktopSrcDir) || filePath.startsWith(path.join(rootDir, 'packages/ui/src'))
+    const shouldCheckVisualDrift = filePath.startsWith(desktopSrcDir) || filePath.startsWith(packagesUiSrcDir)
     if (shouldCheckVisualDrift) {
       for (const check of visualDriftChecks) {
         const matches = collectMatches(content, check)
         if (matches.length) {
           errors.push(`${rel}: ${check.label} -> ${matches.join(', ')}`)
+        }
+      }
+    }
+
+    const shouldCheckTokenRegressions =
+      filePath === rootTailwindConfigPath
+      || filePath.startsWith(desktopSrcDir)
+      || filePath.startsWith(packagesUiSrcDir)
+    if (shouldCheckTokenRegressions) {
+      for (const check of tokenRegressionChecks) {
+        const matches = collectMatches(content, check)
+        if (matches.length) {
+          errors.push(`${rel}: ${check.label} -> ${matches.join(', ')}`)
+        }
+      }
+    }
+
+    if (isSharedUiComponentFile(filePath)) {
+      const allowlistedMatches = new Set(sharedUiTypographyDebtAllowlist[rel] ?? [])
+      const typographyDebtMatches = collectMatches(content, {
+        regex: arbitraryPixelTextSizeRegex,
+        allow: (value, context) => context.allowlistedMatches.has(value),
+        context: { allowlistedMatches },
+      })
+
+      if (typographyDebtMatches.length) {
+        errors.push(`${rel}: shared UI uses arbitrary pixel text sizes outside the current debt allowlist -> ${typographyDebtMatches.join(', ')}`)
+      }
+
+      if (sharedUiTypographyDebtAllowlist[rel]) {
+        const currentMatches = collectMatches(content, { regex: arbitraryPixelTextSizeRegex }, 16)
+        if (!currentMatches.length) {
+          warnings.push(`${rel}: typography debt looks retired; consider removing it from the shared typography allowlist`)
         }
       }
     }

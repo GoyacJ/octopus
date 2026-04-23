@@ -7,6 +7,7 @@ import {
 } from 'reka-ui'
 
 import type { UiMenuItem } from './UiDropdownMenu.vue'
+import UiKbd from './UiKbd.vue'
 
 const props = defineProps<{
   items: UiMenuItem[]
@@ -41,11 +42,17 @@ function handleSelect(item: UiMenuItem) {
         :key="item.key"
         :data-testid="`ui-context-item-${item.key}`"
         :disabled="item.disabled"
-        class="flex cursor-default items-center rounded-[var(--radius-s)] px-3 py-2 text-left text-sm outline-none transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-subtle"
+        class="flex cursor-default items-center justify-between gap-3 rounded-[var(--radius-s)] px-3 py-2 text-left text-sm outline-none transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-subtle"
         :class="item.tone === 'danger' ? 'text-destructive' : 'text-popover-foreground'"
         @select="handleSelect(item)"
       >
-        {{ item.label }}
+        <span class="min-w-0 truncate">{{ item.label }}</span>
+        <UiKbd
+          v-if="item.shortcut?.length"
+          :keys="item.shortcut"
+          size="sm"
+          class="shrink-0 border-border bg-subtle text-text-secondary"
+        />
       </ContextMenuItem>
     </ContextMenuContent>
   </ContextMenuRoot>

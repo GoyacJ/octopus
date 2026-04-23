@@ -4,177 +4,247 @@
 
 ## Goal
 
-把商业化桌面产品最核心的四种状态 —— `loading / error / offline / restricted` —— 统一到 `@octopus/ui` 共享层，让所有业务页异步与异常场景共享一套视觉与行为契约，消除"每页各自造轮子"的不稳定感。
+把当前桌面端最常见的 `loading / error / connection / restricted` 四类状态整理成当前仓库可执行的共享方案，避免继续沿用旧项目里已经失效的错误边界、离线探测和 loading 占位思路。
 
 ## Architecture
 
-四态均以共享组件形式落在 `packages/ui/src/components/`；错误边界与网络探测走 Vue `onErrorCaptured` 与 `navigator.onLine` + 自定义探针，不引入新 runtime。现存 `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue` 将上提为 `@octopus/ui` 的 `UiErrorBoundary`，业务页通过 slot 组合；网络状态走一个新 Pinia store `useConnectionStore`（locally-first，只做状态管理，不持久化）。
+通用展示组件继续落在 `@octopus/ui`。但当前全局运行时错误捕获已经明确由 `apps/desktop/src/App.vue`、`apps/desktop/src/runtime/app-error-boundary.ts` 和 `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue` 负责，不能再把整套运行时边界错误地上提成 `@octopus/ui`；连接状态也要建立在现有 `useShellStore` 的 `backendConnection` 与 `workspaceConnections` 之上，而不是再造一份平行连接 store。
 
 ## Scope
 
 - In scope:
-  - 新增 `UiSkeleton` / `UiErrorState` / `UiErrorBoundary` / `UiOfflineBanner` / `UiRestrictedState`
-  - 上提 `AppRuntimeErrorBoundary.vue` 逻辑到 `@octopus/ui`
-  - `apps/desktop` 业务页的 loading 态迁移（列表、详情、设置页）
-  - 全局 ErrorBoundary 挂载到路由根
-  - 顶栏级 `UiOfflineBanner` 接入 `useConnectionStore`
+  - 新增共享 `UiSkeleton`
+  - 新增共享 `UiErrorState`，并让当前 `AppRuntimeErrorBoundary.vue` 复用它
+  - 基于 `useShellStore` 的连接状态提示条带
+  - 新增共享 `UiRestrictedState`
+  - 把当前若干真实 loading 文案/占位面迁移到 `UiSkeleton`
 - Out of scope:
-  - 后端错误码契约调整（由 OpenAPI governance 负责）
-  - 重试/退避策略（由 adapter 层负责，本计划只做 UI）
-  - Toast 化错误（错误仍然靠 Toast 出短信息，但页级失败态走 UiErrorState）
-  - Agent 流式中断 UI（归属 P3）
+  - 改动 runtime 错误采集与恢复协议
+  - 重新设计 host 启动失败的整页 guard
+  - 新增独立连接状态 store
+  - Agent 流式中断与 Trace 细节反馈
 
 ## Risks Or Open Questions
 
-- `AppRuntimeErrorBoundary.vue` 上提到 `@octopus/ui` 后，原 `apps/desktop` 引用路径会变；需确认该组件不依赖 desktop-only API（若有对 Tauri 的直接调用，须在 P1 adapter 层封装）。
-- `useConnectionStore` 的"离线"定义：纯 `navigator.onLine` 不够（Tauri 环境里可能始终 true），必须对 workspace host ping 超时也视为离线；ping 端点与频率须由 host 侧确认。
-- `UiRestrictedState` 三种变体（权限不足 / 试用到期 / 只读）的具体文案与 CTA，需要与产品确认。本计划仅交付**视觉与插槽契约**，文案由产品填入。
+- 当前运行时错误边界依赖路由跳转、复制详情和 runtime reset token。这里只能抽共享展示层，不能把整套恢复逻辑硬搬进 `@octopus/ui`。
+- 当前 shell 的连接状态语义是 `connected / disconnected / unreachable`，而不是旧计划里的 `online / degraded / offline`。连接提示必须基于这套真实枚举。
+- 当前仓库没有广泛的 `animate-pulse` 债务。loading 迁移要围绕真实存在的 loading 面，而不是沿用旧项目的 grep 规则。
 
 ## Execution Rules
 
 - Do not start implementation until each task has exact files, acceptance, verification, and stop conditions.
-- Do not collapse shared-layer work into a business-page-local workaround.
-- Stop when contract ownership, source of truth, or verification output is unclear.
-- Execute in small batches and update status in place after each batch.
-- 每个新组件必须有至少 3 个 vitest 用例：渲染、插槽、`prefers-reduced-motion` 分支。
+- Keep runtime crash capture desktop-owned unless a sub-piece is proven transport-agnostic.
+- Reuse `useShellStore` for connection truth; do not introduce a second source of truth for connectivity.
+- Prefer targeted loading migrations on current high-traffic surfaces over repo-wide speculative cleanup.
 
 ## Task Ledger
 
-### Task 1: UiSkeleton 共享组件
+### Task 1: Add Shared `UiSkeleton`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiSkeleton.vue`
-- Create: `packages/ui/src/components/__tests__/UiSkeleton.test.ts`
 - Modify: `packages/ui/src/index.ts`
+- Modify: `apps/desktop/test/ui-primitives.test.ts`
 
 Preconditions:
-- P1 Task 2（字号 token）、Task 4（motion preset）已完成。
+- Typography and motion baselines from the token plan are available or can be consumed from current tokens without introducing ad-hoc values.
 
 Step 1:
-- Action: 实现三形态：`<UiSkeleton variant="line" :lines="3" />`、`variant="card"`、`variant="table" :rows="6" :cols="4"`；shimmer 用 CSS `@keyframes` + `background-size: 200% 100%`；在 `prefers-reduced-motion: reduce` 下只保留静态底色，不动画。
-- Done when: 三 variant 渲染正常；`prefers-reduced-motion` 下 `animation: none`；组件只用 token（颜色走 `bg-surface-muted`，radius 走 `rounded-m`）。
-- Verify: `pnpm -C apps/desktop test -- UiSkeleton` 通过。
-- Stop if: shimmer 在 Safari 下掉帧（需改为 transform 动画）。
+- Action: Add a shared skeleton primitive that covers the current desktop needs: line blocks, card blocks, and table-row blocks. Respect `prefers-reduced-motion` through the existing `packages/ui/src/lib/motion.ts` helper path.
+- Done when: Shared loading placeholders no longer require each desktop surface to invent its own copy-only loading treatment.
+- Verify: `pnpm -C apps/desktop test -- ui-primitives && pnpm -C apps/desktop typecheck`
+- Stop if: The current token layer cannot represent the skeleton colors or radii without adding one-off values.
 
-### Task 2: UiErrorState + UiErrorBoundary
+### Task 2: Extract Shared Error Presentation, Keep Desktop Runtime Boundary
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiErrorState.vue`
-- Create: `packages/ui/src/components/UiErrorBoundary.vue`
-- Create: `packages/ui/src/components/__tests__/UiErrorState.test.ts`
-- Create: `packages/ui/src/components/__tests__/UiErrorBoundary.test.ts`
 - Modify: `packages/ui/src/index.ts`
-- Modify: `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue`（改为 re-export 或薄包装）
+- Modify: `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue`
+- Modify: `apps/desktop/tsconfig.json`
+- Modify: `apps/desktop/test/app-runtime-error-boundary.test.ts`
+- Modify: `apps/desktop/test/ui-primitives.test.ts`
 
 Preconditions:
-- P1 已完成（token 与 motion）。
+- Current ownership of runtime crash capture remains in `App.vue` + `runtime/app-error-boundary.ts`.
 
 Step 1:
-- Action: `UiErrorState` 是可视化展示组件，props：`title`、`description`、`errorId?`、`onRetry?`、`onCopy?`、`onFeedback?`；默认插画走 `UiDotLottie`（进入视口才加载），可关闭；视觉使用 `border border-whisper bg-surface rounded-l padding-8`。禁止 toast 化，它是**页级**失败态。
-- Done when: 带 retry/copy/feedback 三按钮渲染成功；插画可被 `:show-illustration="false"` 关闭；单测覆盖三回调触发。
-- Verify: `pnpm -C apps/desktop test -- UiErrorState` 通过。
-- Stop if: 现 `@octopus/ui` 已有 `UiStatusCallout` 覆盖此语义——需先读该组件判断是否复用/扩展而非新建。
+- Action: Extract the reusable visual structure of the runtime failure page into `UiErrorState`, then refit `AppRuntimeErrorBoundary.vue` to consume that shared presentation while preserving the current desktop-only recovery actions and diagnostic copy flow.
+- Done when: The app still renders the same runtime failure experience, but the visual error shell becomes reusable for non-runtime page failures.
+- Verify: `pnpm -C apps/desktop test -- app-runtime-error-boundary ui-primitives && pnpm -C apps/desktop build:ui`
+- Stop if: The shared component would need direct router/runtime awareness instead of staying presentation-only.
 
-Step 2:
-- Action: `UiErrorBoundary` 用 Vue `onErrorCaptured` 捕获子树异常，捕获后渲染 `UiErrorState` 并提供 `reset()` 方法；暴露 `#error="{ error, reset }"` 作用域插槽以便业务页自定义。把 `AppRuntimeErrorBoundary.vue` 改为调用 `UiErrorBoundary` 的薄壳，保留 desktop-only 的上报逻辑（如 Tauri 崩溃日志写入）在外层 wrapper 里。
-- Done when: 路由根挂 `UiErrorBoundary`；人工在开发环境抛 `throw new Error('x')` 能触发 fallback；`reset()` 能恢复；原 `AppRuntimeErrorBoundary` 引用处无变化。
-- Verify: `pnpm -C apps/desktop test && pnpm -C apps/desktop build:ui` 通过。
-- Stop if: 原 `AppRuntimeErrorBoundary` 依赖非共享的 Tauri 调用；需要在 adapter 层先封装。
+### Task 3: Surface Connection Problems From `useShellStore`
 
-### Task 3: useConnectionStore + UiOfflineBanner
-
-Status: `pending`
+Status: `done`
 
 Files:
-- Create: `apps/desktop/src/stores/connection.ts`（Pinia store）
 - Create: `packages/ui/src/components/UiOfflineBanner.vue`
-- Create: `packages/ui/src/components/__tests__/UiOfflineBanner.test.ts`
-- Modify: `apps/desktop/src/components/layout/WorkbenchTopbar.vue`
 - Modify: `packages/ui/src/index.ts`
+- Modify: `apps/desktop/src/components/layout/WorkbenchTopbar.vue`
+- Modify: `apps/desktop/test/layout-shell.test.ts`
+- Modify: `apps/desktop/test/shell-store.test.ts`
 
 Preconditions:
-- P1 已完成。
-- host ping 端点已确认（默认先用 `GET /api/v1/health` + 5s 超时）。
+- Current shell connection semantics are confirmed from `apps/desktop/src/stores/shell.ts`.
 
 Step 1:
-- Action: `useConnectionStore` 暴露 `status: 'online' | 'degraded' | 'offline'`；`online` = `navigator.onLine === true && 最近一次 ping < 5s`；`degraded` = `navigator.onLine === true && ping 超时 1~2 次`；`offline` = `navigator.onLine === false || ping 连续超时 ≥ 3 次`。Ping 走 `apps/desktop/src/tauri/shell.ts` 的 `health()`（不存在则先在 adapter 层补）。
-- Done when: 手动断网后 store 切到 `offline`，恢复后 3 秒内切回 `online`。
-- Verify: `pnpm -C apps/desktop test -- connection.store` 覆盖 3 个状态切换。
-- Stop if: `shell.ts` 无 `health()`，需要先在 P1/adapter 层里补并对齐 OpenAPI 契约（不属于本计划范围，需开新任务）。
+- Action: Render a topbar-adjacent connection banner driven by the existing `useShellStore` records. Hide on `connected`, show warning on `disconnected`, show danger + retry affordance on `unreachable`. Keep the full-screen host-unavailable guard in `App.vue` as the owner of catastrophic backend boot failure.
+- Done when: Users can distinguish workspace/session connectivity issues from total host startup failure without a second store or duplicated health polling logic.
+- Verify: `pnpm -C apps/desktop test -- layout-shell shell-store && pnpm -C apps/desktop build:ui`
+- Stop if: `unreachable` always resolves to the full-page guard and leaves no topbar state worth surfacing.
 
-Step 2:
-- Action: `UiOfflineBanner` 是**顶栏级**条带（非 toast），`status === 'online'` 时不渲染；`degraded` 显示橙色提示（warning soft）；`offline` 显示 danger soft + 重试按钮。高度 28px，位于 topbar 下缘，占满宽度；`WorkbenchTopbar` 里 slot 或直接组合。
-- Done when: 三状态视觉符合 DESIGN.md 语义色；离线时 topbar 下方出现条带不压缩主内容布局。
-- Verify: `pnpm -C apps/desktop test -- UiOfflineBanner && pnpm -C apps/desktop build:ui` 通过。
-- Stop if: topbar 高度与条带叠加会破坏既有布局（需联动 `--topbar-height` token）。
+### Task 4: Add Shared `UiRestrictedState`
 
-### Task 4: UiRestrictedState 三变体
-
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiRestrictedState.vue`
-- Create: `packages/ui/src/components/__tests__/UiRestrictedState.test.ts`
 - Modify: `packages/ui/src/index.ts`
+- Modify: `apps/desktop/test/ui-primitives.test.ts`
 
 Preconditions:
-- P1 已完成。
-- 产品已提供三变体的默认文案或确认由插槽注入。
+- None.
 
 Step 1:
-- Action: 实现 `UiRestrictedState` 支持三 variant：`permission` / `trial-expired` / `read-only`；视觉语言统一为"居中小卡片 + icon + 标题 + 描述 + 主 CTA"，但不同 variant 用不同 status color soft（permission → neutral，trial-expired → warning soft，read-only → info soft）。
-- Done when: 三 variant 截图对齐；主 CTA 可通过 `action` 插槽替换。
-- Verify: `pnpm -C apps/desktop test -- UiRestrictedState` 通过。
-- Stop if: 产品侧 CTA 文案/跳转链接未定，暂缺省留插槽。
+- Action: Create a shared restricted-state primitive that covers the current desktop cases without hardcoding one product story: permission denied, read-only, and upgrade/entitlement gating. Keep actions slot-driven.
+- Done when: Desktop pages gain one shared restricted-state contract instead of continuing to improvise per-page permission empty states.
+- Verify: `pnpm -C apps/desktop test -- ui-primitives && pnpm -C apps/desktop typecheck`
+- Stop if: Product needs materially different copy hierarchies per restriction type and rejects a single shared presentation contract.
 
-### Task 5: 业务页 Skeleton 迁移
+### Task 5: Migrate Real Loading Surfaces To `UiSkeleton`
 
-Status: `pending`
+Status: `done`
 
 Files:
-- Modify: `apps/desktop/src/views/**/*.vue`（按 grep 命中点）
+- Modify: `apps/desktop/src/components/conversation/ArtifactVersionList.vue`
+- Modify: `apps/desktop/src/components/layout/ConversationContextPane.vue`
+- Modify: `apps/desktop/src/views/project/ProjectDeliverablesView.vue`
+- Modify: `apps/desktop/src/views/project/ProjectModelsPanel.vue`
+- Modify: `apps/desktop/test/conversation-surface.test.ts`
+- Modify: `apps/desktop/test/project-deliverables-view.test.ts`
 
 Preconditions:
-- Task 1 已完成。
+- Task 1 completed.
 
 Step 1:
-- Action: 跑 `rg -n "animate-pulse|role=\"status\"" apps/desktop/src/views` 取自制骨架清单；逐页迁移到 `UiSkeleton`。不允许用裸 spinner 作为列表/详情页的 loading 态（spinner 只保留给"按钮提交中"这种短停态）。
-- Done when: `rg -n "animate-pulse" apps/desktop/src/views` 零命中。
-- Verify: `pnpm -C apps/desktop test && pnpm -C apps/desktop typecheck` 通过；人工在三个代表性页面（agents 列表、tools 列表、settings）切慢网下看骨架态。
-- Stop if: 某页骨架结构与 `UiSkeleton` 三 variant 都不匹配，需要第四 variant（回到 Task 1 增补，不要在业务页 hack）。
+- Action: Replace current loading copy/placeholder treatment on the listed high-traffic surfaces with `UiSkeleton` where the user is waiting for data blocks rather than for a button action to finish.
+- Done when: Deliverable/version/context loading states use one shared skeleton language and stop reading like temporary fallback copy.
+- Verify: `pnpm -C apps/desktop test -- conversation-surface project-deliverables-view && pnpm -C apps/desktop typecheck`
+- Stop if: A listed surface actually needs a semantic empty/error state instead of a loading skeleton.
 
-### Task 6: 全局 ErrorBoundary 挂载
+### Task 6: Record Current Global Runtime Boundary Baseline
 
-Status: `pending`
+Status: `done`
 
 Files:
-- Modify: `apps/desktop/src/App.vue`（或路由根组件）
+- Review: `apps/desktop/src/App.vue`
+- Review: `apps/desktop/src/runtime/app-error-boundary.ts`
+- Review: `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue`
+- Review: `apps/desktop/test/app-runtime-error-boundary.test.ts`
 
 Preconditions:
-- Task 2 已完成。
+- None.
 
 Step 1:
-- Action: 在路由 `<router-view>` 外层包一层 `UiErrorBoundary`；fallback 提供 `reset()` + `重新加载页面` 两个动作；`errorId` 用 `crypto.randomUUID()` 生成并写入 `logs/`（或走 adapter 上报）。
-- Done when: 路由级未捕获异常不再白屏；错误 ID 可被用户复制。
-- Verify: 手动在开发环境抛异常触发；`pnpm -C apps/desktop build:ui` 通过。
-- Stop if: Vue `onErrorCaptured` 在路由切换竞态下不触发，需要额外挂 `window.onerror`。
+- Action: Preserve the fact that the current repo already mounts a global runtime error boundary and tests it. Future work should extend this baseline, not recreate the mount point from scratch.
+- Done when: This plan no longer treats global runtime error capture as missing.
+- Verify: `pnpm -C apps/desktop test -- app-runtime-error-boundary`
+- Stop if: The current runtime boundary mount has been removed in the meantime.
 
 ## Batch Checkpoint Format
 
 ```md
 ## Checkpoint YYYY-MM-DD HH:MM
 
-- Batch: Task 1 -> Task 2 Step 1
-- Completed: short list
+- Batch: Task 1 Step 1 -> Task 3 Step 1
+- Completed:
+  - short list
 - Verification:
-  - `pnpm -C apps/desktop test` -> pass
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop test -- app-runtime-error-boundary` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+```
+
+## Checkpoint 2026-04-23 12:23 CST
+
+- Batch: Task 1 Step 1
+- Completed:
+  - 新增共享 `UiSkeleton`，覆盖 line、card、table-row 三种骨架形态
+  - 通过 `packages/ui/src/index.ts` 暴露 `UiSkeleton`
+  - 在 `apps/desktop/test/ui-primitives.test.ts` 增加三种骨架变体和 reduced motion 断言
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
   - `pnpm -C apps/desktop typecheck` -> pass
 - Blockers:
   - none
 - Next:
-  - Task 2 Step 2
-```
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 12:29 CST
+
+- Batch: Task 2 Step 1
+- Completed:
+  - 新增共享展示壳 `UiErrorState`，统一 intro、summary、actions、details 四段结构
+  - 让 `AppRuntimeErrorBoundary.vue` 复用共享错误展示层，同时保留 desktop 侧的 retry、复制详情和路由恢复逻辑
+  - 补齐 `apps/desktop/tsconfig.json` 的 `@octopus/ui` 路径映射，使 worktree 下的 typecheck/build 与本地源码解析保持一致
+  - 在 `app-runtime-error-boundary` 和 `ui-primitives` 测试里覆盖新的结构分区与共享组件渲染
+- Verification:
+  - `pnpm -C apps/desktop test -- app-runtime-error-boundary ui-primitives` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 12:43 CST
+
+- Batch: Task 3 Step 1
+- Completed:
+  - 新增共享 `UiOfflineBanner`，统一 topbar 连接告警条的 warning 与 danger 呈现
+  - 让 `WorkbenchTopbar.vue` 基于 `useShellStore().activeWorkspaceConnection` 渲染断连与不可达提示，并在 `unreachable` 时复用现有 `refreshBackendStatus()` 重试
+  - 在 `layout-shell` 与 `shell-store` 测试里覆盖断连提示、不可达重试和 loopback 健康检查状态同步
+- Verification:
+  - `pnpm -C apps/desktop test -- layout-shell shell-store` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 12:45 CST
+
+- Batch: Task 4 Step 1
+- Completed:
+  - 新增共享 `UiRestrictedState`，提供 `neutral / warning / accent` 三种受限状态语气和通用 intro/body/actions 布局
+  - 通过 `packages/ui/src/index.ts` 暴露 `UiRestrictedState`
+  - 在 `ui-primitives` 测试里覆盖 tone、meta、正文和 actions 插槽结构
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 13:07 CST
+
+- Batch: Task 5 Step 1
+- Completed:
+  - 将会话上下文、交付物列表、模型面板和产物版本列表的加载态统一迁移到共享 `UiSkeleton`
+  - 在 `conversation-surface` 与 `project-deliverables-view` 测试里覆盖交付物列表骨架和相关高频加载面
+  - 补齐 `UiSkeleton` 在真实桌面高频加载路径里的落地，结束 `UI States System` 计划剩余执行项
+- Verification:
+  - `pnpm -C apps/desktop test -- conversation-surface project-deliverables-view` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - `2026-04-21-ui-ai-feedback.md` Task 2 Step 1

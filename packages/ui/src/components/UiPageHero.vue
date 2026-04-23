@@ -24,10 +24,10 @@ const props = withDefaults(defineProps<{
         </div>
 
         <div v-if="props.title || props.description" class="space-y-2">
-          <h2 v-if="props.title" class="text-[30px] font-bold leading-[1.15] tracking-[-0.03em] text-text-primary">
+          <h2 v-if="props.title" class="text-page-title font-bold leading-[1.15] tracking-[-0.03em] text-text-primary">
             {{ props.title }}
           </h2>
-          <p v-if="props.description" class="max-w-3xl text-[14px] leading-relaxed text-text-secondary">
+          <p v-if="props.description" class="max-w-3xl text-body leading-relaxed text-text-secondary">
             {{ props.description }}
           </p>
         </div>

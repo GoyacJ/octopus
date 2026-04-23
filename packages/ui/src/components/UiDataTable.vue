@@ -64,7 +64,7 @@ function resolveCellRender(cell: {
           <th
             v-for="header in headerGroup.headers"
             :key="header.id"
-            class="px-3 py-2 text-[12px] font-medium whitespace-nowrap"
+            class="px-3 py-2 text-caption font-medium whitespace-nowrap"
           >
             <FlexRender
               v-if="!header.isPlaceholder"
@@ -74,7 +74,7 @@ function resolveCellRender(cell: {
           </th>
         </tr>
         </thead>
-        <tbody class="text-text-primary text-[13px]">
+        <tbody class="text-label text-text-primary">
         <tr
           v-for="row in table.getRowModel().rows"
           :key="row.id"

@@ -62,7 +62,7 @@ const segments = computed(() => {
     </svg>
     <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
       <span class="text-xs font-bold text-text-primary leading-none">{{ total }}</span>
-      <span class="text-[10px] text-text-tertiary uppercase tracking-tighter mt-1">{{ props.totalLabel }}</span>
+      <span class="mt-1 text-micro uppercase tracking-tighter text-text-tertiary">{{ props.totalLabel }}</span>
     </div>
   </div>
 </template>

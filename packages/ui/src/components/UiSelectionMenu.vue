@@ -3,12 +3,14 @@ import type { Component } from 'vue'
 
 import { Check } from 'lucide-vue-next'
 
+import UiKbd from './UiKbd.vue'
 import UiPopover from './UiPopover.vue'
 import { cn } from '../lib/utils'
 
 export interface UiSelectionMenuItem {
   id: string
   label: string
+  shortcut?: string[]
   helper?: string
   badge?: string
   active?: boolean
@@ -82,8 +84,8 @@ function selectItem(item: UiSelectionMenuItem) {
 
     <div :data-testid="props.testId" class="flex flex-col">
       <div v-if="props.title || props.description" class="border-b border-border bg-subtle px-3 py-3">
-        <strong v-if="props.title" class="block text-[13px] font-semibold text-text-primary">{{ props.title }}</strong>
-        <p v-if="props.description" class="pt-0.5 text-[11px] leading-relaxed text-text-tertiary">{{ props.description }}</p>
+        <strong v-if="props.title" class="block text-label font-semibold text-text-primary">{{ props.title }}</strong>
+        <p v-if="props.description" class="pt-0.5 text-micro text-text-tertiary">{{ props.description }}</p>
       </div>
 
       <div
@@ -95,7 +97,7 @@ function selectItem(item: UiSelectionMenuItem) {
           :key="section.id ?? section.label ?? section.items.map((item) => item.id).join(':')"
           class="mb-2 flex flex-col gap-0.5 last:mb-0"
         >
-          <p v-if="section.label" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary/60">
+          <p v-if="section.label" class="px-2 py-1 text-micro font-bold uppercase tracking-wider text-text-tertiary/60">
             {{ section.label }}
           </p>
 
@@ -121,15 +123,21 @@ function selectItem(item: UiSelectionMenuItem) {
                 <span class="flex min-w-0 items-start gap-2.5">
                   <component :is="item.icon" v-if="item.icon" :size="14" class="mt-0.5 shrink-0 opacity-70" />
                   <span class="min-w-0">
-                    <strong class="block truncate text-[13px] leading-tight">{{ item.label }}</strong>
-                    <small v-if="item.helper" class="block pt-0.5 text-[11px] text-text-tertiary leading-normal">{{ item.helper }}</small>
+                    <strong class="block truncate text-label">{{ item.label }}</strong>
+                    <small v-if="item.helper" class="block pt-0.5 text-micro text-text-tertiary">{{ item.helper }}</small>
                   </span>
                 </span>
 
                 <span class="flex shrink-0 items-center gap-2">
+                  <UiKbd
+                    v-if="item.shortcut?.length"
+                    :keys="item.shortcut"
+                    size="sm"
+                    class="shrink-0 border-border bg-surface text-text-secondary"
+                  />
                   <span
                     v-if="item.badge"
-                    class="rounded border border-border/40 bg-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-tertiary"
+                    class="rounded border border-border/40 bg-subtle px-1.5 py-0.5 text-micro font-bold uppercase text-text-tertiary"
                   >
                     {{ item.badge }}
                   </span>

@@ -79,7 +79,7 @@ function handleOpenChange(value: boolean) {
           :model-value="query"
           :display-value="findLabel"
           :placeholder="props.placeholder"
-          class="flex h-8 w-full rounded-[var(--radius-xs)] border border-input bg-background px-3 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary transition-colors duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex h-8 w-full rounded-[var(--radius-xs)] border border-input bg-background px-3 py-1.5 text-label text-text-primary placeholder:text-text-tertiary transition-colors duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="ui-combobox-input"
           @update:model-value="query = String($event)"
         />
@@ -98,7 +98,7 @@ function handleOpenChange(value: boolean) {
             :value="option.value"
             :text-value="`${option.label} ${(option.keywords ?? []).join(' ')}`"
             :data-testid="`ui-combobox-option-${option.value}`"
-            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-[13px] text-text-primary outline-none transition-colors data-[highlighted]:bg-subtle"
+            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-label text-text-primary outline-none transition-colors data-[highlighted]:bg-subtle"
           >
             {{ option.label }}
           </ComboboxItem>

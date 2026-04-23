@@ -24,7 +24,7 @@ const emit = defineEmits<{
       role="switch"
       :aria-checked="props.modelValue"
       :disabled="props.disabled"
-      class="ui-focus-ring relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-fast disabled:cursor-not-allowed"
+      class="ui-focus-ring relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-fast enabled:active:scale-[0.99] motion-reduce:active:scale-100 disabled:cursor-not-allowed"
       :class="[
         props.modelValue
           ? 'border-primary bg-primary shadow-xs'
@@ -39,7 +39,7 @@ const emit = defineEmits<{
         ]"
       />
     </button>
-    <span v-if="props.label || $slots.default" class="text-[13px] text-text-primary select-none">
+    <span v-if="props.label || $slots.default" class="text-label text-text-primary select-none">
       <slot>{{ props.label }}</slot>
     </span>
   </label>

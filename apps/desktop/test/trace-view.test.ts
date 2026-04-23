@@ -9,7 +9,7 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useRuntimeStore } from '@/stores/runtime'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
-import { createSessionDetail } from './support/workspace-fixture-runtime'
+import { createSessionDetail, createTraceItem } from './support/workspace-fixture-runtime'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -117,6 +117,131 @@ describe('TraceView runtime integration', () => {
     await flushUi()
 
     expect(mounted.container.textContent).toContain('Studio Direction Team · Team')
+
+    runtime.dispose()
+    mounted.destroy()
+  })
+
+  it('renders each trace item with its own tone and lightweight meta labels', async () => {
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-mixed-trace',
+      projectId: 'proj-redesign',
+      title: 'Mixed Trace Runtime Session',
+    })
+
+    const detail = createSessionDetail(
+      'conv-mixed-trace',
+      'proj-redesign',
+      'Mixed Trace Runtime Session',
+    )
+    detail.summary.status = 'completed'
+    detail.run.status = 'completed'
+    detail.trace = [
+      {
+        ...createTraceItem({ detail, events: [], nextSequence: 1 }, 'Started run.', 'info'),
+        id: 'trace-mixed-1',
+        kind: 'step',
+        title: 'Run started',
+      },
+      {
+        ...createTraceItem({ detail, events: [], nextSequence: 2 }, 'Waiting for workspace command approval.', 'warning'),
+        id: 'trace-mixed-2',
+        kind: 'tool',
+        title: 'Workspace command',
+        relatedToolName: 'workspace-api',
+      },
+      {
+        ...createTraceItem({ detail, events: [], nextSequence: 3 }, 'Published the deliverable.', 'success'),
+        id: 'trace-mixed-3',
+        kind: 'artifact',
+        title: 'Deliverable published',
+      },
+    ]
+
+    runtime.setActiveSession(detail)
+    await flushUi()
+    await waitFor(() => mounted.container.querySelectorAll('[data-testid="trace-runtime-item"]').length === 3)
+
+    const items = Array.from(
+      mounted.container.querySelectorAll<HTMLElement>('[data-testid="trace-runtime-item"] [data-ui-tone]'),
+    )
+
+    expect(items.map(item => item.getAttribute('data-ui-tone'))).toEqual(['info', 'warning', 'success'])
+    expect(mounted.container.textContent).toContain('Step')
+    expect(mounted.container.textContent).toContain('Tool')
+    expect(mounted.container.textContent).toContain('Artifact')
+    expect(mounted.container.textContent).toContain('workspace-api')
+
+    runtime.dispose()
+    mounted.destroy()
+  })
+
+  it('copies trace detail and the current trace link from the context menu', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-trace-copy',
+      projectId: 'proj-redesign',
+      title: 'Trace Copy Runtime Session',
+    })
+
+    const detail = createSessionDetail(
+      'conv-trace-copy',
+      'proj-redesign',
+      'Trace Copy Runtime Session',
+    )
+    detail.summary.status = 'completed'
+    detail.run.status = 'completed'
+    detail.trace = [
+      {
+        ...createTraceItem({ detail, events: [], nextSequence: 1 }, 'Collected the final trace detail.', 'info'),
+        id: 'trace-copy-1',
+        kind: 'tool',
+        title: 'Workspace sync',
+        relatedToolName: 'workspace-api',
+      },
+    ]
+
+    runtime.setActiveSession(detail)
+    await flushUi()
+    await waitFor(() => mounted.container.querySelector('[data-testid="trace-runtime-item"][data-trace-id="trace-copy-1"]') !== null)
+
+    const traceItem = mounted.container.querySelector<HTMLElement>('[data-testid="trace-runtime-item"][data-trace-id="trace-copy-1"]')
+    expect(traceItem).not.toBeNull()
+
+    traceItem?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 72,
+      clientY: 108,
+    }))
+    await waitFor(() => document.body.querySelector('[data-testid="ui-context-item-copy-detail"]') !== null)
+    document.body.querySelector<HTMLElement>('[data-testid="ui-context-item-copy-detail"]')?.click()
+
+    await waitFor(() => writeText.mock.calls.length === 1)
+    expect(writeText).toHaveBeenNthCalledWith(1, 'Collected the final trace detail.')
+
+    traceItem?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 84,
+      clientY: 116,
+    }))
+    await waitFor(() => document.body.querySelector('[data-testid="ui-context-item-copy-link"]') !== null)
+    document.body.querySelector<HTMLElement>('[data-testid="ui-context-item-copy-link"]')?.click()
+
+    await waitFor(() => writeText.mock.calls.length === 2)
+    expect(String(writeText.mock.calls[1]?.[0])).toContain(router.currentRoute.value.fullPath)
 
     runtime.dispose()
     mounted.destroy()

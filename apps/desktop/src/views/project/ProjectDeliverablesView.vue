@@ -12,6 +12,7 @@ import {
   UiListRow,
   UiPageHeader,
   UiPageShell,
+  UiSkeleton,
   UiStatusCallout,
   UiToolbarRow,
 } from '@octopus/ui'
@@ -282,7 +283,15 @@ async function forkSelectedDeliverable() {
 
       <template #list>
         <div class="space-y-3">
-          <div v-if="filteredDeliverables.length" class="space-y-2">
+          <div
+            v-if="artifactStore.loading && !deliverables.length"
+            data-testid="project-deliverables-list-skeleton"
+            class="space-y-3"
+          >
+            <UiSkeleton variant="card" :count="3" />
+          </div>
+
+          <div v-else-if="filteredDeliverables.length" class="space-y-2">
             <div
               v-for="deliverable in filteredDeliverables"
               :key="deliverable.id"
@@ -381,12 +390,17 @@ async function forkSelectedDeliverable() {
             @select="selectDeliverableVersion"
           />
 
-          <UiStatusCallout
+          <div
             v-if="artifactStore.loading && !selectedDeliverableContent"
-            :description="t('conversation.detail.deliverables.loadingPreview')"
-          />
+            data-testid="deliverable-preview-skeleton"
+            class="space-y-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-4"
+          >
+            <UiSkeleton variant="line" :count="3" />
+            <UiSkeleton variant="card" :count="1" />
+          </div>
 
           <ArtifactPreviewPanel
+            v-else
             :key="`${selectedDeliverable.id}:${resolvedVersion ?? 'none'}`"
             :content="selectedDeliverableContent"
             :error="artifactStore.error"

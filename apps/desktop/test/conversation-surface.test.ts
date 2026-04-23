@@ -74,6 +74,33 @@ function configureWorkspaceClient(
   )
 }
 
+function setScrollMetrics(
+  element: HTMLElement,
+  metrics: {
+    clientHeight: number
+    scrollHeight: number
+    scrollTop: number
+  },
+) {
+  let currentScrollTop = metrics.scrollTop
+
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: metrics.clientHeight,
+  })
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: metrics.scrollHeight,
+  })
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => currentScrollTop,
+    set: (value: number) => {
+      currentScrollTop = value
+    },
+  })
+}
+
 describe('Conversation surfaces', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -298,6 +325,10 @@ describe('Conversation surfaces', () => {
     expect(assistantMessageBubble).not.toBeNull()
     expect(assistantMessageBubble?.className).toContain('border')
     expect(assistantMessageBubble?.className).not.toContain('shadow-xs')
+    const assistantTimestamp = assistantMessageBubble?.querySelector<HTMLElement>('[data-testid^="conversation-message-timestamp-"]')
+    expect(assistantTimestamp).not.toBeNull()
+    expect(assistantTimestamp?.className).toContain('text-micro')
+    expect(assistantTimestamp?.className).toContain('tabular-nums')
 
     const sendButton = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-send-button"]')
     expect(sendButton).not.toBeNull()
@@ -626,6 +657,165 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('copies message content and the current conversation link from the conversation context menu', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const assistantMessageId = 'msg-rt-conv-redesign-2'
+    const assistantMessageContent = '建议先把 schema、共享 UI 和工作台布局拆开'
+
+    await waitFor(() => mounted.container.querySelector(`[data-testid="conversation-message-bubble-${assistantMessageId}"]`) !== null)
+
+    const bubble = mounted.container.querySelector<HTMLElement>(`[data-testid="conversation-message-bubble-${assistantMessageId}"]`)
+    expect(bubble).not.toBeNull()
+
+    bubble?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 80,
+      clientY: 120,
+    }))
+    await waitFor(() => document.body.querySelector('[data-testid="ui-context-item-copy-message"]') !== null)
+    document.body.querySelector<HTMLElement>('[data-testid="ui-context-item-copy-message"]')?.click()
+
+    await waitFor(() => writeText.mock.calls.length === 1)
+    expect(writeText).toHaveBeenNthCalledWith(1, assistantMessageContent)
+
+    bubble?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 92,
+      clientY: 128,
+    }))
+    await waitFor(() => document.body.querySelector('[data-testid="ui-context-item-copy-link"]') !== null)
+    document.body.querySelector<HTMLElement>('[data-testid="ui-context-item-copy-link"]')?.click()
+
+    await waitFor(() => writeText.mock.calls.length === 2)
+    expect(String(writeText.mock.calls[1]?.[0])).toContain(router.currentRoute.value.fullPath)
+
+    mounted.destroy()
+  })
+
+  it('sticks back to the latest output when the user submits a new turn from higher up in history', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async submitUserTurn(sessionId, input, idempotencyKey) {
+          await new Promise(resolve => window.setTimeout(resolve, 120))
+          return client.runtime.submitUserTurn(sessionId, input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const scrollContainer = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-scroll-container"]')
+    expect(scrollContainer).not.toBeNull()
+    setScrollMetrics(scrollContainer!, {
+      clientHeight: 320,
+      scrollHeight: 1200,
+      scrollTop: 160,
+    })
+    scrollContainer!.dispatchEvent(new Event('scroll'))
+    await nextTick()
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '从历史位置继续追问。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    Object.defineProperty(scrollContainer!, 'scrollHeight', {
+      configurable: true,
+      value: 1440,
+    })
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === '从历史位置继续追问。'))
+    await waitFor(() => scrollContainer!.scrollTop === 1440)
+    expect(mounted.container.querySelector('[data-testid="conversation-jump-to-latest"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('keeps the reader position and shows a jump action when assistant output arrives off-screen', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const scrollContainer = mounted.container.querySelector<HTMLElement>('[data-testid="conversation-scroll-container"]')
+    expect(scrollContainer).not.toBeNull()
+    setScrollMetrics(scrollContainer!, {
+      clientHeight: 320,
+      scrollHeight: 1200,
+      scrollTop: 160,
+    })
+    scrollContainer!.dispatchEvent(new Event('scroll'))
+    await nextTick()
+
+    const activeSession = runtime.activeSession
+    expect(activeSession).not.toBeNull()
+    const lastMessage = activeSession!.messages.at(-1)
+    expect(lastMessage).not.toBeUndefined()
+    const sessionId = runtime.activeSessionId
+
+    runtime.$patch((state) => {
+      const session = state.sessionDetails[sessionId]
+      state.sessionDetails = {
+        ...state.sessionDetails,
+        [sessionId]: {
+          ...session,
+          messages: [
+            ...session.messages,
+            {
+              ...lastMessage!,
+              id: 'msg-scroll-offscreen-assistant',
+              content: '这是离屏到达的新输出。',
+              timestamp: (lastMessage?.timestamp ?? 0) + 10,
+              senderType: 'assistant',
+            },
+          ],
+        },
+      }
+    })
+    Object.defineProperty(scrollContainer!, 'scrollHeight', {
+      configurable: true,
+      value: 1410,
+    })
+
+    await waitFor(() => mounted.container.textContent?.includes('这是离屏到达的新输出。') ?? false)
+    expect(scrollContainer!.scrollTop).toBe(160)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-jump-to-latest"]') !== null)
+
+    const jumpButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-jump-to-latest"]')
+    jumpButton?.click()
+
+    await waitFor(() => scrollContainer!.scrollTop === 1410)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-jump-to-latest"]') === null)
+
+    mounted.destroy()
+  })
+
   it('shows live process text on the assistant placeholder before the final result arrives', async () => {
     configureWorkspaceClient((client) => ({
       ...client,
@@ -656,9 +846,10 @@ describe('Conversation surfaces', () => {
     sendButton?.click()
 
     await waitFor(() => runtime.activeMessages.some(message => message.content === 'Thinking…'))
-    const processToggle = Array.from(mounted.container.querySelectorAll('button'))
-      .filter(button => button.textContent?.includes('Thinking') || button.textContent?.includes('Processing'))
-      .at(-1)
+    let processToggle = Array.from(
+      mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="conversation-process-toggle"]'),
+    ).at(-1)
+    expect(processToggle?.textContent).toContain('Thinking')
     processToggle?.click()
     await nextTick()
     expect(mounted.container.textContent).toContain('Preparing the assistant response.')
@@ -667,6 +858,16 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.textContent).toContain('Called 1 time')
 
     await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
+    await waitFor(() => Array.from(
+      mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="conversation-process-toggle"]'),
+    ).at(-1)?.textContent?.includes('Completed') ?? false)
+
+    processToggle = Array.from(
+      mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="conversation-process-toggle"]'),
+    )
+      .at(-1)
+    expect(processToggle?.textContent).toContain('Completed')
+    expect(processToggle?.textContent).toContain('Used 1 tool in this response.')
 
     mounted.destroy()
   })
@@ -691,6 +892,11 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => runtime.activeMessages.some(message => !!message.approval))
     await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-approval"]') !== null)
+    const processToggle = Array.from(
+      mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="conversation-process-toggle"]'),
+    ).at(-1)
+    expect(processToggle?.textContent).toContain('Waiting for approval')
+    expect(processToggle?.textContent).toContain('Approve workspace command execution')
     expect(mounted.container.textContent).toContain('Approve workspace command execution')
     expect(mounted.container.textContent).toContain('Run pwd in the workspace terminal.')
     expect(mounted.container.querySelector('[data-testid="conversation-inline-approve"]')).not.toBeNull()
@@ -702,6 +908,129 @@ describe('Conversation surfaces', () => {
     await waitFor(() => runtime.pendingApproval === null)
     await waitFor(() => runtime.activeMessages.some(message => message.content === 'Command approved and execution completed.'))
     expect(mounted.container.querySelector('[data-testid="conversation-inline-approval"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('surfaces waiting-input state from the assistant bubble without session-wide guessing', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    runtime.addOptimisticUserMessage({
+      content: 'Connect the workspace provider before executing.',
+      permissionMode: 'auto',
+    })
+
+    const baseRun = runtime.activeRun!
+    runtime.applyRuntimeEvent({
+      id: 'evt-auth-tool-surface',
+      eventType: 'runtime.trace.emitted',
+      kind: 'runtime.trace.emitted',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-redesign',
+      runId: baseRun.id,
+      emittedAt: 105,
+      sequence: 1,
+      trace: {
+        id: 'trace-auth-tool-surface',
+        sessionId: runtime.activeSessionId,
+        runId: baseRun.id,
+        conversationId: 'conv-redesign',
+        kind: 'tool',
+        title: 'Workspace API',
+        detail: 'Opening the provider auth flow before execution.',
+        tone: 'info',
+        timestamp: 105,
+        actor: 'assistant',
+        actorKind: 'agent',
+        actorId: 'agent-architect',
+        relatedToolName: 'Workspace API',
+      },
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-auth-placeholder-surface',
+      eventType: 'auth.challenge_requested',
+      kind: 'auth.challenge_requested',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-redesign',
+      runId: baseRun.id,
+      emittedAt: 110,
+      sequence: 2,
+      authChallenge: {
+        id: 'auth-placeholder-surface',
+        sessionId: runtime.activeSessionId,
+        conversationId: 'conv-redesign',
+        runId: baseRun.id,
+        summary: 'Provider sign-in required',
+        detail: 'Resolve the provider auth challenge before execution can continue.',
+        status: 'pending',
+        createdAt: 110,
+        approvalLayer: 'provider-auth',
+        escalationReason: 'provider authentication required',
+        targetKind: 'provider-auth',
+        targetRef: 'provider:workspace-api',
+        providerKey: 'workspace-api',
+        requiresAuth: true,
+        requiresApproval: false,
+      },
+      run: {
+        ...baseRun,
+        status: 'waiting_input',
+        currentStep: 'awaiting_auth',
+        updatedAt: 110,
+        nextAction: 'auth',
+        authTarget: {
+          id: 'auth-placeholder-surface',
+          sessionId: runtime.activeSessionId,
+          conversationId: 'conv-redesign',
+          runId: baseRun.id,
+          summary: 'Provider sign-in required',
+          detail: 'Resolve the provider auth challenge before execution can continue.',
+          status: 'pending',
+          createdAt: 110,
+          approvalLayer: 'provider-auth',
+          escalationReason: 'provider authentication required',
+          targetKind: 'provider-auth',
+          targetRef: 'provider:workspace-api',
+          providerKey: 'workspace-api',
+          requiresAuth: true,
+          requiresApproval: false,
+        },
+        pendingMediation: {
+          mediationKind: 'auth',
+          state: 'pending',
+          summary: 'Provider sign-in required',
+          detail: 'Resolve the provider auth challenge before execution can continue.',
+          targetKind: 'provider-auth',
+          targetRef: 'provider:workspace-api',
+          providerKey: 'workspace-api',
+          authChallengeId: 'auth-placeholder-surface',
+          requiresAuth: true,
+          requiresApproval: false,
+        },
+      },
+    })
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-input-wait"]') !== null)
+    const processToggle = Array.from(
+      mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="conversation-process-toggle"]'),
+    ).at(-1)
+
+    expect(processToggle?.textContent).toContain('Waiting for input')
+    expect(processToggle?.textContent).toContain('Provider sign-in required')
+    expect(mounted.container.textContent).toContain('Provider sign-in required')
+    expect(mounted.container.textContent).toContain('Resolve the provider auth challenge before execution can continue.')
+    expect(mounted.container.textContent).toContain('Needs input for Workspace API')
 
     mounted.destroy()
   })
@@ -831,6 +1160,7 @@ describe('Conversation surfaces', () => {
     expect(queueList).not.toBeNull()
     expect(composer).not.toBeNull()
     expect(queueList?.compareDocumentPosition(composer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(mounted.container.querySelector('[data-testid="conversation-queue-title"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('把这条加入队列。')
 
     const removeButton = mounted.container.querySelector<HTMLButtonElement>(`[data-testid="conversation-queue-remove-${runtime.activeQueue[0]?.id}"]`)
@@ -839,6 +1169,50 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => runtime.activeQueue.length === 0)
     expect(mounted.container.querySelector('[data-testid="conversation-queue-list"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('opens the project task workbench from the conversation queue boundary', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+
+    textarea.value = 'Run pwd in the workspace terminal.'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    sendButton?.click()
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-approval"]') !== null)
+
+    textarea.value = '把这条加入队列。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    sendButton?.click()
+
+    await waitFor(() => runtime.activeQueue.length === 1)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-open-project-tasks"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="conversation-project-tasks-entry"]')).not.toBeNull()
+
+    mounted.container
+      .querySelector<HTMLButtonElement>('[data-testid="conversation-open-project-tasks"]')
+      ?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-tasks')
+    await waitFor(() => mounted.container.querySelector('[data-testid="project-tasks-view"]') !== null)
+    expect(router.currentRoute.value.query.from).toBe('conversation')
+    expect(router.currentRoute.value.query.conversationId).toBe('conv-redesign')
+    expect(mounted.container.querySelector('[data-testid="project-tasks-conversation-callout"]')).not.toBeNull()
 
     mounted.destroy()
   })
@@ -1050,6 +1424,41 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.querySelector('[data-testid="deliverable-version-list"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Version 3 content for artifact-run-conv-redesign.')
     expect(mounted.container.textContent).toContain('Runtime Delivery Summary v2')
+
+    mounted.destroy()
+  })
+
+  it('renders a shared skeleton while deliverable preview content is still loading', async () => {
+    let releasePreview: (() => void) | null = null
+    const previewGate = new Promise<void>((resolve) => {
+      releasePreview = resolve
+    })
+
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async getDeliverableVersionContent(deliverableId, version) {
+          await previewGate
+          return await client.runtime.getDeliverableVersionContent(deliverableId, version)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=deliverable&deliverable=artifact-run-conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-preview-skeleton"]') !== null)
+
+    expect(mounted.container.textContent).not.toContain(String(i18n.global.t('conversation.detail.deliverables.loadingPreview')))
+
+    releasePreview?.()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="deliverable-preview-panel"]') !== null)
 
     mounted.destroy()
   })

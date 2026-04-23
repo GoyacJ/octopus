@@ -12,6 +12,7 @@ import {
   UiInspectorPanel,
   UiListRow,
   UiSelect,
+  UiSkeleton,
   UiStatTile,
   UiStatusCallout,
   UiTimelineList,
@@ -678,12 +679,17 @@ async function forkSelectedDeliverable() {
               @select="selectDeliverableVersion"
             />
 
-            <UiStatusCallout
+            <div
               v-if="artifactStore.loading && !selectedDeliverableContent"
-              :description="t('conversation.detail.deliverables.loadingPreview')"
-            />
+              data-testid="deliverable-preview-skeleton"
+              class="space-y-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-4"
+            >
+              <UiSkeleton variant="line" :count="3" />
+              <UiSkeleton variant="card" :count="1" />
+            </div>
 
             <ArtifactPreviewPanel
+              v-else
               :key="`${selectedConversationDeliverable.id}:${artifactStore.resolvedSelectedVersion ?? 'none'}:${isEditingDeliverable ? 'edit' : 'view'}`"
               :content="selectedDeliverableContent"
               :draft="selectedDeliverableDraft"

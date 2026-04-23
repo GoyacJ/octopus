@@ -19,7 +19,9 @@
       "@octopus/assets/pets": ["../../packages/assets/pets/index.ts"],
       "@octopus/assets/pets/*": ["../../packages/assets/pets/*"],
       "@octopus/schema": ["../../packages/schema/src/index.ts"],
-      "@octopus/schema/*": ["../../packages/schema/src/*"]
+      "@octopus/schema/*": ["../../packages/schema/src/*"],
+      "@octopus/ui": ["../../packages/ui/src/index.ts"],
+      "@octopus/ui/*": ["../../packages/ui/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],

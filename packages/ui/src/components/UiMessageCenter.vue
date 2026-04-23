@@ -95,7 +95,7 @@ function formatLabel(value?: string): string {
       <div v-if="props.activeTab === 'notifications'" class="space-y-3 px-1">
         <div class="flex items-start justify-between gap-3">
           <div class="space-y-1">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+            <p class="text-micro font-semibold uppercase tracking-[0.2em] text-text-tertiary">
               {{ props.notificationTitle }}
             </p>
             <p class="text-sm text-text-secondary">
@@ -150,7 +150,7 @@ function formatLabel(value?: string): string {
 
       <div v-else class="space-y-3 px-1">
         <div class="space-y-1">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+          <p class="text-micro font-semibold uppercase tracking-[0.2em] text-text-tertiary">
             {{ props.inboxTitle }}
           </p>
           <p class="text-sm text-text-secondary">

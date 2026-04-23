@@ -45,14 +45,14 @@ const toneClass = computed(() => {
   <div :class="cn('flex flex-col gap-2 rounded-[var(--radius-l)] border p-3', toneClass.container, props.class)">
     <div
       v-if="props.title"
-      :class="cn('text-[13px] font-semibold leading-none', toneClass.title)"
+      :class="cn('text-label font-semibold leading-none', toneClass.title)"
     >
       {{ props.title }}
     </div>
-    <div v-if="props.description" class="text-[13px] leading-relaxed text-text-secondary">
+    <div v-if="props.description" class="text-label leading-relaxed text-text-secondary">
       {{ props.description }}
     </div>
-    <div v-if="$slots.default" class="text-[13px] leading-relaxed text-text-secondary">
+    <div v-if="$slots.default" class="text-label leading-relaxed text-text-secondary">
       <slot />
     </div>
   </div>

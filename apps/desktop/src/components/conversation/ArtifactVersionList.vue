@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { DeliverableVersionSummary } from '@octopus/schema'
 
-import { UiBadge, UiEmptyState, UiPanelFrame } from '@octopus/ui'
+import { UiBadge, UiEmptyState, UiPanelFrame, UiSkeleton } from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 
@@ -51,9 +51,10 @@ function selectVersion(version: number) {
 
     <div
       v-if="loading && !sortedVersions.length"
-      class="text-xs text-text-tertiary"
+      data-testid="deliverable-version-list-skeleton"
+      class="space-y-3"
     >
-      {{ t('conversation.detail.deliverables.loadingVersions') }}
+      <UiSkeleton variant="card" :count="3" />
     </div>
 
     <div v-else-if="sortedVersions.length" class="space-y-2">

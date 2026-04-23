@@ -163,7 +163,9 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:tag:preview']).toBe('node scripts/generate-preview-release-tag.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')
-    expect(packageJson.scripts?.['check:desktop']).toBe('pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test')
+    expect(packageJson.scripts?.['check:desktop']).toBe(
+      'pnpm check:frontend-governance && pnpm check:color-contrast && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test && pnpm check:frontend-browser && pnpm check:frontend-performance',
+    )
     expect(packageJson.scripts?.['check:desktop-release']).toBe(
       'pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm check:runtime-phase4 && pnpm check:runtime-phase8 && pnpm version:check',
     )
@@ -337,11 +339,11 @@ describe('repository governance', () => {
     expect(frontendGovernance).toContain('(?:orange|amber|yellow)-')
   })
 
-  it('defines canonical desktop tokens around the Octopus coral accent system', () => {
+  it('defines canonical desktop tokens around the Octopus warm accent system', () => {
     const tokens = readRepoFile('packages', 'ui', 'src', 'tokens.css')
 
-    expect(tokens).toContain('--color-accent: #ff6a2a;')
-    expect(tokens).toContain('--color-accent-hover: #e65a1f;')
+    expect(tokens).toContain('--color-accent: #c54e14;')
+    expect(tokens).toContain('--color-accent-hover: #ad4310;')
     expect(tokens).toContain('--color-accent-soft: #fff1e8;')
     expect(tokens).toContain('--color-ring: rgba(255, 106, 42, 0.22);')
     expect(tokens).toContain('--color-status-info: #ff6a2a;')

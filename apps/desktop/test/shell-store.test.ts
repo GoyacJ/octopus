@@ -12,15 +12,18 @@ vi.mock('@/tauri/client', async () => {
     bootstrapShellHost: vi.fn(),
     createWorkspaceConnection: vi.fn(),
     deleteWorkspaceConnection: vi.fn(),
+    healthcheck: vi.fn(),
   }
 })
 
 import { bootstrapShellHost } from '@/tauri/client'
 import { createWorkspaceConnection, deleteWorkspaceConnection } from '@/tauri/client'
+import { healthcheck } from '@/tauri/client'
 
 const bootstrapShellHostMock = vi.mocked(bootstrapShellHost)
 const createWorkspaceConnectionMock = vi.mocked(createWorkspaceConnection)
 const deleteWorkspaceConnectionMock = vi.mocked(deleteWorkspaceConnection)
+const healthcheckMock = vi.mocked(healthcheck)
 
 const testConnections = [
   {
@@ -39,6 +42,7 @@ describe('useShellStore', () => {
     bootstrapShellHostMock.mockReset()
     createWorkspaceConnectionMock.mockReset()
     deleteWorkspaceConnectionMock.mockReset()
+    healthcheckMock.mockReset()
   })
 
   it('enters an explicit host failure state when shell bootstrap fails', async () => {
@@ -257,5 +261,54 @@ describe('useShellStore', () => {
     expect(store.workspaceConnections.map(item => item.workspaceConnectionId)).toEqual(['conn-local'])
     expect(store.workspaceSessionsState['conn-enterprise']).toBeUndefined()
     expect(store.activeWorkspaceConnectionId).toBe('conn-local')
+  })
+
+  it('syncs the loopback workspace connection state from backend healthcheck results', async () => {
+    const store = useShellStore()
+    store.backendConnectionState = {
+      state: 'ready',
+      transport: 'http',
+      baseUrl: 'http://127.0.0.1:43127',
+    }
+    store.workspaceConnectionsState = [
+      {
+        workspaceConnectionId: 'conn-local',
+        workspaceId: 'ws-local',
+        label: 'Local Workspace',
+        baseUrl: 'http://127.0.0.1:43127',
+        transportSecurity: 'loopback',
+        authMode: 'session-token',
+        status: 'connected',
+      },
+      {
+        workspaceConnectionId: 'conn-enterprise',
+        workspaceId: 'ws-enterprise',
+        label: 'Enterprise Workspace',
+        baseUrl: 'https://enterprise.example.test',
+        transportSecurity: 'trusted',
+        authMode: 'session-token',
+        status: 'disconnected',
+      },
+    ]
+
+    healthcheckMock.mockResolvedValue({
+      host: {
+        platform: 'tauri',
+        mode: 'local',
+        appVersion: '0.2.5',
+        cargoWorkspace: false,
+        shell: 'tauri2',
+      },
+      backend: {
+        state: 'unavailable',
+        transport: 'http',
+      },
+    })
+
+    await store.refreshBackendStatus()
+
+    expect(store.backendConnection?.state).toBe('unavailable')
+    expect(store.workspaceConnectionsState.find(item => item.workspaceConnectionId === 'conn-local')?.status).toBe('unreachable')
+    expect(store.workspaceConnectionsState.find(item => item.workspaceConnectionId === 'conn-enterprise')?.status).toBe('disconnected')
   })
 })

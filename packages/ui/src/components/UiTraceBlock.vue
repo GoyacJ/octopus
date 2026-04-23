@@ -9,10 +9,12 @@ const props = withDefaults(
     detail: string
     actor: string
     timestampLabel: string
+    metaItems?: string[]
     tone?: 'default' | 'success' | 'warning' | 'error' | 'info'
     class?: string
   }>(),
   {
+    metaItems: () => [],
     tone: 'default',
     class: '',
   },
@@ -49,6 +51,12 @@ const markerClass = computed(() => {
   }
   return 'bg-text-tertiary'
 })
+
+const normalizedMetaItems = computed(() =>
+  props.metaItems
+    .map(item => item.trim())
+    .filter(item => item.length > 0),
+)
 </script>
 
 <template>
@@ -61,19 +69,34 @@ const markerClass = computed(() => {
   >
     <div
       data-testid="ui-trace-block-header"
-      :class="cn('flex items-center justify-between gap-4 border-b border-border px-4 py-3 text-[11px] font-medium text-text-tertiary', headerClass)"
+      :class="cn('flex items-center justify-between gap-4 border-b border-border px-4 py-3 text-micro font-medium text-text-tertiary', headerClass)"
     >
       <div class="flex min-w-0 items-center gap-2">
         <span :class="cn('h-2 w-2 shrink-0 rounded-full', markerClass)" />
         <span class="truncate">{{ props.actor }}</span>
       </div>
-      <span class="shrink-0">{{ props.timestampLabel }}</span>
+      <span class="shrink-0 tabular-nums">{{ props.timestampLabel }}</span>
     </div>
 
     <div class="space-y-2 px-4 py-4">
-      <strong class="text-[13px] font-bold leading-tight text-text-primary">{{ props.title }}</strong>
+      <strong class="text-label font-bold text-text-primary">{{ props.title }}</strong>
 
-      <p class="text-[12px] leading-relaxed text-text-secondary break-words">
+      <div
+        v-if="normalizedMetaItems.length"
+        data-testid="ui-trace-block-meta"
+        class="flex flex-wrap gap-2"
+      >
+        <span
+          v-for="item in normalizedMetaItems"
+          :key="item"
+          data-testid="ui-trace-block-meta-item"
+          class="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--border)_82%,transparent)] bg-[color-mix(in_srgb,var(--surface)_82%,var(--subtle)_18%)] px-2.5 py-1 text-micro font-medium uppercase tracking-[0.08em] text-text-tertiary"
+        >
+          {{ item }}
+        </span>
+      </div>
+
+      <p class="text-caption text-text-secondary break-words">
         {{ props.detail }}
       </p>
     </div>

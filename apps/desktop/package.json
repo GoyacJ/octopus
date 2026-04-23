@@ -8,6 +8,8 @@
     "build:ui": "node ../../scripts/run-desktop-ui.mjs build tauri",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "playwright test --config ./playwright.config.ts",
+    "test:e2e:smoke": "playwright test --config ./playwright.config.ts test/e2e/smoke.spec.ts",
     "typecheck": "vue-tsc --noEmit --pretty false"
   },
   "dependencies": {

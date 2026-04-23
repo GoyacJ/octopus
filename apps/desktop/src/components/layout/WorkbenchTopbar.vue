@@ -3,9 +3,9 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import type { InboxItemRecord, NotificationRecord } from '@octopus/schema'
-import { Bell, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
+import { AlertTriangle, Bell, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
 
-import { UiButton, UiMessageCenter, UiNotificationBadge, UiPopover, UiSelectionMenu } from '@octopus/ui'
+import { UiButton, UiKbd, UiMessageCenter, UiNotificationBadge, UiOfflineBanner, UiPopover, UiSelectionMenu } from '@octopus/ui'
 
 import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
@@ -209,6 +209,33 @@ const inboxSubtitle = computed(() =>
   t('messageCenter.inbox.subtitle', { count: inbox.actionableCount }),
 )
 
+const connectionBanner = computed(() => {
+  const connection = shell.activeWorkspaceConnection
+  if (!connection) {
+    return null
+  }
+
+  if (connection.status === 'connected' || connection.status === 'expired') {
+    return null
+  }
+
+  if (connection.status === 'unreachable') {
+    return {
+      tone: 'danger' as const,
+      title: t('topbar.connection.unreachable.title', { workspace: workspaceLabel.value }),
+      description: t('topbar.connection.unreachable.description'),
+      showRetry: true,
+    }
+  }
+
+  return {
+    tone: 'warning' as const,
+    title: t('topbar.connection.disconnected.title', { workspace: workspaceLabel.value }),
+    description: t('topbar.connection.disconnected.description'),
+    showRetry: false,
+  }
+})
+
 function handleMessageCenterOpenChange(open: boolean) {
   if (open) {
     closeLegacyMenus()
@@ -272,7 +299,12 @@ function settingsButtonClasses() {
 }
 
 function searchTriggerClasses() {
-  return 'ui-focus-ring flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface px-3 py-1.5 text-[13px] text-text-secondary transition-colors hover:border-border-strong hover:bg-subtle hover:text-text-primary'
+  return [
+    'ui-focus-ring flex items-center gap-2 rounded-[var(--radius-m)] border px-3 py-1.5 text-[13px] transition-[border-color,background-color,color,box-shadow] duration-normal ease-apple motion-reduce:transition-none',
+    shell.searchOpen
+      ? 'border-border-strong bg-accent text-text-primary ring-1 ring-inset ring-border-strong'
+      : 'border-border bg-surface text-text-secondary hover:border-border-strong hover:bg-subtle hover:text-text-primary',
+  ].join(' ')
 }
 
 function profileTriggerClasses() {
@@ -299,10 +331,6 @@ function localeToggleButtonClasses() {
   return shellTriggerIconButtonClasses(localeMenuOpen.value)
 }
 
-function searchHintClasses() {
-  return 'hidden rounded-full border border-border bg-subtle px-1.5 py-0.5 text-[10px] font-semibold text-text-tertiary md:inline-flex'
-}
-
 async function handleNotificationSelect(notification: NotificationRecord) {
   await notifications.markRead(notification.id)
   closeMessageCenter()
@@ -319,14 +347,19 @@ async function handleInboxSelect(item: InboxItemRecord) {
   closeMessageCenter()
   await router.push(item.routeTo)
 }
+
+async function retryConnection() {
+  await shell.refreshBackendStatus()
+}
 </script>
 
 <template>
-  <header
-    class="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-background px-4"
-    data-testid="workbench-topbar"
-  >
-    <div class="flex min-w-0 items-center gap-3">
+  <div class="sticky top-0 z-30 bg-background">
+    <header
+      class="flex h-12 items-center justify-between border-b border-border bg-background px-4"
+      data-testid="workbench-topbar"
+    >
+      <div class="flex min-w-0 items-center gap-3">
       <UiButton
         v-if="shell.leftSidebarCollapsed"
         variant="ghost"
@@ -357,11 +390,21 @@ async function handleInboxSelect(item: InboxItemRecord) {
         type="button"
         data-testid="global-search-trigger"
         :class="searchTriggerClasses()"
+        :aria-pressed="shell.searchOpen ? 'true' : 'false'"
         @click="shell.openSearch"
       >
         <Search :size="14" />
         <span :class="searchLabelClasses()">{{ t('topbar.searchPlaceholder') }}</span>
-        <span :class="searchHintClasses()">K</span>
+        <UiKbd
+          :keys="shell.searchShortcutKeys"
+          size="sm"
+          :class="[
+            'hidden md:inline-flex',
+            shell.searchOpen
+              ? 'border-border bg-surface text-text-primary'
+              : 'border-border bg-subtle text-text-tertiary',
+          ]"
+        />
       </button>
 
       <UiSelectionMenu
@@ -382,6 +425,7 @@ async function handleInboxSelect(item: InboxItemRecord) {
             size="icon"
             data-testid="topbar-theme-toggle"
             :class="themeToggleButtonClasses()"
+            :aria-label="t('topbar.theme')"
           >
             <component :is="themeIcons[shell.preferences.theme]" :size="15" />
           </UiButton>
@@ -406,6 +450,7 @@ async function handleInboxSelect(item: InboxItemRecord) {
             size="icon"
             data-testid="topbar-locale-toggle"
             :class="localeToggleButtonClasses()"
+            :aria-label="t('topbar.locale')"
           >
             <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
           </UiButton>
@@ -497,6 +542,7 @@ async function handleInboxSelect(item: InboxItemRecord) {
             data-testid="topbar-profile-trigger"
             class="ui-focus-ring flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 transition-colors"
             :class="profileTriggerClasses()"
+            :aria-label="t('topbar.accountSectionTitle')"
           >
             <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
               <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
@@ -549,6 +595,32 @@ async function handleInboxSelect(item: InboxItemRecord) {
           </div>
         </div>
       </UiPopover>
-    </div>
-  </header>
+      </div>
+    </header>
+
+    <UiOfflineBanner
+      v-if="connectionBanner"
+      test-id="topbar-connection-banner"
+      actions-test-id="topbar-connection-banner-actions"
+      :tone="connectionBanner.tone"
+      :title="connectionBanner.title"
+      :description="connectionBanner.description"
+    >
+      <template #icon>
+        <AlertTriangle :size="16" />
+      </template>
+
+      <template v-if="connectionBanner.showRetry" #actions>
+        <UiButton
+          size="sm"
+          variant="outline"
+          data-testid="topbar-connection-retry"
+          :disabled="shell.syncingBackend"
+          @click="retryConnection"
+        >
+          {{ shell.syncingBackend ? t('topbar.connection.retrying') : t('topbar.connection.retry') }}
+        </UiButton>
+      </template>
+    </UiOfflineBanner>
+  </div>
 </template>

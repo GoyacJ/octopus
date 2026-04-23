@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 
 import {
   UiBadge,
   UiButton,
+  UiContextMenu,
   UiEmptyState,
   UiInspectorPanel,
   UiPageHeader,
@@ -14,12 +16,14 @@ import {
   UiTraceBlock,
 } from '@octopus/ui'
 
+import { buildRoutePermalink, copyTextToClipboard } from '@/composables/clipboard'
 import { formatDateTime } from '@/i18n/copy'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
+const route = useRoute()
 const runtime = useRuntimeStore()
 const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
@@ -65,13 +69,59 @@ const activeMediationDetail = computed(() =>
   ?? '',
 )
 
-const runtimeTraceTone = computed<'default' | 'success' | 'warning' | 'error' | 'info'>(() => {
-  const tone = runtime.activeTrace[0]?.tone
+function resolveTraceTone(tone: string | undefined): 'default' | 'success' | 'warning' | 'error' | 'info' {
   if (tone === 'success' || tone === 'warning' || tone === 'error' || tone === 'info') {
     return tone
   }
   return 'default'
-})
+}
+
+function formatTraceMeta(value: string | undefined): string {
+  if (!value) {
+    return ''
+  }
+
+  return value
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ')
+}
+
+function buildTraceMetaItems(trace: { kind: string, relatedToolName?: string }): string[] {
+  return [
+    formatTraceMeta(trace.kind),
+    trace.relatedToolName ?? '',
+  ].filter(Boolean)
+}
+
+function buildTraceContextMenuItems(trace: { detail?: string | null }) {
+  return [
+    {
+      key: 'copy-detail',
+      label: t('trace.context.copyDetail'),
+      disabled: !trace.detail,
+    },
+    {
+      key: 'copy-link',
+      label: t('common.copyLink'),
+    },
+  ]
+}
+
+async function handleTraceContextSelect(
+  trace: { detail?: string | null },
+  key: string,
+) {
+  if (key === 'copy-detail' && trace.detail) {
+    await copyTextToClipboard(trace.detail)
+    return
+  }
+
+  if (key === 'copy-link') {
+    await copyTextToClipboard(buildRoutePermalink(route.fullPath))
+  }
+}
 
 async function approveRuntime() {
   await runtime.resolveApproval('approve')
@@ -121,6 +171,8 @@ async function rejectMemoryProposal() {
         data-testid="trace-run-state"
         :title="t('trace.runState.title')"
         :subtitle="t('trace.runState.subtitle')"
+        role="region"
+        :aria-label="t('trace.runState.title')"
       >
         <div v-if="runtime.activeRun" class="space-y-4">
           <div class="flex flex-wrap gap-2.5">
@@ -141,6 +193,8 @@ async function rejectMemoryProposal() {
         data-testid="trace-recovery"
         :title="t('trace.recovery.title')"
         :subtitle="t('trace.recovery.subtitle')"
+        role="region"
+        :aria-label="t('trace.recovery.title')"
       >
         <div v-if="activeMediationKind" data-testid="trace-runtime-approval">
           <UiStatusCallout
@@ -182,21 +236,30 @@ async function rejectMemoryProposal() {
       data-testid="trace-timeline"
       :title="t('trace.timeline.title')"
       :subtitle="t('trace.timeline.subtitle')"
+      role="region"
+      :aria-label="t('trace.timeline.title')"
     >
       <div class="space-y-4">
         <div
           v-for="trace in runtime.activeTrace"
           :key="trace.id"
-          data-testid="trace-runtime-item"
         >
-          <UiTraceBlock
-            :title="trace.title"
-            :detail="trace.detail"
-            :actor="trace.actor"
-            :timestamp-label="formatDateTime(trace.timestamp)"
-            :tone="runtimeTraceTone"
-            class="max-w-5xl"
-          />
+          <UiContextMenu
+            :items="buildTraceContextMenuItems(trace)"
+            @select="handleTraceContextSelect(trace, $event)"
+          >
+            <div data-testid="trace-runtime-item" :data-trace-id="trace.id">
+              <UiTraceBlock
+                :title="trace.title"
+                :detail="trace.detail"
+                :actor="trace.actor"
+                :timestamp-label="formatDateTime(trace.timestamp)"
+                :tone="resolveTraceTone(trace.tone)"
+                :meta-items="buildTraceMetaItems(trace)"
+                class="max-w-5xl"
+              />
+            </div>
+          </UiContextMenu>
         </div>
         <UiEmptyState
           v-if="!runtime.activeTrace.length"

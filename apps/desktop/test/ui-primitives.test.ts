@@ -16,6 +16,7 @@ import {
   UiDialog,
   UiDropdownMenu,
   UiEmptyState,
+  UiErrorState,
   UiFilterChipGroup,
   UiInfoCard,
   UiInboxBlock,
@@ -29,12 +30,15 @@ import {
   UiPopover,
   UiRecordCard,
   UiRankingList,
+  UiRestrictedState,
   UiSearchableMultiSelect,
   UiSelectionMenu,
+  UiSkeleton,
   UiSurface,
   UiConversationComposerShell,
   UiDotLottie,
   UiInspectorPanel,
+  UiKbd,
   UiHierarchyList,
   UiListRow,
   UiListDetailShell,
@@ -162,8 +166,10 @@ describe('Shared UI primitives', () => {
 
     expect(outlineClasses).toContain('bg-surface')
     expect(outlineClasses).toContain('hover:bg-subtle')
+    expect(outlineClasses).toContain('enabled:active:scale-[0.99]')
     expect(outlineClasses).not.toContain('hover:bg-accent')
     expect(ghostClasses).toContain('hover:bg-subtle')
+    expect(ghostClasses).toContain('enabled:active:scale-[0.99]')
     expect(ghostClasses).not.toContain('hover:bg-accent')
   })
 
@@ -179,6 +185,7 @@ describe('Shared UI primitives', () => {
 
     expect(classes).toContain('bg-[var(--color-status-info-soft)]')
     expect(classes).toContain('text-status-info')
+    expect(classes).toContain('text-micro')
     expect(classes).not.toContain('bg-accent')
   })
 
@@ -395,7 +402,7 @@ describe('Shared UI primitives', () => {
         <UiDropdownMenu
           v-model:open="open"
           :items="[
-            { key: 'rename', label: 'Rename' },
+            { key: 'rename', label: 'Rename', shortcut: ['⌘', 'R'] },
             { key: 'delete', label: 'Delete', tone: 'danger' },
           ]"
           @select="selected = $event"
@@ -422,6 +429,7 @@ describe('Shared UI primitives', () => {
     expect(dropdownContent).not.toBeNull()
     expect(dropdownContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
     expect(dropdownContent?.className).not.toContain('border-border')
+    expect(renameItem?.querySelector('[data-testid="ui-kbd"]')?.textContent).toContain('⌘+R')
     expect(renameItem?.className).toContain('data-[highlighted]:bg-subtle')
     expect(renameItem?.className).not.toContain('data-[highlighted]:bg-accent')
     expect(deleteItem).not.toBeNull()
@@ -827,7 +835,7 @@ describe('Shared UI primitives', () => {
       attachTo: document.body,
       props: {
         items: [
-          { key: 'open', label: 'Open' },
+          { key: 'open', label: 'Open', shortcut: ['Enter'] },
           { key: 'archive', label: 'Archive' },
         ],
       },
@@ -847,6 +855,7 @@ describe('Shared UI primitives', () => {
     expect(contextContent).not.toBeNull()
     expect(contextContent?.className).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
     expect(contextContent?.className).not.toContain('border-border')
+    expect(document.body.querySelector('[data-testid="ui-context-item-open"] [data-testid="ui-kbd"]')?.textContent).toContain('Enter')
     expect(archiveItem.classes().join(' ')).toContain('data-[highlighted]:bg-subtle')
     expect(archiveItem.classes().join(' ')).not.toContain('data-[highlighted]:bg-accent')
     await wrapper.get('[data-testid="ui-context-item-archive"]').trigger('click')
@@ -871,6 +880,7 @@ describe('Shared UI primitives', () => {
     })
 
     expect(wrapper.attributes('data-ui-state')).toBe('active')
+    expect(wrapper.classes().join(' ')).toContain('active:scale-[0.99]')
     expect(wrapper.find('[data-testid="list-row-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="list-row-action"]').exists()).toBe(true)
   })
@@ -906,6 +916,24 @@ describe('Shared UI primitives', () => {
     expect(statTile.attributes('data-ui-tone')).toBe('warning')
     expect(traceBlock.attributes('data-ui-tone')).toBe('info')
     expect(artifactBlock.attributes('data-ui-artifact-block')).toBe('true')
+  })
+
+  it('renders UiTraceBlock metadata chips without turning it into a nested timeline', () => {
+    const traceBlock = mount(UiTraceBlock, {
+      props: {
+        title: 'Workspace sync',
+        detail: 'Updated runtime snapshot.',
+        actor: 'Runtime',
+        timestampLabel: '09:41',
+        tone: 'warning',
+        metaItems: ['Tool', 'workspace-api'],
+      },
+    })
+
+    expect(traceBlock.find('[data-testid="ui-trace-block-meta"]').exists()).toBe(true)
+    expect(traceBlock.findAll('[data-testid="ui-trace-block-meta-item"]')).toHaveLength(2)
+    expect(traceBlock.text()).toContain('Tool')
+    expect(traceBlock.text()).toContain('workspace-api')
   })
 
   it('renders AI-native block primitives with integrated bands instead of floating cards', () => {
@@ -1083,7 +1111,10 @@ describe('Shared UI primitives', () => {
       `,
     }))
 
-    expect(wrapper.find('[data-testid="page-shell"]').exists()).toBe(true)
+    const pageShell = wrapper.get('[data-testid="page-shell"]')
+
+    expect(pageShell.exists()).toBe(true)
+    expect(pageShell.attributes('data-density')).toBe('regular')
     expect(wrapper.find('[data-testid="list-slot"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="page-header-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="page-header-action"]').exists()).toBe(true)
@@ -1091,6 +1122,41 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Inspector')
     expect(wrapper.text()).toContain('Heads up')
     expect(wrapper.find('[data-testid="composer-shell"]').exists()).toBe(true)
+  })
+
+  it('supports explicit page-shell density presets through a shared prop', () => {
+    const wrapper = mount(UiPageShell, {
+      props: {
+        density: 'comfortable',
+        testId: 'comfortable-page-shell',
+      },
+      slots: {
+        default: '<div data-testid="comfortable-page-shell-body">Body</div>',
+      },
+    })
+
+    expect(wrapper.get('[data-testid="comfortable-page-shell"]').attributes('data-density')).toBe('comfortable')
+    expect(wrapper.get('[data-testid="comfortable-page-shell-body"]').exists()).toBe(true)
+  })
+
+  it('renders UiKbd through the shared export surface and ignores empty key entries', () => {
+    const wrapper = mount(UiKbd, {
+      props: {
+        keys: ['⌘', 'K', ''],
+      },
+    })
+
+    const kbd = wrapper.get('[data-testid="ui-kbd"]')
+
+    expect(kbd.text()).toBe('⌘+K')
+
+    const emptyWrapper = mount(UiKbd, {
+      props: {
+        keys: [],
+      },
+    })
+
+    expect(emptyWrapper.find('[data-testid="ui-kbd"]').exists()).toBe(false)
   })
 
   it('keeps UiStatusCallout restrained instead of using saturated fills', () => {
@@ -1142,6 +1208,93 @@ describe('Shared UI primitives', () => {
     expect(infoCard.text()).toContain('Unified styling')
   })
 
+  it('renders UiSkeleton across line, card, and table-row variants while respecting reduced motion', () => {
+    const line = mount(UiSkeleton, {
+      props: {
+        variant: 'line',
+        count: 3,
+      },
+    })
+    const card = mount(UiSkeleton, {
+      props: {
+        variant: 'card',
+        count: 2,
+      },
+    })
+    const tableRow = mount(UiSkeleton, {
+      props: {
+        variant: 'table-row',
+        count: 4,
+        reducedMotion: true,
+      },
+    })
+
+    expect(line.get('[data-testid="ui-skeleton"]').attributes('data-ui-skeleton-variant')).toBe('line')
+    expect(line.findAll('[data-testid="ui-skeleton-item"]')).toHaveLength(3)
+    expect(line.html()).toContain('ui-skeleton-block--animated')
+
+    expect(card.get('[data-testid="ui-skeleton"]').attributes('data-ui-skeleton-variant')).toBe('card')
+    expect(card.findAll('[data-testid="ui-skeleton-item"]')).toHaveLength(2)
+    expect(card.html()).toContain('rounded-[var(--radius-l)]')
+
+    expect(tableRow.get('[data-testid="ui-skeleton"]').attributes('data-ui-skeleton-variant')).toBe('table-row')
+    expect(tableRow.get('[data-testid="ui-skeleton"]').attributes('data-ui-skeleton-animated')).toBe('false')
+    expect(tableRow.findAll('[data-testid="ui-skeleton-item"]')).toHaveLength(4)
+    expect(tableRow.html()).not.toContain('ui-skeleton-block--animated')
+  })
+
+  it('renders UiErrorState with shared intro, actions, and details regions', () => {
+    const wrapper = mount(UiErrorState, {
+      props: {
+        eyebrow: 'Runtime error',
+        title: 'Something broke',
+        description: 'Try again or return to safety.',
+      },
+      slots: {
+        icon: '<span data-testid="ui-error-state-icon">!</span>',
+        summary: '<div data-testid="ui-error-state-summary">Summary</div>',
+        actions: '<button data-testid="ui-error-state-action" type="button">Retry</button>',
+        details: '<pre data-testid="ui-error-state-detail-block">Stack</pre>',
+      },
+    })
+
+    expect(wrapper.find('[data-testid="ui-error-state"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-error-state-intro"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-error-state-icon"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-error-state-summary"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-error-state-actions"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-error-state-details"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Something broke')
+  })
+
+  it('renders UiRestrictedState with tone-aware intro, meta, body, and actions regions', () => {
+    const wrapper = mount(UiRestrictedState, {
+      props: {
+        tone: 'accent',
+        eyebrow: 'Upgrade required',
+        title: 'Unlock shared providers',
+        description: 'Your current plan does not include this capability.',
+      },
+      slots: {
+        icon: '<span data-testid="ui-restricted-state-icon">#</span>',
+        meta: '<span data-testid="ui-restricted-state-meta">Plan gate</span>',
+        default: '<p data-testid="ui-restricted-state-copy">Ask an owner to grant access.</p>',
+        actions: '<button data-testid="ui-restricted-state-action" type="button">Manage plan</button>',
+      },
+    })
+
+    const intro = wrapper.get('[data-testid="ui-restricted-state-intro"]')
+    const body = wrapper.get('[data-testid="ui-restricted-state-body"]')
+    const actions = wrapper.get('[data-testid="ui-restricted-state-actions"]')
+
+    expect(intro.attributes('data-ui-restricted-tone')).toBe('accent')
+    expect(intro.classes().join(' ')).toContain('bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)]')
+    expect(wrapper.find('[data-testid="ui-restricted-state-icon"]').exists()).toBe(true)
+    expect(body.text()).toContain('Plan gate')
+    expect(body.text()).toContain('Ask an owner to grant access.')
+    expect(actions.text()).toContain('Manage plan')
+  })
+
   it('keeps UiActionCard hover neutral while strengthening the border affordance', () => {
     const wrapper = mount(UiActionCard, {
       props: {
@@ -1154,6 +1307,7 @@ describe('Shared UI primitives', () => {
 
     expect(classes).toContain('hover:bg-subtle')
     expect(classes).toContain('hover:border-border-strong')
+    expect(classes).toContain('active:scale-[0.99]')
     expect(classes).not.toContain('hover:bg-accent')
   })
 
@@ -1230,6 +1384,7 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('84%')
     expect(wrapper.text()).toContain('Shared UI adoption')
     expect(wrapper.find('[data-testid="ui-metric-progress"]').attributes('style')).toContain('84%')
+    expect(wrapper.get('[data-ui-performance-contained="true"]').attributes('class') ?? '').toContain('[content-visibility:auto]')
   })
 
   it('renders UiMetricCard accent tone with a brand-soft fill and stronger border', () => {
@@ -1273,6 +1428,7 @@ describe('Shared UI primitives', () => {
     expect(timeline.text()).toContain('Collapsed custom surfaces')
     expect(timeline.text()).toContain('2026-04-03 10:00')
     expect(timeline.text()).toContain('conversation')
+    expect(timeline.get('[data-ui-performance-contained="true"]').attributes('class') ?? '').toContain('[content-visibility:auto]')
   })
 
   it('renders UiToolbarRow and UiNavCardList with shared composition slots', async () => {
@@ -1361,7 +1517,7 @@ describe('Shared UI primitives', () => {
           {
             label: 'Agents',
             items: [
-              { id: 'agent:architect', label: 'Architect', helper: 'Primary owner' },
+              { id: 'agent:architect', label: 'Architect', helper: 'Primary owner', shortcut: ['⌘', '1'] },
               { id: 'agent:analyst', label: 'Analyst' },
             ],
           },
@@ -1397,6 +1553,7 @@ describe('Shared UI primitives', () => {
     expect(architectItem?.className).toContain('hover:bg-subtle')
     expect(architectItem?.className).toContain('hover:border-border')
     expect(architectItem?.className).not.toContain('hover:bg-accent')
+    expect(architectItem?.querySelector('[data-testid="ui-kbd"]')?.textContent).toContain('⌘+1')
     expect(redesignTeamItem?.className).toContain('border-border-strong')
     expect(redesignTeamItem?.className).toContain('bg-accent')
     wrapper.unmount()
@@ -1550,15 +1707,19 @@ describe('Shared UI primitives', () => {
         compact: true,
       },
       slots: {
+        meta: '<span data-testid="compact-header-meta">09:41</span>',
         actions: '<button data-testid="compact-header-action" type="button">Create</button>',
       },
     })
 
     const headerClasses = wrapper.get('header').classes().join(' ')
+    const metaClasses = wrapper.get('[data-testid="compact-header-meta"]').element.parentElement?.className ?? ''
 
     expect(headerClasses).toContain('gap-3')
-    expect(wrapper.html()).toContain('text-[22px]')
-    expect(wrapper.html()).toContain('text-[13px]')
+    expect(wrapper.html()).toContain('text-section-title')
+    expect(wrapper.html()).toContain('text-label')
+    expect(metaClasses).toContain('text-micro')
+    expect(metaClasses).toContain('tabular-nums')
     expect(wrapper.find('[data-testid="compact-header-action"]').exists()).toBe(true)
   })
 
@@ -1576,6 +1737,18 @@ describe('Shared UI primitives', () => {
     expect(classes).toContain('is-active')
     expect(classes).toContain('bg-accent')
     expect(classes).toContain('border-border-strong')
+  })
+
+  it('adds restrained press feedback only to interactive UiRecordCard instances', () => {
+    const wrapper = mount(UiRecordCard, {
+      props: {
+        title: 'Interactive row',
+        interactive: true,
+        testId: 'interactive-record-card',
+      },
+    })
+
+    expect(wrapper.get('[data-testid="interactive-record-card"]').classes().join(' ')).toContain('active:scale-[0.99]')
   })
 
   it('renders UiRecordCard compact layout with tightened spacing and low-contrast footer', () => {
@@ -1639,6 +1812,7 @@ describe('Shared UI primitives', () => {
     expect(switchClasses).toContain('border-[var(--control-toggle-off-border)]')
     expect(switchClasses).toContain('bg-[var(--control-toggle-off-bg)]')
     expect(switchClasses).toContain('shadow-xs')
+    expect(switchClasses).toContain('enabled:active:scale-[0.99]')
     expect(switchClasses).not.toContain('bg-border-strong/60')
     expect(switchClasses).not.toContain('shadow-inner')
     expect(switchHtml).toContain('border-[var(--control-toggle-thumb-border)]')
@@ -1667,6 +1841,10 @@ describe('Shared UI primitives', () => {
     expect(wrapper.get('[data-testid="ui-notification-row-marker-notif-row"]').classes().join(' ')).toContain('bg-status-info')
     expect(wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').classes().join(' ')).toContain('hover:bg-subtle')
     expect(wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').classes().join(' ')).not.toContain('hover:bg-accent')
+    expect(wrapper.get('[data-testid="ui-notification-row-header-notif-row"]').html()).toContain('text-micro')
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').html()).toContain('text-label')
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').html()).toContain('text-caption')
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').html()).toContain('tabular-nums')
 
     await wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').trigger('click')
     expect(wrapper.emitted('mark-read')).toEqual([['notif-row']])
@@ -1828,7 +2006,7 @@ describe('Shared UI primitives', () => {
     expect(errorToast.html()).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_48%,var(--bg-popover))]')
   })
 
-  it('keeps UiToastItem lift restrained and lets animation wrappers opt out of autoplay', async () => {
+  it('keeps UiToastItem lift restrained and disables media autoplay when reduced motion is active', async () => {
     const toast = mount(UiToastItem, {
       props: {
         notification: createNotification({
@@ -1842,26 +2020,55 @@ describe('Shared UI primitives', () => {
     expect(toast.findComponent(UiSurface).attributes('class') ?? '').toContain('shadow-sm')
     expect(toast.findComponent(UiSurface).attributes('class') ?? '').not.toContain('shadow-md')
 
+    let observerCallback: ((entries: Array<{ isIntersecting: boolean, intersectionRatio: number }>) => void) | null = null
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    vi.stubGlobal('IntersectionObserver', vi.fn((callback: typeof observerCallback) => {
+      observerCallback = callback
+      return {
+        observe,
+        disconnect,
+        unobserve: vi.fn(),
+        takeRecords: vi.fn(() => []),
+      }
+    }))
+
     const dotLottie = mount(UiDotLottie, {
       props: {
         src: '/animations/pulse.lottie',
-        autoplay: false,
+        autoplay: true,
+        loop: true,
+        reducedMotion: true,
+        lazy: true,
       },
     })
 
+    expect(dotLottie.get('[data-testid="ui-dotlottie"]').attributes('data-lazy-ready')).toBe('false')
+    observerCallback?.([{ isIntersecting: true, intersectionRatio: 1 }])
+    await nextTick()
     expect(dotLottie.get('[data-testid="ui-dotlottie"]').attributes('data-autoplay')).toBe('false')
+    expect(dotLottie.get('[data-testid="ui-dotlottie"]').attributes('data-loop')).toBe('false')
+    expect(dotLottie.get('[data-testid="ui-dotlottie"]').attributes('data-lazy-ready')).toBe('true')
 
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
 
     const riveCanvas = mount(UiRiveCanvas, {
       props: {
         src: '/animations/pet.riv',
-        autoplay: false,
+        autoplay: true,
+        reducedMotion: true,
+        lazy: true,
       },
     })
 
+    expect(riveCanvas.get('[data-testid="ui-rive-canvas"]').attributes('data-lazy-ready')).toBe('false')
+    observerCallback?.([{ isIntersecting: true, intersectionRatio: 1 }])
     await nextTick()
 
     expect(riveCanvas.get('[data-testid="ui-rive-canvas"]').attributes('data-autoplay')).toBe('false')
+    expect(riveCanvas.get('[data-testid="ui-rive-canvas"]').attributes('data-lazy-ready')).toBe('true')
+    expect(observe).toHaveBeenCalled()
+    expect(disconnect).toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })

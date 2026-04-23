@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CatalogConfiguredModelOption } from '@/stores/catalog'
-import { UiButton, UiCheckbox, UiEmptyState, UiField, UiInput, UiRecordCard, UiSelect, UiStatusCallout } from '@octopus/ui'
+import { UiButton, UiCheckbox, UiEmptyState, UiField, UiInput, UiRecordCard, UiSelect, UiSkeleton, UiStatusCallout } from '@octopus/ui'
 
 defineProps<{
   modelTabReady: boolean
@@ -26,8 +26,14 @@ const emit = defineEmits<{
       {{ $t('projectSettings.tabs.models') }}
     </template>
 
-    <div v-if="!modelTabReady" class="text-sm text-text-secondary">
-      {{ $t('projectSettings.loading') }}
+    <div
+      v-if="!modelTabReady"
+      data-testid="project-settings-models-skeleton"
+      class="space-y-4"
+    >
+      <UiSkeleton variant="line" :count="2" />
+      <UiSkeleton variant="card" :count="3" />
+      <UiSkeleton variant="line" :count="2" />
     </div>
 
     <div v-else class="space-y-5">

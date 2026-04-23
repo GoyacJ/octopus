@@ -51,13 +51,13 @@ const classes = computed(() => cn(surfaceVariants({ variant: props.variant, padd
   <section :class="classes">
     <header v-if="eyebrow || title || subtitle || $slots.actions" class="mb-4 flex flex-wrap items-start justify-between gap-4">
       <div v-if="eyebrow || title || subtitle" class="min-w-0 flex-1 space-y-1">
-        <p v-if="eyebrow" class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+        <p v-if="eyebrow" class="text-micro font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {{ eyebrow }}
         </p>
-        <h2 v-if="title" class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
+        <h2 v-if="title" class="text-section-title font-bold tracking-[-0.02em] text-text-primary">
           {{ title }}
         </h2>
-        <p v-if="subtitle" class="text-[14px] leading-relaxed text-text-secondary line-clamp-2">
+        <p v-if="subtitle" class="text-body leading-relaxed text-text-secondary line-clamp-2">
           {{ subtitle }}
         </p>
       </div>

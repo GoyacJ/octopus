@@ -38,13 +38,14 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
     :tabindex="props.interactive ? 0 : undefined"
     :role="props.interactive ? 'button' : undefined"
     :class="cn(
-      'flex min-w-0 flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+      'flex min-w-0 flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-[transform,colors,border-color,box-shadow] duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
       props.layout === 'tile' && 'gap-3 p-4',
       props.layout === 'compact' && 'gap-1 p-2',
       props.active
         ? 'is-active border-border-strong bg-accent shadow-xs'
         : 'border-border bg-surface',
-      props.interactive && !props.active && 'cursor-pointer hover:bg-subtle hover:border-border-strong',
+      props.interactive && 'cursor-pointer active:scale-[0.99] motion-reduce:active:scale-100',
+      props.interactive && !props.active && 'hover:bg-subtle hover:border-border-strong',
       props.class,
     )"
     @click="emitClick"
@@ -60,18 +61,18 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
       </div>
 
       <div class="min-w-0 flex-1 space-y-1">
-        <div v-if="$slots.eyebrow" class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+        <div v-if="$slots.eyebrow" class="text-micro font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           <slot name="eyebrow" />
         </div>
         <strong :class="cn(
           'block font-semibold leading-tight text-text-primary',
-          props.layout === 'compact' ? 'text-[14px]' : 'text-[15px]',
+          props.layout === 'compact' ? 'text-body' : 'text-card-title',
         )">
           {{ props.title }}
         </strong>
         <p :class="cn(
           'text-text-secondary line-clamp-2',
-          props.layout === 'compact' ? 'text-[12px] leading-5' : 'text-[13px] leading-relaxed',
+          props.layout === 'compact' ? 'text-caption leading-5' : 'text-label leading-relaxed',
         )" v-if="props.description">
           {{ props.description }}
         </p>

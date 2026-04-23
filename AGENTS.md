@@ -48,7 +48,7 @@
   2. If missing, reference `shadcn-vue` interaction and structure patterns, but implement the component inside `@octopus/ui`.
   3. `Dialog`, `Popover`, `DropdownMenu`, `Combobox`, `Tabs`, `Accordion`, and `ContextMenu` must be built on `Reka UI` primitives.
 - Shared UI Component Catalog:
-  - Base: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`, `UiSectionHeading`.
+- Base: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`, `UiKbd`, `UiSectionHeading`.
   - Layout: `UiSurface`, `UiPanelFrame`, `UiToolbarRow`, `UiPageHero`, `UiNavCardList`.
   - Data Display: `UiBadge`, `UiEmptyState`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiRecordCard`, `UiListRow`, `UiStatTile`, `UiPagination`.
   - Context Blocks: `UiArtifactBlock`, `UiTraceBlock`, `UiInboxBlock`.

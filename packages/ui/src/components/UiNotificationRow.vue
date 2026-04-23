@@ -50,19 +50,19 @@ const presentation = computed(() => getNotificationPresentation(props.notificati
           class="h-2 w-2 shrink-0 rounded-full"
           :class="presentation.dotClass"
         />
-        <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+        <span class="text-micro font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {{ props.scopeLabel }}
         </span>
         <span
           v-if="!props.notification.readAt"
-          class="rounded-full border border-border bg-[color-mix(in_srgb,var(--surface)_76%,transparent)] px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+          class="rounded-full border border-border bg-[color-mix(in_srgb,var(--surface)_76%,transparent)] px-2 py-0.5 text-micro font-medium text-text-secondary"
         >
           New
         </span>
       </div>
 
       <div class="flex shrink-0 items-center gap-1.5">
-        <span v-if="timestampLabel" class="text-[11px] font-medium text-text-tertiary">
+        <span v-if="timestampLabel" class="text-micro font-medium tabular-nums text-text-tertiary">
           {{ timestampLabel }}
         </span>
         <button
@@ -77,10 +77,10 @@ const presentation = computed(() => getNotificationPresentation(props.notificati
     </div>
 
     <div class="space-y-1 px-4 py-4">
-      <p class="truncate text-sm font-semibold" :class="presentation.titleClass">
+      <p class="truncate text-label font-semibold tracking-tight" :class="presentation.titleClass">
         {{ props.notification.title }}
       </p>
-      <p class="text-xs leading-5 text-text-secondary">
+      <p class="text-caption text-text-secondary">
         {{ props.notification.body }}
       </p>
     </div>

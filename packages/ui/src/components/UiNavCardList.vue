@@ -87,7 +87,7 @@ defineSlots<{
           </span>
           <span
             v-if="item.badge && props.density !== 'rail'"
-            class="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-secondary"
+            class="shrink-0 rounded-full bg-muted px-2 py-1 text-micro font-semibold uppercase tracking-[0.08em] text-text-secondary"
           >
             {{ item.badge }}
           </span>
