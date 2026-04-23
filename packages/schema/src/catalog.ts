@@ -112,7 +112,6 @@ export type ModelCapabilityId =
   | 'batch'
   | 'context_cache'
   | 'mcp'
-  | 'web_search'
   | 'computer_use'
 
 export type ModelSurfaceId =

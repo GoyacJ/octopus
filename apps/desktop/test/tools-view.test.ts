@@ -140,16 +140,33 @@ describe('Workspace tools view', () => {
   })
 
   it('paginates the left tool catalog list after filtering', async () => {
+    installWorkspaceApiFixture({
+      toolCatalogTransform(entries) {
+        const webFetchEntry = entries.find(entry => entry.sourceKey === 'builtin:web_fetch')
+        expect(webFetchEntry).toBeTruthy()
+        return [
+          ...entries,
+          {
+            ...webFetchEntry!,
+            id: 'builtin-web-fetch-preview',
+            name: 'web_fetch_preview',
+            description: 'Preview fetched web pages in the pagination regression fixture.',
+            sourceKey: 'builtin:web_fetch_preview',
+            builtinKey: 'web_fetch_preview',
+          },
+        ]
+      },
+    })
     const mounted = mountApp()
 
     await waitForText(mounted.container, 'bash')
-    expect(mounted.container.textContent).not.toContain('web_fetch')
+    expect(mounted.container.textContent).not.toContain('web_fetch_preview')
 
     const nextButton = findButton(mounted.container, 'Next')
     expect(nextButton).toBeDefined()
     nextButton!.click()
 
-    await waitForText(mounted.container, 'web_fetch')
+    await waitForText(mounted.container, 'web_fetch_preview')
 
     mounted.destroy()
   })

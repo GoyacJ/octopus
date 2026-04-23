@@ -4,7 +4,7 @@ use octopus_sdk_model::{FallbackPolicy, FallbackTrigger, ModelError, ModelId};
 fn overloaded_errors_trigger_fallback() {
     let policy = FallbackPolicy::default().with_route(
         ModelId("claude-opus-4-6".to_string()),
-        ModelId("gpt-5.4".to_string()),
+        ModelId("gpt-4o".to_string()),
     );
 
     assert_eq!(
@@ -19,12 +19,12 @@ fn overloaded_errors_trigger_fallback() {
 fn next_model_uses_second_model_in_route() {
     let policy = FallbackPolicy::default().with_route(
         ModelId("claude-opus-4-6".to_string()),
-        ModelId("gpt-5.4".to_string()),
+        ModelId("gpt-4o".to_string()),
     );
 
     assert_eq!(
         policy.next_model(&ModelId("claude-opus-4-6".to_string())),
-        Some(&ModelId("gpt-5.4".to_string()))
+        Some(&ModelId("gpt-4o".to_string()))
     );
 }
 
@@ -32,7 +32,7 @@ fn next_model_uses_second_model_in_route() {
 fn model_not_found_does_not_trigger_fallback() {
     let policy = FallbackPolicy::default().with_route(
         ModelId("claude-opus-4-6".to_string()),
-        ModelId("gpt-5.4".to_string()),
+        ModelId("gpt-4o".to_string()),
     );
 
     assert_eq!(

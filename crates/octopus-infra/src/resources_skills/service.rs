@@ -255,6 +255,7 @@ impl InfraWorkspaceService {
         );
         let mut entries = Vec::new();
 
+        // Shared capability projection mirrors only the current live builtin surface.
         for spec in builtin_tool_catalog().entries() {
             let source_key = format!("builtin:{}", spec.name);
             let capability_id = format!("builtin-{}", spec.name);

@@ -1,9 +1,11 @@
 mod builder;
 mod config_bridge;
 mod execution_bridge;
+mod plugin_boot;
 mod registry_bridge;
 mod secret_vault;
 mod session_bridge;
+mod subagent_runtime;
 
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 
@@ -126,10 +128,7 @@ impl RuntimeSdkBridge {
     ) -> RuntimeSessionPolicySnapshot {
         RuntimeSessionPolicySnapshot {
             selected_actor_ref: metadata.selected_actor_ref.clone(),
-            selected_configured_model_id: metadata
-                .configured_model_id
-                .clone()
-                .unwrap_or_default(),
+            selected_configured_model_id: metadata.configured_model_id.clone().unwrap_or_default(),
             execution_permission_mode: match metadata.permission_mode {
                 PermissionMode::Default | PermissionMode::Plan => {
                     octopus_core::RUNTIME_PERMISSION_READ_ONLY.into()

@@ -110,12 +110,6 @@ const BUILTIN_TOOL_ENTRIES: &[BuiltinToolMetadata] = &[
         required_permission: BuiltinToolPermission::DangerFullAccess,
     },
     BuiltinToolMetadata {
-        name: "web_search",
-        aliases: &[],
-        description: "Query the web when external verification is required.",
-        required_permission: BuiltinToolPermission::ReadOnly,
-    },
-    BuiltinToolMetadata {
         name: "web_fetch",
         aliases: &[],
         description: "Fetch a web page when a direct source is required.",
@@ -137,30 +131,6 @@ const BUILTIN_TOOL_ENTRIES: &[BuiltinToolMetadata] = &[
         name: "sleep",
         aliases: &["Sleep"],
         description: "Wait for a specified duration without holding a shell process.",
-        required_permission: BuiltinToolPermission::ReadOnly,
-    },
-    BuiltinToolMetadata {
-        name: "task",
-        aliases: &["agent"],
-        description: "Spawn and manage subagent execution.",
-        required_permission: BuiltinToolPermission::ReadOnly,
-    },
-    BuiltinToolMetadata {
-        name: "skill",
-        aliases: &["SkillTool"],
-        description: "Resolve and activate a named skill package.",
-        required_permission: BuiltinToolPermission::ReadOnly,
-    },
-    BuiltinToolMetadata {
-        name: "task_list",
-        aliases: &["TaskList"],
-        description: "List background tasks tracked by the host runtime.",
-        required_permission: BuiltinToolPermission::ReadOnly,
-    },
-    BuiltinToolMetadata {
-        name: "task_get",
-        aliases: &["TaskGet"],
-        description: "Read a single background task snapshot from the host runtime.",
         required_permission: BuiltinToolPermission::ReadOnly,
     },
 ];
@@ -198,5 +168,17 @@ mod tests {
             BuiltinToolPermission::DangerFullAccess.as_catalog_value(),
             "danger-full-access"
         );
+    }
+
+    #[test]
+    fn builtin_tool_catalog_hides_non_live_stub_entries() {
+        let catalog = builtin_tool_catalog();
+
+        for name in ["web_search", "task", "skill", "task_list", "task_get"] {
+            assert!(
+                catalog.resolve(name).is_none(),
+                "{name} should stay out of the live builtin catalog"
+            );
+        }
     }
 }

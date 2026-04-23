@@ -274,8 +274,8 @@ pub(super) fn write_runtime_workspace_config(root: &Path) {
 
 pub(super) fn write_runtime_workspace_config_with_generation_model(root: &Path) {
     std::env::set_var(
-        "OCTOPUS_TEST_GOOGLE_API_KEY",
-        "test-octopus-server-google-key",
+        "OCTOPUS_TEST_OPENAI_API_KEY",
+        "test-octopus-server-openai-key",
     );
     let path = root.join("config").join("runtime").join("workspace.json");
     if let Some(parent) = path.parent() {
@@ -284,13 +284,55 @@ pub(super) fn write_runtime_workspace_config_with_generation_model(root: &Path) 
     fs::write(
         path,
         serde_json::to_vec_pretty(&json!({
+            "providerOverrides": {
+                "openai": {
+                    "label": "OpenAI",
+                    "enabled": true,
+                    "surfaces": [
+                        {
+                            "surface": "conversation",
+                            "protocolFamily": "openai_chat",
+                            "baseUrl": "https://api.openai.com/v1"
+                        },
+                        {
+                            "surface": "responses",
+                            "protocolFamily": "openai_responses",
+                            "baseUrl": "https://api.openai.com/v1"
+                        }
+                    ]
+                }
+            },
+            "modelRegistry": {
+                "models": {
+                    "gpt-4o-generate": {
+                        "providerId": "openai",
+                        "label": "GPT-4o Generate",
+                        "description": "Workspace-scoped single-shot generation model for runtime route tests.",
+                        "track": "generation",
+                        "availability": "configured",
+                        "defaultPermission": "auto",
+                        "surfaceBindings": [
+                            {
+                                "surface": "responses",
+                                "protocolFamily": "openai_responses",
+                                "enabled": true,
+                                "executionProfile": {
+                                    "executionClass": "single_shot_generation",
+                                    "toolLoop": false,
+                                    "upstreamStreaming": true
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
             "configuredModels": {
                 "generation-only-model": {
                     "configuredModelId": "generation-only-model",
                     "name": "Generation Only Model",
-                    "providerId": "google",
-                    "modelId": "gemini-2.5-flash",
-                    "credentialRef": "env:OCTOPUS_TEST_GOOGLE_API_KEY",
+                    "providerId": "openai",
+                    "modelId": "gpt-4o-generate",
+                    "credentialRef": "env:OCTOPUS_TEST_OPENAI_API_KEY",
                     "enabled": true,
                     "source": "workspace"
                 }

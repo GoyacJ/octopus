@@ -15,16 +15,10 @@ impl RoleRouter {
 
         for (role, candidates) in [
             (ModelRole::Main, &["opus"][..]),
-            (
-                ModelRole::Fast,
-                &["haiku", "gpt-5.4-mini", "gemini-2.5-flash"][..],
-            ),
-            (ModelRole::Best, &["opus-1m", "opus", "gpt-5.4"][..]),
-            (ModelRole::Plan, &["opus", "gpt-5.4"][..]),
-            (
-                ModelRole::Compact,
-                &["gemini-2.5-flash", "haiku", "gpt-5.4-mini"][..],
-            ),
+            (ModelRole::Fast, &["haiku", "gpt-4o", "sonnet"][..]),
+            (ModelRole::Best, &["opus-1m", "opus", "sonnet"][..]),
+            (ModelRole::Plan, &["opus", "sonnet"][..]),
+            (ModelRole::Compact, &["haiku", "gpt-4o", "sonnet"][..]),
         ] {
             if let Some(model_id) = resolve_first(catalog, candidates) {
                 defaults.insert(role, model_id);

@@ -123,7 +123,7 @@ fn table_exists(connection: &Connection, table: &str) -> Result<bool, rusqlite::
             [table],
             |_| Ok(()),
         )
-        .map(|_| true)
+        .map(|()| true)
         .or_else(|error| match error {
             rusqlite::Error::QueryReturnedNoRows => Ok(false),
             other => Err(other),

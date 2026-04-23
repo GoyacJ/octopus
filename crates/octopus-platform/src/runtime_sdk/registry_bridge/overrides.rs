@@ -6,8 +6,8 @@ use octopus_core::{
 use serde_json::{Map, Value};
 
 use super::builtins::{
-    builtin_provider, canonical_model_id, infer_surface_bindings, provider_surface,
-    CANONICAL_DEFAULTS,
+    builtin_provider, canonical_model_id, hidden_builtin_model, infer_surface_bindings,
+    provider_surface, CANONICAL_DEFAULTS,
 };
 
 pub(crate) fn parse_provider_overrides(
@@ -194,6 +194,17 @@ pub(crate) fn build_default_selections(
             let Some(object) = entry.as_object() else {
                 continue;
             };
+            let provider_id = object
+                .get("providerId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let model_id = object
+                .get("modelId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if hidden_builtin_model(model_id, provider_id).is_some() {
+                continue;
+            }
             selections.insert(
                 purpose.clone(),
                 DefaultSelection {
@@ -201,16 +212,8 @@ pub(crate) fn build_default_selections(
                         .get("configuredModelId")
                         .and_then(Value::as_str)
                         .map(ToOwned::to_owned),
-                    provider_id: object
-                        .get("providerId")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    model_id: object
-                        .get("modelId")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
+                    provider_id: provider_id.to_string(),
+                    model_id: model_id.to_string(),
                     surface: object
                         .get("surface")
                         .and_then(Value::as_str)

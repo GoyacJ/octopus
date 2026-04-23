@@ -9,9 +9,9 @@ use octopus_sdk::{
     register_builtins, AgentRuntimeBuilder, AskAnswer, AskError, AskPrompt, AskResolver,
     AssistantEvent, ContentBlock, EventRange, Message, ModelError, ModelId, ModelProvider,
     ModelRequest, ModelStream, NoopBackend, PermissionGate, PermissionOutcome, PluginRegistry,
-    ProviderDescriptor, ProviderId, Role, SecretValue, SecretVault, SessionEvent,
-    SqliteJsonlSessionStore, StartSessionInput, StopReason, SubmitTurnInput, ToolCallRequest,
-    ToolRegistry, VaultError,
+    PluginSourceTag, ProviderDescriptor, ProviderId, Role, SecretValue, SecretVault, SessionEvent,
+    SessionStore, SqliteJsonlSessionStore, StartSessionInput, StopReason, SubagentOutput,
+    SubagentSpec, SubmitTurnInput, TaskBudget, TaskFn, ToolCallRequest, ToolRegistry, VaultError,
 };
 
 struct AllowAllGate;
@@ -75,7 +75,11 @@ impl ModelProvider for ScriptedModelProvider {
     }
 }
 
-fn build_bridge(root: &std::path::Path) -> Arc<octopus_platform::RuntimeSdkBridge> {
+fn build_bridge_with_turns(
+    root: &std::path::Path,
+    turns: Vec<Vec<AssistantEvent>>,
+    task_fn: Option<Arc<dyn TaskFn>>,
+) -> Arc<octopus_platform::RuntimeSdkBridge> {
     let store = Arc::new(
         SqliteJsonlSessionStore::open(&root.join("data/main.db"), &root.join("runtime/events"))
             .expect("session store should open"),
@@ -93,24 +97,7 @@ fn build_bridge(root: &std::path::Path) -> Arc<octopus_platform::RuntimeSdkBridg
         default_token_budget: 8_192,
         session_store: store,
         model_provider: Arc::new(ScriptedModelProvider {
-            turns: std::sync::Mutex::new(vec![
-                vec![
-                    AssistantEvent::ToolUse {
-                        id: octopus_sdk::ToolCallId("call-1".into()),
-                        name: "bash".into(),
-                        input: serde_json::json!({ "command": "printf 'bridge ok'" }),
-                    },
-                    AssistantEvent::MessageStop {
-                        stop_reason: StopReason::ToolUse,
-                    },
-                ],
-                vec![
-                    AssistantEvent::TextDelta("final answer".into()),
-                    AssistantEvent::MessageStop {
-                        stop_reason: StopReason::EndTurn,
-                    },
-                ],
-            ]),
+            turns: std::sync::Mutex::new(turns),
         }),
         tool_registry: tools,
         permission_gate: Arc::new(AllowAllGate),
@@ -119,10 +106,120 @@ fn build_bridge(root: &std::path::Path) -> Arc<octopus_platform::RuntimeSdkBridg
         plugin_registry,
         plugins_snapshot,
         tracer: Arc::new(octopus_sdk::NoopTracer),
-        task_fn: None,
+        task_fn,
     })
     .build()
     .expect("bridge should build")
+}
+
+fn build_bridge(root: &std::path::Path) -> Arc<octopus_platform::RuntimeSdkBridge> {
+    build_bridge_with_turns(
+        root,
+        vec![
+            vec![
+                AssistantEvent::ToolUse {
+                    id: octopus_sdk::ToolCallId("call-1".into()),
+                    name: "bash".into(),
+                    input: serde_json::json!({ "command": "printf 'bridge ok'" }),
+                },
+                AssistantEvent::MessageStop {
+                    stop_reason: StopReason::ToolUse,
+                },
+            ],
+            vec![
+                AssistantEvent::TextDelta("final answer".into()),
+                AssistantEvent::MessageStop {
+                    stop_reason: StopReason::EndTurn,
+                },
+            ],
+        ],
+        None,
+    )
+}
+
+struct StaticTaskFn;
+
+#[async_trait]
+impl TaskFn for StaticTaskFn {
+    async fn run(
+        &self,
+        _spec: &SubagentSpec,
+        input: &str,
+    ) -> Result<SubagentOutput, octopus_sdk::SubagentError> {
+        Ok(SubagentOutput::Summary {
+            text: format!("subagent: {input}"),
+            meta: octopus_sdk::SubagentSummary {
+                session_id: octopus_sdk::SessionId("subagent-1".into()),
+                turns: 1,
+                tokens_used: 3,
+                duration_ms: 1,
+                trace_id: "trace-subagent".into(),
+            },
+        })
+    }
+}
+
+#[test]
+fn runtime_sdk_registry_input_hides_non_live_stub_builtins() {
+    let mut tools = ToolRegistry::new();
+    register_builtins(&mut tools).expect("builtins should register");
+
+    for name in ["web_search", "task", "skill", "task_list", "task_get"] {
+        assert!(
+            tools.get(name).is_none(),
+            "{name} should not enter the runtime registry before live wiring exists"
+        );
+    }
+}
+
+#[tokio::test]
+async fn runtime_sdk_live_builder_bootstraps_bundled_plugins_snapshot() {
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let bridge =
+        RuntimeSdkFactory::build_live("ws-live", root.path().to_path_buf(), "claude-sonnet-4-5")
+            .expect("live bridge should build");
+
+    let detail = bridge
+        .create_session(
+            octopus_core::CreateRuntimeSessionInput {
+                conversation_id: String::new(),
+                project_id: Some("project-live".into()),
+                title: "Live Plugin Session".into(),
+                session_kind: Some("project".into()),
+                selected_actor_ref: "agent:test".into(),
+                selected_configured_model_id: None,
+                execution_permission_mode: "default".into(),
+            },
+            "user-owner",
+        )
+        .await
+        .expect("session should create");
+    let store = SqliteJsonlSessionStore::open(
+        &root.path().join("data/main.db"),
+        &root.path().join("runtime/events"),
+    )
+    .expect("session store should reopen");
+    let snapshot = store
+        .snapshot(&octopus_sdk::SessionId(detail.summary.id.clone()))
+        .await
+        .expect("live builder should persist a plugins snapshot");
+
+    assert_eq!(
+        snapshot
+            .plugins_snapshot
+            .plugins
+            .first()
+            .map(|plugin| plugin.id.as_str()),
+        Some("example-noop-tool")
+    );
+    assert_eq!(
+        snapshot
+            .plugins_snapshot
+            .plugins
+            .first()
+            .map(|plugin| plugin.source),
+        Some(PluginSourceTag::Bundled)
+    );
 }
 
 #[tokio::test]
@@ -193,6 +290,97 @@ async fn runtime_sdk_bridge_projects_sessions_runs_and_events() {
             .message
             .as_ref()
             .map(|message| message.content == "final answer")
+            .unwrap_or(false)
+    }));
+}
+
+#[tokio::test]
+async fn runtime_sdk_bridge_executes_task_tool_when_task_fn_present() {
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let bridge = build_bridge_with_turns(
+        root.path(),
+        vec![
+            vec![
+                AssistantEvent::ToolUse {
+                    id: octopus_sdk::ToolCallId("task-1".into()),
+                    name: "task".into(),
+                    input: serde_json::json!({
+                        "spec": SubagentSpec {
+                            id: "worker-1".into(),
+                            system_prompt: "Be concise.".into(),
+                            allowed_tools: Vec::new(),
+                            model_role: "subagent-default".into(),
+                            permission_mode: octopus_sdk::PermissionMode::Default,
+                            task_budget: TaskBudget {
+                                total: 100,
+                                completion_threshold: 0.9,
+                            },
+                            max_turns: 1,
+                            depth: 1,
+                        },
+                        "input": "delegate this"
+                    }),
+                },
+                AssistantEvent::MessageStop {
+                    stop_reason: StopReason::ToolUse,
+                },
+            ],
+            vec![
+                AssistantEvent::TextDelta("task finished".into()),
+                AssistantEvent::MessageStop {
+                    stop_reason: StopReason::EndTurn,
+                },
+            ],
+        ],
+        Some(Arc::new(StaticTaskFn)),
+    );
+
+    let detail = bridge
+        .create_session(
+            octopus_core::CreateRuntimeSessionInput {
+                conversation_id: String::new(),
+                project_id: Some("project-task".into()),
+                title: "Task Session".into(),
+                session_kind: Some("project".into()),
+                selected_actor_ref: "agent:test".into(),
+                selected_configured_model_id: Some("test-model".into()),
+                execution_permission_mode: "default".into(),
+            },
+            "user-owner",
+        )
+        .await
+        .expect("session should create");
+
+    let run = bridge
+        .submit_turn(
+            &detail.summary.id,
+            octopus_core::SubmitRuntimeTurnInput {
+                content: "run task".into(),
+                permission_mode: Some("default".into()),
+                recall_mode: None,
+                ignored_memory_ids: Vec::new(),
+                memory_intent: None,
+            },
+        )
+        .await
+        .expect("turn should complete");
+    assert_eq!(run.status, "completed");
+
+    let events = bridge
+        .list_events(&detail.summary.id, None)
+        .await
+        .expect("events should list");
+    assert!(events
+        .iter()
+        .any(|event| event.event_type == "runtime.tool.executed"));
+    assert!(!events.iter().any(|event| {
+        event
+            .message
+            .as_ref()
+            .map(|message| {
+                message.content.contains("TaskFn not injected")
+                    || message.content.contains("[tool-error]")
+            })
             .unwrap_or(false)
     }));
 }

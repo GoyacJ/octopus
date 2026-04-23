@@ -174,7 +174,7 @@ async fn runtime_config_bridge_merges_user_workspace_and_project_sources() {
     fs::write(
         root.path().join("config/runtime/users/user-1.json"),
         serde_json::to_vec_pretty(&json!({
-            "model": "gpt-5.4-mini"
+            "model": "gpt-4o"
         }))
         .expect("user json"),
     )
@@ -284,8 +284,88 @@ async fn runtime_config_bridge_builds_catalog_snapshot_with_usage() {
             .map(|selection| selection.model_id.as_str()),
         Some("claude-sonnet-4-5")
     );
-    assert!(snapshot
+    assert_eq!(
+        snapshot
+            .default_selections
+            .get("fast")
+            .map(|selection| selection.model_id.as_str()),
+        Some("claude-haiku-4-5-20251213")
+    );
+    for hidden_model in [
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gemini-2.5-flash",
+        "MiniMax-M2.7",
+    ] {
+        assert!(
+            snapshot
+                .models
+                .iter()
+                .all(|model| model.model_id != hidden_model),
+            "{hidden_model} should not stay in the live platform snapshot"
+        );
+    }
+}
+
+#[tokio::test]
+async fn runtime_config_bridge_marks_hidden_stub_models_unsupported_and_skips_default_override() {
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let bridge = build_bridge(root.path());
+
+    bridge
+        .save_config(
+            "workspace",
+            octopus_core::RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: json!({
+                    "configuredModels": {
+                        "hidden-openai": {
+                            "configuredModelId": "hidden-openai",
+                            "name": "Hidden OpenAI Responses Model",
+                            "providerId": "openai",
+                            "modelId": "gpt-5.4",
+                            "credentialRef": "env:OPENAI_API_KEY",
+                            "enabled": true,
+                            "source": "workspace"
+                        }
+                    },
+                    "defaultSelections": {
+                        "fast": {
+                            "configuredModelId": "hidden-openai",
+                            "providerId": "openai",
+                            "modelId": "gpt-5.4",
+                            "surface": "responses"
+                        }
+                    }
+                }),
+                configured_model_credentials: Vec::new(),
+            },
+        )
+        .await
+        .expect("save runtime config");
+
+    let snapshot = bridge.catalog_snapshot().await.expect("catalog snapshot");
+    let configured_model = snapshot
+        .configured_models
+        .iter()
+        .find(|model| model.configured_model_id == "hidden-openai")
+        .expect("configured model should stay visible");
+    let hidden_model = snapshot
         .models
         .iter()
-        .any(|model| model.model_id == "MiniMax-M2.7"));
+        .find(|model| model.model_id == "gpt-5.4")
+        .expect("hidden builtin should stay as unsupported catalog metadata");
+
+    assert_eq!(configured_model.status, "unsupported");
+    assert!(hidden_model.surface_bindings.iter().all(|binding| {
+        binding.execution_profile.execution_class
+            == octopus_core::RuntimeExecutionClass::Unsupported
+    }));
+    assert_eq!(
+        snapshot
+            .default_selections
+            .get("fast")
+            .map(|selection| selection.model_id.as_str()),
+        Some("claude-haiku-4-5-20251213")
+    );
 }

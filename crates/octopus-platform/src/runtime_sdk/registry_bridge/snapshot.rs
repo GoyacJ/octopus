@@ -11,7 +11,7 @@ use crate::runtime_sdk::RuntimeSdkBridge;
 
 use super::builtins::{
     builtin_model, builtin_provider, canonical_model_id, configured_model_status,
-    token_usage_summary, CANONICAL_DEFAULTS,
+    hidden_builtin_model, token_usage_summary, CANONICAL_DEFAULTS,
 };
 use super::overrides::{
     build_default_selections, parse_budget_policy, parse_model_overrides, parse_provider_overrides,
@@ -59,11 +59,7 @@ pub(crate) fn build_catalog_snapshot(
         ("claude-sonnet-4-5", "anthropic"),
         ("claude-opus-4-6", "anthropic"),
         ("claude-haiku-4-5-20251213", "anthropic"),
-        ("gpt-5.4", "openai"),
-        ("gpt-5.4-mini", "openai"),
         ("gpt-4o", "openai"),
-        ("gemini-2.5-flash", "google"),
-        ("MiniMax-M2.7", "minimax"),
         ("grok-3", "xai"),
     ] {
         models.insert(model_id.to_string(), builtin_model(model_id, provider_id));
@@ -129,13 +125,26 @@ pub(crate) fn build_catalog_snapshot(
             } else {
                 model_id.to_string()
             };
+            let hidden_model = hidden_builtin_model(&final_model_id, provider_id);
 
             providers
                 .entry(provider_id.to_string())
                 .or_insert_with(|| builtin_provider(provider_id));
-            models
-                .entry(final_model_id.clone())
-                .or_insert_with(|| builtin_model(&final_model_id, provider_id));
+            match hidden_model {
+                Some(ref model) => {
+                    diagnostics.warnings.push(format!(
+                        "configured model `{configured_model_id}` targets non-live builtin `{final_model_id}`; keeping it config-visible but runtime-unsupported"
+                    ));
+                    models
+                        .entry(final_model_id.clone())
+                        .or_insert_with(|| model.clone());
+                }
+                None => {
+                    models
+                        .entry(final_model_id.clone())
+                        .or_insert_with(|| builtin_model(&final_model_id, provider_id));
+                }
+            }
 
             let credential_ref = object
                 .get("credentialRef")
@@ -193,14 +202,18 @@ pub(crate) fn build_catalog_snapshot(
                     .and_then(Value::as_str)
                     .unwrap_or("workspace")
                     .to_string(),
-                status: configured_model_status(
-                    credential_ref.as_deref(),
-                    object
-                        .get("enabled")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true),
-                    bridge,
-                ),
+                status: if hidden_model.is_some() {
+                    "unsupported".into()
+                } else {
+                    configured_model_status(
+                        credential_ref.as_deref(),
+                        object
+                            .get("enabled")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                        bridge,
+                    )
+                },
                 configured: credential_ref.is_some(),
             });
         }

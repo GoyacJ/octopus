@@ -10,7 +10,10 @@ use octopus_sdk::{
     ToolCallRequest, ToolRegistry, Tracer, VendorNativeAdapter,
 };
 
-use super::{RuntimeSdkBridge, RuntimeSdkPaths, RuntimeSdkState, RuntimeSecretVault};
+use super::{
+    plugin_boot::boot_live_plugins, subagent_runtime::build_live_task_fn, RuntimeSdkBridge,
+    RuntimeSdkPaths, RuntimeSdkState, RuntimeSecretVault,
+};
 
 struct AllowAllGate;
 
@@ -101,15 +104,24 @@ impl RuntimeSdkFactory {
         paths.ensure_layout()?;
         let database = paths.database()?;
         let secret_vault = RuntimeSecretVault::open(&workspace_id, &paths, database.clone())?;
-        let session_store = Arc::new(
+        let session_store: Arc<dyn SessionStore> = Arc::new(
             SqliteJsonlSessionStore::open(&paths.db_path, &workspace_root.join("runtime/events"))
                 .map_err(|error| octopus_core::AppError::runtime(error.to_string()))?,
         );
         let mut tool_registry = ToolRegistry::new();
         register_builtins(&mut tool_registry)
             .map_err(|error| octopus_core::AppError::runtime(error.to_string()))?;
-        let plugin_registry = PluginRegistry::new();
-        let plugins_snapshot = plugin_registry.get_snapshot();
+        let (plugin_registry, plugins_snapshot) = boot_live_plugins(&workspace_root)?;
+        let permission_gate: Arc<dyn PermissionGate> = Arc::new(AllowAllGate);
+        let model_provider = build_live_model_provider(secret_vault.clone());
+        let task_fn = Some(build_live_task_fn(
+            Arc::clone(&session_store),
+            Arc::clone(&model_provider),
+            &tool_registry,
+            Arc::clone(&permission_gate),
+            &plugin_registry,
+            &workspace_root,
+        )?);
 
         Self::new(RuntimeSdkDeps {
             workspace_id,
@@ -118,15 +130,15 @@ impl RuntimeSdkFactory {
             default_permission_mode: PermissionMode::Default,
             default_token_budget: 8_192,
             session_store,
-            model_provider: build_live_model_provider(secret_vault.clone()),
+            model_provider,
             tool_registry,
-            permission_gate: Arc::new(AllowAllGate),
+            permission_gate,
             ask_resolver: Arc::new(NoopAskResolver),
             sandbox_backend: default_backend_for_host(),
             plugin_registry,
             plugins_snapshot,
             tracer: Arc::new(NoopTracer),
-            task_fn: None,
+            task_fn,
         })
         .build_with_parts(paths, secret_vault)
     }

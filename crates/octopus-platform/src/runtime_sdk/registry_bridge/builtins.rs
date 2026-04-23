@@ -14,8 +14,13 @@ pub(crate) const CANONICAL_DEFAULTS: &[(&str, &str, &str, &str)] = &[
         "claude-sonnet-4-5",
         "conversation",
     ),
-    ("responses", "openai", "gpt-5.4", "responses"),
-    ("fast", "openai", "gpt-5.4-mini", "responses"),
+    ("responses", "openai", "gpt-4o", "conversation"),
+    (
+        "fast",
+        "anthropic",
+        "claude-haiku-4-5-20251213",
+        "conversation",
+    ),
 ];
 
 const CANONICAL_MODEL_ALIASES: &[(&str, &str)] = &[
@@ -44,6 +49,21 @@ fn builtin_surface(
             upstream_streaming: execution_class == RuntimeExecutionClass::AgentConversation,
         },
     }
+}
+
+fn unsupported_provider_surface(
+    surface: &str,
+    protocol_family: &str,
+    base_url: &str,
+) -> SurfaceDescriptor {
+    let mut descriptor = provider_surface(surface, protocol_family, base_url);
+    descriptor.enabled = false;
+    descriptor.execution_profile = RuntimeExecutionProfile {
+        execution_class: RuntimeExecutionClass::Unsupported,
+        tool_loop: false,
+        upstream_streaming: false,
+    };
+    descriptor
 }
 
 pub(crate) fn provider_surface(
@@ -90,15 +110,19 @@ pub(crate) fn builtin_provider(provider_id: &str) -> ProviderRegistryRecord {
             enabled: true,
             surfaces: vec![
                 provider_surface("conversation", "openai_chat", "https://api.openai.com/v1"),
-                provider_surface("responses", "openai_responses", "https://api.openai.com/v1"),
+                unsupported_provider_surface(
+                    "responses",
+                    "openai_responses",
+                    "https://api.openai.com/v1",
+                ),
             ],
             metadata: Value::Object(Map::new()),
         },
         "google" => ProviderRegistryRecord {
             provider_id: provider_id.into(),
             label: "Google".into(),
-            enabled: true,
-            surfaces: vec![provider_surface(
+            enabled: false,
+            surfaces: vec![unsupported_provider_surface(
                 "conversation",
                 "gemini_native",
                 "https://generativelanguage.googleapis.com",
@@ -108,15 +132,23 @@ pub(crate) fn builtin_provider(provider_id: &str) -> ProviderRegistryRecord {
         "minimax" => ProviderRegistryRecord {
             provider_id: provider_id.into(),
             label: "MiniMax".into(),
-            enabled: true,
+            enabled: false,
             surfaces: vec![
-                provider_surface(
+                unsupported_provider_surface(
                     "conversation",
                     "anthropic_messages",
                     "https://api.minimax.chat",
                 ),
-                provider_surface("conversation", "openai_chat", "https://api.minimax.chat"),
-                provider_surface("conversation", "vendor_native", "https://api.minimax.chat"),
+                unsupported_provider_surface(
+                    "conversation",
+                    "openai_chat",
+                    "https://api.minimax.chat",
+                ),
+                unsupported_provider_surface(
+                    "conversation",
+                    "vendor_native",
+                    "https://api.minimax.chat",
+                ),
             ],
             metadata: Value::Object(Map::new()),
         },
@@ -197,32 +229,6 @@ pub(crate) fn builtin_model(model_id: &str, provider_id: &str) -> ModelRegistryR
             Some(200_000),
             Some(8_192),
         ),
-        "gpt-5.4" => model_record(
-            model_id,
-            provider_id,
-            "GPT-5.4",
-            "Primary OpenAI Responses model.",
-            vec![builtin_surface(
-                "responses",
-                "openai_responses",
-                RuntimeExecutionClass::SingleShotGeneration,
-            )],
-            Some(200_000),
-            Some(8_192),
-        ),
-        "gpt-5.4-mini" => model_record(
-            model_id,
-            provider_id,
-            "GPT-5.4 Mini",
-            "Fast OpenAI Responses model.",
-            vec![builtin_surface(
-                "responses",
-                "openai_responses",
-                RuntimeExecutionClass::SingleShotGeneration,
-            )],
-            Some(128_000),
-            Some(8_192),
-        ),
         "gpt-4o" => model_record(
             model_id,
             provider_id,
@@ -233,44 +239,6 @@ pub(crate) fn builtin_model(model_id: &str, provider_id: &str) -> ModelRegistryR
                 "openai_chat",
                 RuntimeExecutionClass::AgentConversation,
             )],
-            Some(128_000),
-            Some(8_192),
-        ),
-        "gemini-2.5-flash" => model_record(
-            model_id,
-            provider_id,
-            "Gemini 2.5 Flash",
-            "Primary Gemini single-shot generation model.",
-            vec![builtin_surface(
-                "conversation",
-                "gemini_native",
-                RuntimeExecutionClass::SingleShotGeneration,
-            )],
-            Some(128_000),
-            Some(8_192),
-        ),
-        "MiniMax-M2.7" => model_record(
-            model_id,
-            provider_id,
-            "MiniMax M2.7",
-            "Primary MiniMax conversation model.",
-            vec![
-                builtin_surface(
-                    "conversation",
-                    "anthropic_messages",
-                    RuntimeExecutionClass::AgentConversation,
-                ),
-                builtin_surface(
-                    "conversation",
-                    "vendor_native",
-                    RuntimeExecutionClass::Unsupported,
-                ),
-                builtin_surface(
-                    "conversation",
-                    "openai_chat",
-                    RuntimeExecutionClass::AgentConversation,
-                ),
-            ],
             Some(128_000),
             Some(8_192),
         ),
@@ -301,6 +269,84 @@ pub(crate) fn builtin_model(model_id: &str, provider_id: &str) -> ModelRegistryR
             None,
         ),
     }
+}
+
+pub(crate) fn hidden_builtin_model(
+    model_id: &str,
+    provider_id: &str,
+) -> Option<ModelRegistryRecord> {
+    let mut record = match model_id {
+        "gpt-5.4" => model_record(
+            model_id,
+            provider_id,
+            "GPT-5.4",
+            "Hidden from live surface until OpenAI Responses adapter lands.",
+            vec![builtin_surface(
+                "responses",
+                "openai_responses",
+                RuntimeExecutionClass::Unsupported,
+            )],
+            Some(200_000),
+            Some(32_000),
+        ),
+        "gpt-5.4-mini" => model_record(
+            model_id,
+            provider_id,
+            "GPT-5.4 Mini",
+            "Hidden from live surface until OpenAI Responses adapter lands.",
+            vec![builtin_surface(
+                "responses",
+                "openai_responses",
+                RuntimeExecutionClass::Unsupported,
+            )],
+            Some(128_000),
+            Some(16_384),
+        ),
+        "gemini-2.5-pro" => model_record(
+            model_id,
+            provider_id,
+            "Gemini 2.5 Pro",
+            "Hidden from live surface until Gemini native adapter lands.",
+            vec![builtin_surface(
+                "conversation",
+                "gemini_native",
+                RuntimeExecutionClass::Unsupported,
+            )],
+            Some(1_000_000),
+            Some(32_000),
+        ),
+        "gemini-2.5-flash" => model_record(
+            model_id,
+            provider_id,
+            "Gemini 2.5 Flash",
+            "Hidden from live surface until Gemini native adapter lands.",
+            vec![builtin_surface(
+                "conversation",
+                "gemini_native",
+                RuntimeExecutionClass::Unsupported,
+            )],
+            Some(1_000_000),
+            Some(16_384),
+        ),
+        "MiniMax-M2.7" => model_record(
+            model_id,
+            provider_id,
+            "MiniMax M2.7",
+            "Hidden from live surface until vendor-native adapter lands.",
+            vec![builtin_surface(
+                "conversation",
+                "vendor_native",
+                RuntimeExecutionClass::Unsupported,
+            )],
+            Some(200_000),
+            Some(16_384),
+        ),
+        _ => return None,
+    };
+
+    record.enabled = false;
+    record.availability = "unsupported".into();
+    Some(record)
 }
 
 fn model_record(
@@ -342,7 +388,7 @@ fn model_record(
 
 fn default_protocol_family(provider_id: &str, model_id: &str, surface: &str) -> &'static str {
     match (provider_id, model_id, surface) {
-        ("anthropic", _, _) | ("minimax", "MiniMax-M2.7", _) => "anthropic_messages",
+        ("anthropic", _, _) => "anthropic_messages",
         ("google", _, _) => "gemini_native",
         ("openai", _, "responses") => "openai_responses",
         _ => "openai_chat",

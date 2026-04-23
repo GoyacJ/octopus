@@ -616,6 +616,8 @@ impl DefaultModelProvider {
 }
 ```
 
+> Post-W8 live hardening 冻结：凡是 live runtime 直接消费的 `ModelCatalog::new_builtin()` / `RoleRouter::new_builtin()` / platform snapshot/default selection，都只能暴露其 `ProtocolAdapter` 已真实实现的 model family。`OpenAiResponsesAdapter`、`GeminiNativeAdapter`、`VendorNativeAdapter` 在本 tranche 仍未落地 live adapter，因此对应 family 必须先从 live catalog、role defaults、platform snapshot 与 default selections 隐去，而不是继续以 `AdapterNotImplemented` 形式对外可见。
+
 ### 2.4 `octopus-sdk-tools`（Level 2）
 
 **职责**：`Tool` trait + 15 个内置工具 + 并发分区。
@@ -1075,6 +1077,8 @@ impl DurableScratchpad {
     pub async fn write(&self, session: &SessionId, content: &str) -> Result<(), MemoryError>;
 }
 ```
+
+> Post-W8 live hardening 冻结：`register_builtins()`、`builtin_tool_catalog()` 与共享 capability projection 不允许继续把 stub tool 视为健康 live capability。若没有共享层显式建模 metadata-only builtin，则 `web_search`、`skill`、`task_list`、`task_get` 以及未注入 `TaskFn` 的 `task` 都必须保持 non-live。`skill` 资产的 catalog 暴露继续由 `octopus-infra` 的 skill inventory 负责，不等于 builtin runtime tool 仍可执行。
 
 > W4 Task 9 回填：`SystemPromptBuilder` 已落 `role / tools_guidance / process / safety / output` 五段内置段生成器；`tools_guidance` 只消费 `ToolRegistry::schemas_sorted()` 的 `name / description`，不把 `input_schema` 写进 system prompt。
 >
@@ -1621,6 +1625,8 @@ impl PluginError {
 
 > W5 执行边界：`ToolDecl` / `HookDecl` 只用于 manifest、诊断、snapshot；真正接入 runtime 的是 `PluginToolRegistration` / `PluginHookRegistration`。`skills / model providers` 在 W5 仍先停留在 metadata + builder slot。
 
+> Post-W8 live hardening 冻结：live builder 不能再把 `PluginRegistry::new()` 的空实例当成 plugin 接线完成。`PluginLifecycle::run()` 必须由 `octopus-platform` 用明确的 discovery config + loaded plugin set 执行，再把 runtime `Tool` / `Hook` registration 注入 live runtime。`SkillDecl`、`ModelProviderDecl`、`McpServerDecl` 在本 tranche 继续停留在 decl-only / catalog-only，不得伪装成 live executable capability。
+
 ### 2.12 `octopus-sdk-ui-intent`（Level 2）
 
 **职责**：UI 意图 IR 发射器 + schema validator；**不含渲染逻辑**。
@@ -1739,6 +1745,8 @@ impl AgentRuntimeBuilder {
 
 > W6 `cancel()` 只承诺取消当前进程内由该 runtime 跟踪的 active run；跨重启恢复后的 run-control 合同延后到 session/runtime contracts 具备显式运行态事件后再冻结。
 
+> Post-W8 live hardening 冻结：builder 继续只消费注入物，不在 `build()` 内自行 discover；但 `octopus-platform` 作为 owner，必须在进入 builder 前先完成 live gating。也就是：只有真实可执行的 builtin tools、已跑完 lifecycle 的 plugin runtime registrations、以及已注入 `TaskFn` 的 `task` 才能进入 live runtime。缺失能力不能再靠下游 transport / desktop 本地过滤掩盖。
+
 ### 2.15 `octopus-sdk`（Level 5，门面）
 
 **职责**：业务唯一入口；受控 re-export。**禁止**在本 crate 内定义新 trait / struct / fn；仅允许 `pub use` 与 `//!` 文档。
@@ -1789,6 +1797,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   impl RuntimeExecutionService for RuntimeSdkBridge { /* submit_turn */ }
   ```
 - 责任边界：`octopus-platform` 持有 `AgentRuntimeBuilder` 的组装权，并在 `runtime_sdk/*` 内完成 SDK event → legacy runtime DTO 投影；`octopus-server` / `octopus-desktop` 只消费 `PlatformServices`，不直接持有 `AgentRuntime`。
+- Post-W8 hardening ownership：builtin tool live gating、stub-backed model family 收口、plugin discovery/snapshot bootstrap、`TaskFn` live injection 都归 `runtime_sdk/*`。`octopus-server` / `octopus-desktop` / `octopus-cli` 不得各自维护本地 stub denylist、模型补丁表或空 plugin snapshot 修补逻辑。
 
 ### 3.2 `octopus-persistence`（新）
 
@@ -1881,6 +1890,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 13 | 2026-04-21 | `octopus-sdk-contracts::{ToolCallRequest, PermissionMode, PermissionOutcome}` | `contracts/openapi/src/components/schemas/runtime.yaml#RuntimePermissionDecision`（现状） | permission handshake 形状不一致 | W3 SDK 使用 `ToolCallRequest + PermissionMode + PermissionOutcome(Allow/Deny/AskApproval)` 作为 tools/permissions 的最小握手面；现有 runtime schema 仍以 adapter 侧 decision/projection 字段为主，未公开等价调用请求与审批 prompt 契约。 | `align-openapi` | `open` |
 | 14 | 2026-04-21 | `octopus-sdk-tools::partition_tool_calls` | `docs/sdk/03-tool-system.md §3.2` / future runtime orchestration contract | `partition_tool_calls.resource_bucket` 延后 | W3 只冻结"工具级"并发分区：读工具按 `is_concurrency_safe` 合批，写工具串行；资源级串行桶 `partition_tool_calls.resource_bucket` 明确延到 W4，由 `HookRunner / PermissionPolicy` 外层兜底，当前无需改 OpenAPI。 | `no-op` | `open` |
 | 15 | 2026-04-21 | `octopus-sdk-sandbox::default_backend_for_host` | `docs/sdk/06-permissions-sandbox.md §6.10` / Windows host runtime contract | Windows 沙箱后端延后 | W4 只落 `Noop / Seatbelt / Bubblewrap` 三后端；Windows 真实 AppContainer/Job Object 仍未实现，当前公共面固定为 `NoopBackend` fallback + `TODO(W8)` warning。 | `no-op` | `open` |
+| 16 | 2026-04-23 | Post-W8 live hardening (`octopus-sdk-tools` / `octopus-sdk-model` / `octopus-sdk-plugin` / `octopus-platform`) | `/api/v1/runtime/*` capability-facing DTO / `packages/schema/src/**` | live-only vs metadata-only capability split 未对外公开 | 当前实现将按 shared-layer policy 把 stub builtin tools、stub-backed model families、空 plugin snapshot 从 live runtime 收口；在 Task 6 前，OpenAPI/schema 仍缺“metadata 存在但 live 不可执行”的显式表达。 | `align-openapi` | `open` |
 
 **处理方式取值**：`align-openapi`（优先调整 OpenAPI）/ `align-sdk`（调整 SDK）/ `dual-carry`（短期双写 + deadline）/ `no-op`（仅命名差异，文档标注即可）。
 
@@ -2000,3 +2010,4 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-22 | 审计后收口：`§2.10` 补记 `SubagentContext::for_evaluator` 与 `GeneratorEvaluator::with_evaluator_parent`；`§2.11` 补记 `PluginManifest.source`、`Plugin::source()` 和 `PluginRegistry::register_plugin(..., source)`，与 W5 remediation 后的真实公共面对齐 | Codex |
 | 2026-04-22 | W6 审计收口：`§2.14` builder 从 `PermissionPolicy` / `with_subagent_orchestrator(...)` 收敛为当前可装配执行链的 `PermissionGate / AskResolver / PluginsSnapshot / TaskFn / Tracer`；`build()` 明确不做 plugin discover；`cancel()` 语义收窄到当前进程内 active run；`§2.9` 增记 hooks source order 若偏离 `session > project > plugin > workspace > defaults` 则阻断 W6 plugin hook 接线 | Codex |
 | 2026-04-22 | W7 Weekly Gate 收尾：`§2.4 / §2.5` 的 builtin catalog 与 MCP discovery 公共面已被业务侧实用；`§8` 的 workspace 目标态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、legacy grep 与 `ls crates/` 守护复核通过。 | Codex |
+| 2026-04-23 | Post-W8 Task 1 冻结：`§2.3 / §2.4 / §2.11 / §2.14 / §3.1 / §5` 增记 live-only capability hardening 规则；明确 stub builtin tools、stub-backed model families、空 plugin snapshot 与未注入 `TaskFn` 都不能继续占 live surface。 | Codex |

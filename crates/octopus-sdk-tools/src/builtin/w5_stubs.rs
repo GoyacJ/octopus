@@ -5,7 +5,10 @@ use octopus_sdk_contracts::{ContentBlock, SubagentOutput, SubagentSpec};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::{TaskFn, Tool, ToolCategory, ToolContext, ToolError, ToolResult, ToolSpec};
+use crate::{
+    with_task_parent_session, TaskFn, Tool, ToolCategory, ToolContext, ToolError, ToolResult,
+    ToolSpec,
+};
 
 macro_rules! define_stub_tool {
     ($tool:ident, $tool_name:literal, $description:literal, $category:expr, $crate_name:literal) => {
@@ -113,7 +116,7 @@ impl Tool for AgentTool {
 
     async fn execute(
         &self,
-        _ctx: ToolContext,
+        ctx: ToolContext,
         input: serde_json::Value,
     ) -> Result<ToolResult, ToolError> {
         let started_at = Instant::now();
@@ -129,16 +132,19 @@ impl Tool for AgentTool {
                 message: error.to_string(),
             })?;
 
-        match self.task_fn.run(&input.spec, &input.input).await {
-            Ok(output) => Ok(output_result(
-                output,
-                started_at.elapsed().as_millis() as u64,
-            )?),
-            Err(error) => Ok(error_result(
-                error.to_string(),
-                started_at.elapsed().as_millis() as u64,
-            )),
-        }
+        with_task_parent_session(ctx.session_id.clone(), async {
+            match self.task_fn.run(&input.spec, &input.input).await {
+                Ok(output) => Ok(output_result(
+                    output,
+                    started_at.elapsed().as_millis() as u64,
+                )?),
+                Err(error) => Ok(error_result(
+                    error.to_string(),
+                    started_at.elapsed().as_millis() as u64,
+                )),
+            }
+        })
+        .await
     }
 }
 

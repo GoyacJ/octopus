@@ -2,8 +2,11 @@ use std::sync::Arc;
 
 use octopus_sdk_contracts::AskAnswer;
 use octopus_sdk_tools::{
-    builtin::{AgentTool, SkillTool, TaskGetTool, TaskListTool},
-    Tool, ToolError,
+    builtin::{
+        builtin_tool_catalog, register_builtins, AgentTool, SkillTool, TaskGetTool, TaskListTool,
+        WebSearchTool,
+    },
+    Tool, ToolError, ToolRegistry,
 };
 use tempfile::tempdir;
 
@@ -51,5 +54,34 @@ async fn w5_stub_tools_stay_unimplemented() {
             ToolError::NotYetImplemented { week: "W5", .. }
         ));
         assert!(error.as_tool_result().is_error);
+    }
+
+    let web_search = WebSearchTool::new();
+    let error = web_search
+        .execute(ctx(), serde_json::json!({ "query": "octopus sdk" }))
+        .await
+        .expect_err("web_search should stay unimplemented until a provider exists");
+    assert!(matches!(
+        error,
+        ToolError::NotYetImplemented { week: "W6", .. }
+    ));
+    assert!(error.as_tool_result().is_error);
+}
+
+#[test]
+fn live_builtin_registry_and_catalog_hide_stub_only_tools() {
+    let mut registry = ToolRegistry::new();
+    register_builtins(&mut registry).expect("live builtins should register");
+
+    let catalog = builtin_tool_catalog();
+    for name in ["web_search", "task", "skill", "task_list", "task_get"] {
+        assert!(
+            registry.get(name).is_none(),
+            "{name} should stay out of the live builtin registry"
+        );
+        assert!(
+            catalog.resolve(name).is_none(),
+            "{name} should stay out of the live builtin catalog"
+        );
     }
 }

@@ -53,14 +53,8 @@ fn canonicalize_handles_bedrock_style_ids_and_unknown_models() {
             .0,
         "claude-opus-4-6"
     );
-    assert_eq!(
-        catalog
-            .resolve("gpt-5")
-            .expect("gpt-5 alias should resolve")
-            .model
-            .id
-            .0,
-        "gpt-5.4"
-    );
+    assert!(catalog.resolve("gpt-5").is_none());
+    assert!(catalog.resolve("gemini-flash").is_none());
+    assert!(catalog.resolve("minimax-m2").is_none());
     assert!(catalog.resolve("unknown/xxx").is_none());
 }

@@ -33,13 +33,13 @@ pub use web_fetch::WebFetchTool;
 pub use web_search::WebSearchTool;
 
 pub fn register_builtins(registry: &mut ToolRegistry) -> Result<(), RegistryError> {
-    for tool in builtin_tools() {
+    for tool in live_builtin_tools() {
         registry.register(tool)?;
     }
     Ok(())
 }
 
-fn builtin_tools() -> Vec<Arc<dyn Tool>> {
+fn live_builtin_tools() -> Vec<Arc<dyn Tool>> {
     vec![
         Arc::new(FileReadTool::new()),
         Arc::new(FileWriteTool::new()),
@@ -47,14 +47,9 @@ fn builtin_tools() -> Vec<Arc<dyn Tool>> {
         Arc::new(GlobTool::new()),
         Arc::new(GrepTool::new()),
         Arc::new(BashTool::new()),
-        Arc::new(WebSearchTool::new()),
         Arc::new(WebFetchTool::new()),
         Arc::new(AskUserQuestionTool::new()),
         Arc::new(TodoWriteTool::new()),
         Arc::new(SleepTool::new()),
-        Arc::new(AgentTool::new()),
-        Arc::new(SkillTool::new()),
-        Arc::new(TaskListTool::new()),
-        Arc::new(TaskGetTool::new()),
     ]
 }

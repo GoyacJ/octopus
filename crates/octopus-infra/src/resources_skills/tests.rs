@@ -1,4 +1,5 @@
 use super::*;
+use octopus_platform::WorkspaceService;
 use serde_json::json;
 
 fn management_capabilities() -> WorkspaceToolManagementCapabilities {
@@ -123,4 +124,30 @@ fn capability_management_projection_groups_mcp_capabilities_by_asset() {
     assert_eq!(packages[0]["toolNames"], json!(["tail_logs"]));
     assert_eq!(packages[0]["promptNames"], json!(["deploy_review"]));
     assert_eq!(packages[0]["resourceUris"], json!(["file://ops-guide.txt"]));
+}
+
+#[test]
+fn capability_management_projection_hides_non_live_builtin_stubs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let bundle = crate::build_infra_bundle(temp.path()).expect("infra bundle");
+    let projection = tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(bundle.workspace.get_capability_management_projection())
+        .expect("capability management projection");
+
+    for source_key in [
+        "builtin:web_search",
+        "builtin:task",
+        "builtin:skill",
+        "builtin:task_list",
+        "builtin:task_get",
+    ] {
+        assert!(
+            projection
+                .entries
+                .iter()
+                .all(|entry| entry.source_key != source_key),
+            "{source_key} should stay out of the shared builtin projection"
+        );
+    }
 }

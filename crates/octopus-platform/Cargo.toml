@@ -17,6 +17,11 @@ getrandom = "0.2"
 octopus-core = { path = "../octopus-core" }
 octopus-persistence = { path = "../octopus-persistence" }
 octopus-sdk = { path = "../octopus-sdk" }
+octopus-sdk-context = { path = "../octopus-sdk-context" }
+octopus-sdk-plugin = { path = "../octopus-sdk-plugin" }
+octopus-sdk-session = { path = "../octopus-sdk-session" }
+octopus-sdk-subagent = { path = "../octopus-sdk-subagent" }
+octopus-sdk-tools = { path = "../octopus-sdk-tools" }
 reqwest.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true

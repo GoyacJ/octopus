@@ -258,7 +258,10 @@ async fn test_open_replays_latest_session_started_from_legacy_jsonl_records() {
     assert_eq!(snapshot.effective_config_hash, "hash-2");
     assert_eq!(snapshot.token_budget, 4_096);
     assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
-    assert_eq!(snapshot.head_event_id.0, format!("legacy-{}-3", session_id.0));
+    assert_eq!(
+        snapshot.head_event_id.0,
+        format!("legacy-{}-3", session_id.0)
+    );
 }
 
 #[tokio::test]

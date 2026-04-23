@@ -8,13 +8,13 @@
 
 ## Status
 
-状态：`draft`
+状态：`done`
 
 ## Active Work
 
-当前 Task：`Task 1 · 冻结 post-W8 live surface policy`
+当前 Task：`完成 · Post-W8 capability hardening tranche`
 
-当前 Step：`已按 code audit 收紧 Task Ledger；等待执行`
+当前 Step：`Exit Gate satisfied · 状态 / checkpoint / 变更日志已对齐`
 
 ### Pre-Task Checklist（起稿阶段）
 
@@ -46,6 +46,46 @@ Open Questions：
 | D7 | 共享 consumer path | **`octopus-infra` 生成的 capability projection 属于 live surface 本身。** 不允许只改 `builtin_tool_catalog()` 而忽略 `WorkspaceToolCatalogEntry` 投影路径。 | Task 2 / Task 6 |
 | D8 | plugin runtime reach | **本 tranche 先把 plugin runtime tools / hooks 接上 live builder。** `skill` / `model_provider` / `MCP` 若当前只有声明级登记，就先按 decl-only policy 收口，不把它们误写成已 live 可执行。 | Task 3 / Task 4 |
 | D9 | task registry 范围 | **`task` 与 `task_list` / `task_get` 不绑定推进。** 本 tranche 只给 `task` 定义 `TaskFn` owner；`task_list` / `task_get` 若无共享 host owner，继续留在 non-live。 | Task 2 / Task 5 |
+
+## Live Surface Policy Matrix（Task 1 freeze）
+
+> 适用范围：本 tranche 只冻结当前已审计到的 residual gap。未列出的既有 live capability 继续按现状保持 live。
+
+### Builtin tools
+
+| 能力 | 当前证据 | 冻结结论 | 执行位置 | 备注 |
+|---|---|---|---|---|
+| `task` | `AgentTool::new()` 默认挂 `ErrorTaskFn("TaskFn not injected")`；`RuntimeSdkFactory::build_live()` 传 `task_fn: None` | `implement now` | Task 5 | 只在 `octopus-platform` 注入真实 `TaskFn` 后保留 live；在此之前不允许继续裸暴露。 |
+| `web_search` | `WebSearchTool::execute()` 固定回 `ToolError::NotYetImplemented` | `hide from live surface` | Task 2 | 当前没有共享 web search provider owner；不在 `server` / `desktop` 本地兜底。 |
+| `skill` | `SkillTool` 仍是 W5 stub | `hide from live surface` | Task 2 | Skill 资产继续通过 `octopus-infra` 的 skill catalog 暴露；这和 live runtime tool 不是一回事。 |
+| `task_list` | `TaskListTool` 仍是 W5 stub | `defer but non-live` | Task 2 | 没有共享 host task registry owner 前，不进入 live runtime。 |
+| `task_get` | `TaskGetTool` 仍是 W5 stub | `defer but non-live` | Task 2 | 同上。 |
+
+### Plugin paths
+
+| 能力 | 当前证据 | 冻结结论 | 执行位置 | 备注 |
+|---|---|---|---|---|
+| `PluginLifecycle::run()` + real discovery config | `RuntimeSdkFactory::build_live()` 现在只放空 `PluginRegistry::new()`，不跑 lifecycle | `implement now` | Task 3 | live builder 必须持有唯一的 discovery config 与 loaded plugin set。 |
+| plugin runtime `Tool` / `Hook` registration | `PluginRegistry` 已有 runtime handle，但 live path 没接入 | `implement now` | Task 3 | 这是本 tranche 唯一进入 live runtime 的 plugin runtime component。 |
+| plugin `SkillDecl` | 当前只有 manifest/metadata 路径 | `defer but non-live` | Task 3 | 不伪装成 live executable capability。 |
+| plugin `ModelProviderDecl` | 当前只有 declaration，没有 live provider bootstrap | `defer but non-live` | Task 3 / Task 4 | 本 tranche 不把 provider 注册权迁到 plugin runtime。 |
+| plugin `McpServerDecl` | 当前只在 catalog / 管理面消费 | `defer but non-live` | Task 3 | 不把 declaration 级 MCP 注册写成 live runtime MCP tool。 |
+
+### Stub-backed model families
+
+| 能力 | 当前证据 | 冻结结论 | 执行位置 | 备注 |
+|---|---|---|---|---|
+| `openai_responses` (`gpt-5.4`, `gpt-5.4-mini`) | `OpenAiResponsesAdapter` 仍是 stub；platform snapshot/defaults 仍暴露 `gpt-5.4*` | `hide from live surface` | Task 4 | 直到 adapter 落地前，从 live catalog、role defaults、platform snapshot、default selections 一起移除。 |
+| `gemini_native` (`gemini-2.5-*`) | `GeminiNativeAdapter` 仍是 stub；`RoleRouter::Compact/Fast` 仍引用 `gemini-2.5-flash` | `hide from live surface` | Task 4 | 直到 adapter 落地前，从 live catalog 和默认路由里一起移除。 |
+| `vendor_native` (`MiniMax-M2.7`) | `VendorNativeAdapter` 仍是 stub；platform snapshot 仍暴露 `MiniMax-M2.7` | `hide from live surface` | Task 4 | 当前 tranche 不补 vendor-native adapter。 |
+
+### Shared consumer paths
+
+| 路径 | 当前证据 | 冻结结论 | 执行位置 | 备注 |
+|---|---|---|---|---|
+| `builtin_tool_catalog()` -> `WorkspaceToolCatalogEntry` | `octopus-infra` 直接把 builtin metadata 投影成 `availability: healthy` | `implement now` | Task 2 | 共享投影必须和 live builtin policy 同步，不能保留私有 stub denylist。 |
+| platform model snapshot / default selections | `registry_bridge::{builtins,snapshot,overrides}` 仍把 stub-backed models 记成默认可用 | `implement now` | Task 4 | snapshot/defaults 与 `ModelCatalog` 同步收口。 |
+| plugin snapshot | live builder 现在拿到的是空 snapshot | `implement now` | Task 3 | snapshot 必须来自真实 discovery 结果，而不是空占位。 |
 
 ## Goal
 
@@ -140,7 +180,7 @@ Open Questions：
 
 ### Task 1: 冻结 post-W8 scope 与 live surface policy
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/12-post-w8-capability-hardening.md`
@@ -167,7 +207,7 @@ Step 2:
 
 ### Task 2: 审计并收口 stub builtin tools 的 live 暴露
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-tools/src/builtin/mod.rs`
@@ -197,7 +237,7 @@ Step 2:
 
 ### Task 3: 把 plugin discovery / lifecycle 接到 live builder
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-platform/src/runtime_sdk/{builder.rs,mod.rs}`
@@ -223,7 +263,7 @@ Step 2:
 
 ### Task 4: 审计并收口 stub-backed models 的 live catalog
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-model/src/adapter/stubs.rs`
@@ -252,7 +292,7 @@ Step 2:
 
 ### Task 5: 把 `task_fn` / `task` tool 接到 live runtime
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-platform/src/runtime_sdk/{builder.rs,mod.rs}`
@@ -279,7 +319,7 @@ Step 2:
 
 ### Task 6: 在 capability surface 稳定后回填 contracts / schema / transport
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `contracts/openapi/src/**`
@@ -307,7 +347,7 @@ Step 2:
 
 ### Task 7: Exit Gate、控制文档与变更日志收口
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/12-post-w8-capability-hardening.md`
@@ -345,9 +385,205 @@ Step 2:
 - Next:
   - Task 1 Step 1
 
+## Checkpoint 2026-04-23 10:43
+
+- Week: Post-W8
+- Batch: Task 1 Step 1 -> Task 1 Step 2
+- Completed:
+  - 冻结 builtin tools / plugin paths / stub-backed model families 的唯一 live policy matrix
+  - 把 plan 状态切到 `in_progress`，并把当前执行位置推进到 Task 2 Step 1
+  - 明确共享 consumer path 也属于 hardening 范围，不允许只改 builder 不改 projection
+- Files changed:
+  - `docs/plans/sdk/12-post-w8-capability-hardening.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/README.md` (modified)
+- Verification:
+  - `rg -n "register_builtins|WebSearchTool|SkillTool|TaskListTool|TaskGetTool|task_fn: None|PluginRegistry::new\\(|ModelCatalog::new_builtin|OpenAiResponsesAdapter|GeminiNativeAdapter|VendorNativeAdapter" crates/octopus-platform crates/octopus-sdk-tools crates/octopus-sdk-model crates/octopus-sdk-plugin` -> pass
+  - `rg -n "post-W8|capability hardening|TaskFn|PluginRegistry|OpenAiResponses|GeminiNative|VendorNative" docs/plans/sdk/{12-post-w8-capability-hardening.md,02-crate-topology.md,00-overview.md}` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - 基线 `cargo test -p octopus-sdk-tools -p octopus-platform -p octopus-sdk-model -p octopus-sdk-plugin -p octopus-infra` 首次命中 `octopus-sdk-model::provider_impl::tests::fallback_triggers_on_overloaded_then_succeeds` 的波动失败；单测重跑通过，先登记为现有噪音，不把它并入 Task 1 结论
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 11:24
+
+- Week: Post-W8
+- Batch: Task 2 Step 1 -> Task 2 Step 2
+- Completed:
+  - 把 `register_builtins()` 收窄到当前真实 live builtin，移除 `web_search`、`task`、`skill`、`task_list`、`task_get` 的默认注册
+  - 把 `builtin_tool_catalog()` 同步收窄到同一能力面，避免 shared layer 继续把 stub builtin 当成健康 capability
+  - 补 `octopus-sdk-tools` / `octopus-platform` / `octopus-infra` 测试，锁定 live registry 与 capability projection 的新口径
+- Files changed:
+  - `crates/octopus-sdk-tools/src/builtin/mod.rs` (modified)
+  - `crates/octopus-sdk-tools/src/builtin/catalog.rs` (modified)
+  - `crates/octopus-sdk-tools/tests/builtin_stubs.rs` (modified)
+  - `crates/octopus-platform/tests/runtime_sdk_bridge.rs` (modified)
+  - `crates/octopus-infra/src/resources_skills/service.rs` (modified)
+  - `crates/octopus-infra/src/resources_skills/tests.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-tools -p octopus-platform` -> pass
+  - `cargo test -p octopus-sdk-tools -p octopus-platform -p octopus-infra` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 11:25
+
+- Week: Post-W8
+- Batch: Task 3 Step 1 -> Task 3 Step 2
+- Completed:
+  - 新增 `runtime_sdk::plugin_boot`，由 `octopus-platform` 统一组装 live plugin discovery config，并以 `example_bundled_plugins()` 作为当前唯一 loaded plugin set
+  - `RuntimeSdkFactory::build_live()` 不再注入空 `PluginRegistry`，而是实际执行 `PluginLifecycle::run()` 并把真实 `plugins_snapshot` 交给 runtime
+  - 保持 plugin runtime / decl-only 边界不变：本批只接通 runtime `tools/hooks` 所在 registry/snapshot，未把 `skill` / `model_provider` / `MCP` 伪装成 live executable capability
+  - 补平台测试，锁定 live builder 持久化的 session snapshot 含 `example-noop-tool` 且来源为 `bundled`
+- Files changed:
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/plugin_boot.rs` (added)
+  - `crates/octopus-platform/tests/runtime_sdk_bridge.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-plugin -p octopus-sdk-core -p octopus-platform` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 11:44
+
+- Week: Post-W8
+- Batch: Task 4 Step 1 -> Task 4 Step 2
+- Completed:
+  - 从 `sdk-model` builtin catalog、alias 与 role defaults 中移除仍然走 stub adapter 的 `gpt-5.4*`、`gemini-2.5-*`、`MiniMax-M2.7`
+  - 把 platform `registry_bridge` 的 canonical defaults、provider metadata、snapshot 和 override 逻辑一起收口到同一 live 模型集
+  - 对命中 hidden builtin 的已保存 `configuredModels` 保留配置可见性，但统一降级为 `unsupported`，并补 warning/test 锁定迁移行为
+- Files changed:
+  - `crates/octopus-sdk-model/src/catalog/builtin/openai.rs` (modified)
+  - `crates/octopus-sdk-model/src/catalog/builtin/google.rs` (modified)
+  - `crates/octopus-sdk-model/src/catalog/builtin/minimax.rs` (modified)
+  - `crates/octopus-sdk-model/src/role_router.rs` (modified)
+  - `crates/octopus-sdk-model/tests/catalog_builtin.rs` (modified)
+  - `crates/octopus-sdk-model/tests/role_router.rs` (modified)
+  - `crates/octopus-sdk-model/tests/fallback.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge/builtins.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge/snapshot.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/registry_bridge/overrides.rs` (modified)
+  - `crates/octopus-platform/tests/runtime_config_bridge.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-sdk-model -p octopus-platform` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 12:13
+
+- Week: Post-W8
+- Batch: Task 5 Step 1 -> Task 5 Step 2
+- Completed:
+  - 在 `octopus-sdk-tools` 给 `task` 调用补上父会话上下文透传，让 live `TaskFn` 能按当前 `ToolContext.session_id` 构造真实 parent session
+  - 新增 `runtime_sdk::subagent_runtime`，由 `octopus-platform` 持有 live `TaskFn` owner，组装含 plugin tools 的 subagent parent registry，并把 `task_fn` 注入 `RuntimeSdkFactory::build_live()`
+  - 补平台级测试，锁定两种正确形态：默认 live builtin registry 仍不裸露 stub `task`；一旦 builder 提供 `task_fn`，`task` 会被注入并执行，不再回 `TaskFn not injected`
+- Files changed:
+  - `crates/octopus-sdk-tools/src/task_fn.rs` (modified)
+  - `crates/octopus-sdk-tools/src/builtin/w5_stubs.rs` (modified)
+  - `crates/octopus-platform/Cargo.toml` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/builder.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/mod.rs` (modified)
+  - `crates/octopus-platform/src/runtime_sdk/subagent_runtime.rs` (added)
+  - `crates/octopus-platform/tests/runtime_sdk_bridge.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-platform -p octopus-sdk-core -p octopus-sdk-tools` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-23 12:24
+
+- Week: Post-W8
+- Batch: Task 6 Step 1 -> Task 6 Step 2
+- Completed:
+  - 审计 `/api/v1/runtime/*`、schema、desktop fixture 与测试引用后，确认这批 residual 只落在 server test helper 和 desktop fixture/test，不需要改 `contracts/openapi/src/**` 或 `packages/schema/src/**` 源文件
+  - 把 server 里的 `generation-only-model` 从 hidden `gemini-2.5-flash` 切到显式声明的 workspace-scoped OpenAI single-shot generation model，避免测试继续依赖已冻结为 non-live 的 builtin family
+  - 从 desktop workspace fixture 中移除 `builtin:web_search` 的假健康 builtin 投影，并把 tools 分页测试改成自带第 7 条 builtin fixture，不再依赖旧 capability set
+- Files changed:
+  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests/support_workspace.rs` (modified)
+  - `apps/desktop/test/support/workspace-fixture-state.ts` (modified)
+  - `apps/desktop/test/tools-view.test.ts` (modified)
+- Verification:
+  - `cargo test -p octopus-server` -> pass
+  - `pnpm openapi:bundle` -> pass
+  - `pnpm schema:generate` -> pass
+  - `pnpm -C apps/desktop test` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1
+
+## Checkpoint 2026-04-23 12:29
+
+- Week: Post-W8
+- Batch: Task 7 Step 1 -> Task 7 Step 2
+- Completed:
+  - 跑完 Post-W8 exit gate，全仓测试、desktop 全量测试、OpenAPI bundle、schema generate 全部通过
+  - 为通过 `cargo clippy --workspace -- -D warnings`，补了 `octopus-sdk-session` 中一处 `ignored_unit_patterns` 小修，不涉及 capability 语义
+  - 复核生成物后确认 `contracts/openapi/octopus.openapi.yaml` 与 `packages/schema/src/generated.ts` 无额外 diff，本 tranche 不需要再补 `Fact-Fix` 或 `03-legacy-retirement.md`
+- Files changed:
+  - `crates/octopus-sdk-session/src/sqlite/schema.rs` (modified)
+  - `docs/plans/sdk/12-post-w8-capability-hardening.md` (modified)
+- Verification:
+  - `cargo test --workspace` -> pass
+  - `cargo clippy --workspace -- -D warnings` -> pass
+  - `pnpm -C apps/desktop test` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - plan complete
+
+## Checkpoint 2026-04-23 12:43
+
+- Week: Post-W8
+- Batch: 审计残留修复
+- Completed:
+  - 根据实施完成审计结论，补修 `packages/schema` 里遗漏的 `web_search` capability union 残留，避免 schema 继续把已冻结为 non-live 的能力当成正式模型能力值
+  - 同步移除 desktop locale 中对应的 capability 文案，清掉 UI 层对旧 capability id 的显式枚举痕迹
+  - 复核代码引用后确认当前 live runtime、OpenAPI source 与 desktop fixture 都不再保留 `web_search` 的 capability-facing contract 残留
+- Files changed:
+  - `packages/schema/src/catalog.ts` (modified)
+  - `apps/desktop/src/locales/en-US.json` (modified)
+  - `apps/desktop/src/locales/zh-CN.json` (modified)
+  - `docs/plans/sdk/12-post-w8-capability-hardening.md` (modified)
+- Verification:
+  - `rg -n "web_search|task_list|task_get|gpt-5\\.4|gemini-2\\.5|MiniMax-M2\\.7" contracts/openapi/src packages/schema/src apps/desktop/src` -> only builtin stub implementation/tests remain; no capability-facing contract hit for `web_search`
+  - `pnpm -C apps/desktop test` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - plan complete
+
 ## 变更日志
 
 | 日期 | 变更 | 责任人 |
 |---|---|---|
 | 2026-04-23 | 首稿：新增 Post-W8 follow-up tranche，冻结“先收口 live capability surface，再做 contract reconciliation”的执行顺序；补 Task Ledger、公共面登记、Exit Gate 与 checkpoint。 | Codex |
 | 2026-04-23 | 按代码现状审计收紧 Task Ledger：Task 2 补 `octopus-infra` consumer path 并把 desktop fixtures 明确后移到 Task 6；Task 3 改为 plugin live bootstrap + runtime/decl 边界冻结；Task 4 承接 model surface 收口并补 `role_router.rs` / `registry_bridge/overrides.rs`；Task 5 聚焦 `task_fn` ownership。 | Codex |
+| 2026-04-23 | 审计补修 residual contract 痕迹：移除 `packages/schema` 与 desktop locale 中遗漏的 `web_search` capability 枚举/文案，补一条 post-audit checkpoint。 | Codex |
