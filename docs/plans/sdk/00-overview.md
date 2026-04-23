@@ -7,6 +7,10 @@
 
 在 **6–8 周**内完成一次**一次性彻底重构**：把现有 `crates/runtime` + `crates/tools` + `crates/plugins` + `crates/octopus-runtime-adapter` + `crates/api` 五条路径合并为一个遵循 `docs/sdk/01–14` 的 SDK 矩阵（14 个子 crate + 1 个顶层门面 crate），并让业务侧（`octopus-platform` / `octopus-server` / `octopus-desktop` / `octopus-cli`）只通过 `octopus-sdk` 这一个公共面使用所有 Agent 能力。
 
+> Completed 2026-04-23：W1–W8 主线与 `13-finalization-and-deferred-capabilities.md` formal closeout 已全部完成。live workspace / control plane 已收口为 `21` 个 crate 目录：`15` 个 SDK crate + `5` 个业务 crate + `1` 个共享业务 core crate（`octopus-core`）；`crates/telemetry` 已登记退役并删除；workspace gate `cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与 repo 级 `> 800` 行扫描已全部通过。
+>
+> 2026-04-23 deferred capability freeze：`web_search / skill / task_list / task_get` 继续保持 non-live 且从 runtime registry / builtin catalog 隐藏；plugin `SkillDecl / ModelProviderDecl / McpServerDecl` 继续只作为 declaration-only registry data；`openai_responses / gemini_native / vendor_native` 相关 builtin model family 继续只以 config-visible but runtime-unsupported hidden metadata 形式保留。下一轮若要把其中任一能力重新带回 live scope，必须同批更新 `octopus-platform/src/runtime_sdk/{builder.rs,plugin_boot.rs,subagent_runtime.rs,registry_bridge/{builtins.rs,snapshot.rs,overrides.rs}}`、对应 `octopus-sdk-*` owner、`contracts/openapi/**` / `packages/schema/src/**` / `apps/desktop/**` 与本目录控制文档。
+
 ## Architecture
 
 - **分层所有权**：SDK = 能力层；`octopus-platform` = 业务域；`octopus-server` = HTTP 路由；`octopus-desktop` = Tauri 宿主；`octopus-cli` = CLI 入口。四层单向依赖 SDK，不反向注入业务概念。
@@ -68,6 +72,8 @@
 ## 2. 目标 crate 矩阵（概要）
 
 > 完整签名与依赖方向见 `02-crate-topology.md`。此处仅作导航。
+>
+> 现状注记（2026-04-23）：下表已按 formal closeout 对齐到 live workspace。目标矩阵是 `15` 个 SDK crate + `5` 个业务 crate，再加 `1` 个共享业务 core crate `octopus-core`；原先孤立且无活调用方的 `crates/telemetry` 已登记退役，不再计入目标目录集。
 
 ### 2.1 SDK 侧（15 crate）
 
@@ -89,7 +95,7 @@
 | 观测 | `octopus-sdk-observability` | 内部 | `TraceSpan / UsageLedger / ReplayTracer` |
 | 核心 | `octopus-sdk-core` | ✅（仅 `AgentRuntime` / `AgentRuntimeBuilder`） | Brain Loop 串联 |
 
-### 2.2 业务侧（5 crate）
+### 2.2 业务侧（5 crate）+ 共享业务 core（1 crate）
 
 | Crate | 职责 | 说明 |
 |---|---|---|
@@ -98,6 +104,7 @@
 | `octopus-server` | Axum + OpenAPI 路由 | `handlers.rs` 4300 行按资源切 10+ 文件 |
 | `octopus-desktop` | Tauri 宿主桥 | 替换 `octopus-desktop-backend` |
 | `octopus-cli` | CLI 入口 | 合并 `rusty-claude-cli` + `commands` |
+| `octopus-core` | 共享业务 domain types / DTO / error | 供 `octopus-platform / octopus-infra / octopus-server / octopus-desktop / apps/desktop/src-tauri` 复用；不属于 SDK crate，也不视为遗留异常目录 |
 
 ### 2.3 被删除（W7 收尾完成；完整退役矩阵见 `03-legacy-retirement.md`）
 
@@ -251,7 +258,7 @@
 
 1. `octopus-sdk` 作为业务唯一入口：`rg "use (runtime|tools|plugins|api|octopus_runtime_adapter|octopus_model_policy|rusty_claude_cli|octopus_desktop_backend|compat_harness|mock_anthropic_service|commands)::" crates/octopus-{platform,persistence,server,desktop,cli} apps/desktop/src-tauri` 无匹配。
 2. §2.3 列出的 **11 个遗留 crate 目录全部不存在**；`Cargo.toml` workspace 使用 `crates/*` 通配无需改动；`default-members` 与 `02-crate-topology.md §8` / live `Cargo.toml` 保持一致。
-3. `ls crates/` 的目录集合与 `02-crate-topology.md §1` 的 15 个 SDK crate + 5 个业务 crate 完全吻合（共 20 个目录）。
+3. `ls crates/` 的目录集合与 `02-crate-topology.md §8` 的现行 workspace 控制面完全吻合：`15` 个 SDK crate + `5` 个业务 crate + `1` 个共享业务 core crate `octopus-core`，共 `21` 个目录；`crates/telemetry` 已完成退役，不再出现在 workspace 实盘或控制面。
 4. 全仓库 `cargo test --workspace` 全绿 + `pnpm -C apps/desktop test` 关键 suite 全绿 + `cargo clippy --workspace -- -D warnings` 全绿。
 5. Prompt cache 基线测试：工具顺序变更守护测试在 CI 中存在并绿。
 6. 凭据零暴露合同测试：事件日志扫描 CI job 绿。
@@ -356,3 +363,7 @@ cleanup+split                                                          │██
 | 2026-04-22 | W7 Weekly Gate 收尾：`10-week-7-business-cutover.md` 由 `in_progress` 切为 `done`。`octopus-server / octopus-desktop / octopus-cli` 已全部切到 SDK 业务链，11 个 legacy crate 目录已删除；`cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与 W7 的 legacy grep / `ls crates/` / Phase 4/8 治理守护全部通过。 | Codex |
 | 2026-04-22 | W8 文档审计修复：`octopus-persistence` 的口径收敛为“业务侧统一 SQLite 入口”，`octopus-sdk-session` 保持独立双通道存储；W7/W8 与 DoD 的 `default-members` 口径改为引用 `02-crate-topology.md §8` 与 live `Cargo.toml` 的现行一致性，不再写死“5 业务 crate + Tauri app”。 | Codex |
 | 2026-04-22 | W8 Weekly Gate 收尾：`11-week-8-cleanup-and-split.md` 由 `in_progress` 切为 `done`；`octopus-persistence` 上线、业务侧 SQLite ownership 收口、repo 级 ≤800 行门禁、legacy 目录删除态、`runtime/sessions/*.json` 守护、`cargo test --workspace`、`cargo clippy --workspace -- -D warnings` 与 `pnpm -C apps/desktop test` 全部通过。 | Codex |
+| 2026-04-23 | formal closeout 基线对齐：补记 W1–W8 主线已完成但 formal completion 仍被 `13-finalization-and-deferred-capabilities.md` 挂起；`§2` / `§5` / 风险登记同步显式记录 live workspace 当前为 `22` 个 crate 目录，差口集中到 `octopus-core / telemetry` 的控制面归属。 | Codex |
+| 2026-04-23 | Task 2 收口：确认 `octopus-core` 为共享业务 core crate，继续保留；确认 `crates/telemetry` 无仓内活调用方、未进入 `default-members`，按 formal closeout 直接退役。`§2.2` / `§5` 目录口径同步收口为 `15 + 5 + 1 = 21`。 | Codex |
+| 2026-04-23 | Task 4 冻结 deferred capability 边界：`§Goal` 补记三类后续能力的当前状态与 re-entry 触点，明确下一轮 live 化必须先改 shared runtime ownership，再同批收口 contract、desktop fixtures 与控制文档。 | Codex |
+| 2026-04-23 | Task 5 收口：workspace tests / clippy / desktop tests / line gate 全绿，`README` 索引状态全部改为 `done`，本节补记 `Completed 2026-04-23`，SDK 重构 formal closeout 正式完成。 | Codex |

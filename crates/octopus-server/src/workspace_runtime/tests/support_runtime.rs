@@ -1,4 +1,5 @@
 use super::*;
+use super::support_workspace::APPROVAL_AGENT_ID;
 
 pub(super) fn insert_approval_required_agent(root: &Path) {
     let connection = Connection::open(root.join("data").join("main.db")).expect("db");

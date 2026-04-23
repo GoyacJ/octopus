@@ -15,24 +15,6 @@ fn generic_agent_catalog_filter_excludes_pet_records() {
     assert_eq!(visible[0].asset_role, "default");
 }
 
-fn sample_runtime_event() -> octopus_core::RuntimeEventEnvelope {
-    octopus_core::RuntimeEventEnvelope {
-        id: "evt-1".into(),
-        event_type: "runtime.run.updated".into(),
-        workspace_id: "ws-local".into(),
-        project_id: Some("project-1".into()),
-        session_id: "session-1".into(),
-        conversation_id: "conversation-1".into(),
-        run_id: Some("run-1".into()),
-        emitted_at: 20,
-        sequence: 1,
-        run: Some(sample_runtime_run_snapshot()),
-        capability_plan_summary: Some(octopus_core::RuntimeCapabilityPlanSummary::default()),
-        provider_state_summary: Some(Vec::new()),
-        ..Default::default()
-    }
-}
-
 #[test]
 fn runtime_session_detail_transport_preserves_phase_four_fields_without_escape_hatches() {
     let json =

@@ -3,6 +3,7 @@
 > 本文档遵循 `docs/plans/sdk/AGENTS.md` 与 `docs/plans/PLAN_TEMPLATE.md`；执行规约见 `docs/plans/sdk/01-ai-execution-protocol.md`。
 >
 > 本文件是 W8 收尾后的 follow-up tranche。`04`–`11` 的完成状态保持不变；本 tranche 只处理 live runtime 仍暴露的 stub / 未接线能力收口。
+> formal completion 的控制面收口、crate 拓扑对齐与最后一个 `> 800` 行命中改由 `13-finalization-and-deferred-capabilities.md` 接手；这些残口不回写为本 tranche 未完成。
 >
 > 阅读顺序：**本文件 →** `docs/sdk/03-tool-system.md §3.2 / §3.4 / §3.6 / §3.7` → `docs/sdk/05-sub-agents.md §5.2 / §5.4 / §5.6 / §5.9` → `docs/sdk/11-model-system.md §11.4 / §11.6 / §11.7 / §11.17` → `docs/sdk/12-plugin-system.md §12.3 / §12.8.4 / §12.15 / §12.16` → `docs/sdk/13-contracts-map.md` → `docs/plans/sdk/02-crate-topology.md §2.3 / §2.4 / §2.10 / §2.11 / §2.14 / §3.1 / §5` → `crates/octopus-platform/src/runtime_sdk/builder.rs` → `crates/octopus-sdk-tools/src/builtin/{mod.rs,w5_stubs.rs,web_search.rs}` → `crates/octopus-sdk-model/src/{adapter/stubs.rs,catalog/builtin/{openai.rs,google.rs,minimax.rs}}` → `crates/octopus-sdk-plugin/src/lifecycle.rs` → `crates/octopus-platform/src/runtime_sdk/registry_bridge/{builtins.rs,snapshot.rs}`。
 
@@ -87,6 +88,14 @@ Open Questions：
 | platform model snapshot / default selections | `registry_bridge::{builtins,snapshot,overrides}` 仍把 stub-backed models 记成默认可用 | `implement now` | Task 4 | snapshot/defaults 与 `ModelCatalog` 同步收口。 |
 | plugin snapshot | live builder 现在拿到的是空 snapshot | `implement now` | Task 3 | snapshot 必须来自真实 discovery 结果，而不是空占位。 |
 
+## Deferred Capability Freeze（转交 `13` 继续维持）
+
+| 类别 | 当前冻结面 | 当前 owner / 代码证据 | 下一轮 live re-entry 触点 |
+|---|---|---|---|
+| `non-live and hidden from runtime/catalog` | `web_search`、`skill`、`task_list`、`task_get` | `octopus-sdk-tools::builtin::{mod.rs,catalog.rs}` 已把这 4 项移出 `register_builtins()` 与 `builtin_tool_catalog()`；`octopus-platform::runtime_sdk::builder` 只消费 live builtin 集 | 先在共享层定义 runtime owner / transport source，再同批更新 `octopus-sdk-tools`、`octopus-platform::runtime_sdk::builder`、shared capability projection、`contracts/openapi/**` / `packages/schema/src/**` / `apps/desktop/**` 与控制文档 |
+| `decl-only registry data` | plugin `SkillDecl`、`ModelProviderDecl`、`McpServerDecl` | `octopus-sdk-plugin::{manifest.rs,registry.rs}` 仍只把这些组件登记进 declaration store；live path 仅接 `PluginLifecycle::run()` + runtime `Tool/Hook` registration | 先在 `octopus-platform::runtime_sdk::{plugin_boot,builder}` 定义 bootstrap owner，再扩 shared registry bridge、host contract、desktop fixtures 与控制文档，不能只改 manifest/registry |
+| `config-visible but runtime-unsupported hidden metadata` | `openai_responses`、`gemini_native`、`vendor_native` builtin family | `octopus-platform::runtime_sdk::registry_bridge::{builtins.rs,snapshot.rs}` 用 `hidden_builtin_model()` 保留已有 `configuredModels`，统一降级为 `status = unsupported` | 同批补 `octopus-sdk-model` adapter 实现与 builtin catalog / role defaults，再更新 platform snapshot/default selections、capability-facing contract/desktop fixtures 与控制文档 |
+
 ## Goal
 
 让当前 live SDK runtime 只暴露真实可执行的 tools / models / plugins，把 `task_fn` 与 plugin lifecycle 接到 `octopus-platform` 的 live builder，再按稳定后的能力面回填 transport contracts、schema 与控制文档。
@@ -133,6 +142,7 @@ Open Questions：
 - 本 tranche 只收口 W8 后审计暴露的 capability gap：`web_search` 与 W5 stub tools 仍上 live registry、`task_fn` 在 live builder 中为空、stub-backed model adapters 仍通过 catalog 暴露、plugin lifecycle 只在测试路径跑通。
 - `octopus-infra` 仍会从 `builtin_tool_catalog()` 直接生成 `WorkspaceToolCatalogEntry`，desktop fixtures 也仍保留旧 capability set；这些都算 live / shared consumer 残留，不是“UI 本地小问题”。
 - 若执行中证明是 `docs/sdk/*` 规范层与现实现状冲突，而不是实现漏接，则回写 `docs/sdk/README.md` `## Fact-Fix 勘误`，不强行把错误 surface 做成“实现完成”。
+- formal completion 仍需继续推进时，只能转交新的收口计划，不得把本 tranche 的 `done` 状态改回 `in_progress`。
 
 ## 公共面变更登记
 
@@ -587,3 +597,5 @@ Step 2:
 | 2026-04-23 | 首稿：新增 Post-W8 follow-up tranche，冻结“先收口 live capability surface，再做 contract reconciliation”的执行顺序；补 Task Ledger、公共面登记、Exit Gate 与 checkpoint。 | Codex |
 | 2026-04-23 | 按代码现状审计收紧 Task Ledger：Task 2 补 `octopus-infra` consumer path 并把 desktop fixtures 明确后移到 Task 6；Task 3 改为 plugin live bootstrap + runtime/decl 边界冻结；Task 4 承接 model surface 收口并补 `role_router.rs` / `registry_bridge/overrides.rs`；Task 5 聚焦 `task_fn` ownership。 | Codex |
 | 2026-04-23 | 审计补修 residual contract 痕迹：移除 `packages/schema` 与 desktop locale 中遗漏的 `web_search` capability 枚举/文案，补一条 post-audit checkpoint。 | Codex |
+| 2026-04-23 | formal closeout 边界补记：明确本 tranche `done` 仅覆盖 live capability hardening；控制文档对齐、crate 归属收口和 `support.rs` ≤ 800 行门禁转交 `13-finalization-and-deferred-capabilities.md`。 | Codex |
+| 2026-04-23 | Task 4 冻结 deferred capability 边界：新增三类后续能力的 owner / 代码证据 / live re-entry 触点表，明确 `13` 只维持冻结口径，不重开本 tranche 实施。 | Codex |

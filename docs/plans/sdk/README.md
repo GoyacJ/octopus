@@ -9,10 +9,10 @@
 
 | 文档 | 范围 | 状态 |
 |---|---|---|
-| `00-overview.md` | 总控：目标、10 项取舍结论、8 周路线、全局 checkpoint 与退出条件 | `draft` |
-| `01-ai-execution-protocol.md` | AI 推进规约：checklist 机制、stop conditions、每周门禁、批次报告格式 | `draft` |
-| `02-crate-topology.md` | SDK crate 分包、对外 trait/struct 公共面、依赖方向、契约差异清单、UI IR 登记表 | `draft` |
-| `03-legacy-retirement.md` | 旧 crate 退役清单（逐文件/逐符号）+ 替代映射 + 守护扫描 | `draft` |
+| `00-overview.md` | 总控：目标、10 项取舍结论、8 周路线、全局 checkpoint 与退出条件 | `done` |
+| `01-ai-execution-protocol.md` | AI 推进规约：checklist 机制、stop conditions、每周门禁、批次报告格式 | `done` |
+| `02-crate-topology.md` | SDK crate 分包、对外 trait/struct 公共面、依赖方向、契约差异清单、UI IR 登记表 | `done` |
+| `03-legacy-retirement.md` | 旧 crate 退役清单（逐文件/逐符号）+ 替代映射 + 守护扫描 | `done` |
 | `04-week-1-contracts-session.md` | W1：`octopus-sdk-contracts` + `octopus-sdk-session` | `done` |
 | `05-week-2-model.md` | W2：`octopus-sdk-model`（Provider / Surface / Model 三层） | `done` |
 | `06-week-3-tools-mcp.md` | W3：`octopus-sdk-tools` + `octopus-sdk-mcp`（删 Capability Planner） | `done` |
@@ -21,7 +21,8 @@
 | `09-week-6-core-loop.md` | W6：`octopus-sdk-core`（Brain Loop）整合 + `octopus-sdk` / `octopus-cli` 最小链路 | `done` |
 | `10-week-7-business-cutover.md` | W7：业务侧切换到 SDK + 删除 `octopus-runtime-adapter` | `done` |
 | `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `done` |
-| `12-post-w8-capability-hardening.md` | Post-W8：收口 live runtime 仍暴露的 stub tools / stub-backed models / plugin live bootstrap，并在稳定后回填 contracts | `in_progress` |
+| `12-post-w8-capability-hardening.md` | Post-W8：收口 live runtime 仍暴露的 stub tools / stub-backed models / plugin live bootstrap，并在稳定后回填 contracts | `done` |
+| `13-finalization-and-deferred-capabilities.md` | 收口 SDK 重构 formal completion：对齐控制文档、解决 crate / ≤ 800 行缺口，并冻结 deferred capability 边界 | `done` |
 
 > 本索引随周计划产出逐步更新 `状态`。预登记周计划可保持 `pending` 且暂未建文件；文件创建后按 `draft → in_progress → blocked/done` 流转。
 >
@@ -48,4 +49,4 @@
 
 ---
 
-**最后更新**：2026-04-23（Post-W8 子 Plan `12-post-w8-capability-hardening.md` 已进入 `in_progress`，Task 1 policy freeze 完成）
+**最后更新**：2026-04-23（`13-finalization-and-deferred-capabilities.md` 已完成；SDK 重构 formal closeout 已收口为 `done`）
