@@ -64,18 +64,28 @@ describe('Workbench search overlay', () => {
   it('opens from the global shortcut and closes with escape', async () => {
     const mounted = mountApp()
     const shell = useShellStore()
+    const searchTriggerShortcut = document.body.querySelector<HTMLElement>('[data-testid="global-search-trigger"] [data-testid="ui-kbd"]')
+    const searchTrigger = document.body.querySelector<HTMLElement>('[data-testid="global-search-trigger"]')
+
+    expect(searchTriggerShortcut).not.toBeNull()
+    expect(searchTriggerShortcut?.textContent).toContain('K')
+    expect(searchTrigger?.getAttribute('aria-pressed')).toBe('false')
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
-    await nextTick()
+    await flushNavigation()
 
     expect(shell.searchOpen).toBe(true)
     expect(document.body.querySelector('[data-testid="search-overlay-panel"]')).not.toBeNull()
     expect(document.body.querySelector('[data-testid="search-overlay-input"]')).not.toBeNull()
+    expect(searchTrigger?.getAttribute('aria-pressed')).toBe('true')
+    expect(searchTrigger?.className).toContain('bg-accent')
+    expect(document.body.querySelector('[data-testid="search-overlay-shortcuts"]')?.textContent).toContain(String(i18n.global.t('common.cancel')))
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await nextTick()
+    await flushNavigation()
 
     expect(shell.searchOpen).toBe(false)
+    expect(searchTrigger?.getAttribute('aria-pressed')).toBe('false')
 
     mounted.destroy()
   })
@@ -233,7 +243,8 @@ describe('Workbench search overlay', () => {
     expect(activeResult).not.toBeNull()
     expect(activeResult?.className).toContain('border-border-strong')
     expect(activeResult?.className).toContain('bg-accent')
-    expect(activeResult?.className).not.toContain('shadow-xs')
+    expect(activeResult?.className).toContain('ring-1')
+    expect(activeResult?.querySelector('[data-testid="ui-kbd"]')?.textContent).toContain('Enter')
 
     mounted.destroy()
   })
@@ -248,12 +259,12 @@ describe('Workbench search overlay', () => {
     const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
     const activeResult = document.body.querySelector<HTMLButtonElement>('[data-active="true"]')
     const inactiveResult = document.body.querySelector<HTMLButtonElement>('[data-active="false"]')
-    const shortcutSpans = [...document.body.querySelectorAll<HTMLElement>('[data-testid="search-overlay-shortcuts"] span')]
+    const shortcutKeys = [...document.body.querySelectorAll<HTMLElement>('[data-testid="search-overlay-shortcuts"] [data-testid="ui-kbd"]')]
 
     const inputShell = input?.parentElement
     const inactiveResultIcon = inactiveResult?.firstElementChild as HTMLElement | null
     const activeResultAction = activeResult?.lastElementChild as HTMLElement | null
-    const enterShortcutKey = shortcutSpans.find(element => element.textContent?.trim() === 'Enter')
+    const enterShortcutKey = shortcutKeys.find(element => element.textContent?.includes('Enter'))
 
     expect(inputShell).not.toBeNull()
     expect(inputShell?.className).toContain('bg-subtle')
@@ -266,12 +277,12 @@ describe('Workbench search overlay', () => {
     expect(inactiveResultIcon?.className).not.toContain('text-primary')
 
     expect(activeResultAction).not.toBeNull()
-    expect(activeResultAction?.className).toContain('bg-surface')
-    expect(activeResultAction?.className).not.toContain('bg-background')
+    expect(activeResultAction?.textContent).toContain('Enter')
 
     expect(enterShortcutKey).not.toBeNull()
     expect(enterShortcutKey?.className).toContain('bg-surface')
     expect(enterShortcutKey?.className).not.toContain('bg-background')
+    expect(shortcutKeys).toHaveLength(4)
 
     mounted.destroy()
   })
@@ -301,6 +312,8 @@ describe('Workbench search overlay', () => {
     expect(emptyState?.className).toContain('border-border')
     expect(emptyState?.className).toContain('bg-subtle')
     expect(emptyState?.className).not.toContain('shadow-xs')
+    expect(emptyState?.textContent).toContain(String(i18n.global.t('searchOverlay.emptyTitle')))
+    expect(emptyState?.textContent).toContain(String(i18n.global.t('common.cancel')))
 
     mounted.destroy()
   })

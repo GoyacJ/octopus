@@ -42,7 +42,7 @@
 
 ### Task 1: Add Restrained Press Feedback To Shared Primitives
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiButton.vue`
@@ -63,7 +63,7 @@ Step 1:
 
 ### Task 2: Roll `UiKbd` Into Current Menus And Search Surfaces
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiDropdownMenu.vue`
@@ -85,7 +85,7 @@ Step 1:
 
 ### Task 3: Polish The Existing Global Search Overlay
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/layouts/WorkbenchLayout.vue`
@@ -106,7 +106,7 @@ Step 1:
 
 ### Task 4: Tighten Shared Typography On Current Chrome
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiPageHeader.vue`
@@ -127,7 +127,7 @@ Step 1:
 
 ### Task 5: Standardize Copy Actions On Current AI Surfaces
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiContextMenu.vue`
@@ -161,3 +161,79 @@ Step 1:
 - Next:
   - Task 4
 ```
+
+## Checkpoint 2026-04-23 14:45 CST
+
+- Batch: Task 1 Step 1
+- Completed:
+  - 为 `UiButton`、`UiActionCard`、`UiRecordCard`、`UiSwitch`、`UiListRow` 统一补上克制的按压反馈，并保留现有 hover、selected 与 disabled 语义
+  - 只在可交互状态下注入 press scale，避免把静态卡片误当成可按压控件
+  - 顺手把 `UiTraceBlock` 的裸 `11px` meta pill 收回到 `text-micro`，消掉这批验证里暴露出的治理债务
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 14:49 CST
+
+- Batch: Task 2 Step 1
+- Completed:
+  - 为 `UiDropdownMenu`、`UiContextMenu`、`UiSelectionMenu` 增加 additive `shortcut` 能力，并统一用 `UiKbd` 渲染菜单尾部快捷键
+  - 把顶栏全局搜索触发器和搜索覆盖层底部操作提示切到 `UiKbd`，统一快捷键视觉而不改现有搜索状态链路
+  - 更新 shared primitive 与搜索覆盖层测试，覆盖菜单行、顶栏触发器和 overlay footer 的 `UiKbd` 落地
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives search-overlay` -> pass
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 14:57 CST
+
+- Batch: Task 3 Step 1
+- Completed:
+  - 把 `Cmd/Ctrl+K` 判断和平台快捷键标示统一收回 `useShellStore`，让 `WorkbenchLayout`、`WorkbenchTopbar`、`WorkbenchSearchOverlay` 走同一条搜索入口语义
+  - 为当前搜索 trigger 和 overlay 补齐开态抛光：trigger 开态与 `aria-pressed` 同步，header / footer / empty state 都补上统一的 `UiKbd` 提示
+  - 收紧 active result 的 framing，把当前项操作改成 `Enter` 键帽，并更新 overlay 与 shell 测试覆盖开关、空态和 active row 细节
+- Verification:
+  - `pnpm -C apps/desktop test -- search-overlay layout-shell` -> pass
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 15:01 CST
+
+- Batch: Task 4 Step 1
+- Completed:
+  - 把 `UiPageHeader` 的 meta 容器、`UiBadge`、`UiNotificationRow` 统一切到当前 typography roles，让页头 meta、badge、通知标题和时间戳走同一套 `text-micro / text-label / text-caption`
+  - 把 `ConversationMessageBubble` 的发送者行、actor meta、process 摘要、tool meta 和 usage 数字收口到共享文本角色，并给消息时间戳补上稳定测试锚点
+  - 更新 shared primitive 与会话界面测试，覆盖页头 meta、badge、通知时间戳和消息时间戳的 `tabular-nums` / `text-micro` 约束
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives conversation-surface` -> pass
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 15:23 CST
+
+- Batch: Task 5 Step 1
+- Completed:
+  - 为会话和 Trace 页面统一接入复制上下文菜单，补齐 `copy message`、`copy trace detail` 和当前路由 permalink 复制语义
+  - 新增共享 `clipboard` helper，统一处理浏览器 `navigator.clipboard` 与回退复制逻辑
+  - 把会话页实现收口到 `ConversationView` 单例 context menu，避免每条消息各挂一个菜单 root 带来的测试累计开销
+  - 更新会话与 Trace 测试，覆盖消息内容、Trace 明细和当前链接复制
+- Verification:
+  - `pnpm -C apps/desktop exec vitest run test/conversation-surface.test.ts test/trace-view.test.ts` -> pass
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - all tasks complete; all five UI plans complete

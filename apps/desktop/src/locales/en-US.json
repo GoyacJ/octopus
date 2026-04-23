@@ -57,7 +57,8 @@
     "activeWorkspace": "Active workspace: {workspace}",
     "workspaceLabel": "Workspace: {workspace}",
     "noRemoteBaseUrl": "No remote base URL",
-    "noBaseUrl": "No base URL"
+    "noBaseUrl": "No base URL",
+    "copyLink": "Copy link"
   },
   "topbar": {
     "searchPlaceholder": "Search conversations, projects, or pages…",
@@ -85,7 +86,19 @@
     "workspaceSectionTitle": "Workspaces",
     "workspaceSectionSubtitle": "Switch scope or add a new workspace connection.",
     "addWorkspace": "Add workspace",
-    "removeWorkspace": "Remove workspace"
+    "removeWorkspace": "Remove workspace",
+    "connection": {
+      "disconnected": {
+        "title": "{workspace} is disconnected",
+        "description": "The current workspace session is offline. Existing data stays visible until the connection comes back."
+      },
+      "unreachable": {
+        "title": "{workspace} is unreachable",
+        "description": "The current workspace backend is not responding. Retry the connection before continuing."
+      },
+      "retry": "Retry connection",
+      "retrying": "Retrying…"
+    }
   },
   "notifications": {
     "title": "Notifications",
@@ -977,11 +990,21 @@
     "stream": {
       "title": "Message Stream",
       "emptyTitle": "No messages",
-      "emptyDescription": "The conversation will start here."
+      "emptyDescription": "The conversation will start here.",
+      "jumpToLatest": "Jump to latest"
+    },
+    "queue": {
+      "title": "Queued in this conversation",
+      "description": "These follow-up turns stay in the current session.",
+      "tasksHint": "Schedules, durable runs, and interventions live in project tasks.",
+      "openTasks": "Open project tasks"
     },
     "messages": {
       "emptyTitle": "No runtime messages yet",
       "emptyDescription": "Start a turn to stream messages into this conversation."
+    },
+    "context": {
+      "copyMessage": "Copy message"
     },
     "setup": {
       "missingModel": {
@@ -1310,6 +1333,9 @@
       "contextTitle": "Context Bundle",
       "contextSubtitle": "{count} refs bound",
       "contextInstructionsLabel": "Pinned instructions",
+      "fromConversationTitle": "Project tasks handle durable work",
+      "fromConversationDescription": "You opened this workbench from a conversation. Use it for schedules, long-running runs, and interventions; queued turns stay in that session.",
+      "backToConversation": "Back to conversation",
       "contextNoInstructions": "No pinned instructions were recorded.",
       "contextResolutionLabel": "Resolution mode",
       "contextResolvedAtLabel": "Last resolved",
@@ -1432,6 +1458,9 @@
       "subtitle": "Full record of tool calls, thinking paths, and system feedback.",
       "emptyTitle": "Timeline is empty",
       "emptyDescription": "Start a new run to stream events into this timeline."
+    },
+    "context": {
+      "copyDetail": "Copy trace detail"
     }
   },
   "resources": {

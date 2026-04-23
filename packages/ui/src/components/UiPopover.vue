@@ -7,6 +7,7 @@ import {
   PopoverTrigger,
 } from 'reka-ui'
 
+import { prefersReducedMotion } from '../lib/motion'
 import { cn } from '../lib/utils'
 
 const props = withDefaults(defineProps<{
@@ -15,11 +16,16 @@ const props = withDefaults(defineProps<{
   side?: 'top' | 'right' | 'bottom' | 'left'
   class?: string
   rootClass?: string
+  respectReducedMotion?: boolean
+  reducedMotion?: boolean
 }>(), {
   open: false,
   align: 'start',
+  side: 'bottom',
   class: '',
   rootClass: '',
+  respectReducedMotion: true,
+  reducedMotion: undefined,
 })
 
 const emit = defineEmits<{
@@ -27,6 +33,10 @@ const emit = defineEmits<{
 }>()
 
 const root = ref<HTMLElement | null>(null)
+const reducedMotionActive = computed(() =>
+  props.respectReducedMotion !== false && (props.reducedMotion ?? prefersReducedMotion()),
+)
+const reducedMotionState = computed(() => (reducedMotionActive.value ? 'true' : 'false'))
 
 const contentClasses = computed(() => cn(
   'z-50 min-w-[14rem] rounded-[var(--radius-l)] border border-[color-mix(in_srgb,var(--border)_84%,transparent)] bg-popover p-1.5 shadow-md outline-none',
@@ -47,6 +57,7 @@ const contentClasses = computed(() => cn(
       <PopoverPortal>
         <PopoverContent
           data-testid="ui-popover-content"
+          :data-reduced-motion="reducedMotionState"
           :align="props.align"
           :side="props.side"
           :side-offset="4"

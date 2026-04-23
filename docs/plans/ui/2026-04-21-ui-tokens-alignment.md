@@ -58,7 +58,7 @@ Step 1:
 
 ### Task 2: Land Typography Tokens In `tokens.css` + Tailwind
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/tokens.css`
@@ -81,12 +81,13 @@ Step 2:
 
 ### Task 3: Add Density Tokens + `UiPageShell` Density Prop
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/tokens.css`
 - Modify: `packages/ui/src/components/UiPageShell.vue`
 - Modify: `docs/design/DESIGN.md`
+- Modify: `apps/desktop/test/ui-primitives.test.ts`
 
 Preconditions:
 - Task 2 completed.
@@ -105,7 +106,7 @@ Step 2:
 
 ### Task 4: Expand Shared Motion Presets
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/lib/motion.ts`
@@ -122,7 +123,7 @@ Step 1:
 
 ### Task 5: Remove Legacy `glass` Alias
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/tokens.css`
@@ -139,7 +140,7 @@ Step 1:
 
 ### Task 6: Add Shared `UiKbd`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiKbd.vue`
@@ -158,7 +159,7 @@ Step 1:
 
 ### Task 7: Audit Arbitrary Typography In Shared UI
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiActionCard.vue`
@@ -185,7 +186,7 @@ Step 1:
 
 ### Task 8: Expand Frontend Governance Token Checks
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `scripts/check-frontend-governance.mjs`
@@ -198,6 +199,50 @@ Step 1:
 - Done when: Token regressions fail the current governance check with repo-path output that points to the exact offender.
 - Verify: `pnpm check:frontend-governance`
 - Stop if: Existing business-surface debt is still too large to enforce the new rule set without first narrowing the scope to shared UI.
+
+### Task 9: Close Audit Gaps In `UiKbd` And Shared Typography Debt
+
+Status: `done`
+
+Files:
+- Modify: `packages/ui/src/components/UiKbd.vue`
+- Modify: `packages/ui/src/components/UiAccordion.vue`
+- Modify: `packages/ui/src/components/UiButton.vue`
+- Modify: `packages/ui/src/components/UiCheckbox.vue`
+- Modify: `packages/ui/src/components/UiCombobox.vue`
+- Modify: `packages/ui/src/components/UiDialog.vue`
+- Modify: `packages/ui/src/components/UiDonutChart.vue`
+- Modify: `packages/ui/src/components/UiDropdownMenu.vue`
+- Modify: `packages/ui/src/components/UiField.vue`
+- Modify: `packages/ui/src/components/UiInput.vue`
+- Modify: `packages/ui/src/components/UiInspectorPanel.vue`
+- Modify: `packages/ui/src/components/UiMessageCenter.vue`
+- Modify: `packages/ui/src/components/UiMetricCard.vue`
+- Modify: `packages/ui/src/components/UiNavCardList.vue`
+- Modify: `packages/ui/src/components/UiNotificationCenter.vue`
+- Modify: `packages/ui/src/components/UiPageHero.vue`
+- Modify: `packages/ui/src/components/UiRadioGroup.vue`
+- Modify: `packages/ui/src/components/UiRecordCard.vue`
+- Modify: `packages/ui/src/components/UiSectionHeading.vue`
+- Modify: `packages/ui/src/components/UiSelect.vue`
+- Modify: `packages/ui/src/components/UiStatTile.vue`
+- Modify: `packages/ui/src/components/UiStatusCallout.vue`
+- Modify: `packages/ui/src/components/UiSurface.vue`
+- Modify: `packages/ui/src/components/UiSwitch.vue`
+- Modify: `packages/ui/src/components/UiTabs.vue`
+- Modify: `packages/ui/src/components/UiTextarea.vue`
+- Modify: `packages/ui/src/components/UiToastItem.vue`
+- Modify: `scripts/check-frontend-governance.mjs`
+- Modify: `apps/desktop/test/ui-primitives.test.ts`
+
+Preconditions:
+- Tasks 2, 6, 7, and 8 completed.
+
+Step 1:
+- Action: Re-open the audit closure for shared keyboard hints and shared UI typography debt. Make `UiKbd` accept the class binding shapes used by current desktop consumers, then replace the remaining shared UI arbitrary pixel text classes with current typography roles and shrink the governance allowlist down to true editor/content exceptions only.
+- Done when: `UiKbd` no longer blocks current desktop `typecheck` / `build:ui`, and shared UI chrome no longer relies on allowlisted `10px`–`13px` arbitrary text sizes to pass governance.
+- Verify: `pnpm -C apps/desktop typecheck && pnpm -C apps/desktop build:ui && pnpm check:frontend-governance && rg -n "text-\\[(10|11|12|13)px\\]" packages/ui/src/components`
+- Stop if: A remaining hit belongs to editor content or data-visualization content where the current typography roles are not a semantic fit and needs an explicit governance exception.
 
 ## Batch Checkpoint Format
 
@@ -215,3 +260,124 @@ Step 1:
 - Next:
   - Task 5 Step 1
 ```
+
+## Checkpoint 2026-04-23 11:30 CST
+
+- Batch: Task 2 Step 1 -> Task 2 Step 2
+- Completed:
+  - 在 `packages/ui/src/tokens.css` 增加 page title、section title、card title、body、label、caption、badge、micro 的字号 token
+  - 在 `tailwind.config.js` 增加对应 `fontSize` 映射，统一走变量化的 `line-height` 和 `letter-spacing`
+- Verification:
+  - `rg -n "font-size-(page-title|section-title|card-title|body|label|caption|badge|micro)" packages/ui/src/tokens.css` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 11:34 CST
+
+- Batch: Task 3 Step 1 -> Task 3 Step 2
+- Completed:
+  - 在 `packages/ui/src/tokens.css` 增加 `compact / regular / comfortable` 密度 token
+  - 给 `UiPageShell.vue` 增加 `density` prop 和稳定的 `data-density` 标记，并把页面 shell 间距改成 token 驱动
+  - 在 `docs/design/DESIGN.md` 补上密度约束，并给 `ui-primitives` 增加 `UiPageShell` 密度覆盖
+- Verification:
+  - `rg -n "density-(compact|regular|comfortable)" packages/ui/src/tokens.css` -> pass
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 11:47 CST
+
+- Batch: Task 4 Step 1
+- Completed:
+  - 在 `packages/ui/src/lib/motion.ts` 增加共享动效常量 `MOTION_DURATIONS`、`MOTION_EASINGS` 和 `makeTransition`
+  - 通过 `packages/ui/src/index.ts` 暴露共享动效导出，后续页面和组件可直接从 `@octopus/ui` 引用
+- Verification:
+  - `pnpm -C apps/desktop typecheck` -> pass
+  - `rg -n "MOTION_|makeTransition|prefersReducedMotion" packages/ui/src/lib/motion.ts` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 11:54 CST
+
+- Batch: Task 5 Step 1
+- Completed:
+  - 从 `packages/ui/src/tokens.css` 删除 `--bg-glass`
+  - 从 `tailwind.config.js` 删除 `glass` 颜色映射
+- Verification:
+  - `rg -n "bg-glass|glass:|--bg-glass" apps/desktop/src packages/ui/src tailwind.config.js` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-23 12:11 CST
+
+- Batch: Task 6 Step 1
+- Completed:
+  - 新增共享原语 `packages/ui/src/components/UiKbd.vue`
+  - 通过 `packages/ui/src/index.ts` 暴露 `UiKbd`
+  - 在根 `AGENTS.md` 的 Shared UI Component Catalog 里登记 `UiKbd`
+  - 给 `apps/desktop/test/ui-primitives.test.ts` 增加 `UiKbd` 渲染覆盖
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1
+
+## Checkpoint 2026-04-23 12:16 CST
+
+- Batch: Task 7 Step 1
+- Completed:
+  - 把 `UiActionCard`、`UiArtifactBlock`、`UiBadge`、`UiDataTable`、`UiEmptyState`、`UiInboxBlock`、`UiListRow`、`UiNotificationBadge`、`UiNotificationRow`、`UiPageHeader`、`UiSelectionMenu`、`UiTraceBlock` 的任意像素字号替换成共享 typography roles
+  - 同批把这些组件里仍残留的 `14px / 22px / 30px` 标题字号一起收口到 `text-card-title`、`text-section-title`、`text-page-title`
+  - 更新 `apps/desktop/test/ui-primitives.test.ts`，让 `UiPageHeader` 断言跟随新的 token 类名
+- Verification:
+  - `rg -n "text-\\[[0-9]+px\\]" packages/ui/src/components/{UiActionCard.vue,UiArtifactBlock.vue,UiBadge.vue,UiDataTable.vue,UiEmptyState.vue,UiInboxBlock.vue,UiListRow.vue,UiNotificationBadge.vue,UiNotificationRow.vue,UiPageHeader.vue,UiSelectionMenu.vue,UiTraceBlock.vue}` -> clear
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 8 Step 1
+
+## Checkpoint 2026-04-23 12:29 CST
+
+- Batch: Task 8 Step 1
+- Completed:
+  - 扩展 `scripts/check-frontend-governance.mjs`，继续沿用现有 in-memory debt/allowlist 机制
+  - 新增 shared UI 任意像素字号回归检测，并保留必要 allowlist
+  - 新增 `glass` alias 回归检测，同时修正 `rounded-[var(--radius-2xl)]` 的允许规则
+- Verification:
+  - `pnpm check:frontend-governance` -> pass
+- Blockers:
+  - none
+- Next:
+  - `2026-04-21-ui-states-system.md` Task 1 Step 1
+
+## Checkpoint 2026-04-23 17:50 CST
+
+- Batch: Task 9 Step 1
+- Completed:
+  - 把 `packages/ui/src/components/UiKbd.vue` 的 `class` prop 收口到 `HTMLAttributes['class']`，让桌面端当前数组 class 绑定通过类型检查和构建
+  - 把 shared UI arbitrary pixel text debt 收缩到真正例外 `packages/ui/src/components/UiCodeEditor.vue`
+  - 收紧 `scripts/check-frontend-governance.mjs` 的 shared UI typography allowlist，只保留 editor/content 例外
+- Verification:
+  - `pnpm -C apps/desktop typecheck` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+  - `pnpm check:frontend-governance` -> pass
+  - `rg -n "text-\[(10|11|12|13)px\]" packages/ui/src/components` -> only `UiCodeEditor.vue`
+- Blockers:
+  - none
+- Next:
+  - none

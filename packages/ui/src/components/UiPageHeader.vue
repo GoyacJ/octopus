@@ -23,14 +23,14 @@ const props = withDefaults(defineProps<{
     props.class,
   )">
     <div class="min-w-0 flex-1 space-y-2">
-      <p v-if="props.eyebrow" class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+      <p v-if="props.eyebrow" class="text-micro font-semibold uppercase tracking-[0.08em] text-text-tertiary">
         {{ props.eyebrow }}
       </p>
       <h1
         v-if="props.title"
         :class="cn(
-          'font-bold leading-[1.15] tracking-[-0.03em] text-text-primary',
-          props.compact ? 'text-[22px]' : 'text-[30px]',
+          'font-bold text-text-primary',
+          props.compact ? 'text-section-title' : 'text-page-title',
         )"
       >
         {{ props.title }}
@@ -38,13 +38,13 @@ const props = withDefaults(defineProps<{
       <p
         v-if="props.description"
         :class="cn(
-          'max-w-3xl leading-relaxed text-text-secondary',
-          props.compact ? 'text-[13px]' : 'text-[14px]',
+          'max-w-3xl text-text-secondary',
+          props.compact ? 'text-label' : 'text-body',
         )"
       >
         {{ props.description }}
       </p>
-      <div v-if="$slots.meta" class="flex flex-wrap items-center gap-2 pt-1">
+      <div v-if="$slots.meta" class="flex flex-wrap items-center gap-2 pt-1 text-micro text-text-tertiary tabular-nums">
         <slot name="meta" />
       </div>
     </div>

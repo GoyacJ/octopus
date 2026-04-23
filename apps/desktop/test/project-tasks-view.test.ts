@@ -168,6 +168,27 @@ describe('Project tasks view', () => {
     mounted.destroy()
   })
 
+  it('clarifies durable task ownership when opened from a conversation', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/tasks?from=conversation&conversationId=conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'Release Brief Refresh')
+    await waitFor(() => mounted.container.querySelector('[data-testid="project-tasks-conversation-callout"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="project-tasks-back-to-conversation"]')).not.toBeNull()
+
+    mounted.container
+      .querySelector<HTMLButtonElement>('[data-testid="project-tasks-back-to-conversation"]')
+      ?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-conversation')
+    expect(router.currentRoute.value.params.conversationId).toBe('conv-redesign')
+
+    mounted.destroy()
+  })
+
   it('reruns the selected task from the detail panel', async () => {
     const mounted = mountApp()
     const { useProjectTaskStore } = await import('@/stores/project_task')

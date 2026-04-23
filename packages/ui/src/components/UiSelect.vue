@@ -32,7 +32,7 @@ const attrs = useAttrs()
 
 const classes = computed(() =>
   cn(
-    'flex h-8 w-full appearance-none rounded-[var(--radius-xs)] border border-input bg-background px-3 pr-8 text-[13px] text-text-primary outline-none transition-colors duration-fast focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
+    'flex h-8 w-full appearance-none rounded-[var(--radius-xs)] border border-input bg-background px-3 pr-8 text-label text-text-primary outline-none transition-colors duration-fast focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
     props.class
   )
 )

@@ -59,7 +59,7 @@ function emitValue(value: string) {
         :value="tab.value"
         type="button"
         :class="cn(
-          'min-h-[2rem] px-3 text-[13px] font-medium transition-colors',
+          'min-h-[2rem] px-3 text-label font-medium transition-colors',
           'ui-focus-ring focus-visible:rounded-[var(--radius-xs)]',
           props.variant === 'default' && 'border-b-2 -mb-px pb-1.5',
           props.variant !== 'default' && 'rounded-[var(--radius-xs)]',

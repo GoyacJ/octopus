@@ -58,7 +58,7 @@ function select(value: string, disabled?: boolean) {
           ]"
         />
       </div>
-      <span class="text-text-primary text-[13px] leading-tight">{{ option.label }}</span>
+      <span class="text-label text-text-primary leading-tight">{{ option.label }}</span>
     </label>
   </div>
 </template>

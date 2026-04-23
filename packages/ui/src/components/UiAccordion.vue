@@ -76,7 +76,7 @@ function handleUpdate(value: string | string[] | undefined) {
       </AccordionHeader>
 
       <AccordionContent class="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-        <div class="pl-7 pr-4 pb-2 pt-1 text-[13px] leading-relaxed text-text-secondary">
+        <div class="pl-7 pr-4 pb-2 pt-1 text-label leading-relaxed text-text-secondary">
           <slot name="content" :item="item">
             {{ item.content }}
           </slot>

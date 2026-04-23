@@ -45,7 +45,7 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
     >
       <div class="flex items-start justify-between gap-3 px-1 pb-3">
         <div class="space-y-1">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+          <p class="text-micro font-semibold uppercase tracking-[0.2em] text-text-tertiary">
             {{ props.title }}
           </p>
           <p class="text-sm text-text-secondary">

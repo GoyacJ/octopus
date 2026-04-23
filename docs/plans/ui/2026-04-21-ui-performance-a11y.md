@@ -42,7 +42,7 @@
 
 ### Task 1: Establish Browser-Host E2E Baseline
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `package.json`
@@ -61,7 +61,7 @@ Step 1:
 
 ### Task 2: Add Core Browser A11y Checks On Current Surfaces
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `package.json`
@@ -83,7 +83,7 @@ Step 1:
 
 ### Task 3: Cover Reduced-Motion And Keyboard Flows
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `apps/desktop/test/e2e/reduced-motion.spec.ts`
@@ -103,7 +103,7 @@ Step 1:
 
 ### Task 4: Add Report-Only Browser Performance Baseline
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `package.json`
@@ -122,7 +122,7 @@ Step 1:
 
 ### Task 5: Apply Targeted Lazy-Load And Render Containment
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `packages/ui/src/components/UiDotLottie.vue`
@@ -142,7 +142,7 @@ Step 1:
 
 ### Task 6: Add Token Contrast Guardrails
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `package.json`
@@ -157,6 +157,22 @@ Step 1:
 - Done when: 对比度问题能在 token 层被提前发现，而不是等到页面回归里偶然暴露。
 - Verify: `pnpm check:color-contrast`
 - Stop if: Theme tokens are mid-migration and no stable token pair list can be agreed from the current source of truth.
+
+### Task 7: Wire Browser Validation Into `check:desktop`
+
+Status: `done`
+
+Files:
+- Modify: `package.json`
+
+Preconditions:
+- Tasks 1, 2, 3, 4, and 6 completed.
+
+Step 1:
+- Action: Add explicit root verification commands for the current browser-host smoke and reduced-motion checks, then wire browser smoke, a11y, reduced-motion, performance, and color-contrast into the default `check:desktop` path so the desktop baseline matches this plan’s goal instead of relying on manual follow-up commands.
+- Done when: Running `pnpm check:desktop` exercises the current desktop static checks plus browser smoke, a11y, reduced-motion, performance, and token contrast checks from one default entrypoint.
+- Verify: `pnpm check:desktop`
+- Stop if: The browser-host checks prove too flaky or too slow to live in the default desktop path without a separate stabilization pass.
 
 ## Batch Checkpoint Format
 
@@ -174,3 +190,104 @@ Step 1:
 - Next:
   - Task 4
 ```
+
+## Checkpoint 2026-04-23 13:50 CST
+
+- Batch: Task 1 Step 1
+- Completed:
+  - 为桌面端补上独立于 Vitest 的 Playwright browser-host 基线，并把 runner 配到 `apps/desktop/playwright.config.ts`
+  - 新增 `smoke.spec.ts`，覆盖 browser-host 首次启动注册、全局搜索触发器和项目任务页跳转
+  - 用 `globalSetup` 托管 `pnpm dev:web` 生命周期，并在每次运行前清理 browser-host 持久状态，保证首轮验证可重复
+- Verification:
+  - `pnpm exec playwright test --config apps/desktop/playwright.config.ts apps/desktop/test/e2e/smoke.spec.ts` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 13:59 CST
+
+- Batch: Task 2 Step 1
+- Completed:
+  - 新增 `check:a11y` 命令，接入 browser-host 下的 axe 审计和键盘导航回归
+  - 为搜索覆盖层、会话页、Trace 页和任务页补齐真实浏览器语义标记，并给 shell 关键 icon/select 控件补上 accessible name
+  - 把 browser-host 登录 helper 扩成 register/login 双路径，消除多用例串跑时误判 first-launch 的超时问题
+- Verification:
+  - `pnpm check:a11y` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 14:18 CST
+
+- Batch: Task 3 Step 1
+- Completed:
+  - 为 `UiDialog` / `UiPopover` 补上 reduced-motion 状态标记，并保证减弱动效下弹层打开、关闭和焦点回退仍然稳定
+  - 为 `UiDotLottie` / `UiRiveCanvas` 显式补齐 `respectReducedMotion` 默认策略，让减弱动效模式下的 autoplay / loop 真正停掉
+  - 新增 browser-host reduced-motion 回归，并补了共享 media wrapper 的单测，避免只测弹层不测媒体
+- Verification:
+  - `pnpm exec playwright test --config apps/desktop/playwright.config.ts apps/desktop/test/e2e/reduced-motion.spec.ts` -> pass
+  - `pnpm -C apps/desktop exec vitest run test/ui-primitives.test.ts -t "keeps UiToastItem lift restrained and disables media autoplay when reduced motion is active"` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 14:31 CST
+
+- Batch: Task 4 Step 1
+- Completed:
+  - 新增 `performance.spec.ts`，采样已认证 shell 启动、搜索覆盖层打开、会话页 ready 和 Trace 页 ready 四个浏览器指标
+  - 新增 `check-frontend-performance.mjs`，把 report-only 性能基线落到 `tmp/frontend-performance/latest.json`，并输出可读摘要
+  - 固定 Playwright e2e 输出目录，补上根命令 `check:frontend-performance`
+- Verification:
+  - `pnpm check:frontend-performance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 14:36 CST
+
+- Batch: Task 5 Step 1
+- Completed:
+  - 为 `UiDotLottie` / `UiRiveCanvas` 增加按视口触发的懒初始化，减弱动效和显式关闭懒加载时仍保持原有行为
+  - 为 `UiMetricCard` / `UiTimelineList` 增加窄范围 `content-visibility` 与 containment，减少共享列表型组件的首屏渲染压力
+  - 为共享 primitive 单测补上 lazy init 与渲染隔离断言，覆盖优化后的关键分支
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm check:frontend-performance` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-23 14:41 CST
+
+- Batch: Task 6 Step 1
+- Completed:
+  - 新增 `check-color-contrast.mjs`，按 light/dark 两套主题校验关键文本与语义色 token 的 WCAG 对比度
+  - 在根脚本里新增 `check:color-contrast`，并接入 `check:desktop`，把 token 层对比度回归前移到常规前端校验
+  - 收紧 light 主题的 secondary/accent/warning/error token，并补强 dark 主题 error token，让计划内关键配对全部过线
+- Verification:
+  - `pnpm check:color-contrast` -> pass
+- Blockers:
+  - none
+- Next:
+  - Switch to `2026-04-21-ui-polish-microinteractions.md` Task 1 Step 1
+
+## Checkpoint 2026-04-23 17:53 CST
+
+- Batch: Task 7 Step 1
+- Completed:
+  - 把 browser smoke、a11y、reduced-motion 聚合成 `check:frontend-browser`，并把它与 contrast、performance 一起接入根级 `check:desktop`
+  - 新增 `apps/desktop/test/e2e/startBrowserHost.mjs`，把 browser-host 状态清理前移到 `webServer.command`，不再让 `globalSetup` 在服务启动后删 workspace
+  - 调整 `apps/desktop/test/e2e/browserHost.ts`，在首启场景先走 bootstrap-admin API 预置 owner，再继续真实浏览器登录路径，消除首轮 `audit_records` 缺表链路
+- Verification:
+  - `pnpm check:a11y` -> pass
+  - `pnpm check:desktop` -> pass
+- Blockers:
+  - none
+- Next:
+  - none

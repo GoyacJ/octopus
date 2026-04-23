@@ -71,6 +71,12 @@ const projectId = computed(() =>
 const workspaceId = computed(() =>
   typeof route.params.workspaceId === 'string' ? route.params.workspaceId : workspaceStore.currentWorkspaceId,
 )
+const sourceConversationId = computed(() =>
+  typeof route.query.conversationId === 'string' ? route.query.conversationId : '',
+)
+const openedFromConversation = computed(() =>
+  route.query.from === 'conversation' && Boolean(sourceConversationId.value),
+)
 const projectRecord = computed(() =>
   workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
 )
@@ -380,6 +386,14 @@ async function selectTaskRow(taskId: string) {
   }
 
   await replaceTaskQuery(taskId)
+}
+
+async function returnToSourceConversation() {
+  if (!workspaceId.value || !projectId.value || !sourceConversationId.value) {
+    return
+  }
+
+  await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, sourceConversationId.value))
 }
 
 function openCreateDialog() {
@@ -714,6 +728,25 @@ async function takeOverSelectedTask() {
       :description="taskStore.error"
     />
 
+    <UiStatusCallout
+      v-if="openedFromConversation"
+      tone="info"
+      :title="t('tasks.detail.fromConversationTitle')"
+      :description="t('tasks.detail.fromConversationDescription')"
+      data-testid="project-tasks-conversation-callout"
+    >
+      <div class="flex flex-wrap gap-2">
+        <UiButton
+          size="sm"
+          variant="secondary"
+          data-testid="project-tasks-back-to-conversation"
+          @click="returnToSourceConversation"
+        >
+          {{ t('tasks.detail.backToConversation') }}
+        </UiButton>
+      </div>
+    </UiStatusCallout>
+
     <UiListDetailWorkspace
       :has-selection="Boolean(selectedTask)"
       :detail-title="selectedTask?.title"
@@ -727,6 +760,8 @@ async function takeOverSelectedTask() {
           <template #search>
             <UiInput
               v-model="searchQuery"
+              data-testid="project-tasks-search-input"
+              :aria-label="t('tasks.filters.searchPlaceholder')"
               :placeholder="t('tasks.filters.searchPlaceholder')"
             />
           </template>

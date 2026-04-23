@@ -33,9 +33,11 @@ defineSlots<{
     <li
       v-for="(item, index) in props.items"
       :key="item.id"
+      data-ui-performance-contained="true"
       :class="cn(
-        'flex items-start gap-3 rounded-[var(--radius-l)] border border-border bg-surface shadow-xs',
+        'flex items-start gap-3 rounded-[var(--radius-l)] border border-border bg-surface shadow-xs [contain:layout_paint_style] [content-visibility:auto]',
         props.density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-3',
+        props.density === 'compact' ? '[contain-intrinsic-size:88px]' : '[contain-intrinsic-size:112px]',
       )"
     >
       <slot name="item" :item="item" :index="index" :density="props.density">

@@ -67,7 +67,7 @@ function onChange() {
     >
       <Check v-if="checked" :size="10" stroke-width="3" />
     </div>
-    <span v-if="props.label || $slots.default" class="text-text-primary text-[13px]">
+    <span v-if="props.label || $slots.default" class="text-label text-text-primary">
       <slot>{{ props.label }}</slot>
     </span>
   </label>

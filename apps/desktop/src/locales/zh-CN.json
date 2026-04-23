@@ -57,7 +57,8 @@
     "activeWorkspace": "当前工作区: {workspace}",
     "workspaceLabel": "工作区: {workspace}",
     "noRemoteBaseUrl": "暂无远端地址",
-    "noBaseUrl": "暂无地址"
+    "noBaseUrl": "暂无地址",
+    "copyLink": "复制链接"
   },
   "topbar": {
     "searchPlaceholder": "搜索对话、项目或页面…",
@@ -85,7 +86,19 @@
     "workspaceSectionTitle": "工作区列表",
     "workspaceSectionSubtitle": "切换当前工作范围，或新增一个工作区连接。",
     "addWorkspace": "添加工作区",
-    "removeWorkspace": "移除工作区"
+    "removeWorkspace": "移除工作区",
+    "connection": {
+      "disconnected": {
+        "title": "{workspace} 已断开连接",
+        "description": "当前工作区会话暂时离线，已加载的数据会先保留在页面上。"
+      },
+      "unreachable": {
+        "title": "{workspace} 当前不可达",
+        "description": "当前工作区 backend 暂时没有响应，请先重试连接。"
+      },
+      "retry": "重新连接",
+      "retrying": "重新连接中…"
+    }
   },
   "notifications": {
     "title": "通知中心",
@@ -977,11 +990,21 @@
     "stream": {
       "title": "消息流",
       "emptyTitle": "暂无消息",
-      "emptyDescription": "对话即将从这里开始。"
+      "emptyDescription": "对话即将从这里开始。",
+      "jumpToLatest": "回到最新"
+    },
+    "queue": {
+      "title": "当前会话中的排队请求",
+      "description": "这些后续 turn 只会留在当前会话里。",
+      "tasksHint": "长期运行、调度和干预入口都放在项目任务页。",
+      "openTasks": "打开项目任务页"
     },
     "messages": {
       "emptyTitle": "暂无运行消息",
       "emptyDescription": "发起一次 turn 后，这里会显示运行态消息流。"
+    },
+    "context": {
+      "copyMessage": "复制消息"
     },
     "setup": {
       "missingModel": {
@@ -1310,6 +1333,9 @@
       "contextTitle": "上下文包",
       "contextSubtitle": "已绑定 {count} 个引用",
       "contextInstructionsLabel": "固定说明",
+      "fromConversationTitle": "项目任务页承接长期工作",
+      "fromConversationDescription": "你是从会话页跳转到这里的。调度、长期运行和干预都在这个工作台里处理；会话队列仍然只属于原来的会话。",
+      "backToConversation": "回到会话",
       "contextNoInstructions": "还没有记录固定说明。",
       "contextResolutionLabel": "解析模式",
       "contextResolvedAtLabel": "最近解析",
@@ -1432,6 +1458,9 @@
       "subtitle": "全量记录工具调用、思考过程与系统反馈。",
       "emptyTitle": "时间线为空",
       "emptyDescription": "开始一次新的运行后，这里会持续追加事件。"
+    },
+    "context": {
+      "copyDetail": "复制 Trace 明细"
     }
   },
   "resources": {

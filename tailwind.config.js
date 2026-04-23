@@ -19,7 +19,6 @@ export default {
         popover: 'var(--bg-popover)',
         accent: 'var(--bg-accent)',
         secondary: 'var(--bg-secondary)',
-        glass: 'var(--bg-glass)',
         input: 'var(--border-input)',
         ring: 'var(--ring)',
         'border-subtle': 'var(--border-subtle)',
@@ -64,6 +63,64 @@ export default {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         serif: ['var(--font-serif)', 'serif'],
         mono: ['var(--font-mono)', 'monospace'],
+      },
+      fontSize: {
+        'page-title': [
+          'var(--font-size-page-title)',
+          {
+            lineHeight: 'var(--line-height-page-title)',
+            letterSpacing: 'var(--letter-spacing-page-title)',
+          },
+        ],
+        'section-title': [
+          'var(--font-size-section-title)',
+          {
+            lineHeight: 'var(--line-height-section-title)',
+            letterSpacing: 'var(--letter-spacing-section-title)',
+          },
+        ],
+        'card-title': [
+          'var(--font-size-card-title)',
+          {
+            lineHeight: 'var(--line-height-card-title)',
+            letterSpacing: 'var(--letter-spacing-card-title)',
+          },
+        ],
+        body: [
+          'var(--font-size-body)',
+          {
+            lineHeight: 'var(--line-height-body)',
+            letterSpacing: 'var(--letter-spacing-body)',
+          },
+        ],
+        label: [
+          'var(--font-size-label)',
+          {
+            lineHeight: 'var(--line-height-label)',
+            letterSpacing: 'var(--letter-spacing-label)',
+          },
+        ],
+        caption: [
+          'var(--font-size-caption)',
+          {
+            lineHeight: 'var(--line-height-caption)',
+            letterSpacing: 'var(--letter-spacing-caption)',
+          },
+        ],
+        badge: [
+          'var(--font-size-badge)',
+          {
+            lineHeight: 'var(--line-height-badge)',
+            letterSpacing: 'var(--letter-spacing-badge)',
+          },
+        ],
+        micro: [
+          'var(--font-size-micro)',
+          {
+            lineHeight: 'var(--line-height-micro)',
+            letterSpacing: 'var(--letter-spacing-micro)',
+          },
+        ],
       },
       boxShadow: {
         xs: 'var(--shadow-xs)',

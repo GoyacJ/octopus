@@ -8,12 +8,12 @@ import {
   ChevronRight,
   FileText,
   FolderOpen,
-  MoreHorizontal,
   Paperclip,
   RotateCcw,
   Users,
   Wrench,
 } from 'lucide-vue-next'
+
 import { UiBadge, UiButton, UiStatusCallout } from '@octopus/ui'
 import type { ConversationAttachment, Message, MessageProcessEntry, WorkspaceResourceRecord } from '@octopus/schema'
 
@@ -50,11 +50,9 @@ const hasFocusedToolEntry = computed(() => detailEntries.value.some(entry => ent
 const showProcessPanel = computed(() => !isUserMessage.value && hasProcessPanel.value)
 const hasPendingApproval = computed(() => props.message.approval?.status !== 'approved' && props.message.approval?.status !== 'rejected')
 const approvalRiskLabel = computed(() => props.message.approval?.riskLevel ?? '')
-const isMessageRunning = computed(() =>
-  props.message.status === 'running'
-  || props.message.status === 'waiting_approval'
-  || props.message.status === 'waiting_input',
-)
+const isWaitingApproval = computed(() => props.message.status === 'waiting_approval')
+const isWaitingInput = computed(() => props.message.status === 'waiting_input')
+const isRunning = computed(() => props.message.status === 'running')
 const actorKindLabel = computed(() => {
   if (props.message.actorKind === 'team') {
     return 'Team'
@@ -66,7 +64,113 @@ const actorKindLabel = computed(() => {
 })
 const actorKindIcon = computed(() => (props.message.actorKind === 'team' ? Users : Bot))
 
-const processLabel = computed(() => (detailEntries.value.some(e => e.type === 'thinking') ? 'Thinking' : 'Processing'))
+const latestProcessEntry = computed(() => detailEntries.value[detailEntries.value.length - 1])
+const latestResultEntry = computed(() =>
+  [...detailEntries.value].reverse().find(entry => entry.type === 'result')
+  ?? latestProcessEntry.value,
+)
+const timestampLabel = computed(() =>
+  new Date(props.message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+)
+
+const processSummary = computed(() => {
+  if (isWaitingApproval.value) {
+    return {
+      label: 'Waiting for approval',
+      detail: props.message.approval?.summary ?? latestResultEntry.value?.title ?? 'Execution paused for a decision.',
+      icon: AlertTriangle,
+    }
+  }
+
+  if (isWaitingInput.value) {
+    return {
+      label: 'Waiting for input',
+      detail: latestResultEntry.value?.title ?? 'Assistant needs more input to continue.',
+      icon: AlertTriangle,
+    }
+  }
+
+  if (isRunning.value && toolCalls.value.length) {
+    return {
+      label: 'Using tools',
+      detail: `${toolCalls.value.length} ${toolCalls.value.length === 1 ? 'tool' : 'tools'} active`,
+      icon: Wrench,
+    }
+  }
+
+  if (isRunning.value && detailEntries.value.some(entry => entry.type === 'thinking')) {
+    return {
+      label: 'Thinking',
+      detail: latestProcessEntry.value?.detail ?? 'Preparing the assistant response.',
+      icon: Brain,
+    }
+  }
+
+  if (isRunning.value) {
+    return {
+      label: 'Processing',
+      detail: latestProcessEntry.value?.title ?? 'Assistant is still working.',
+      icon: Wrench,
+    }
+  }
+
+  if (props.message.status === 'blocked' || props.message.status === 'paused') {
+    return {
+      label: 'Paused',
+      detail: latestResultEntry.value?.detail ?? 'Execution is waiting before it can continue.',
+      icon: AlertTriangle,
+    }
+  }
+
+  if (props.message.status === 'failed' || props.message.status === 'terminated') {
+    return {
+      label: 'Stopped',
+      detail: latestResultEntry.value?.detail ?? 'Execution ended before completing.',
+      icon: AlertTriangle,
+    }
+  }
+
+  return {
+    label: 'Completed',
+    detail: toolCalls.value.length
+      ? `Used ${toolCalls.value.length} ${toolCalls.value.length === 1 ? 'tool' : 'tools'} in this response.`
+      : (latestResultEntry.value?.title ?? 'Assistant finished this response.'),
+    icon: Bot,
+  }
+})
+
+const waitingInputTitle = computed(() => latestResultEntry.value?.title ?? 'Waiting for input')
+const waitingInputDescription = computed(() =>
+  latestResultEntry.value?.detail ?? 'Assistant needs authentication or additional input to continue.',
+)
+
+function formatToolCallTitle(label: string) {
+  if (isWaitingApproval.value) {
+    return `Paused on ${label}`
+  }
+  if (isWaitingInput.value) {
+    return `Needs input for ${label}`
+  }
+  if (isRunning.value) {
+    return `Using ${label}`
+  }
+  return `Used ${label}`
+}
+
+function formatToolCallMeta(count: number) {
+  const countLabel = `Called ${count} ${count === 1 ? 'time' : 'times'}`
+
+  if (isWaitingApproval.value) {
+    return `${countLabel} · Waiting for approval`
+  }
+  if (isWaitingInput.value) {
+    return `${countLabel} · Waiting for input`
+  }
+  if (isRunning.value) {
+    return `${countLabel} · In progress`
+  }
+  return countLabel
+}
 </script>
 
 <template>
@@ -75,6 +179,8 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
     :class="isUserMessage ? 'justify-end' : 'justify-start'"
   >
     <article
+      :data-testid="`conversation-message-bubble-${message.id}`"
+      :data-message-id="message.id"
       class="group relative flex max-w-[90%] gap-3 rounded-[var(--radius-xl)] border px-4 py-3 transition-colors"
       :class="[
         isUserMessage
@@ -83,9 +189,9 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
       ]"
     >
       <!-- Avatar Column -->
-      <div class="flex flex-col items-center shrink-0 pt-1">
+      <div class="flex shrink-0 flex-col items-center pt-1">
         <div
-          class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-[11px] font-bold text-text-secondary"
+          class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-micro font-bold text-text-secondary"
           :class="props.avatarSrc ? 'bg-transparent p-0' : (isUserMessage ? 'bg-accent text-primary' : '')"
         >
           <img
@@ -101,73 +207,77 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
 
       <!-- Content Column -->
       <div class="flex min-w-0 flex-1 flex-col gap-2">
-        <!-- Sender & Meta Info -->
-        <div class="flex items-center gap-3 min-h-6" :class="isUserMessage ? 'flex-row-reverse' : ''">
-          <span class="text-[13px] font-bold text-text-primary">{{ isUserMessage ? 'You' : senderLabel }}</span>
-          <span class="text-[10px] text-text-tertiary opacity-60 font-medium tracking-tight">
-            {{ new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-          </span>
-
-          <div v-if="!isUserMessage && actorLabel" class="flex min-w-0 items-center gap-2 text-[10px] font-semibold text-text-secondary">
-            <UiBadge v-if="actorKindLabel" :label="actorKindLabel" tone="info" />
-            <span class="flex min-w-0 items-center gap-1">
-              <component :is="actorKindIcon" :size="11" class="shrink-0 text-text-tertiary" />
-              <span class="max-w-[180px] truncate">{{ actorLabel }}</span>
+          <!-- Sender & Meta Info -->
+          <div class="flex min-h-6 items-center gap-3" :class="isUserMessage ? 'flex-row-reverse' : ''">
+            <span class="text-label font-semibold text-text-primary">{{ isUserMessage ? 'You' : senderLabel }}</span>
+            <span :data-testid="`conversation-message-timestamp-${message.id}`" class="text-micro font-medium tabular-nums text-text-tertiary opacity-60">
+              {{ timestampLabel }}
             </span>
-          </div>
 
-          <div class="flex-1" />
-
-          <!-- Actions (Only visible on hover) -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-            <UiButton v-if="isUserMessage" variant="ghost" size="icon" class="h-6 w-6 rounded-md" @click="emit('rollback', message.id)">
-              <RotateCcw :size="12" />
-            </UiButton>
-            <UiButton variant="ghost" size="icon" class="h-6 w-6 rounded-md text-text-tertiary">
-              <MoreHorizontal :size="12" />
-            </UiButton>
-          </div>
-        </div>
-
-        <!-- AI Thinking/Process Toggle (Only for AI) -->
-        <div v-if="showProcessPanel" class="mt-1">
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-text-tertiary transition-colors hover:bg-subtle hover:text-text-secondary"
-            @click="emit('toggle-detail', message.id)"
-          >
-            <component :is="isExpanded ? ChevronDown : ChevronRight" :size="14" class="shrink-0" />
-            <div class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider">
-              <Brain v-if="processLabel === 'Thinking'" :size="12" />
-              <Wrench v-else :size="12" />
-              <span>{{ processLabel }}...</span>
+            <div v-if="!isUserMessage && actorLabel" class="flex min-w-0 items-center gap-2 text-micro font-semibold text-text-secondary">
+              <UiBadge v-if="actorKindLabel" :label="actorKindLabel" tone="info" />
+              <span class="flex min-w-0 items-center gap-1">
+                <component :is="actorKindIcon" :size="11" class="shrink-0 text-text-tertiary" />
+                <span class="max-w-[180px] truncate">{{ actorLabel }}</span>
+              </span>
             </div>
-          </button>
 
-          <div v-if="isExpanded" class="ml-2 mt-2 space-y-3 border-l border-border pl-4 py-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div
-              v-for="entry in detailEntries"
-              :key="entry.id"
-              class="space-y-1.5 rounded-[var(--radius-m)] border border-transparent px-3 py-2 transition-colors"
-              :class="entry.toolId && entry.toolId === focusedToolId ? 'border-border bg-accent' : 'bg-subtle/60'"
-              :data-testid="entry.toolId && entry.toolId === focusedToolId ? 'conversation-focused-tool-entry' : undefined"
+            <div class="flex-1" />
+
+            <!-- Actions (Only visible on hover) -->
+            <div class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <UiButton v-if="isUserMessage" variant="ghost" size="icon" class="h-6 w-6 rounded-md" @click="emit('rollback', message.id)">
+                <RotateCcw :size="12" />
+              </UiButton>
+            </div>
+          </div>
+
+          <!-- AI Thinking/Process Toggle (Only for AI) -->
+          <div v-if="showProcessPanel" class="mt-1">
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-text-tertiary transition-colors hover:bg-subtle hover:text-text-secondary"
+              data-testid="conversation-process-toggle"
+              @click="emit('toggle-detail', message.id)"
             >
-              <div class="text-[12px] font-bold text-text-secondary flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full bg-border-strong"></div>
-                {{ entry.title }}
+              <component :is="isExpanded ? ChevronDown : ChevronRight" :size="14" class="mt-0.5 shrink-0" />
+              <div class="flex min-w-0 flex-col items-start gap-0.5 text-left">
+                <div class="flex min-w-0 items-center gap-2 text-caption font-semibold text-text-secondary">
+                  <component :is="processSummary.icon" :size="12" class="shrink-0" />
+                  <span class="truncate">
+                    {{ processSummary.label }}<span v-if="isRunning">...</span>
+                  </span>
+                </div>
+                <span class="truncate text-micro font-medium text-text-tertiary">
+                  {{ processSummary.detail }}
+                </span>
               </div>
-              <p class="text-[12px] leading-relaxed text-text-tertiary pl-3.5">{{ entry.detail }}</p>
+            </button>
+
+            <div v-if="isExpanded" class="ml-2 mt-2 space-y-3 border-l border-border pl-4 py-1 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div
+                v-for="entry in detailEntries"
+                :key="entry.id"
+                class="space-y-1.5 rounded-[var(--radius-m)] border border-transparent px-3 py-2 transition-colors"
+                :class="entry.toolId && entry.toolId === focusedToolId ? 'border-border bg-accent' : 'bg-subtle/60'"
+                :data-testid="entry.toolId && entry.toolId === focusedToolId ? 'conversation-focused-tool-entry' : undefined"
+              >
+                <div class="flex items-center gap-2 text-caption font-semibold text-text-secondary">
+                  <div class="h-1.5 w-1.5 rounded-full bg-border-strong"></div>
+                  {{ entry.title }}
+                </div>
+                <p class="pl-3.5 text-caption text-text-tertiary">{{ entry.detail }}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Message Body -->
-        <div
-          class="text-[15px] leading-[1.6] text-text-primary whitespace-pre-wrap break-words"
-          :class="isUserMessage ? 'text-right' : 'text-left'"
-        >
-          {{ message.content }}
-        </div>
+          <!-- Message Body -->
+          <div
+            class="whitespace-pre-wrap break-words text-[15px] leading-[1.6] text-text-primary"
+            :class="isUserMessage ? 'text-right' : 'text-left'"
+          >
+            {{ message.content }}
+          </div>
 
         <div
           v-if="!isUserMessage && toolCalls.length"
@@ -178,7 +288,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             v-for="toolCall in toolCalls"
             :key="toolCall.toolId"
             type="button"
-            class="flex items-center gap-2 rounded-[var(--radius-l)] border border-border bg-surface px-3 py-2 text-left text-[11px] text-text-secondary transition-colors hover:bg-subtle"
+            class="flex items-center gap-2 rounded-[var(--radius-l)] border border-border bg-surface px-3 py-2 text-left text-caption text-text-secondary transition-colors hover:bg-subtle"
             :data-testid="`conversation-inline-tool-${toolCall.toolId}`"
             @click="emit('focus-tool', { messageId: message.id, toolId: toolCall.toolId })"
           >
@@ -187,14 +297,28 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             </div>
             <div class="min-w-0 flex-1">
               <div class="truncate font-semibold text-text-primary">
-                {{ isMessageRunning ? 'Using' : 'Used' }} {{ toolCall.label }}
+                {{ formatToolCallTitle(toolCall.label) }}
               </div>
-              <div class="text-[10px] text-text-tertiary">
-                Called {{ toolCall.count }} {{ toolCall.count === 1 ? 'time' : 'times' }}
+              <div class="text-micro tabular-nums text-text-tertiary">
+                {{ formatToolCallMeta(toolCall.count) }}
               </div>
             </div>
           </button>
         </div>
+
+        <UiStatusCallout
+          v-if="!isUserMessage && isWaitingInput"
+          class="gap-3"
+          tone="info"
+          :title="waitingInputTitle"
+          :description="waitingInputDescription"
+          data-testid="conversation-inline-input-wait"
+        >
+          <div class="flex flex-wrap items-center gap-2 text-micro font-semibold text-status-info">
+            <AlertTriangle :size="13" class="shrink-0" />
+            <span>Assistant needs more input before this run can continue.</span>
+          </div>
+        </UiStatusCallout>
 
         <UiStatusCallout
           v-if="!isUserMessage && message.approval"
@@ -204,7 +328,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
           :description="message.approval.detail"
           data-testid="conversation-inline-approval"
         >
-          <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <div class="flex flex-wrap items-center gap-2 text-micro font-semibold">
             <span class="inline-flex items-center gap-1.5 text-status-warning">
               <AlertTriangle :size="13" class="shrink-0" />
               <span>{{ message.approval.toolName }}</span>
@@ -233,9 +357,9 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
         </UiStatusCallout>
 
         <!-- Assets / Resources -->
-        <div 
-          v-if="resources.length || attachments.length || artifacts.length" 
-          class="flex flex-wrap gap-2 pt-2" 
+        <div
+          v-if="resources.length || attachments.length || artifacts.length"
+          class="flex flex-wrap gap-2 pt-2"
           :class="isUserMessage ? 'justify-end' : 'justify-start'"
         >
           <button
@@ -249,7 +373,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             <Paperclip v-else :size="13" class="text-text-tertiary" />
             <span>{{ resource.name }}</span>
           </button>
-          
+
           <button
             v-for="artifact in artifacts"
             :key="artifact.id"
@@ -261,9 +385,9 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             <UiBadge v-if="artifact.kindLabel" :label="artifact.kindLabel" subtle />
           </button>
         </div>
-        
+
         <!-- Usage info -->
-        <div v-if="!isUserMessage && message.usage" class="text-[10px] text-text-tertiary opacity-40 pt-2 font-medium">
+        <div v-if="!isUserMessage && message.usage" class="pt-2 text-micro font-medium tabular-nums text-text-tertiary opacity-40">
           {{ message.usage.totalTokens }} tokens · {{ permissionLabel }}
         </div>
       </div>

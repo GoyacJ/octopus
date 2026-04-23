@@ -40,10 +40,10 @@ const presentation = computed(() => getNotificationPresentation(props.notificati
       />
       <div class="min-w-0 flex-1 space-y-1">
         <div class="flex items-start justify-between gap-3">
-          <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+          <span class="text-micro font-semibold uppercase tracking-[0.18em] text-text-tertiary">
             {{ props.scopeLabel }}
           </span>
-          <span v-if="timestampLabel" class="shrink-0 text-[11px] font-medium text-text-tertiary">
+          <span v-if="timestampLabel" class="shrink-0 text-micro font-medium tabular-nums text-text-tertiary">
             {{ timestampLabel }}
           </span>
         </div>

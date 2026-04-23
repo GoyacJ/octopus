@@ -25,10 +25,10 @@ const props = withDefaults(defineProps<{
       class="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4"
     >
       <div v-if="props.title || props.subtitle" class="min-w-0 flex-1 space-y-1">
-        <h2 v-if="props.title" class="text-[16px] font-semibold leading-tight text-text-primary">
+        <h2 v-if="props.title" class="text-card-title font-semibold leading-tight text-text-primary">
           {{ props.title }}
         </h2>
-        <p v-if="props.subtitle" class="text-[13px] leading-6 text-text-secondary">
+        <p v-if="props.subtitle" class="text-label leading-6 text-text-secondary">
           {{ props.subtitle }}
         </p>
       </div>

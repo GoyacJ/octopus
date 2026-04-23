@@ -6,7 +6,7 @@ import { Blocks, FileText, FolderKanban, MessageSquare, Search, Waypoints } from
 import type { RouteLocationRaw } from 'vue-router'
 
 import type { ConversationRecord, DeliverableSummary } from '@octopus/schema'
-import { UiButton, UiDialog, UiInput, UiPanelFrame } from '@octopus/ui'
+import { UiButton, UiDialog, UiInput, UiKbd, UiPanelFrame } from '@octopus/ui'
 
 import {
   createProjectConversationTarget,
@@ -318,9 +318,9 @@ function moveActiveResult(delta: 1 | -1) {
 
 function resultButtonClasses(active: boolean) {
   return [
-    'flex h-auto w-full items-center gap-3 rounded-[var(--radius-m)] border px-3 py-3 text-left shadow-none',
+    'flex h-auto w-full items-center gap-3 rounded-[var(--radius-m)] border px-3 py-3 text-left shadow-none transition-[background-color,border-color,box-shadow,transform] duration-normal ease-apple motion-reduce:transition-none active:scale-[0.99] motion-reduce:active:scale-100',
     active
-      ? 'border-border-strong bg-accent text-text-primary hover:bg-accent'
+      ? 'border-border-strong bg-accent text-text-primary ring-1 ring-inset ring-border-strong hover:bg-accent'
       : 'border-transparent text-text-primary hover:border-border hover:bg-subtle',
   ].join(' ')
 }
@@ -331,8 +331,8 @@ function resultIconClasses(active: boolean) {
     : 'mt-0.5 rounded-[var(--radius-s)] bg-subtle p-2 text-text-secondary'
 }
 
-function shortcutKeyClasses() {
-  return 'inline-flex items-center rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-primary'
+function resultSubtitleClasses(active: boolean) {
+  return active ? 'block truncate text-xs text-text-primary/78' : 'block truncate text-xs text-text-secondary'
 }
 
 async function handleInputKeydown(event: KeyboardEvent) {
@@ -371,16 +371,22 @@ async function selectResult(item: SearchResult) {
     @update:open="(open) => { if (!open) shell.closeSearch() }"
   >
     <template #header>
-      <div class="flex items-center gap-2 text-[12px] font-semibold text-text-secondary">
-        <Search :size="14" class="text-text-tertiary" />
-        <span>{{ t('common.search') }}</span>
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-[12px] font-semibold text-text-secondary">
+          <Search :size="14" class="text-text-tertiary" />
+          <span>{{ t('common.search') }}</span>
+        </div>
+        <div class="hidden items-center gap-2 sm:flex">
+          <UiKbd :keys="shell.searchShortcutKeys" size="sm" class="border-border bg-subtle text-text-tertiary" />
+          <UiKbd :keys="['Esc']" size="sm" class="border-border bg-subtle text-text-tertiary" />
+        </div>
       </div>
     </template>
 
     <UiPanelFrame variant="hero" padding="none">
       <div data-testid="search-overlay-panel" class="bg-popover">
         <div class="border-b border-border px-5 py-4">
-          <div class="flex items-center gap-3 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-3">
+          <div class="flex items-center gap-3 rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-3 transition-[border-color,background-color,box-shadow] duration-normal ease-apple focus-within:border-border-strong focus-within:bg-surface focus-within:ring-1 focus-within:ring-inset focus-within:ring-border-strong motion-reduce:transition-none">
             <Search :size="18" class="shrink-0 text-text-secondary" />
             <UiInput
               ref="searchInput"
@@ -388,6 +394,7 @@ async function selectResult(item: SearchResult) {
               data-testid="search-overlay-input"
               :placeholder="t('searchOverlay.placeholder')"
               role="combobox"
+              :aria-label="t('common.search')"
               aria-autocomplete="list"
               :aria-expanded="results.length ? 'true' : 'false'"
               :aria-controls="SEARCH_RESULTS_LIST_ID"
@@ -404,6 +411,7 @@ async function selectResult(item: SearchResult) {
             :id="SEARCH_RESULTS_LIST_ID"
             data-testid="search-overlay-results"
             role="listbox"
+            :aria-label="t('common.search')"
             class="max-h-[26rem] space-y-3 overflow-y-auto"
           >
             <section
@@ -432,13 +440,13 @@ async function selectResult(item: SearchResult) {
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm font-semibold">{{ item.title }}</span>
-                  <span class="block truncate text-xs text-text-secondary">{{ item.subtitle }}</span>
+                  <span :class="resultSubtitleClasses(item.index === activeResultIndex)">{{ item.subtitle }}</span>
                 </span>
                 <span
                   v-if="item.index === activeResultIndex"
-                  class="shrink-0 rounded-full border border-border bg-surface px-2 py-1 text-[10px] font-semibold text-text-secondary"
+                  class="shrink-0"
                 >
-                  {{ t('common.open') }}
+                  <UiKbd :keys="['Enter']" size="sm" class="border-border bg-surface text-text-primary" />
                 </span>
               </UiButton>
             </section>
@@ -449,15 +457,19 @@ async function selectResult(item: SearchResult) {
             class="mt-3 flex flex-wrap items-center gap-3 border-t border-border bg-subtle px-3 py-3 text-[11px] text-text-secondary"
           >
             <span class="inline-flex items-center gap-2">
-              <span class="inline-flex items-center gap-1 rounded-full border border-border bg-subtle px-1.5 py-1">
-                <span :class="shortcutKeyClasses()">Up</span>
-                <span :class="shortcutKeyClasses()">Down</span>
+              <span class="inline-flex items-center gap-1">
+                <UiKbd :keys="['Up']" size="sm" class="border-border bg-surface text-text-primary" />
+                <UiKbd :keys="['Down']" size="sm" class="border-border bg-surface text-text-primary" />
               </span>
               <span>{{ t('searchOverlay.shortcuts.navigate') }}</span>
             </span>
             <span class="inline-flex items-center gap-2">
-              <span :class="shortcutKeyClasses()">Enter</span>
+              <UiKbd :keys="['Enter']" size="sm" class="border-border bg-surface text-text-primary" />
               <span>{{ t('searchOverlay.shortcuts.open') }}</span>
+            </span>
+            <span class="inline-flex items-center gap-2">
+              <UiKbd :keys="['Esc']" size="sm" class="border-border bg-surface text-text-primary" />
+              <span>{{ t('common.cancel') }}</span>
             </span>
           </div>
           <div
@@ -465,7 +477,20 @@ async function selectResult(item: SearchResult) {
             data-testid="search-overlay-empty"
             class="rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-10 text-center text-sm text-text-secondary"
           >
-            {{ t('searchOverlay.emptyDescription') }}
+            <div class="space-y-2">
+              <p class="text-sm font-semibold text-text-primary">{{ t('searchOverlay.emptyTitle') }}</p>
+              <p>{{ t('searchOverlay.emptyDescription') }}</p>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center justify-center gap-2 text-micro">
+              <span class="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5">
+                <UiKbd :keys="shell.searchShortcutKeys" size="sm" class="border-border bg-subtle text-text-primary" />
+                <span>{{ t('common.search') }}</span>
+              </span>
+              <span class="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5">
+                <UiKbd :keys="['Esc']" size="sm" class="border-border bg-subtle text-text-primary" />
+                <span>{{ t('common.cancel') }}</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>

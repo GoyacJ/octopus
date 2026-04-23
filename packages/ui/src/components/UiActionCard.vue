@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<{
 <template>
   <article
     :class="cn(
-      'group flex items-start gap-3 rounded-md border border-border/40 bg-background p-3 transition-colors hover:border-border-strong hover:bg-subtle cursor-pointer',
+      'group flex items-start gap-3 rounded-md border border-border/40 bg-background p-3 transition-[transform,colors,border-color] duration-fast hover:border-border-strong hover:bg-subtle active:scale-[0.99] motion-reduce:active:scale-100 cursor-pointer',
       props.class,
     )"
   >
@@ -25,13 +25,13 @@ const props = withDefaults(defineProps<{
     </div>
 
     <div class="flex min-w-0 flex-1 flex-col gap-1">
-      <span v-if="props.eyebrow" class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+      <span v-if="props.eyebrow" class="text-micro font-bold uppercase tracking-wider text-text-tertiary">
         {{ props.eyebrow }}
       </span>
-      <strong class="text-[14px] font-bold leading-tight text-text-primary">
+      <strong class="text-card-title font-bold text-text-primary">
         {{ props.title }}
       </strong>
-      <p v-if="props.description" class="text-[12px] leading-relaxed text-text-secondary">
+      <p v-if="props.description" class="text-caption text-text-secondary">
         {{ props.description }}
       </p>
       <div v-if="$slots.default" class="mt-auto pt-1">

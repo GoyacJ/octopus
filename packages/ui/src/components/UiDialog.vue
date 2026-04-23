@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from 'reka-ui'
 
+import { prefersReducedMotion } from '../lib/motion'
 import { cn } from '../lib/utils'
 
 const props = withDefaults(defineProps<{
@@ -22,6 +23,8 @@ const props = withDefaults(defineProps<{
   footerClass?: string
   contentTestId?: string
   bodyTestId?: string
+  respectReducedMotion?: boolean
+  reducedMotion?: boolean
 }>(), {
   open: false,
   title: '',
@@ -32,6 +35,8 @@ const props = withDefaults(defineProps<{
   footerClass: '',
   contentTestId: 'ui-dialog-content',
   bodyTestId: 'ui-dialog-body',
+  respectReducedMotion: true,
+  reducedMotion: undefined,
 })
 
 const emit = defineEmits<{
@@ -41,15 +46,24 @@ const emit = defineEmits<{
 const accessibleTitle = computed(() => props.title || props.closeLabel)
 const visibleDescription = computed(() => props.description?.trim() ?? '')
 const accessibleDescription = computed(() => visibleDescription.value || accessibleTitle.value)
+const reducedMotionActive = computed(() =>
+  props.respectReducedMotion !== false && (props.reducedMotion ?? prefersReducedMotion()),
+)
+const reducedMotionState = computed(() => (reducedMotionActive.value ? 'true' : 'false'))
+const overlayClasses = computed(() => cn(
+  'fixed inset-0 z-50 bg-[var(--color-overlay)]',
+  reducedMotionActive.value ? 'transition-none' : 'transition-opacity',
+))
 </script>
 
 <template>
   <DialogRoot :open="props.open" @update:open="emit('update:open', $event)">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-50 bg-[var(--color-overlay)] transition-opacity" />
+      <DialogOverlay :class="overlayClasses" :data-reduced-motion="reducedMotionState" />
       <DialogContent
         :data-testid="props.contentTestId"
         data-ui-dialog-content="true"
+        :data-reduced-motion="reducedMotionState"
         :class="cn(
           'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-[var(--radius-xl)] border border-border bg-popover p-5 shadow-lg md:w-full md:p-6',
           props.contentClass,
@@ -69,10 +83,10 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
           <div class="min-w-0 flex-1">
             <slot name="header">
               <div class="space-y-1.5">
-                <div class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
+                <div class="text-section-title font-bold tracking-[-0.02em] text-text-primary">
                   {{ accessibleTitle }}
                 </div>
-                <div v-if="visibleDescription" class="text-[14px] leading-relaxed text-text-secondary">
+                <div v-if="visibleDescription" class="text-body leading-relaxed text-text-secondary">
                   {{ visibleDescription }}
                 </div>
               </div>

@@ -5,12 +5,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
 import { resolveRuntimePermissionMode, resolveUiPermissionMode, type AgentRecord, type ConversationActorKind, type Message, type PermissionMode, type RuntimeSessionDetail, type TeamRecord, type WorkspaceResourceRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
+import { UiBadge, UiButton, UiContextMenu, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
 import ConversationContextPane from '@/components/layout/ConversationContextPane.vue'
 import ConversationTabsBar from '@/components/layout/ConversationTabsBar.vue'
+import { buildRoutePermalink, copyTextToClipboard } from '@/composables/clipboard'
 import {
   createProjectConversationTarget,
   createProjectSurfaceTarget,
@@ -78,10 +79,15 @@ const selectedModelId = ref('')
 const selectedPermissionMode = ref<PermissionMode>('auto')
 const selectedActorValue = ref('')
 const composerContextReadyKey = ref('')
+const activeContextMessageId = ref('')
 const expandedMessageIds = ref<string[]>([])
 const focusedToolByMessageId = ref<Record<string, string>>({})
 const scrollContainer = ref<HTMLElement | null>(null)
 const resolvingConversationEntry = ref(false)
+const shouldStickToLatest = ref(true)
+const initialScrollPending = ref(true)
+const pendingSubmittedTurnScroll = ref(false)
+const showJumpToLatest = ref(false)
 let lastComposerContextKey = ''
 let lastContextPaneKey = ''
 let lastPermissionSeedKey = ''
@@ -89,6 +95,11 @@ let lastSessionKey = ''
 let sessionLoadPromise: Promise<void> | null = null
 let conversationEntryKey = ''
 let conversationEntryPromise: Promise<string | null> | null = null
+let lastRenderedMessageId = ''
+let lastRenderedMessageCount = 0
+let lastSeenMessageId = ''
+let lastSeenMessageCount = 0
+const conversationScrollThreshold = 96
 
 const conversationId = computed(() =>
   typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
@@ -202,6 +213,20 @@ const renderedMessages = computed<Message[]>(() => (
     ? runtime.activeMessages
     : []
 ))
+const activeContextMessage = computed(() =>
+  renderedMessages.value.find(message => message.id === activeContextMessageId.value) ?? null,
+)
+const conversationContextMenuItems = computed(() => [
+  {
+    key: 'copy-message',
+    label: t('conversation.context.copyMessage'),
+    disabled: !activeContextMessage.value?.content,
+  },
+  {
+    key: 'copy-link',
+    label: t('common.copyLink'),
+  },
+])
 
 const queueItems = computed(() =>
   runtime.activeQueue.map(item => ({
@@ -210,6 +235,11 @@ const queueItems = computed(() =>
     actorLabel: actorLabelMap.value.get(runtime.activeSession?.summary.selectedActorRef ?? '') ?? 'Assistant',
     createdAt: item.createdAt,
   })),
+)
+const showProjectTasksWorkbenchEntry = computed(() =>
+  queueItems.value.length > 0
+  || runtimeOrchestrationBadges.value.length > 0
+  || Boolean(activeMediationKind.value),
 )
 const runtimeOrchestrationBadges = computed(() => {
   const session = runtime.activeSession
@@ -656,10 +686,66 @@ async function ensureRuntimeSession() {
 }
 
 watch(renderedMessages, (messages) => {
+  const container = scrollContainer.value
+  const previousMetrics = container
+    ? {
+        clientHeight: container.clientHeight,
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      }
+    : null
+  const currentLastMessage = messages.at(-1) ?? null
+  const shouldAutoStick = initialScrollPending.value || pendingSubmittedTurnScroll.value || shouldStickToLatest.value
+  const isHistoryPrepend =
+    !!currentLastMessage
+    && currentLastMessage.id === lastRenderedMessageId
+    && messages.length > lastRenderedMessageCount
+  const hasUnreadMessages =
+    !shouldAutoStick
+    && messages.length > lastSeenMessageCount
+
   nextTick(() => {
-    if (scrollContainer.value) {
-      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    const nextContainer = scrollContainer.value
+    if (!nextContainer) {
+      lastRenderedMessageId = currentLastMessage?.id ?? ''
+      lastRenderedMessageCount = messages.length
+      return
     }
+
+    if (shouldAutoStick) {
+      nextContainer.scrollTop = nextContainer.scrollHeight
+      shouldStickToLatest.value = true
+      showJumpToLatest.value = false
+      initialScrollPending.value = false
+      pendingSubmittedTurnScroll.value = false
+      markLatestMessageSeen()
+      lastRenderedMessageId = currentLastMessage?.id ?? ''
+      lastRenderedMessageCount = messages.length
+      return
+    }
+
+    if (isHistoryPrepend && previousMetrics) {
+      const heightDelta = nextContainer.scrollHeight - previousMetrics.scrollHeight
+      if (heightDelta > 0) {
+        nextContainer.scrollTop = previousMetrics.scrollTop + heightDelta
+      }
+    }
+
+    shouldStickToLatest.value = isConversationNearBottom(nextContainer)
+    if (shouldStickToLatest.value) {
+      showJumpToLatest.value = false
+      markLatestMessageSeen()
+      lastRenderedMessageId = currentLastMessage?.id ?? ''
+      lastRenderedMessageCount = messages.length
+      return
+    }
+
+    if (hasUnreadMessages) {
+      showJumpToLatest.value = true
+    }
+
+    lastRenderedMessageId = currentLastMessage?.id ?? ''
+    lastRenderedMessageCount = messages.length
   })
 }, { deep: true })
 
@@ -679,6 +765,60 @@ watch(
   },
   { immediate: true },
 )
+
+watch(conversationId, () => {
+  initialScrollPending.value = true
+  pendingSubmittedTurnScroll.value = false
+  shouldStickToLatest.value = true
+  showJumpToLatest.value = false
+  lastRenderedMessageId = ''
+  lastRenderedMessageCount = 0
+  lastSeenMessageId = ''
+  lastSeenMessageCount = 0
+})
+
+function isConversationNearBottom(container: HTMLElement) {
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= conversationScrollThreshold
+}
+
+function handleConversationScroll() {
+  if (!scrollContainer.value) {
+    return
+  }
+
+  initialScrollPending.value = false
+  shouldStickToLatest.value = isConversationNearBottom(scrollContainer.value)
+  if (shouldStickToLatest.value) {
+    showJumpToLatest.value = false
+    markLatestMessageSeen()
+  }
+}
+
+function jumpToLatest() {
+  if (!scrollContainer.value) {
+    return
+  }
+
+  scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+  shouldStickToLatest.value = true
+  showJumpToLatest.value = false
+  markLatestMessageSeen()
+}
+
+function markLatestMessageSeen() {
+  lastSeenMessageId = renderedMessages.value.at(-1)?.id ?? ''
+  lastSeenMessageCount = renderedMessages.value.length
+}
+
+function handleMessageContextMenu(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof HTMLElement)) {
+    activeContextMessageId.value = ''
+    return
+  }
+
+  activeContextMessageId.value = target.closest<HTMLElement>('[data-message-id]')?.dataset.messageId ?? ''
+}
 
 async function createConversationFromEmpty() {
   await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, createConversationId()))
@@ -703,6 +843,8 @@ async function submitRuntimeTurn() {
   }
 
   const draft = messageDraft.value
+  pendingSubmittedTurnScroll.value = true
+  showJumpToLatest.value = false
   messageDraft.value = ''
 
   await ensureRuntimeSession()
@@ -712,6 +854,7 @@ async function submitRuntimeTurn() {
   })
 
   if (!submitted) {
+    pendingSubmittedTurnScroll.value = false
     messageDraft.value = draft
   }
 }
@@ -746,6 +889,17 @@ function focusMessageTool(payload: { messageId: string, toolId: string }) {
   focusedToolByMessageId.value = {
     ...focusedToolByMessageId.value,
     [payload.messageId]: payload.toolId,
+  }
+}
+
+async function handleConversationContextSelect(key: string) {
+  if (key === 'copy-message' && activeContextMessage.value?.content) {
+    await copyTextToClipboard(activeContextMessage.value.content)
+    return
+  }
+
+  if (key === 'copy-link') {
+    await copyTextToClipboard(buildRoutePermalink(route.fullPath))
   }
 }
 
@@ -842,6 +996,17 @@ async function cancelMessageAuthChallenge() {
   await runtime.resolveAuthChallenge('cancelled')
 }
 
+async function openProjectTasksWorkbench() {
+  if (!workspaceId.value || !projectId.value) {
+    return
+  }
+
+  await router.push(createProjectSurfaceTarget('project-tasks', workspaceId.value, projectId.value, {
+    from: 'conversation',
+    conversationId: conversationId.value || undefined,
+  }))
+}
+
 async function approveMemoryProposal() {
   await runtime.resolveMemoryProposal('approve')
 }
@@ -870,51 +1035,105 @@ async function rejectMemoryProposal() {
       </div>
 
       <template v-else>
-        <div ref="scrollContainer" class="flex-1 overflow-y-auto py-4">
-          <div data-testid="conversation-message-list" class="mx-auto flex w-full max-w-[800px] flex-col">
-            <ConversationMessageBubble
-              v-for="message in renderedMessages"
-              :key="message.id"
-              :message="message"
-              :sender-label="message.senderType === 'user' ? currentUserLabel : resolveMessageActorLabel(message)"
-              :avatar-label="resolveMessageAvatarLabel(message)"
-              :avatar-src="resolveMessageAvatarSrc(message)"
-              :actor-label="message.senderType === 'user' ? '' : resolveMessageActorLabel(message)"
-              :permission-label="selectedPermissionMode"
-              :resources="resolveMessageResources(message)"
-              :attachments="message.attachments ?? []"
-              :artifacts="resolveMessageArtifacts(message)"
-              :is-expanded="expandedMessageIds.includes(message.id)"
-              :focused-tool-id="focusedToolByMessageId[message.id]"
-              :approval-resolving="runtime.isApprovalResolving(message.approval?.id)"
-              @toggle-detail="toggleDetail"
-              @open-artifact="(payload) => openArtifact(payload.id, payload.version)"
-              @approve="approveMessageApproval"
-              @reject="rejectMessageApproval"
-              @focus-tool="focusMessageTool"
-            />
-
-            <UiEmptyState
-              v-if="!renderedMessages.length"
-              :title="conversationSetupState?.title ?? t('conversation.messages.emptyTitle')"
-              :description="conversationSetupState?.description ?? t('conversation.messages.emptyDescription')"
+        <div
+          ref="scrollContainer"
+          data-testid="conversation-scroll-container"
+          :aria-label="t('sidebar.navigation.conversation')"
+          class="flex-1 overflow-y-auto py-4"
+          @scroll="handleConversationScroll"
+        >
+          <UiContextMenu
+            :items="conversationContextMenuItems"
+            @select="handleConversationContextSelect"
+          >
+            <div
+              data-testid="conversation-message-list"
+              :aria-label="t('sidebar.navigation.conversation')"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+              class="mx-auto flex w-full max-w-[800px] flex-col"
+              @contextmenu.capture="handleMessageContextMenu"
             >
-              <template v-if="conversationSetupState" #actions>
-                <UiButton
-                  v-for="action in conversationSetupState.actions"
-                  :key="action.id"
-                  :data-testid="`conversation-setup-${action.id}`"
-                  @click="openConversationSetupDestination(action.id)"
-                >
-                  {{ action.label }}
-                </UiButton>
-              </template>
-            </UiEmptyState>
+              <ConversationMessageBubble
+                v-for="message in renderedMessages"
+                :key="message.id"
+                :message="message"
+                :sender-label="message.senderType === 'user' ? currentUserLabel : resolveMessageActorLabel(message)"
+                :avatar-label="resolveMessageAvatarLabel(message)"
+                :avatar-src="resolveMessageAvatarSrc(message)"
+                :actor-label="message.senderType === 'user' ? '' : resolveMessageActorLabel(message)"
+                :permission-label="selectedPermissionMode"
+                :resources="resolveMessageResources(message)"
+                :attachments="message.attachments ?? []"
+                :artifacts="resolveMessageArtifacts(message)"
+                :is-expanded="expandedMessageIds.includes(message.id)"
+                :focused-tool-id="focusedToolByMessageId[message.id]"
+                :approval-resolving="runtime.isApprovalResolving(message.approval?.id)"
+                @toggle-detail="toggleDetail"
+                @open-artifact="(payload) => openArtifact(payload.id, payload.version)"
+                @approve="approveMessageApproval"
+                @reject="rejectMessageApproval"
+                @focus-tool="focusMessageTool"
+              />
+
+              <UiEmptyState
+                v-if="!renderedMessages.length"
+                :title="conversationSetupState?.title ?? t('conversation.messages.emptyTitle')"
+                :description="conversationSetupState?.description ?? t('conversation.messages.emptyDescription')"
+              >
+                <template v-if="conversationSetupState" #actions>
+                  <UiButton
+                    v-for="action in conversationSetupState.actions"
+                    :key="action.id"
+                    :data-testid="`conversation-setup-${action.id}`"
+                    @click="openConversationSetupDestination(action.id)"
+                  >
+                    {{ action.label }}
+                  </UiButton>
+                </template>
+              </UiEmptyState>
+            </div>
+          </UiContextMenu>
+        </div>
+
+        <div v-if="showJumpToLatest" class="mx-auto mt-4 flex w-full max-w-[840px] justify-end px-1">
+          <UiButton
+            data-testid="conversation-jump-to-latest"
+            variant="secondary"
+            size="sm"
+            @click="jumpToLatest"
+          >
+            {{ t('conversation.stream.jumpToLatest') }}
+          </UiButton>
+        </div>
+
+        <div
+          v-if="showProjectTasksWorkbenchEntry"
+          class="mx-auto mt-4 flex w-full max-w-[840px] flex-col gap-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          data-testid="conversation-project-tasks-entry"
+        >
+          <div class="min-w-0">
+            <div class="text-[12px] font-semibold text-text-primary">{{ t('conversation.queue.title') }}</div>
+            <p class="mt-1 text-[12px] leading-5 text-text-secondary">{{ t('conversation.queue.tasksHint') }}</p>
           </div>
+          <UiButton
+            data-testid="conversation-open-project-tasks"
+            variant="secondary"
+            size="sm"
+            @click="openProjectTasksWorkbench"
+          >
+            {{ t('conversation.queue.openTasks') }}
+          </UiButton>
         </div>
 
         <div v-if="queueItems.length" class="mx-auto mt-4 w-full max-w-[840px]">
-          <ConversationQueueList :items="queueItems" @remove="runtime.removeQueuedTurn" />
+          <ConversationQueueList
+            :title="t('conversation.queue.title')"
+            :description="t('conversation.queue.description')"
+            :items="queueItems"
+            @remove="runtime.removeQueuedTurn"
+          />
         </div>
 
         <div
@@ -1002,7 +1221,9 @@ async function rejectMemoryProposal() {
           <div class="px-5 pb-3 pt-3">
             <UiTextarea
               v-model="messageDraft"
+              data-testid="conversation-composer-input"
               :disabled="!!conversationSetupState"
+              :aria-label="composerPlaceholder"
               class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus:border-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               :rows="3"
               :placeholder="composerPlaceholder"
@@ -1028,6 +1249,7 @@ async function rejectMemoryProposal() {
                     <UiSelect
                       v-model="selectedModelId"
                       data-testid="conversation-model-select"
+                      :aria-label="t('conversation.composer.modelLabel')"
                       :options="modelOptions"
                       :disabled="!hasModelOptions"
                       class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
@@ -1044,6 +1266,7 @@ async function rejectMemoryProposal() {
                     <UiSelect
                       v-model="selectedPermissionMode"
                       data-testid="conversation-permission-select"
+                      :aria-label="t('conversation.composer.permissionLabel')"
                       :options="permissionOptions"
                       :disabled="!!conversationSetupState"
                       class="h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
@@ -1060,6 +1283,7 @@ async function rejectMemoryProposal() {
                     <UiSelect
                       v-model="selectedActorValue"
                       data-testid="conversation-actor-select"
+                      :aria-label="t('conversation.composer.actorLabel')"
                       :options="actorOptions"
                       :disabled="!hasActorOptions"
                       class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"

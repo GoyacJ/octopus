@@ -181,6 +181,7 @@ describe('Workbench shell layout', () => {
     expect(searchTrigger?.className).toContain('border-border')
     expect(searchTrigger?.className).toContain('bg-surface')
     expect(searchTrigger?.className).not.toContain('shadow-xs')
+    expect(searchTrigger?.getAttribute('aria-pressed')).toBe('false')
 
     mounted.destroy()
   })
@@ -455,6 +456,96 @@ describe('Workbench shell layout', () => {
     } finally {
       mounted.destroy()
       i18n.global.locale.value = originalLocale
+    }
+  })
+
+  it('shows a warning banner for a disconnected active workspace connection', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      const shell = useShellStore()
+      await waitFor(() =>
+        mounted.container.querySelector('[data-testid="workbench-topbar"]') !== null
+        && shell.workspaceConnectionsState.length >= 2
+        && shell.activeWorkspaceConnectionId === 'conn-local',
+      )
+
+      shell.workspaceConnectionsState = shell.workspaceConnectionsState.map(connection =>
+        connection.workspaceConnectionId === 'conn-local'
+          ? { ...connection, status: 'disconnected' }
+          : connection,
+      )
+
+      await waitFor(() => mounted.container.querySelector('[data-testid="topbar-connection-banner"]') !== null)
+
+      const banner = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-connection-banner"]')
+
+      expect(banner).not.toBeNull()
+      expect(banner?.dataset.uiOfflineTone).toBe('warning')
+      expect(banner?.textContent).toContain(String(i18n.global.t('topbar.localWorkspace')))
+      expect(banner?.textContent).toContain(String(i18n.global.t('topbar.connection.disconnected.description')))
+      expect(mounted.container.querySelector('[data-testid="topbar-connection-retry"]')).toBeNull()
+    } finally {
+      mounted.destroy()
+    }
+  })
+
+  it('shows a retry banner for an unreachable active local connection and clears it after retry', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      const shell = useShellStore()
+      const healthcheckSpy = vi.spyOn(tauriClient, 'healthcheck').mockResolvedValue({
+        host: {
+          platform: 'tauri',
+          mode: 'local',
+          appVersion: '0.2.5',
+          cargoWorkspace: false,
+          shell: 'tauri2',
+        },
+        backend: {
+          state: 'ready',
+          transport: 'http',
+        },
+      })
+
+      await waitFor(() =>
+        mounted.container.querySelector('[data-testid="workbench-topbar"]') !== null
+        && shell.workspaceConnectionsState.length >= 2
+        && shell.activeWorkspaceConnectionId === 'conn-local',
+      )
+
+      shell.backendConnectionState = {
+        state: 'ready',
+        transport: 'http',
+        baseUrl: 'http://127.0.0.1:43127',
+      }
+      shell.workspaceConnectionsState = shell.workspaceConnectionsState.map(connection =>
+        connection.workspaceConnectionId === 'conn-local'
+          ? { ...connection, status: 'unreachable' }
+          : connection,
+      )
+
+      await waitFor(() => mounted.container.querySelector('[data-testid="topbar-connection-retry"]') !== null)
+
+      const banner = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-connection-banner"]')
+      const retryButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-connection-retry"]')
+
+      expect(banner?.dataset.uiOfflineTone).toBe('danger')
+      expect(banner?.textContent).toContain(String(i18n.global.t('topbar.connection.unreachable.description')))
+
+      retryButton?.click()
+
+      await waitFor(() => healthcheckSpy.mock.calls.length === 1)
+      await waitFor(() => mounted.container.querySelector('[data-testid="topbar-connection-banner"]') === null)
+
+      expect(shell.backendConnection?.state).toBe('ready')
+    } finally {
+      mounted.destroy()
     }
   })
 

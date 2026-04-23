@@ -29,8 +29,8 @@ const props = withDefaults(
       props.class
     )"
   >
-    <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary opacity-70">{{ props.label }}</span>
+    <span class="text-micro font-bold uppercase tracking-wider text-text-tertiary opacity-70">{{ props.label }}</span>
     <strong class="text-2xl font-bold tracking-tight text-text-primary tabular-nums">{{ props.value }}</strong>
-    <span v-if="props.helper" class="text-[11px] text-text-secondary line-clamp-1">{{ props.helper }}</span>
+    <span v-if="props.helper" class="text-micro text-text-secondary line-clamp-1">{{ props.helper }}</span>
   </div>
 </template>

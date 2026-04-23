@@ -8,6 +8,8 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useKnowledgeStore } from '@/stores/knowledge'
+import type { WorkspaceClient } from '@/tauri/workspace-client'
+import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -44,6 +46,18 @@ function mountApp() {
       container.remove()
     },
   }
+}
+
+function configureWorkspaceClient(
+  transform: (client: WorkspaceClient) => WorkspaceClient,
+) {
+  const createWorkspaceClientMock = vi.mocked(tauriClient.createWorkspaceClient)
+  const baseImplementation = createWorkspaceClientMock.getMockImplementation()
+  expect(baseImplementation).toBeTypeOf('function')
+
+  createWorkspaceClientMock.mockImplementation((context) =>
+    transform(baseImplementation!(context) as WorkspaceClient) as ReturnType<typeof tauriClient.createWorkspaceClient>,
+  )
 }
 
 async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
@@ -87,6 +101,34 @@ describe('Project deliverables view', () => {
     expect(mounted.container.textContent).toContain('Workspace Protocol Baseline')
     expect(mounted.container.querySelector('[data-testid="project-deliverable-detail"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Version 3 content for artifact-run-conv-redesign.')
+
+    mounted.destroy()
+  })
+
+  it('renders shared skeleton rows while the deliverables list is still loading', async () => {
+    let releaseDeliverables: (() => void) | null = null
+    const deliverablesGate = new Promise<void>((resolve) => {
+      releaseDeliverables = resolve
+    })
+
+    configureWorkspaceClient(client => ({
+      ...client,
+      projects: {
+        ...client.projects,
+        async listDeliverables(projectId) {
+          await deliverablesGate
+          return await client.projects.listDeliverables(projectId)
+        },
+      },
+    }))
+
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="project-deliverables-list-skeleton"]') !== null)
+
+    releaseDeliverables?.()
+
+    await waitForText(mounted.container, 'Runtime Delivery Summary')
 
     mounted.destroy()
   })

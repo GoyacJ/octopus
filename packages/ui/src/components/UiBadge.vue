@@ -14,7 +14,7 @@ const props = withDefaults(
 
 <template>
   <span
-    class="inline-flex max-w-full items-center whitespace-nowrap overflow-hidden text-ellipsis rounded-full border px-2 py-1 text-[12px] font-semibold leading-none transition-colors"
+    class="inline-flex max-w-full items-center whitespace-nowrap overflow-hidden text-ellipsis rounded-full border px-2 py-1 text-micro font-semibold transition-colors"
     :class="[
       props.tone === 'default' ? 'border-border bg-subtle text-text-secondary' : '',
       props.tone === 'success' ? 'border-transparent bg-[var(--color-status-success-soft)] text-status-success' : '',

@@ -5,6 +5,30 @@
   --font-serif: Georgia, "Times New Roman", serif;
   --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   --font-size-base: 14px;
+  --font-size-page-title: 30px;
+  --line-height-page-title: 1.15;
+  --letter-spacing-page-title: -0.03em;
+  --font-size-section-title: 22px;
+  --line-height-section-title: 1.25;
+  --letter-spacing-section-title: -0.02em;
+  --font-size-card-title: 16px;
+  --line-height-card-title: 1.35;
+  --letter-spacing-card-title: 0;
+  --font-size-body: 14px;
+  --line-height-body: 1.5;
+  --letter-spacing-body: 0;
+  --font-size-label: 13px;
+  --line-height-label: 1.4;
+  --letter-spacing-label: 0;
+  --font-size-caption: 12px;
+  --line-height-caption: 1.35;
+  --letter-spacing-caption: 0.01em;
+  --font-size-badge: 12px;
+  --line-height-badge: 1.2;
+  --letter-spacing-badge: 0.02em;
+  --font-size-micro: 11px;
+  --line-height-micro: 1.2;
+  --letter-spacing-micro: 0.02em;
 
   --space-0-5: 2px;
   --space-1: 4px;
@@ -19,6 +43,24 @@
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
+  --density-compact-row-height: 32px;
+  --density-compact-horizontal-padding: var(--space-4);
+  --density-compact-horizontal-padding-lg: var(--space-5);
+  --density-compact-vertical-padding: var(--space-4);
+  --density-compact-vertical-padding-lg: var(--space-5);
+  --density-compact-layout-gap: var(--space-4);
+  --density-regular-row-height: 36px;
+  --density-regular-horizontal-padding: var(--space-4);
+  --density-regular-horizontal-padding-lg: var(--space-6);
+  --density-regular-vertical-padding: var(--space-5);
+  --density-regular-vertical-padding-lg: var(--space-6);
+  --density-regular-layout-gap: var(--space-5);
+  --density-comfortable-row-height: 40px;
+  --density-comfortable-horizontal-padding: var(--space-5);
+  --density-comfortable-horizontal-padding-lg: var(--space-8);
+  --density-comfortable-vertical-padding: var(--space-6);
+  --density-comfortable-vertical-padding-lg: var(--space-8);
+  --density-comfortable-layout-gap: var(--space-6);
 
   --radius-xs: 4px;
   --radius-s: 4px;
@@ -49,7 +91,7 @@
   --color-overlay: rgba(20, 19, 18, 0.28);
 
   --color-text-primary: rgba(31, 30, 29, 0.94);
-  --color-text-secondary: rgba(70, 67, 63, 0.72);
+  --color-text-secondary: rgba(70, 67, 63, 0.74);
   --color-text-tertiary: rgba(94, 89, 82, 0.5);
   --color-text-on-accent: #ffffff;
 
@@ -57,8 +99,8 @@
   --color-border-strong: rgba(31, 30, 29, 0.16);
   --color-border-input: rgba(31, 30, 29, 0.12);
 
-  --color-accent: #ff6a2a;
-  --color-accent-hover: #e65a1f;
+  --color-accent: #c54e14;
+  --color-accent-hover: #ad4310;
   --color-accent-soft: #fff1e8;
   --color-ring: rgba(255, 106, 42, 0.22);
   --color-toggle-off-bg: #ebe6de;
@@ -67,9 +109,9 @@
 
   --color-status-success: #0f7b6c;
   --color-status-success-soft: rgba(15, 123, 108, 0.12);
-  --color-status-warning: #b36b18;
+  --color-status-warning: #9b5a12;
   --color-status-warning-soft: rgba(179, 107, 24, 0.12);
-  --color-status-error: #c4554d;
+  --color-status-error: #ad433d;
   --color-status-error-soft: rgba(196, 85, 77, 0.12);
   --color-status-info: #ff6a2a;
   --color-status-info-soft: rgba(255, 106, 42, 0.12);
@@ -112,7 +154,7 @@
   --color-status-success-soft: rgba(65, 169, 150, 0.18);
   --color-status-warning: #d29a4b;
   --color-status-warning-soft: rgba(210, 154, 75, 0.18);
-  --color-status-error: #d87a74;
+  --color-status-error: #e68d87;
   --color-status-error-soft: rgba(216, 122, 116, 0.18);
   --color-status-info: #ff8a57;
   --color-status-info-soft: rgba(255, 138, 87, 0.18);
@@ -137,7 +179,6 @@
   --bg-secondary: var(--color-surface-muted);
   --bg-card: var(--color-surface);
   --bg-popover: var(--color-popover);
-  --bg-glass: var(--color-surface);
 
   --foreground: var(--color-text-primary);
   --text-primary: var(--color-text-primary);

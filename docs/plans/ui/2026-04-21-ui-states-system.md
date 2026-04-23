@@ -41,7 +41,7 @@
 
 ### Task 1: Add Shared `UiSkeleton`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiSkeleton.vue`
@@ -59,12 +59,13 @@ Step 1:
 
 ### Task 2: Extract Shared Error Presentation, Keep Desktop Runtime Boundary
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiErrorState.vue`
 - Modify: `packages/ui/src/index.ts`
 - Modify: `apps/desktop/src/components/layout/AppRuntimeErrorBoundary.vue`
+- Modify: `apps/desktop/tsconfig.json`
 - Modify: `apps/desktop/test/app-runtime-error-boundary.test.ts`
 - Modify: `apps/desktop/test/ui-primitives.test.ts`
 
@@ -79,7 +80,7 @@ Step 1:
 
 ### Task 3: Surface Connection Problems From `useShellStore`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiOfflineBanner.vue`
@@ -99,7 +100,7 @@ Step 1:
 
 ### Task 4: Add Shared `UiRestrictedState`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Create: `packages/ui/src/components/UiRestrictedState.vue`
@@ -117,7 +118,7 @@ Step 1:
 
 ### Task 5: Migrate Real Loading Surfaces To `UiSkeleton`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/components/conversation/ArtifactVersionList.vue`
@@ -171,3 +172,79 @@ Step 1:
 - Next:
   - Task 5 Step 1
 ```
+
+## Checkpoint 2026-04-23 12:23 CST
+
+- Batch: Task 1 Step 1
+- Completed:
+  - 新增共享 `UiSkeleton`，覆盖 line、card、table-row 三种骨架形态
+  - 通过 `packages/ui/src/index.ts` 暴露 `UiSkeleton`
+  - 在 `apps/desktop/test/ui-primitives.test.ts` 增加三种骨架变体和 reduced motion 断言
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 12:29 CST
+
+- Batch: Task 2 Step 1
+- Completed:
+  - 新增共享展示壳 `UiErrorState`，统一 intro、summary、actions、details 四段结构
+  - 让 `AppRuntimeErrorBoundary.vue` 复用共享错误展示层，同时保留 desktop 侧的 retry、复制详情和路由恢复逻辑
+  - 补齐 `apps/desktop/tsconfig.json` 的 `@octopus/ui` 路径映射，使 worktree 下的 typecheck/build 与本地源码解析保持一致
+  - 在 `app-runtime-error-boundary` 和 `ui-primitives` 测试里覆盖新的结构分区与共享组件渲染
+- Verification:
+  - `pnpm -C apps/desktop test -- app-runtime-error-boundary ui-primitives` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 12:43 CST
+
+- Batch: Task 3 Step 1
+- Completed:
+  - 新增共享 `UiOfflineBanner`，统一 topbar 连接告警条的 warning 与 danger 呈现
+  - 让 `WorkbenchTopbar.vue` 基于 `useShellStore().activeWorkspaceConnection` 渲染断连与不可达提示，并在 `unreachable` 时复用现有 `refreshBackendStatus()` 重试
+  - 在 `layout-shell` 与 `shell-store` 测试里覆盖断连提示、不可达重试和 loopback 健康检查状态同步
+- Verification:
+  - `pnpm -C apps/desktop test -- layout-shell shell-store` -> pass
+  - `pnpm -C apps/desktop build:ui` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 12:45 CST
+
+- Batch: Task 4 Step 1
+- Completed:
+  - 新增共享 `UiRestrictedState`，提供 `neutral / warning / accent` 三种受限状态语气和通用 intro/body/actions 布局
+  - 通过 `packages/ui/src/index.ts` 暴露 `UiRestrictedState`
+  - 在 `ui-primitives` 测试里覆盖 tone、meta、正文和 actions 插槽结构
+- Verification:
+  - `pnpm -C apps/desktop test -- ui-primitives` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 13:07 CST
+
+- Batch: Task 5 Step 1
+- Completed:
+  - 将会话上下文、交付物列表、模型面板和产物版本列表的加载态统一迁移到共享 `UiSkeleton`
+  - 在 `conversation-surface` 与 `project-deliverables-view` 测试里覆盖交付物列表骨架和相关高频加载面
+  - 补齐 `UiSkeleton` 在真实桌面高频加载路径里的落地，结束 `UI States System` 计划剩余执行项
+- Verification:
+  - `pnpm -C apps/desktop test -- conversation-surface project-deliverables-view` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - `2026-04-21-ui-ai-feedback.md` Task 2 Step 1

@@ -9,7 +9,7 @@ import { useShellStore } from '@/stores/shell'
 const shell = useShellStore()
 
 function handleGlobalKeydown(event: KeyboardEvent) {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+  if (shell.matchesSearchShortcut(event)) {
     event.preventDefault()
     shell.openSearch()
     return

@@ -152,7 +152,14 @@ Rules:
 - Page titles are visually quiet: no oversized billboard heroes on desktop workbench pages.
 - `Micro` is reserved for eyebrow labels, timestamps, tab badges, and status chips. `uppercase` is allowed only on `Micro` and `Badge` roles, never on body or title surfaces.
 
-### 5.6 Focus
+### 5.6 Density
+
+- shared density presets are `compact`, `regular`, and `comfortable`
+- `regular` is the default for workbench pages
+- density tokens define row height, horizontal padding, vertical padding, and layout gap
+- shared shells and dense shared surfaces should opt into a density preset through shared props or data attributes, not page-local spacing overrides
+
+### 5.7 Focus
 
 - all keyboard-focusable controls must have a visible accent focus ring
 - focus ring must be outside the element silhouette, not hidden by box-shadow resets

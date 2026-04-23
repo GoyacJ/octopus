@@ -2,6 +2,8 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
+  title: string
+  description: string
   items: Array<{
     id: string
     content: string
@@ -37,6 +39,10 @@ function toggleExpanded(queueItemId: string) {
 
 <template>
   <section v-if="items.length" class="queue-shell" data-testid="conversation-queue-list">
+    <header class="queue-header">
+      <div class="queue-title" data-testid="conversation-queue-title">{{ title }}</div>
+      <p class="queue-description">{{ description }}</p>
+    </header>
     <article
       v-for="item in items"
       :key="item.id"
@@ -73,7 +79,8 @@ function toggleExpanded(queueItemId: string) {
 .queue-shell,
 .queue-item,
 .queue-summary,
-.queue-line {
+.queue-line,
+.queue-header {
   display: flex;
 }
 
@@ -85,6 +92,25 @@ function toggleExpanded(queueItemId: string) {
   overflow-y: auto;
   border-radius: 0.9rem;
   background: color-mix(in srgb, var(--bg-surface) 80%, var(--bg-subtle));
+}
+
+.queue-header {
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-bottom: 0.35rem;
+}
+
+.queue-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.queue-description {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 .queue-item {

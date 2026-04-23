@@ -157,6 +157,10 @@ function touchWorkspaceConnection(
   }
 }
 
+function detectApplePlatform(): boolean {
+  return /^Mac|iPhone|iPad|iPod/.test(globalThis.navigator?.platform ?? '')
+}
+
 interface ConversationWorkbenchSelection {
   mode: ConversationWorkbenchMode
   modeLocked: boolean
@@ -223,6 +227,9 @@ export const useShellStore = defineStore('shell', {
     },
     canRestartBackend(): boolean {
       return this.hostState.platform === 'tauri'
+    },
+    searchShortcutKeys(): string[] {
+      return detectApplePlatform() ? ['⌘', 'K'] : ['Ctrl', 'K']
     },
   },
   actions: {
@@ -391,6 +398,9 @@ export const useShellStore = defineStore('shell', {
     },
     toggleRightSidebar() {
       this.setRightSidebarCollapsed(!this.rightSidebarCollapsed)
+    },
+    matchesSearchShortcut(event: Pick<KeyboardEvent, 'metaKey' | 'ctrlKey' | 'key'>) {
+      return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k'
     },
     openSearch() {
       this.searchOpen = true

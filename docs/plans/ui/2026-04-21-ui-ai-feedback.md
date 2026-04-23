@@ -41,7 +41,7 @@
 
 ### Task 1: Stabilize Conversation Scroll Anchoring
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/views/project/ConversationView.vue`
@@ -64,7 +64,7 @@ Step 2:
 
 ### Task 2: Clarify Per-Message Process Feedback
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/components/conversation/ConversationMessageBubble.vue`
@@ -81,7 +81,7 @@ Step 1:
 
 ### Task 3: Split Session Queue From Durable Background Tasks
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/views/project/ConversationView.vue`
@@ -101,7 +101,7 @@ Step 1:
 
 ### Task 4: Align Trace Timeline With Current Runtime Trace Records
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `apps/desktop/src/views/project/TraceView.vue`
@@ -140,3 +140,60 @@ Step 2:
 - Next:
   - Task 4 Step 2
 ```
+
+## Checkpoint 2026-04-23 13:03 CST
+
+- Batch: Task 1 Step 1 -> Task 1 Step 2
+- Completed:
+  - 将 `ConversationView.vue` 的消息区滚动改成锚定策略，首屏、用户提交 turn、仍在底部三种场景才自动贴底
+  - 为会话页补上本地 `回到最新` 按钮，用户离开底部且有新消息到达时可直接回到最新输出
+  - 在 `conversation-surface` 测试里覆盖“历史阅读时不被强制拉回底部”“从历史位置提交新 turn 会重新贴底”“离屏新输出出现后展示回到最新入口”
+- Verification:
+  - `pnpm -C apps/desktop test -- conversation-surface` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 13:11 CST
+
+- Batch: Task 2 Step 1
+- Completed:
+  - 重写 `ConversationMessageBubble.vue` 的过程切换文案，直接区分 Thinking、Using tools、Waiting for approval、Waiting for input、Completed
+  - 调整工具调用行文案，让运行中、等待审批、等待输入和完成后的单条工具反馈各自可读
+  - 为等待输入消息补上内联 callout，并在 `conversation-surface` 测试里覆盖等待审批、等待输入和完成态文案
+- Verification:
+  - `pnpm -C apps/desktop test -- conversation-surface` -> pass
+  - `pnpm -C apps/desktop typecheck` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 13:20 CST
+
+- Batch: Task 3 Step 1
+- Completed:
+  - 让 `ConversationQueueList.vue` 明确只描述当前会话内排队 turn，并补上标题与说明文案
+  - 在 `ConversationView.vue` 增加到 `ProjectTasksView.vue` 的明确入口，区分会话排队与项目长期任务工作台
+  - 在 `ProjectTasksView.vue` 增加从会话页进入时的说明与返回入口，并用测试覆盖会话到任务页再返回的链路
+- Verification:
+  - `pnpm -C apps/desktop exec vitest run test/conversation-surface.test.ts test/project-tasks-view.test.ts` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 13:29 CST
+
+- Batch: Task 4 Step 1 -> Task 4 Step 2
+- Completed:
+  - 移除 `TraceView.vue` 里用 `runtime.activeTrace[0]` 统一染色整条时间线的逻辑，改为每条 trace item 按自己的 `tone` 渲染
+  - 为 `UiTraceBlock.vue` 增加轻量 `metaItems` 行，让单条 trace 可承载当前 runtime 的 kind 和关联工具名，而不引入嵌套状态机
+  - 在 `trace-view` 与 `ui-primitives` 测试里补上混合 tone 和 trace 元信息覆盖
+- Verification:
+  - `pnpm -C apps/desktop exec vitest run test/trace-view.test.ts test/ui-primitives.test.ts` -> pass
+- Blockers:
+  - none
+- Next:
+  - `2026-04-21-ui-performance-a11y.md` Task 1 Step 1
