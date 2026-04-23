@@ -8,10 +8,11 @@ use octopus_sdk_contracts::{
 };
 use octopus_sdk_core::SubmitTurnInput;
 use octopus_sdk_hooks::{Hook, HookSource};
+use octopus_sdk_observability::{session_span_id, session_trace_id};
 use octopus_sdk_plugin::{
-    Plugin, PluginApi, PluginCompat, PluginComponent, PluginDiscoveryConfig,
-    PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry,
-    PluginToolRegistration,
+    PluginApi, PluginCompat, PluginComponent, PluginDiscoveryConfig, PluginDiscoveryRoot,
+    PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry, PluginRuntime,
+    PluginRuntimeCatalog, PluginToolRegistration,
 };
 use octopus_sdk_session::SessionStore;
 use octopus_sdk_tools::{TaskFn, Tool, ToolContext, ToolError, ToolResult, ToolSpec};
@@ -100,11 +101,7 @@ impl NoopPlugin {
     }
 }
 
-impl Plugin for NoopPlugin {
-    fn manifest(&self) -> &PluginManifest {
-        &self.manifest
-    }
-
+impl PluginRuntime for NoopPlugin {
     fn register(&self, api: &mut PluginApi<'_>) -> Result<(), octopus_sdk_plugin::PluginError> {
         api.register_tool(PluginToolRegistration {
             decl: ToolDecl {
@@ -149,10 +146,22 @@ impl TaskFn for StaticTaskFn {
             text: format!("subagent: {input}"),
             meta: octopus_sdk_contracts::SubagentSummary {
                 session_id: octopus_sdk_contracts::SessionId("subagent-1".into()),
+                parent_session_id: octopus_sdk_contracts::SessionId("session-1".into()),
+                resume_session_id: Some(octopus_sdk_contracts::SessionId("subagent-1".into())),
+                spec_id: "worker-1".into(),
+                agent_role: "worker".into(),
+                parent_agent_role: "main".into(),
                 turns: 1,
                 tokens_used: 3,
                 duration_ms: 1,
-                trace_id: "trace-subagent".into(),
+                trace_id: session_trace_id("session-1"),
+                span_id: "subagent:subagent-1".into(),
+                parent_span_id: session_span_id("session-1"),
+                model_id: "test-model".into(),
+                model_version: "test".into(),
+                config_snapshot_id: "cfg-1".into(),
+                permission_mode: PermissionMode::Default,
+                allowed_tools: vec!["noop-tool".into()],
             },
         })
     }
@@ -163,17 +172,17 @@ async fn test_builder_uses_supplied_plugin_registry() {
     let (root, store) = support::temp_store();
     let mut registry = PluginRegistry::new();
     let plugin = NoopPlugin::new();
-    let plugin_root = plugin_root(plugin.manifest());
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(plugin)];
+    let plugin_root = plugin_root(&plugin.manifest);
+    let runtimes = runtime_catalog("example-noop-tool", Arc::new(plugin));
 
     PluginLifecycle::run(
         &mut registry,
         &PluginDiscoveryConfig {
-            roots: vec![plugin_root.path().to_path_buf()],
+            roots: vec![PluginDiscoveryRoot::local(plugin_root.path().to_path_buf())],
             allow: Vec::new(),
             deny: Vec::new(),
         },
-        &plugins,
+        &runtimes,
     )
     .expect("plugin lifecycle should populate registry");
     let supplied_snapshot = registry.get_snapshot();
@@ -260,6 +269,7 @@ fn sample_spec(id: &str) -> SubagentSpec {
         id: id.into(),
         system_prompt: "Be concise.".into(),
         allowed_tools: vec!["noop-tool".into()],
+        agent_role: "worker".into(),
         model_role: "subagent-default".into(),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {
@@ -269,6 +279,14 @@ fn sample_spec(id: &str) -> SubagentSpec {
         max_turns: 2,
         depth: 1,
     }
+}
+
+fn runtime_catalog(plugin_id: &str, runtime: Arc<dyn PluginRuntime>) -> PluginRuntimeCatalog {
+    let mut runtimes = PluginRuntimeCatalog::new();
+    runtimes
+        .register_local(plugin_id, runtime)
+        .expect("runtime ids should stay unique");
+    runtimes
 }
 
 fn plugin_root(manifest: &PluginManifest) -> tempfile::TempDir {

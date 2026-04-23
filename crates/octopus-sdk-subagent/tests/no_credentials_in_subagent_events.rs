@@ -16,12 +16,13 @@ use octopus_sdk_model::{
     ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
     ProviderId,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id, NoopTracer};
 use octopus_sdk_permissions::{
     ApprovalBroker, DefaultPermissionGate, PermissionBehavior, PermissionPolicy, PermissionRule,
     PermissionRuleSource,
 };
 use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
-use octopus_sdk_subagent::{ParentSessionContext, SubagentContext};
+use octopus_sdk_subagent::{ParentSessionContext, ParentTraceContext, SubagentContext};
 use octopus_sdk_tools::ToolRegistry;
 use serde_json::json;
 
@@ -144,6 +145,15 @@ async fn test_parent_session_events_do_not_include_secret_after_hook_and_permiss
         tools: Arc::new(ToolRegistry::new()),
         permissions: Arc::new(gate),
         scratchpad: DurableScratchpad::new(root.path().to_path_buf()),
+        trace: ParentTraceContext {
+            trace_id: session_trace_id(&parent_session.0),
+            span_id: session_span_id(&parent_session.0),
+            agent_role: "main".into(),
+            model_id: "main".into(),
+            model_version: "test".into(),
+            config_snapshot_id: "cfg-parent".into(),
+            tracer: Arc::new(NoopTracer),
+        },
     };
     let context = SubagentContext::from_parent(parent, sample_spec());
 
@@ -189,7 +199,7 @@ async fn test_parent_session_events_do_not_include_secret_after_hook_and_permiss
         .append(
             &parent_session,
             SessionEvent::Render {
-                block: RenderBlock {
+                blocks: vec![RenderBlock {
                     kind: RenderKind::Markdown,
                     payload: json!({
                         "title": "subagent.summary",
@@ -200,8 +210,8 @@ async fn test_parent_session_events_do_not_include_secret_after_hook_and_permiss
                         parent: None,
                         ts_ms: 0,
                     },
-                },
-                lifecycle: RenderLifecycle::OnToolResult,
+                }],
+                lifecycle: RenderLifecycle::assistant_message(),
             },
         )
         .await
@@ -218,6 +228,7 @@ fn sample_spec() -> SubagentSpec {
         id: "reviewer".into(),
         system_prompt: "Be concise.".into(),
         allowed_tools: vec!["shell_exec".into()],
+        agent_role: "worker".into(),
         model_role: "subagent-default".into(),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {

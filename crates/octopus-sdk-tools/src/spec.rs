@@ -1,6 +1,22 @@
 use octopus_sdk_contracts::{ToolCategory, ToolSchema};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolOutputFormat {
+    #[default]
+    Concise,
+    Detailed,
+    Structured,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDisplayDescriptor {
+    pub title: Option<String>,
+    pub summary: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolSpec {
     pub name: String,
@@ -24,7 +40,7 @@ impl ToolSpec {
 mod tests {
     use serde_json::json;
 
-    use super::ToolSpec;
+    use super::{ToolDisplayDescriptor, ToolOutputFormat, ToolSpec};
     use crate::ToolCategory;
 
     #[test]
@@ -49,5 +65,21 @@ mod tests {
             schema.input_schema["properties"]["pattern"]["type"],
             "string"
         );
+    }
+
+    #[test]
+    fn tool_contract_metadata_serializes_stable_defaults() {
+        assert_eq!(
+            serde_json::to_value(ToolOutputFormat::Detailed).expect("format should serialize"),
+            json!("detailed")
+        );
+
+        let display = ToolDisplayDescriptor {
+            title: Some("Search Results".into()),
+            summary: Some("Top matches".into()),
+        };
+        let value = serde_json::to_value(display).expect("display should serialize");
+        assert_eq!(value["title"], "Search Results");
+        assert_eq!(value["summary"], "Top matches");
     }
 }

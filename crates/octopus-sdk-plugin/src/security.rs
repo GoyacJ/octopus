@@ -7,7 +7,9 @@ pub fn validate_security_gates(
     manifest: &PluginManifest,
 ) -> Result<(), PluginError> {
     validate_plugin_id(&manifest.id)?;
-    ensure_not_world_writable(manifest_path)?;
+    if manifest.source != octopus_sdk_contracts::PluginSourceTag::Bundled {
+        ensure_not_world_writable(manifest_path)?;
+    }
 
     let root = manifest_path
         .parent()

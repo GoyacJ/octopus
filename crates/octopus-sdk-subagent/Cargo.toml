@@ -15,6 +15,7 @@ octopus-sdk-context = { path = "../octopus-sdk-context" }
 octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
 octopus-sdk-hooks = { path = "../octopus-sdk-hooks" }
 octopus-sdk-model = { path = "../octopus-sdk-model" }
+octopus-sdk-observability = { path = "../octopus-sdk-observability" }
 octopus-sdk-permissions = { path = "../octopus-sdk-permissions" }
 octopus-sdk-sandbox = { path = "../octopus-sdk-sandbox" }
 octopus-sdk-session = { path = "../octopus-sdk-session" }

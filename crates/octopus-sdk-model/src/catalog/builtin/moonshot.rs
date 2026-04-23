@@ -27,21 +27,63 @@ pub(crate) fn surfaces() -> Vec<Surface> {
 
 #[must_use]
 pub(crate) fn models() -> Vec<Model> {
-    vec![Model {
-        id: ModelId("kimi-k2.5".to_string()),
-        surface: SurfaceId("moonshot.conversation".to_string()),
-        family: "kimi-k2".to_string(),
-        track: ModelTrack::Stable,
-        context_window: ContextWindow {
-            max_input_tokens: 200_000,
-            max_output_tokens: 16_384,
-            supports_1m: false,
+    vec![
+        Model {
+            id: ModelId("kimi-k2.5".to_string()),
+            surface: SurfaceId("moonshot.conversation".to_string()),
+            family: "kimi-k2".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 200_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["kimi".to_string()],
         },
-        aliases: vec!["kimi".to_string()],
-    }]
+        Model {
+            id: ModelId("kimi-k2-thinking".to_string()),
+            surface: SurfaceId("moonshot.conversation".to_string()),
+            family: "kimi-k2".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 200_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["kimi-thinking".to_string()],
+        },
+        Model {
+            id: ModelId("kimi-k2-thinking-turbo".to_string()),
+            surface: SurfaceId("moonshot.conversation".to_string()),
+            family: "kimi-k2".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 200_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["kimi-fast".to_string()],
+        },
+        Model {
+            id: ModelId("kimi-k2-0905-preview".to_string()),
+            surface: SurfaceId("moonshot.conversation".to_string()),
+            family: "kimi-k2".to_string(),
+            track: ModelTrack::Preview,
+            context_window: ContextWindow {
+                max_input_tokens: 200_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec![],
+        },
+    ]
 }
 
 #[must_use]
 pub(crate) fn aliases() -> Vec<(&'static str, &'static str)> {
-    vec![("kimi", "kimi-k2.5")]
+    vec![
+        ("kimi", "kimi-k2.5"),
+        ("kimi-thinking", "kimi-k2-thinking"),
+        ("kimi-fast", "kimi-k2-thinking-turbo"),
+    ]
 }

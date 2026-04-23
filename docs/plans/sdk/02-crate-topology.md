@@ -623,7 +623,7 @@ impl DefaultModelProvider {
 
 > Post-W8 live hardening 冻结：凡是 live runtime 直接消费的 `ModelCatalog::new_builtin()` / `RoleRouter::new_builtin()` / platform snapshot/default selection，都只能暴露其 `ProtocolAdapter` 已真实实现的 model family。`OpenAiResponsesAdapter`、`GeminiNativeAdapter`、`VendorNativeAdapter` 在本 tranche 仍未落地 live adapter，因此对应 family 必须先从 live catalog、role defaults、platform snapshot 与 default selections 隐去，而不是继续以 `AdapterNotImplemented` 形式对外可见。
 >
-> formal closeout 补记：这类 family 不是“彻底删除”，而是由 `octopus-platform::runtime_sdk::registry_bridge::{builtins,snapshot,overrides}` 继续保留 `hidden_builtin_model()` + `status = unsupported` 的 config-visible hidden metadata，用于托住已有 `configuredModels`。下一轮若要让 `openai_responses / gemini_native / vendor_native` 重新进入 live scope，必须同批修改 `octopus-sdk-model` 的 adapter 实现、builtin catalog / role defaults、platform snapshot/default selections、capability-facing contract/desktop fixtures，以及本目录控制文档。
+> formal closeout 补记：这类 family 不是“彻底删除”，而是由 `octopus-platform::runtime_sdk::registry_bridge::{builtins,snapshot,overrides}` 继续保留 `hidden_builtin_model()` + `status = unsupported` 的 config-visible hidden metadata，用于托住已有 `configuredModels`。Task 8 已进一步收窄：`builtin_model()` 不再回退到 hidden compat metadata，hidden builtin 只能通过 `configuredModels` unsupported projection 进入 snapshot。下一轮若要让 `openai_responses / gemini_native / vendor_native` 重新进入 live scope，必须同批修改 `octopus-sdk-model` 的 adapter 实现、builtin catalog / role defaults、platform snapshot/default selections、capability-facing contract/desktop fixtures，以及本目录控制文档。
 
 ### 2.4 `octopus-sdk-tools`（Level 2）
 
@@ -1093,7 +1093,7 @@ impl DurableScratchpad {
 > - `implement now`：`ToolRegistry` 是 canonical inventory，不等于 request-time visible tool surface。
 > - `hide from live`：主循环与 provider request assembly 不得继续对全量 registry 直接 `schemas_sorted()`；未 discovery / exposure 的 deferred capability 不能进入 live tools block。
 > - `implement now`：`ToolSearch / deferred tools / discovered-exposed state` 的 owner 在 shared layer，不得下放到 `server / desktop / cli` 局部补丁。
-> - `supported compat`：`registry.rs::shim_tool_context()` 只能收窄为 shim / directory / test path 的 compat 入口，不能再被视为 live execution owner。
+> - `supported compat`：`registry.rs::shim_tool_context()` 只能收窄为 shim / directory / test path 的 compat 入口，不能再被视为 live execution owner。Task 8 已把它明确锁到 `SdkTransport::call_tool(...)` 这条 compat 调用链。
 > - `implement now`：`ToolResult.render` 只是 tool writeback 的一个入口，不是全部 lifecycle。
 
 > W4 Task 9 回填：`SystemPromptBuilder` 已落 `role / tools_guidance / process / safety / output` 五段内置段生成器；`tools_guidance` 只消费 `ToolRegistry::schemas_sorted()` 的 `name / description`，不把 `input_schema` 写进 system prompt。
@@ -1842,6 +1842,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 - 责任边界：`octopus-platform` 持有 `AgentRuntimeBuilder` 的组装权，并在 `runtime_sdk/*` 内完成 SDK event → legacy runtime DTO 投影；`octopus-server` / `octopus-desktop` 只消费 `PlatformServices`，不直接持有 `AgentRuntime`。
 - Post-W8 hardening ownership：builtin tool live gating、stub-backed model family 收口、plugin discovery/snapshot bootstrap、`TaskFn` live injection 都归 `runtime_sdk/*`。`octopus-server` / `octopus-desktop` / `octopus-cli` 不得各自维护本地 stub denylist、模型补丁表或空 plugin snapshot 修补逻辑。
 - Post-14 residual closure ownership：`runtime_sdk/*` 还负责 request-time tool surface、query loop policy、tool execution governance 与 `coordinator / worker` live gating；`server / desktop / cli` 不得各自补同义逻辑。
+- Task 8 residual closure：`RuntimeSdkDeps::minimal(...)` 已退役；live/test bootstrap 都必须走 `RuntimeSdkFactory::build_live(...)` 或显式 `RuntimeSdkDeps { ... }`。CLI 默认 snapshot id 已从 `octopus-cli:minimal` 收口为 `octopus-cli:local-run`，不再把 minimal 入口当成生产默认语义。
 - deferred capability re-entry checklist：
   - shared runtime ownership 先改 `runtime_sdk::{builder,plugin_boot,subagent_runtime}`，不要从 transport/UI 倒推 capability live 化。
   - shared truth source 同批改 `octopus-sdk-tools` / `octopus-sdk-model` / `octopus-sdk-plugin` 与 `registry_bridge::{builtins,snapshot,overrides}`，避免 catalog、snapshot、defaults 给出不同答案。
@@ -2075,3 +2076,4 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-23 | Task 2 收口：`§3` / `§8` 改成 formal closeout 后的现行控制面，确认 `octopus-core` 是共享业务 core crate；`crates/telemetry` 从 workspace 目标矩阵移除并登记退役，目录口径收口为 `21` 个 crate。 | Codex |
 | 2026-04-23 | Task 4 冻结 deferred capability 边界：`§2.3 / §2.4 / §2.11 / §3.1` 追加 formal closeout 补记，明确三类 deferred capability 的当前 owner、hidden/decl-only/unsupported 状态，以及下一轮 live re-entry 必须触达的 shared-layer / contract / desktop / docs 触点。 | Codex |
 | 2026-04-23 | Task 14 回填：`§2.1 / §2.4 / §2.7 / §2.8 / §2.10 / §2.12 / §2.13 / §2.14 / §3.1 / §5 / §6` 补记 residual closure 冻结；明确 query loop、tool execution governance、render-writeback lifecycle、coordinator/worker、request-time tool exposure 与 compat/shim 的 owner 与 contract 差异。 | Codex |
+| 2026-04-23 | Task 8 收口：`§2.3 / §2.4 / §3.1` 补记 minimal entrypoint 已退役、CLI snapshot id 已收口为 `octopus-cli:local-run`、`hidden_builtin_model()` 只允许走 `configuredModels` compat 投影，以及 `shim_tool_context()` 只剩 `SdkTransport::call_tool(...)` compat 用途。 | Codex |

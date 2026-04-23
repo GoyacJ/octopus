@@ -1,6 +1,4 @@
 //! Model catalog, routing, and protocol adapters for the Octopus SDK.
-//!
-//! W2 Task 1 intentionally keeps this crate as a minimal scaffold.
 
 mod adapter;
 mod catalog;

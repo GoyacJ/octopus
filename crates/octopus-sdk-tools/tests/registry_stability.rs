@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use octopus_sdk_tools::{
-    builtin::register_builtins, RegistryError, Tool, ToolCategory, ToolContext, ToolError,
-    ToolRegistry, ToolResult, ToolSpec,
+    builtin::register_builtins, RegistryError, Tool, ToolAvailability, ToolCategory, ToolContext,
+    ToolError, ToolRegistry, ToolResult, ToolSpec, ToolSurfaceEntry, ToolSurfaceState,
 };
 use serde_json::json;
 
@@ -117,4 +117,38 @@ fn register_builtins_rejects_duplicates() {
     let error = register_builtins(&mut registry).expect_err("second registration should fail");
 
     assert!(matches!(error, RegistryError::DuplicateName(_)));
+}
+
+#[test]
+fn deferred_tools_stay_out_of_request_surface_until_exposed() {
+    let mut registry = ToolRegistry::new();
+    register_builtins(&mut registry).expect("builtins should register");
+
+    let state = ToolSurfaceState::default().with_deferred(ToolSurfaceEntry {
+        spec: ToolSpec {
+            name: "web_search".into(),
+            description: "Search the web".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": { "query": { "type": "string" } }
+            }),
+            category: ToolCategory::Network,
+        },
+        availability: ToolAvailability::Deferred,
+        version: Some("2026-04".into()),
+        output_format: octopus_sdk_tools::ToolOutputFormat::Detailed,
+        display_descriptor: None,
+    });
+
+    let hidden = registry.assemble_surface(&state);
+    assert!(!hidden
+        .request_tools()
+        .into_iter()
+        .any(|tool| tool.name == "web_search"));
+
+    let exposed = registry.assemble_surface(&state.expose("web_search"));
+    assert!(exposed
+        .request_tools()
+        .into_iter()
+        .any(|tool| tool.name == "web_search"));
 }

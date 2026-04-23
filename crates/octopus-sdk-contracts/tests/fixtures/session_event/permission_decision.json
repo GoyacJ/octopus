@@ -1,0 +1,11 @@
+{
+  "call": "call-123",
+  "kind": "permission_decision",
+  "mode": "default",
+  "name": "read_file",
+  "outcome": {
+    "deny": {
+      "reason": "writes outside workspace are denied"
+    }
+  }
+}

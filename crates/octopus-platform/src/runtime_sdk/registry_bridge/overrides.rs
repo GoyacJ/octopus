@@ -3,12 +3,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use octopus_core::{
     ConfiguredModelBudgetPolicy, DefaultSelection, ModelRegistryRecord, ProviderRegistryRecord,
 };
+use octopus_sdk::{builtin_default_routes, ModelCatalog};
 use serde_json::{Map, Value};
 
 use super::builtins::{
     builtin_provider, canonical_model_id, hidden_builtin_model, infer_surface_bindings,
-    provider_surface, CANONICAL_DEFAULTS,
+    provider_surface,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedBuiltinDefault {
+    pub purpose: String,
+    pub provider_id: String,
+    pub model_id: String,
+    pub surface: String,
+}
 
 pub(crate) fn parse_provider_overrides(
     effective_config: &Value,
@@ -169,19 +178,19 @@ pub(crate) fn build_default_selections(
     configured_model_ids: &BTreeSet<String>,
 ) -> BTreeMap<String, DefaultSelection> {
     let mut selections = BTreeMap::new();
-    for (purpose, provider_id, model_id, surface) in CANONICAL_DEFAULTS {
+    for resolved in resolved_builtin_defaults() {
         let configured_model_id = configured_model_ids
-            .get(&canonical_model_id(model_id))
+            .get(&canonical_model_id(&resolved.model_id))
             .cloned()
-            .or_else(|| configured_model_ids.get(*model_id).cloned())
-            .or_else(|| Some((*model_id).to_string()));
+            .or_else(|| configured_model_ids.get(&resolved.model_id).cloned())
+            .or_else(|| Some(resolved.model_id.clone()));
         selections.insert(
-            (*purpose).to_string(),
+            resolved.purpose.clone(),
             DefaultSelection {
                 configured_model_id,
-                provider_id: (*provider_id).to_string(),
-                model_id: (*model_id).to_string(),
-                surface: (*surface).to_string(),
+                provider_id: resolved.provider_id.clone(),
+                model_id: resolved.model_id.clone(),
+                surface: resolved.surface.clone(),
             },
         );
     }
@@ -225,4 +234,31 @@ pub(crate) fn build_default_selections(
     }
 
     selections
+}
+
+pub(crate) fn resolved_builtin_defaults() -> Vec<ResolvedBuiltinDefault> {
+    let catalog = ModelCatalog::new_builtin();
+
+    builtin_default_routes()
+        .iter()
+        .filter_map(|route| {
+            let resolved = route
+                .candidates
+                .iter()
+                .find_map(|candidate| catalog.resolve(candidate))?;
+            Some(ResolvedBuiltinDefault {
+                purpose: route.purpose.to_string(),
+                provider_id: resolved.provider.id.0,
+                model_id: resolved.model.id.0,
+                surface: resolved
+                    .surface
+                    .id
+                    .0
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or("conversation")
+                    .to_string(),
+            })
+        })
+        .collect()
 }

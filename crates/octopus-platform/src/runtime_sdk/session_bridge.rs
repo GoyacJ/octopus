@@ -552,7 +552,42 @@ impl RuntimeSdkBridge {
                     run: Some(detail.run.clone()),
                     ..Default::default()
                 },
-                SessionEvent::Render { block, lifecycle } => RuntimeEventEnvelope {
+                SessionEvent::PermissionDecision {
+                    call,
+                    name,
+                    mode,
+                    outcome,
+                } => RuntimeEventEnvelope {
+                    id: event_id.clone(),
+                    event_type: "runtime.permission.decision".into(),
+                    kind: Some("permission.decision".into()),
+                    workspace_id: self.state.workspace_id.clone(),
+                    project_id: if detail.summary.project_id.is_empty() {
+                        None
+                    } else {
+                        Some(detail.summary.project_id.clone())
+                    },
+                    session_id: detail.summary.id.clone(),
+                    conversation_id: detail.summary.conversation_id.clone(),
+                    run_id: Some(detail.run.id.clone()),
+                    emitted_at,
+                    sequence,
+                    tool_use_id: Some(call.0),
+                    outcome: Some(format!("{outcome:?}")),
+                    trace: Some(runtime_trace(
+                        format!("trace-{event_id}"),
+                        &detail.summary.id,
+                        &detail.run.id,
+                        &detail.summary.conversation_id,
+                        "permission",
+                        &name,
+                        format!("mode={mode:?} outcome={outcome:?}"),
+                        emitted_at,
+                    )),
+                    run: Some(detail.run.clone()),
+                    ..Default::default()
+                },
+                SessionEvent::Render { blocks, lifecycle } => RuntimeEventEnvelope {
                     id: event_id.clone(),
                     event_type: "runtime.render.block".into(),
                     kind: Some("render.block".into()),
@@ -573,8 +608,12 @@ impl RuntimeSdkBridge {
                         &detail.run.id,
                         &detail.summary.conversation_id,
                         "render",
-                        &format!("{:?}", block.kind),
-                        format!("lifecycle={lifecycle:?} payload={}", block.payload),
+                        &format!("{:?}", blocks.first().map(|block| &block.kind)),
+                        format!(
+                            "lifecycle={lifecycle:?} payload={}",
+                            serde_json::to_string(&blocks)
+                                .map_err(RuntimeSdkBridge::runtime_error)?
+                        ),
                         emitted_at,
                     )),
                     run: Some(detail.run.clone()),
@@ -725,8 +764,11 @@ pub(crate) fn runtime_permission_mode(
         .as_str()
     {
         "" => Ok(default_mode),
-        "default" | "auto" | "ask" | "workspace-write" => Ok(octopus_sdk::PermissionMode::Default),
+        "default" | "ask" | "workspace-write" => Ok(octopus_sdk::PermissionMode::Default),
         "accept_edits" | "accept-edits" => Ok(octopus_sdk::PermissionMode::AcceptEdits),
+        "dont_ask" | "dont-ask" | "dontAsk" => Ok(octopus_sdk::PermissionMode::DontAsk),
+        "auto" => Ok(octopus_sdk::PermissionMode::Auto),
+        "bubble" => Ok(octopus_sdk::PermissionMode::Bubble),
         "plan" | "readonly" | "read-only" => Ok(octopus_sdk::PermissionMode::Plan),
         "bypass_permissions" | "bypass-permissions" | "bypass" | "danger-full-access" => {
             Ok(octopus_sdk::PermissionMode::BypassPermissions)

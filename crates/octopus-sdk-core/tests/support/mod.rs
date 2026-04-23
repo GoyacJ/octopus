@@ -80,13 +80,23 @@ impl SecretVault for StaticSecretVault {
 }
 
 pub struct ScriptedModelProvider {
-    turns: Mutex<Vec<Vec<AssistantEvent>>>,
+    turns: Mutex<Vec<ScriptedTurn>>,
     requests: Mutex<Vec<ModelRequest>>,
+}
+
+pub enum ScriptedTurn {
+    Events(Vec<AssistantEvent>),
+    Error(ModelError),
 }
 
 impl ScriptedModelProvider {
     #[must_use]
     pub fn new(turns: Vec<Vec<AssistantEvent>>) -> Self {
+        Self::with_turns(turns.into_iter().map(ScriptedTurn::Events).collect())
+    }
+
+    #[must_use]
+    pub fn with_turns(turns: Vec<ScriptedTurn>) -> Self {
         Self {
             turns: Mutex::new(turns),
             requests: Mutex::new(Vec::new()),
@@ -109,12 +119,17 @@ impl ModelProvider for ScriptedModelProvider {
             .lock()
             .expect("requests lock should stay available")
             .push(req);
-        let events = self
+        let turn = self
             .turns
             .lock()
             .expect("turns lock should stay available")
             .remove(0);
-        Ok(Box::pin(futures::stream::iter(events.into_iter().map(Ok))))
+        match turn {
+            ScriptedTurn::Events(events) => {
+                Ok(Box::pin(futures::stream::iter(events.into_iter().map(Ok))))
+            }
+            ScriptedTurn::Error(error) => Err(error),
+        }
     }
 
     fn describe(&self) -> ProviderDescriptor {

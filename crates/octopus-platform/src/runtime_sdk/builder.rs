@@ -51,39 +51,6 @@ pub struct RuntimeSdkDeps {
     pub task_fn: Option<Arc<dyn TaskFn>>,
 }
 
-impl RuntimeSdkDeps {
-    #[must_use]
-    pub fn minimal(
-        workspace_id: impl Into<String>,
-        workspace_root: PathBuf,
-        default_model: ModelId,
-        session_store: Arc<dyn SessionStore>,
-        model_provider: Arc<dyn ModelProvider>,
-        tool_registry: ToolRegistry,
-        permission_gate: Arc<dyn PermissionGate>,
-        ask_resolver: Arc<dyn AskResolver>,
-        sandbox_backend: Arc<dyn SandboxBackend>,
-    ) -> Self {
-        Self {
-            workspace_id: workspace_id.into(),
-            workspace_root,
-            default_model,
-            default_permission_mode: PermissionMode::Default,
-            default_token_budget: 8_192,
-            session_store,
-            model_provider,
-            tool_registry,
-            permission_gate,
-            ask_resolver,
-            sandbox_backend,
-            plugin_registry: PluginRegistry::new(),
-            plugins_snapshot: PluginsSnapshot::default(),
-            tracer: Arc::new(NoopTracer),
-            task_fn: None,
-        }
-    }
-}
-
 pub struct RuntimeSdkFactory {
     deps: RuntimeSdkDeps,
 }
@@ -120,6 +87,7 @@ impl RuntimeSdkFactory {
             &tool_registry,
             Arc::clone(&permission_gate),
             &plugin_registry,
+            Arc::new(NoopTracer),
             &workspace_root,
         )?);
 

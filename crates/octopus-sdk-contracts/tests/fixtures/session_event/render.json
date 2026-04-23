@@ -1,26 +1,32 @@
 {
-  "block": {
-    "kind": "record",
-    "meta": {
-      "id": "event-render",
-      "parent": "event-parent",
-      "ts_ms": 1713692800123
-    },
-    "payload": {
-      "rows": [
-        {
-          "label": "changed_files",
-          "value": "3"
-        },
-        {
-          "href": "https://example.com/logs/1",
-          "label": "logs",
-          "value": "view"
-        }
-      ],
-      "title": "Execution Summary"
+  "blocks": [
+    {
+      "kind": "record",
+      "meta": {
+        "id": "event-render",
+        "parent": "event-parent",
+        "ts_ms": 1713692800123
+      },
+      "payload": {
+        "rows": [
+          {
+            "label": "changed_files",
+            "value": "3"
+          },
+          {
+            "href": "https://example.com/logs/1",
+            "label": "logs",
+            "value": "view"
+          }
+        ],
+        "title": "Execution Summary"
+      }
     }
-  },
+  ],
   "kind": "render",
-  "lifecycle": "on_tool_result"
+  "lifecycle": {
+    "phase": "on_tool_result",
+    "toolCallId": "call-123",
+    "toolName": "read_file"
+  }
 }

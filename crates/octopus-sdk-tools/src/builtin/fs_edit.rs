@@ -10,7 +10,10 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    builtin::fs_write::{check_permission, display_path, write_atomic},
+    builtin::fs_write::{
+        check_permission, display_path, run_post_file_write_hooks, run_pre_file_write_hooks,
+        write_atomic,
+    },
     Tool, ToolCategory, ToolContext, ToolError, ToolResult, ToolSpec,
 };
 
@@ -99,7 +102,10 @@ impl Tool for FileEditTool {
         } else {
             original.replacen(&input.old_string, &input.new_string, 1)
         };
-        write_atomic(&path, &updated)?;
+        let (path, content) =
+            run_pre_file_write_hooks(&ctx, &request, &path.to_string_lossy(), &updated).await?;
+        write_atomic(&path, &content)?;
+        run_post_file_write_hooks(&ctx, &request, &path).await?;
 
         Ok(ToolResult {
             content: vec![ContentBlock::Text {

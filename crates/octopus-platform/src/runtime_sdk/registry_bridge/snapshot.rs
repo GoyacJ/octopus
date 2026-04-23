@@ -5,16 +5,18 @@ use octopus_core::{
     ModelRegistryDiagnostics,
 };
 use octopus_persistence::Database;
+use octopus_sdk::ModelCatalog;
 use serde_json::Value;
 
 use crate::runtime_sdk::RuntimeSdkBridge;
 
 use super::builtins::{
     builtin_model, builtin_provider, canonical_model_id, configured_model_status,
-    hidden_builtin_model, token_usage_summary, CANONICAL_DEFAULTS,
+    hidden_builtin_model, token_usage_summary,
 };
 use super::overrides::{
     build_default_selections, parse_budget_policy, parse_model_overrides, parse_provider_overrides,
+    resolved_builtin_defaults,
 };
 
 pub(crate) fn load_configured_model_usage_map(
@@ -52,17 +54,18 @@ pub(crate) fn build_catalog_snapshot(
 ) -> Result<ModelCatalogSnapshot, AppError> {
     let mut providers = BTreeMap::new();
     let mut models = BTreeMap::new();
-    for provider_id in ["anthropic", "openai", "google", "minimax", "xai", "custom"] {
-        providers.insert(provider_id.to_string(), builtin_provider(provider_id));
+    let builtin_catalog = ModelCatalog::new_builtin();
+    for provider in builtin_catalog.list_providers() {
+        providers.insert(provider.id.0.clone(), builtin_provider(&provider.id.0));
     }
-    for (model_id, provider_id) in [
-        ("claude-sonnet-4-5", "anthropic"),
-        ("claude-opus-4-6", "anthropic"),
-        ("claude-haiku-4-5-20251213", "anthropic"),
-        ("gpt-4o", "openai"),
-        ("grok-3", "xai"),
-    ] {
-        models.insert(model_id.to_string(), builtin_model(model_id, provider_id));
+    for model in builtin_catalog.list_models() {
+        let provider_id = builtin_catalog
+            .list_surfaces()
+            .iter()
+            .find(|surface| surface.id == model.surface)
+            .map(|surface| surface.provider_id.0.clone())
+            .unwrap_or_default();
+        models.insert(model.id.0.clone(), builtin_model(&model.id.0, &provider_id));
     }
 
     parse_provider_overrides(effective_config, &mut providers);
@@ -84,12 +87,12 @@ pub(crate) fn build_catalog_snapshot(
     let mut configured_model_ids = BTreeSet::new();
 
     if configured_models_value.is_empty() {
-        for (_purpose, provider_id, model_id, _) in CANONICAL_DEFAULTS {
+        for resolved in resolved_builtin_defaults() {
             let record = ConfiguredModelRecord {
-                configured_model_id: (*model_id).to_string(),
-                name: builtin_model(model_id, provider_id).label,
-                provider_id: (*provider_id).to_string(),
-                model_id: (*model_id).to_string(),
+                configured_model_id: resolved.model_id.clone(),
+                name: builtin_model(&resolved.model_id, &resolved.provider_id).label,
+                provider_id: resolved.provider_id.clone(),
+                model_id: resolved.model_id.clone(),
                 credential_ref: None,
                 base_url: None,
                 budget_policy: None,

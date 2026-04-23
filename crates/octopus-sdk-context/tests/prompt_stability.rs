@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder, SystemPromptSection};
 use octopus_sdk_contracts::{PermissionMode, SessionId};
 use octopus_sdk_tools::{
-    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec,
+    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec, ToolSurface,
+    ToolSurfaceState,
 };
 use serde_json::json;
 
@@ -50,7 +51,8 @@ impl Tool for DummyTool {
 #[test]
 fn prompt_build_is_byte_stable() {
     let registry = sample_registry();
-    let ctx = sample_ctx(&registry);
+    let surface = registry.assemble_surface(&ToolSurfaceState::default());
+    let ctx = sample_ctx(&surface);
     let builder = SystemPromptBuilder::new().with_section(SystemPromptSection {
         id: "custom",
         order: 35,
@@ -72,7 +74,8 @@ fn prompt_build_is_byte_stable() {
 #[test]
 fn test_tools_guidance_stability() {
     let registry = sample_registry();
-    let ctx = sample_ctx(&registry);
+    let surface = registry.assemble_surface(&ToolSurfaceState::default());
+    let ctx = sample_ctx(&surface);
     let builder = SystemPromptBuilder::new();
 
     let first = builder.build(&ctx);
@@ -119,7 +122,7 @@ fn sample_registry() -> ToolRegistry {
     registry
 }
 
-fn sample_ctx<'a>(tools: &'a ToolRegistry) -> PromptCtx<'a> {
+fn sample_ctx<'a>(tools: &'a ToolSurface) -> PromptCtx<'a> {
     PromptCtx {
         session: SessionId("session-ctx".into()),
         mode: PermissionMode::Plan,

@@ -3,7 +3,8 @@ use serde_json::Value;
 
 use crate::{
     AskPrompt, CompactionResult, ContentBlock, EndReason, EventId, Message, PermissionMode,
-    PluginsSnapshot, PromptCacheEvent, RenderBlock, RenderLifecycle, Role, ToolCallId, Usage,
+    PermissionOutcome, PluginsSnapshot, PromptCacheEvent, RenderBlock, RenderLifecycle, Role,
+    ToolCallId, Usage,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,8 +162,14 @@ enum SessionEventRepr {
         duration_ms: u64,
         is_error: bool,
     },
+    PermissionDecision {
+        call: ToolCallId,
+        name: String,
+        mode: PermissionMode,
+        outcome: PermissionOutcome,
+    },
     Render {
-        block: RenderBlock,
+        blocks: Vec<RenderBlock>,
         lifecycle: RenderLifecycle,
     },
     Ask {
@@ -200,8 +207,14 @@ pub enum SessionEvent {
         duration_ms: u64,
         is_error: bool,
     },
+    PermissionDecision {
+        call: ToolCallId,
+        name: String,
+        mode: PermissionMode,
+        outcome: PermissionOutcome,
+    },
     Render {
-        block: RenderBlock,
+        blocks: Vec<RenderBlock>,
         lifecycle: RenderLifecycle,
     },
     Ask {
@@ -265,8 +278,19 @@ impl From<&SessionEvent> for SessionEventRepr {
                 duration_ms: *duration_ms,
                 is_error: *is_error,
             },
-            SessionEvent::Render { block, lifecycle } => Self::Render {
-                block: block.clone(),
+            SessionEvent::PermissionDecision {
+                call,
+                name,
+                mode,
+                outcome,
+            } => Self::PermissionDecision {
+                call: call.clone(),
+                name: name.clone(),
+                mode: *mode,
+                outcome: outcome.clone(),
+            },
+            SessionEvent::Render { blocks, lifecycle } => Self::Render {
+                blocks: blocks.clone(),
                 lifecycle: lifecycle.clone(),
             },
             SessionEvent::Ask { prompt } => Self::Ask {
@@ -328,7 +352,18 @@ impl From<SessionEventRepr> for SessionEvent {
                 duration_ms,
                 is_error,
             },
-            SessionEventRepr::Render { block, lifecycle } => Self::Render { block, lifecycle },
+            SessionEventRepr::PermissionDecision {
+                call,
+                name,
+                mode,
+                outcome,
+            } => Self::PermissionDecision {
+                call,
+                name,
+                mode,
+                outcome,
+            },
+            SessionEventRepr::Render { blocks, lifecycle } => Self::Render { blocks, lifecycle },
             SessionEventRepr::Ask { prompt } => Self::Ask { prompt },
             SessionEventRepr::Checkpoint {
                 id,

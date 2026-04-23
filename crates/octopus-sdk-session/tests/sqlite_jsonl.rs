@@ -1,9 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use octopus_sdk_contracts::{
-    AskPrompt, AssistantEvent, ContentBlock, EndReason, EventId, Message, PluginSourceTag,
-    PluginSummary, PluginsSnapshot, RenderBlock, RenderKind, RenderLifecycle, RenderMeta, Role,
-    SessionEvent, StopReason, ToolCallId, Usage,
+    AskPrompt, AssistantEvent, ContentBlock, EndReason, EventId, Message, PermissionMode,
+    PermissionOutcome, PluginSourceTag, PluginSummary, PluginsSnapshot, RenderBlock, RenderKind,
+    RenderLifecycle, RenderMeta, Role, SessionEvent, StopReason, ToolCallId, Usage,
 };
 use octopus_sdk_session::{EventRange, SessionError, SessionStore, SqliteJsonlSessionStore};
 use rusqlite::params;
@@ -144,7 +144,13 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
         .expect("snapshot should load after repair");
 
     assert_eq!(actual, expected);
-    assert_eq!(snapshot.head_event_id, event_ids[9]);
+    assert_eq!(
+        snapshot.head_event_id,
+        event_ids
+            .last()
+            .expect("expected at least one event")
+            .clone()
+    );
     assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
     assert_eq!(
         snapshot.usage,
@@ -483,8 +489,14 @@ fn sample_events() -> Vec<SessionEvent> {
         duration_ms: 42,
         is_error: false,
     };
+    let permission_decision = SessionEvent::PermissionDecision {
+        call: ToolCallId("call-1".into()),
+        name: "read_file".into(),
+        mode: PermissionMode::Default,
+        outcome: PermissionOutcome::Allow,
+    };
     let render = SessionEvent::Render {
-        block: RenderBlock {
+        blocks: vec![RenderBlock {
             kind: RenderKind::Record,
             payload: json!({
                 "rows": [{ "label": "changed_files", "value": "3" }],
@@ -495,8 +507,12 @@ fn sample_events() -> Vec<SessionEvent> {
                 parent: None,
                 ts_ms: 1_713_692_800_123,
             },
-        },
-        lifecycle: RenderLifecycle::OnToolResult,
+        }],
+        lifecycle: RenderLifecycle::tool_phase(
+            octopus_sdk_contracts::RenderPhase::OnToolResult,
+            ToolCallId("call-1".into()),
+            "read_file",
+        ),
     };
     let ask = SessionEvent::Ask {
         prompt: AskPrompt {
@@ -548,6 +564,7 @@ fn sample_events() -> Vec<SessionEvent> {
         user_message,
         assistant_message,
         tool_executed,
+        permission_decision,
         render,
         ask,
         checkpoint,

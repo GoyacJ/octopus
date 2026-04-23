@@ -7,8 +7,9 @@ use octopus_sdk::{
     SubagentOutput, SubagentSpec, TaskFn, ToolRegistry,
 };
 use octopus_sdk_context::DurableScratchpad;
-use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext};
-use octopus_sdk_tools::{current_task_parent_session, Tool};
+use octopus_sdk_observability::{session_trace_id, tool_span_id, Tracer};
+use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext, ParentTraceContext};
+use octopus_sdk_tools::{current_task_parent_context, Tool};
 
 const LIVE_TASK_MAX_CONCURRENCY: usize = 5;
 const MISSING_PARENT_SESSION_REASON: &str = "task parent session missing from tool context";
@@ -20,6 +21,7 @@ pub(crate) fn build_live_task_fn(
     tool_registry: &ToolRegistry,
     permission_gate: Arc<dyn PermissionGate>,
     plugin_registry: &PluginRegistry,
+    tracer: Arc<dyn Tracer>,
     workspace_root: &std::path::Path,
 ) -> Result<Arc<dyn TaskFn>, AppError> {
     let deferred_task_fn = Arc::new(DeferredTaskFn::default());
@@ -33,6 +35,7 @@ pub(crate) fn build_live_task_fn(
         model_provider,
         tools: live_tools,
         permission_gate,
+        tracer,
         scratchpad: DurableScratchpad::new(workspace_root.to_path_buf()),
     });
 
@@ -96,22 +99,43 @@ struct LiveTaskFn {
     model_provider: Arc<dyn ModelProvider>,
     tools: Arc<ToolRegistry>,
     permission_gate: Arc<dyn PermissionGate>,
+    tracer: Arc<dyn Tracer>,
     scratchpad: DurableScratchpad,
 }
 
 #[async_trait]
 impl TaskFn for LiveTaskFn {
     async fn run(&self, spec: &SubagentSpec, input: &str) -> Result<SubagentOutput, SubagentError> {
-        let parent_session_id =
-            current_task_parent_session().ok_or_else(missing_parent_session_error)?;
+        let parent = current_task_parent_context().ok_or_else(missing_parent_session_error)?;
+        let snapshot = self
+            .session_store
+            .snapshot(&parent.session_id)
+            .await
+            .map_err(|error| SubagentError::Storage {
+                reason: error.to_string(),
+            })?;
+        let parent_span_id = parent
+            .tool_call_id
+            .as_ref()
+            .map(|call| tool_span_id(&call.0))
+            .unwrap_or_else(|| format!("session:{}", parent.session_id.0));
         let workers = OrchestratorWorkers::new(
             ParentSessionContext {
-                session_id: parent_session_id,
+                session_id: parent.session_id,
                 session_store: Arc::clone(&self.session_store),
                 model: Arc::clone(&self.model_provider),
                 tools: Arc::clone(&self.tools),
                 permissions: Arc::clone(&self.permission_gate),
                 scratchpad: self.scratchpad.clone(),
+                trace: ParentTraceContext {
+                    trace_id: session_trace_id(&snapshot.id.0),
+                    span_id: parent_span_id,
+                    agent_role: "main".into(),
+                    model_id: snapshot.model,
+                    model_version: self.model_provider.describe().catalog_version,
+                    config_snapshot_id: snapshot.config_snapshot_id,
+                    tracer: Arc::clone(&self.tracer),
+                },
             },
             LIVE_TASK_MAX_CONCURRENCY,
         );
@@ -271,6 +295,7 @@ mod tests {
             &tools,
             Arc::new(AllowAllGate),
             &PluginRegistry::new(),
+            Arc::new(octopus_sdk::NoopTracer),
             root.path(),
         )
         .expect("live task fn should build");
@@ -294,6 +319,7 @@ mod tests {
             id: id.into(),
             system_prompt: "Be concise.".into(),
             allowed_tools: vec!["ToolA".into()],
+            agent_role: "worker".into(),
             model_role: "subagent-default".into(),
             permission_mode: PermissionMode::Default,
             task_budget: TaskBudget {
@@ -360,16 +386,27 @@ mod tests {
             Ok(Box::pin(futures::stream::empty()))
         }
 
-        async fn snapshot(&self, _id: &SessionId) -> Result<SessionSnapshot, SessionError> {
-            Err(SessionError::NotFound)
+        async fn snapshot(&self, id: &SessionId) -> Result<SessionSnapshot, SessionError> {
+            Ok(SessionSnapshot {
+                id: id.clone(),
+                working_dir: std::path::PathBuf::from("."),
+                permission_mode: PermissionMode::Default,
+                model: "test-model".into(),
+                config_snapshot_id: "cfg-parent".into(),
+                effective_config_hash: "hash-parent".into(),
+                token_budget: 8_192,
+                plugins_snapshot: PluginsSnapshot::default(),
+                head_event_id: EventId("event-parent".into()),
+                usage: Usage::default(),
+            })
         }
 
         async fn fork(&self, _id: &SessionId, _from: EventId) -> Result<SessionId, SessionError> {
             Err(SessionError::NotFound)
         }
 
-        async fn wake(&self, _id: &SessionId) -> Result<SessionSnapshot, SessionError> {
-            Err(SessionError::NotFound)
+        async fn wake(&self, id: &SessionId) -> Result<SessionSnapshot, SessionError> {
+            self.snapshot(id).await
         }
     }
 }

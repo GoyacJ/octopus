@@ -45,8 +45,15 @@ pub struct HookDecl {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookPoint {
+    PreSampling,
+    PostSampling,
     PreToolUse,
     PostToolUse,
+    OnToolError,
+    PreFileWrite,
+    PostFileWrite,
+    SubagentSpawn,
+    SubagentReturn,
     Stop,
     SessionStart,
     SessionEnd,

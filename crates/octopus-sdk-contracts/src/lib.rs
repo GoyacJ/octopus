@@ -1,6 +1,4 @@
 //! Shared SDK contract types for sessions, model IO, and UI intent IR.
-//!
-//! W1 Task 1 intentionally keeps this crate as a minimal scaffold.
 
 mod ask_resolver;
 mod compaction;

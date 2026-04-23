@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ModelCatalog, ModelId, ModelRole};
+use crate::{builtin_default_routes, ModelCatalog, ModelId, ModelRole};
 
 #[derive(Debug, Clone, Default)]
 pub struct RoleRouter {
@@ -13,13 +13,11 @@ impl RoleRouter {
     pub fn new_builtin(catalog: &ModelCatalog) -> Self {
         let mut defaults = HashMap::new();
 
-        for (role, candidates) in [
-            (ModelRole::Main, &["opus"][..]),
-            (ModelRole::Fast, &["haiku", "gpt-4o", "sonnet"][..]),
-            (ModelRole::Best, &["opus-1m", "opus", "sonnet"][..]),
-            (ModelRole::Plan, &["opus", "sonnet"][..]),
-            (ModelRole::Compact, &["haiku", "gpt-4o", "sonnet"][..]),
-        ] {
+        for route in builtin_default_routes() {
+            let Some(role) = route.role.clone() else {
+                continue;
+            };
+            let candidates = route.candidates;
             if let Some(model_id) = resolve_first(catalog, candidates) {
                 defaults.insert(role, model_id);
             }

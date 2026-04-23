@@ -14,6 +14,8 @@ pub struct NetworkProxy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SandboxSpec {
     pub fs_whitelist: Vec<PathBuf>,
+    #[serde(default)]
+    pub network_allowlist: Vec<String>,
     pub network_proxy: Option<NetworkProxy>,
     pub env_allowlist: Vec<String>,
     pub cpu_time_limit_ms: Option<u64>,

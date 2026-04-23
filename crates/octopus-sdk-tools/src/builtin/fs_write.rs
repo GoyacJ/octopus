@@ -6,7 +6,9 @@ use std::{
 };
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{ContentBlock, PermissionOutcome, ToolCallId, ToolCallRequest};
+use octopus_sdk_contracts::{
+    ContentBlock, HookEvent, PermissionOutcome, RewritePayload, ToolCallId, ToolCallRequest,
+};
 use serde::Deserialize;
 use serde_json::json;
 use tempfile::NamedTempFile;
@@ -73,8 +75,10 @@ impl Tool for FileWriteTool {
         };
         check_permission(&ctx, &request).await?;
         let input: FileWriteInput = serde_json::from_value(input)?;
-        let path = resolve_path_allow_missing(&ctx.working_dir, &input.path);
-        write_atomic(&path, &input.content)?;
+        let (path, content) =
+            run_pre_file_write_hooks(&ctx, &request, &input.path, &input.content).await?;
+        write_atomic(&path, &content)?;
+        run_post_file_write_hooks(&ctx, &request, &path).await?;
 
         Ok(ToolResult {
             content: vec![ContentBlock::Text {
@@ -113,6 +117,60 @@ pub(crate) fn resolve_path_allow_missing(base_dir: &Path, input: &str) -> PathBu
         return path;
     }
     candidate
+}
+
+pub(crate) async fn run_pre_file_write_hooks(
+    ctx: &ToolContext,
+    request: &ToolCallRequest,
+    input_path: &str,
+    input_content: &str,
+) -> Result<(PathBuf, String), ToolError> {
+    let path = resolve_path_allow_missing(&ctx.working_dir, input_path);
+    let outcome = ctx
+        .hooks
+        .run(HookEvent::PreFileWrite {
+            call: request.clone(),
+            path: path.display().to_string(),
+            content: input_content.to_string(),
+        })
+        .await
+        .map_err(|error| ToolError::Execution {
+            message: format!("pre_file_write hook failed: {error}"),
+        })?;
+
+    if let Some(reason) = outcome.aborted {
+        return Err(ToolError::Execution { message: reason });
+    }
+
+    match outcome.final_payload {
+        Some(RewritePayload::FileWrite { path, content }) => {
+            Ok((resolve_path_allow_missing(&ctx.working_dir, &path), content))
+        }
+        _ => Ok((path, input_content.to_string())),
+    }
+}
+
+pub(crate) async fn run_post_file_write_hooks(
+    ctx: &ToolContext,
+    request: &ToolCallRequest,
+    path: &Path,
+) -> Result<(), ToolError> {
+    let outcome = ctx
+        .hooks
+        .run(HookEvent::PostFileWrite {
+            call: request.clone(),
+            path: path.display().to_string(),
+        })
+        .await
+        .map_err(|error| ToolError::Execution {
+            message: format!("post_file_write hook failed: {error}"),
+        })?;
+
+    if let Some(reason) = outcome.aborted {
+        return Err(ToolError::Execution { message: reason });
+    }
+
+    Ok(())
 }
 
 pub(crate) fn write_atomic(path: &Path, content: &str) -> Result<(), ToolError> {

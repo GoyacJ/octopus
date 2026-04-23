@@ -2,7 +2,7 @@ use std::{
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
 };
 
@@ -10,15 +10,18 @@ use async_trait::async_trait;
 use futures::Stream;
 use octopus_sdk_context::DurableScratchpad;
 use octopus_sdk_contracts::{
-    AssistantEvent, EventId, PermissionGate, PermissionMode, PermissionOutcome, SessionEvent,
-    SessionId, StopReason, SubagentSpec, TaskBudget, ToolCallRequest, ToolCategory,
+    AssistantEvent, EventId, HookDecision, HookEvent, PermissionGate, PermissionMode,
+    PermissionOutcome, SessionEvent, SessionId, StopReason, SubagentSpec, TaskBudget,
+    ToolCallRequest, ToolCategory,
 };
+use octopus_sdk_hooks::{Hook, HookSource};
 use octopus_sdk_model::{
     ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
     ProviderId,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id, NoopTracer};
 use octopus_sdk_session::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
-use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext};
+use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext, ParentTraceContext};
 use octopus_sdk_tools::{
     builtin::AgentTool, Tool, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec,
 };
@@ -111,6 +114,25 @@ impl Tool for DummyTool {
     }
 }
 
+struct RecordingHook {
+    seen: Arc<Mutex<Vec<HookEvent>>>,
+}
+
+#[async_trait]
+impl Hook for RecordingHook {
+    fn name(&self) -> &str {
+        "recording-hook"
+    }
+
+    async fn on_event(&self, event: &HookEvent) -> HookDecision {
+        self.seen
+            .lock()
+            .expect("seen lock should stay available")
+            .push(event.clone());
+        HookDecision::Continue
+    }
+}
+
 #[tokio::test]
 async fn test_agent_tool_with_task_fn() {
     let root = tempfile::tempdir().expect("tempdir should exist");
@@ -121,6 +143,7 @@ async fn test_agent_tool_with_task_fn() {
         tools: Arc::new(tool_registry(vec!["ToolA"])),
         permissions: Arc::new(AllowAllGate),
         scratchpad: DurableScratchpad::new(root.path().to_path_buf()),
+        trace: parent_trace("parent-task-tool"),
     };
     let tool = AgentTool::new().with_task_fn(OrchestratorWorkers::new(parent, 2).into_task_fn());
     let result = tool
@@ -144,11 +167,73 @@ async fn test_agent_tool_with_task_fn() {
     assert_eq!(support::text_output(result), "summary: build summary");
 }
 
+#[tokio::test]
+async fn test_agent_tool_emits_subagent_hooks() {
+    let root = tempfile::tempdir().expect("tempdir should exist");
+    let parent = ParentSessionContext {
+        session_id: SessionId("parent-task-tool".into()),
+        session_store: Arc::new(InMemorySessionStore::default()),
+        model: Arc::new(EchoProvider),
+        tools: Arc::new(tool_registry(vec!["ToolA"])),
+        permissions: Arc::new(AllowAllGate),
+        scratchpad: DurableScratchpad::new(root.path().to_path_buf()),
+        trace: parent_trace("parent-task-tool"),
+    };
+    let tool = AgentTool::new().with_task_fn(OrchestratorWorkers::new(parent, 2).into_task_fn());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let ctx = support::tool_context(
+        root.path(),
+        Arc::new(support::StubAskResolver {
+            answer: Err(octopus_sdk_contracts::AskError::NotResolvable),
+        }),
+        Arc::new(support::RecordingEventSink::new()),
+    );
+    ctx.hooks.register(
+        "record-subagent",
+        Arc::new(RecordingHook {
+            seen: Arc::clone(&seen),
+        }),
+        HookSource::Workspace,
+        10,
+    );
+
+    let result = tool
+        .execute(
+            ctx,
+            serde_json::json!({
+                "spec": sample_spec("worker-1"),
+                "input": "build summary"
+            }),
+        )
+        .await
+        .expect("agent tool should succeed with injected task fn");
+
+    assert!(!result.is_error);
+    assert_eq!(support::text_output(result), "summary: build summary");
+
+    let events = seen
+        .lock()
+        .expect("seen lock should stay available")
+        .clone();
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        &events[0],
+        HookEvent::SubagentSpawn { parent_session, spec }
+            if parent_session.0 == "session-1" && spec.id == "worker-1"
+    ));
+    assert!(matches!(
+        &events[1],
+        HookEvent::SubagentReturn { parent_session, summary }
+            if parent_session.0 == "session-1" && summary.session_id.0 == "child-0"
+    ));
+}
+
 fn sample_spec(id: &str) -> SubagentSpec {
     SubagentSpec {
         id: id.into(),
         system_prompt: "Be concise.".into(),
         allowed_tools: vec!["ToolA".into()],
+        agent_role: "worker".into(),
         model_role: "subagent-default".into(),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {
@@ -157,6 +242,18 @@ fn sample_spec(id: &str) -> SubagentSpec {
         },
         max_turns: 2,
         depth: 1,
+    }
+}
+
+fn parent_trace(session_id: &str) -> ParentTraceContext {
+    ParentTraceContext {
+        trace_id: session_trace_id(session_id),
+        span_id: session_span_id(session_id),
+        agent_role: "main".into(),
+        model_id: "main".into(),
+        model_version: "test".into(),
+        config_snapshot_id: "cfg-parent".into(),
+        tracer: Arc::new(NoopTracer),
     }
 }
 

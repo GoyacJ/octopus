@@ -1,7 +1,7 @@
 use octopus_sdk_contracts::ToolCategory;
 use octopus_sdk_permissions::PermissionMode;
 
-const EXPECTED_DECISIONS: [(PermissionMode, ToolCategory, &str); 16] = [
+const EXPECTED_DECISIONS: [(PermissionMode, ToolCategory, &str); 28] = [
     (PermissionMode::Default, ToolCategory::Read, "allow"),
     (PermissionMode::Default, ToolCategory::Write, "ask"),
     (PermissionMode::Default, ToolCategory::Shell, "ask"),
@@ -30,6 +30,18 @@ const EXPECTED_DECISIONS: [(PermissionMode, ToolCategory, &str); 16] = [
         ToolCategory::Subagent,
         "allow",
     ),
+    (PermissionMode::DontAsk, ToolCategory::Read, "allow"),
+    (PermissionMode::DontAsk, ToolCategory::Write, "deny"),
+    (PermissionMode::DontAsk, ToolCategory::Shell, "deny"),
+    (PermissionMode::DontAsk, ToolCategory::Subagent, "deny"),
+    (PermissionMode::Auto, ToolCategory::Read, "allow"),
+    (PermissionMode::Auto, ToolCategory::Write, "ask"),
+    (PermissionMode::Auto, ToolCategory::Shell, "ask"),
+    (PermissionMode::Auto, ToolCategory::Subagent, "ask"),
+    (PermissionMode::Bubble, ToolCategory::Read, "ask"),
+    (PermissionMode::Bubble, ToolCategory::Write, "ask"),
+    (PermissionMode::Bubble, ToolCategory::Shell, "ask"),
+    (PermissionMode::Bubble, ToolCategory::Subagent, "ask"),
     (PermissionMode::Plan, ToolCategory::Read, "allow"),
     (PermissionMode::Plan, ToolCategory::Write, "deny"),
     (PermissionMode::Plan, ToolCategory::Shell, "deny"),
@@ -38,7 +50,7 @@ const EXPECTED_DECISIONS: [(PermissionMode, ToolCategory, &str); 16] = [
 
 #[test]
 fn permission_mode_semantics_table_is_complete() {
-    assert_eq!(EXPECTED_DECISIONS.len(), 16);
+    assert_eq!(EXPECTED_DECISIONS.len(), 28);
 }
 
 #[test]
@@ -54,6 +66,15 @@ fn permission_mode_semantics_match_w4_decision_matrix() {
             (PermissionMode::AcceptEdits, ToolCategory::Shell) => "ask",
             (PermissionMode::AcceptEdits, ToolCategory::Subagent) => "allow",
             (PermissionMode::BypassPermissions, _) => "allow",
+            (PermissionMode::DontAsk, ToolCategory::Read) => "allow",
+            (PermissionMode::DontAsk, ToolCategory::Write) => "deny",
+            (PermissionMode::DontAsk, ToolCategory::Shell) => "deny",
+            (PermissionMode::DontAsk, ToolCategory::Subagent) => "deny",
+            (PermissionMode::Auto, ToolCategory::Read) => "allow",
+            (PermissionMode::Auto, ToolCategory::Write) => "ask",
+            (PermissionMode::Auto, ToolCategory::Shell) => "ask",
+            (PermissionMode::Auto, ToolCategory::Subagent) => "ask",
+            (PermissionMode::Bubble, _) => "ask",
             (PermissionMode::Plan, ToolCategory::Read) => "allow",
             (PermissionMode::Plan, ToolCategory::Write) => "deny",
             (PermissionMode::Plan, ToolCategory::Shell) => "deny",

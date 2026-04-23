@@ -130,12 +130,12 @@ impl RuntimeSdkBridge {
             selected_actor_ref: metadata.selected_actor_ref.clone(),
             selected_configured_model_id: metadata.configured_model_id.clone().unwrap_or_default(),
             execution_permission_mode: match metadata.permission_mode {
-                PermissionMode::Default | PermissionMode::Plan => {
-                    octopus_core::RUNTIME_PERMISSION_READ_ONLY.into()
-                }
-                PermissionMode::AcceptEdits => {
-                    octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into()
-                }
+                PermissionMode::Plan => octopus_core::RUNTIME_PERMISSION_READ_ONLY.into(),
+                PermissionMode::Default
+                | PermissionMode::AcceptEdits
+                | PermissionMode::DontAsk
+                | PermissionMode::Auto
+                | PermissionMode::Bubble => octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into(),
                 PermissionMode::BypassPermissions => {
                     octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into()
                 }

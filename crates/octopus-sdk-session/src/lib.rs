@@ -1,6 +1,4 @@
 //! Session storage traits and default persistence for the Octopus SDK.
-//!
-//! W1 Task 1 intentionally keeps this crate as a minimal scaffold.
 
 mod error;
 mod jsonl;

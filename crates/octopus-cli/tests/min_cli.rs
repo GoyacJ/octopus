@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    fs,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 use async_trait::async_trait;
 use octopus_cli::run_once::{main_with_args, run_once};
@@ -6,8 +9,9 @@ use octopus_sdk::{
     builtin::register_builtins, AgentRuntime, AskAnswer, AskError, AskPrompt, AskResolver,
     AssistantEvent, ContentBlock, Message, ModelError, ModelId, ModelProvider, ModelRequest,
     ModelStream, NoopBackend, PermissionGate, PermissionMode, PermissionOutcome,
-    ProviderDescriptor, ProviderId, Role, SecretValue, SessionEvent, SqliteJsonlSessionStore,
-    StartSessionInput, StopReason, ToolCallRequest, ToolRegistry, VaultError,
+    ProviderDescriptor, ProviderId, Role, SecretValue, SessionEvent, SessionStore,
+    SqliteJsonlSessionStore, StartSessionInput, StopReason, ToolCallRequest, ToolRegistry,
+    VaultError,
 };
 
 struct AllowAllGate;
@@ -219,4 +223,29 @@ async fn main_with_args_prints_scripted_reply() {
 
     let rendered = String::from_utf8(out).expect("stdout buffer should stay utf8");
     assert!(rendered.contains("cli scripted reply"));
+
+    let session_file = fs::read_dir(root.path().join("runtime/events"))
+        .expect("runtime events dir should exist")
+        .filter_map(|entry| entry.ok())
+        .find(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("jsonl"))
+        .expect("cli run should persist one session jsonl");
+    let session_id = octopus_sdk::SessionId(
+        session_file
+            .path()
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("session filename should have a stem")
+            .to_string(),
+    );
+    let store = SqliteJsonlSessionStore::open(
+        &root.path().join("data/main.db"),
+        &root.path().join("runtime/events"),
+    )
+    .expect("session store should reopen");
+    let snapshot = store
+        .snapshot(&session_id)
+        .await
+        .expect("cli session snapshot should load");
+
+    assert_eq!(snapshot.config_snapshot_id, "octopus-cli:local-run");
 }

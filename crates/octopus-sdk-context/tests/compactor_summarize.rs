@@ -3,7 +3,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use octopus_sdk_context::{Compactor, SessionView};
 use octopus_sdk_contracts::{
-    AssistantEvent, CompactionStrategyTag, ContentBlock, EventId, Message, Role,
+    AssistantEvent, CacheBreakpoint, CacheTtl, CompactionStrategyTag, ContentBlock, EventId,
+    Message, Role,
 };
 use octopus_sdk_model::{
     CacheControlStrategy, ModelError, ModelProvider, ModelRequest, ModelRole, ModelStream,
@@ -18,7 +19,25 @@ struct MockProvider {
 impl ModelProvider for MockProvider {
     async fn complete(&self, req: ModelRequest) -> Result<ModelStream, ModelError> {
         assert_eq!(req.role, ModelRole::Compact);
-        assert_eq!(req.cache_control, CacheControlStrategy::None);
+        assert_eq!(
+            req.cache_breakpoints,
+            vec![
+                CacheBreakpoint {
+                    position: 0,
+                    ttl: CacheTtl::OneHour,
+                },
+                CacheBreakpoint {
+                    position: 1,
+                    ttl: CacheTtl::FiveMinutes,
+                },
+            ]
+        );
+        assert_eq!(
+            req.cache_control,
+            CacheControlStrategy::PromptCaching {
+                breakpoints: vec!["system", "first_user"],
+            }
+        );
         let summary = self.summary.clone();
         Ok(Box::pin(futures::stream::iter(vec![Ok(
             AssistantEvent::TextDelta(summary),

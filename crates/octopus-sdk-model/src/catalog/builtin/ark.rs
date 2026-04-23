@@ -27,21 +27,51 @@ pub(crate) fn surfaces() -> Vec<Surface> {
 
 #[must_use]
 pub(crate) fn models() -> Vec<Model> {
-    vec![Model {
-        id: ModelId("doubao-seed-1.6".to_string()),
-        surface: SurfaceId("ark.responses".to_string()),
-        family: "doubao-seed-1.6".to_string(),
-        track: ModelTrack::Stable,
-        context_window: ContextWindow {
-            max_input_tokens: 128_000,
-            max_output_tokens: 16_384,
-            supports_1m: false,
+    vec![
+        Model {
+            id: ModelId("doubao-seed-1.6".to_string()),
+            surface: SurfaceId("ark.responses".to_string()),
+            family: "doubao-seed-1.6".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["doubao".to_string()],
         },
-        aliases: vec!["doubao".to_string()],
-    }]
+        Model {
+            id: ModelId("doubao-seed-1.6-thinking".to_string()),
+            surface: SurfaceId("ark.responses".to_string()),
+            family: "doubao-seed-1.6".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["doubao-thinking".to_string()],
+        },
+        Model {
+            id: ModelId("doubao-seed-1.6-flash".to_string()),
+            surface: SurfaceId("ark.responses".to_string()),
+            family: "doubao-seed-1.6".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 16_384,
+                supports_1m: false,
+            },
+            aliases: vec!["doubao-fast".to_string()],
+        },
+    ]
 }
 
 #[must_use]
 pub(crate) fn aliases() -> Vec<(&'static str, &'static str)> {
-    vec![("doubao", "doubao-seed-1.6")]
+    vec![
+        ("doubao", "doubao-seed-1.6"),
+        ("doubao-thinking", "doubao-seed-1.6-thinking"),
+        ("doubao-fast", "doubao-seed-1.6-flash"),
+    ]
 }

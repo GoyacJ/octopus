@@ -5,57 +5,63 @@ use octopus_sdk_contracts::{ContentBlock, PluginSourceTag, ToolDecl};
 use octopus_sdk_tools::{Tool, ToolContext, ToolError, ToolResult, ToolSpec};
 
 use crate::{
-    Plugin, PluginApi, PluginComponent, PluginError, PluginManifest, PluginToolRegistration,
+    PluginApi, PluginComponent, PluginError, PluginManifest, PluginRuntime, PluginRuntimeCatalog,
+    PluginToolRegistration,
 };
 
+const EXAMPLE_NOOP_TOOL_ID: &str = "example-noop-tool";
 const EXAMPLE_NOOP_TOOL_MANIFEST: &str = include_str!("../bundled/example-noop-tool/plugin.json");
 
 #[must_use]
-pub fn example_bundled_plugins() -> Vec<Box<dyn Plugin>> {
-    vec![Box::new(NoopPlugin::new())]
+pub fn bundled_plugin_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("bundled")
 }
 
-struct NoopPlugin {
-    manifest: PluginManifest,
+#[must_use]
+pub fn bundled_runtime_catalog() -> PluginRuntimeCatalog {
+    let mut runtimes = PluginRuntimeCatalog::new();
+    runtimes
+        .register_bundled(EXAMPLE_NOOP_TOOL_ID, Arc::new(NoopPlugin))
+        .expect("bundled runtime ids should stay unique");
+    runtimes
 }
 
-impl NoopPlugin {
-    fn new() -> Self {
-        let manifest_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("bundled/example-noop-tool/plugin.json");
-        let manifest = serde_json::from_str::<PluginManifest>(EXAMPLE_NOOP_TOOL_MANIFEST)
-            .expect("bundled example manifest should parse");
-        manifest
-            .validate(&manifest_path)
-            .expect("bundled example manifest should validate");
-
-        Self { manifest }
-    }
-
-    fn tool_decl(&self) -> ToolDecl {
-        self.manifest
-            .components
-            .iter()
-            .find_map(|component| match component {
-                PluginComponent::Tool(decl) => Some(decl.clone()),
-                _ => None,
-            })
-            .expect("bundled example manifest should include a tool decl")
+#[must_use]
+pub fn bundled_manifest(id: &str) -> Option<PluginManifest> {
+    match id {
+        EXAMPLE_NOOP_TOOL_ID => Some(example_noop_tool_manifest()),
+        _ => None,
     }
 }
 
-impl Plugin for NoopPlugin {
-    fn manifest(&self) -> &PluginManifest {
-        &self.manifest
-    }
+fn example_noop_tool_manifest() -> PluginManifest {
+    let manifest_path = bundled_plugin_root().join("example-noop-tool/plugin.json");
+    let mut manifest: PluginManifest = serde_json::from_str(EXAMPLE_NOOP_TOOL_MANIFEST)
+        .expect("bundled example manifest should parse");
+    manifest.source = PluginSourceTag::Bundled;
+    manifest
+        .validate(&manifest_path)
+        .expect("bundled example manifest should validate");
+    manifest
+}
 
-    fn source(&self) -> PluginSourceTag {
-        PluginSourceTag::Bundled
-    }
+fn example_noop_tool_decl() -> ToolDecl {
+    example_noop_tool_manifest()
+        .components
+        .into_iter()
+        .find_map(|component| match component {
+            PluginComponent::Tool(decl) => Some(decl),
+            _ => None,
+        })
+        .expect("bundled example manifest should include a tool decl")
+}
 
+struct NoopPlugin;
+
+impl PluginRuntime for NoopPlugin {
     fn register(&self, api: &mut PluginApi<'_>) -> Result<(), PluginError> {
         api.register_tool(PluginToolRegistration {
-            decl: self.tool_decl(),
+            decl: example_noop_tool_decl(),
             tool: Arc::new(NoopTool::new()),
         })
     }

@@ -103,13 +103,19 @@ impl ModelProvider for DefaultModelProvider {
     }
 
     fn describe(&self) -> ProviderDescriptor {
-        let mut supported_families = self.adapters.keys().cloned().collect::<Vec<_>>();
+        let mut supported_families = self
+            .catalog
+            .list_surfaces()
+            .iter()
+            .map(|surface| surface.protocol.clone())
+            .collect::<Vec<_>>();
         supported_families.sort_by_key(|family| family.to_string());
+        supported_families.dedup();
 
         ProviderDescriptor {
             id: crate::ProviderId("builtin".to_string()),
             supported_families,
-            catalog_version: "builtin-2026-04-02".to_string(),
+            catalog_version: crate::builtin_catalog_version().to_string(),
         }
     }
 }
@@ -468,12 +474,12 @@ mod tests {
         let descriptor = ProviderDescriptor {
             id: crate::ProviderId("builtin".to_string()),
             supported_families: vec![ProtocolFamily::AnthropicMessages],
-            catalog_version: "builtin-2026-04-02".to_string(),
+            catalog_version: crate::builtin_catalog_version().to_string(),
         };
 
         assert_eq!(
             serde_json::to_value(&descriptor).unwrap()["catalog_version"],
-            "builtin-2026-04-02"
+            crate::builtin_catalog_version()
         );
     }
 

@@ -76,6 +76,7 @@ fn parse_agent_markdown(markdown: &str) -> Result<SubagentSpec, SubagentError> {
         id,
         system_prompt: body.trim().to_string(),
         allowed_tools: frontmatter.allowed_tools.unwrap_or_default(),
+        agent_role: frontmatter.agent_role.unwrap_or_else(|| "worker".into()),
         model_role: normalize_model_role(frontmatter.model.as_deref()),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {
@@ -159,6 +160,7 @@ struct AgentFrontmatter {
     name: String,
     model: Option<String>,
     allowed_tools: Option<Vec<String>>,
+    agent_role: Option<String>,
     max_turns: Option<u16>,
     task_budget: Option<u32>,
 }

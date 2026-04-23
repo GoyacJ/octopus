@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder};
 use octopus_sdk_contracts::{PermissionMode, SessionId};
 use octopus_sdk_tools::{
-    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec,
+    Tool, ToolCategory, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec, ToolSurface,
+    ToolSurfaceState,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -52,7 +53,8 @@ impl Tool for DummyTool {
 fn prompt_and_tool_fingerprint_are_stable_and_sensitive_to_tool_set() {
     let builder = SystemPromptBuilder::new();
     let initial_registry = base_registry();
-    let base_ctx = sample_ctx(&initial_registry);
+    let initial_surface = initial_registry.assemble_surface(&ToolSurfaceState::default());
+    let base_ctx = sample_ctx(&initial_surface);
 
     let first = combined_fingerprint(&builder, &base_ctx);
     let second = combined_fingerprint(&builder, &base_ctx);
@@ -69,11 +71,13 @@ fn prompt_and_tool_fingerprint_are_stable_and_sensitive_to_tool_set() {
             ToolCategory::Read,
         )))
         .expect("search should register");
-    let expanded = combined_fingerprint(&builder, &sample_ctx(&expanded_registry));
+    let expanded_surface = expanded_registry.assemble_surface(&ToolSurfaceState::default());
+    let expanded = combined_fingerprint(&builder, &sample_ctx(&expanded_surface));
     assert_ne!(first, expanded);
 
     let restored_registry = registry_with_original_tool_set_in_different_order();
-    let restored = combined_fingerprint(&builder, &sample_ctx(&restored_registry));
+    let restored_surface = restored_registry.assemble_surface(&ToolSurfaceState::default());
+    let restored = combined_fingerprint(&builder, &sample_ctx(&restored_surface));
     assert_eq!(first, restored);
 }
 
@@ -83,11 +87,11 @@ fn combined_fingerprint(builder: &SystemPromptBuilder, ctx: &PromptCtx<'_>) -> S
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    let payload = format!("{prompt_hex}:{}", ctx.tools.tools_fingerprint());
+    let payload = format!("{prompt_hex}:{}", ctx.tools.fingerprint());
     format!("{:x}", Sha256::digest(payload.as_bytes()))
 }
 
-fn sample_ctx<'a>(tools: &'a ToolRegistry) -> PromptCtx<'a> {
+fn sample_ctx<'a>(tools: &'a ToolSurface) -> PromptCtx<'a> {
     PromptCtx {
         session: SessionId("session-fingerprint".into()),
         mode: PermissionMode::Default,

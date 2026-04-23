@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use octopus_sdk_contracts::{PermissionMode, SessionId};
-use octopus_sdk_tools::ToolRegistry;
+use octopus_sdk_tools::ToolSurface;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,7 +21,7 @@ pub struct PromptCtx<'a> {
     pub session: SessionId,
     pub mode: PermissionMode,
     pub project_root: PathBuf,
-    pub tools: &'a ToolRegistry,
+    pub tools: &'a ToolSurface,
 }
 
 impl SystemPromptBuilder {
@@ -73,17 +73,12 @@ fn role_section(ctx: &PromptCtx<'_>) -> SystemPromptSection {
     }
 }
 
-fn tools_guidance_section(registry: &ToolRegistry) -> SystemPromptSection {
+fn tools_guidance_section(surface: &ToolSurface) -> SystemPromptSection {
     let mut lines = vec![
         "<tools_guidance>".to_string(),
         "Use tools just in time. Prefer reading before writing.".to_string(),
     ];
-    lines.extend(
-        registry
-            .schemas_sorted()
-            .into_iter()
-            .map(|spec| format!("- {}: {}", spec.name, spec.description)),
-    );
+    lines.extend(surface.prompt_lines());
     lines.push("</tools_guidance>".to_string());
 
     SystemPromptSection {
@@ -125,6 +120,9 @@ fn mode_label(mode: PermissionMode) -> &'static str {
         PermissionMode::Default => "default",
         PermissionMode::AcceptEdits => "accept_edits",
         PermissionMode::BypassPermissions => "bypass_permissions",
+        PermissionMode::DontAsk => "dont_ask",
+        PermissionMode::Auto => "auto",
+        PermissionMode::Bubble => "bubble",
         PermissionMode::Plan => "plan",
     }
 }

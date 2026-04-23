@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use octopus_sdk_contracts::{
-    AssistantEvent, CompactionResult, CompactionStrategyTag, ContentBlock, EventId, Message, Role,
+    AssistantEvent, CacheBreakpoint, CacheTtl, CompactionResult, CompactionStrategyTag,
+    ContentBlock, EventId, Message, Role,
 };
 use octopus_sdk_model::{
     CacheControlStrategy, ModelError, ModelId, ModelProvider, ModelRequest, ModelRole,
@@ -59,9 +60,7 @@ impl Compactor {
                 }))
             }
             CompactionStrategyTag::Summarize => Ok(Some(self.summarize(session).await?)),
-            CompactionStrategyTag::Hybrid => Err(CompactionError::Aborted {
-                reason: "hybrid not implemented in W4".into(),
-            }),
+            CompactionStrategyTag::Hybrid => Ok(Some(self.hybrid(session).await?)),
         }
     }
 
@@ -86,6 +85,9 @@ impl Compactor {
 
         let split = (session.messages.len() / 2).max(1);
         let prefix_messages = session.messages[..split].to_vec();
+        let has_user_message = prefix_messages
+            .iter()
+            .any(|message| matches!(message.role, Role::User));
         let tokens_before = session.tokens;
         let folded_turn_ids = if session.event_ids.len() >= split {
             session.event_ids[..split].to_vec()
@@ -103,10 +105,10 @@ impl Compactor {
                 messages: prefix_messages,
                 tools: Vec::new(),
                 role: ModelRole::Compact,
-                cache_breakpoints: Vec::new(),
+                cache_breakpoints: compact_cache_breakpoints(has_user_message),
                 response_format: None,
                 thinking: None,
-                cache_control: CacheControlStrategy::None,
+                cache_control: compact_cache_control(has_user_message),
                 max_tokens: None,
                 temperature: None,
                 stream: true,
@@ -162,6 +164,31 @@ impl Compactor {
             tokens_after: session.tokens,
             strategy: CompactionStrategyTag::Summarize,
         })
+    }
+
+    async fn hybrid(
+        &self,
+        session: &mut SessionView<'_>,
+    ) -> Result<CompactionResult, CompactionError> {
+        let tokens_before = session.tokens;
+        let cleared = self.clear_tool_results(session).await;
+        let usage_ratio = f64::from(session.tokens) / f64::from(session.tokens_budget.max(1));
+        if session.tokens_budget == 0 || usage_ratio < f64::from(self.threshold) {
+            return Ok(CompactionResult {
+                summary: String::new(),
+                folded_turn_ids: Vec::new(),
+                tool_results_cleared: cleared,
+                tokens_before,
+                tokens_after: session.tokens,
+                strategy: CompactionStrategyTag::Hybrid,
+            });
+        }
+
+        let mut result = self.summarize(session).await?;
+        result.tool_results_cleared = cleared;
+        result.tokens_before = tokens_before;
+        result.strategy = CompactionStrategyTag::Hybrid;
+        Ok(result)
     }
 }
 
@@ -224,4 +251,26 @@ fn estimate_chars_tokens(chars: usize) -> u32 {
     } else {
         u32::try_from(chars).unwrap_or(u32::MAX).div_ceil(4)
     }
+}
+
+fn compact_cache_breakpoints(has_user_message: bool) -> Vec<CacheBreakpoint> {
+    let mut breakpoints = vec![CacheBreakpoint {
+        position: 0,
+        ttl: CacheTtl::OneHour,
+    }];
+    if has_user_message {
+        breakpoints.push(CacheBreakpoint {
+            position: 1,
+            ttl: CacheTtl::FiveMinutes,
+        });
+    }
+    breakpoints
+}
+
+fn compact_cache_control(has_user_message: bool) -> CacheControlStrategy {
+    let mut breakpoints = vec!["system"];
+    if has_user_message {
+        breakpoints.push("first_user");
+    }
+    CacheControlStrategy::PromptCaching { breakpoints }
 }

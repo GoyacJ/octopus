@@ -19,8 +19,9 @@ use octopus_sdk_model::{
     ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
     ProviderId,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id, NoopTracer};
 use octopus_sdk_session::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
-use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext};
+use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext, ParentTraceContext};
 use octopus_sdk_tools::{Tool, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec};
 
 struct AllowAllGate;
@@ -151,10 +152,14 @@ fn test_fan_in_merge() {
             assert!(text.contains("- beta"));
             assert!(text.contains("- gamma"));
             assert_eq!(meta.session_id.0, "session-a");
+            assert_eq!(meta.parent_session_id.0, "parent-fan-out");
+            assert_eq!(meta.resume_session_id, None);
+            assert_eq!(meta.spec_id, "fan-in");
+            assert_eq!(meta.agent_role, "coordinator");
             assert_eq!(meta.turns, 6);
             assert_eq!(meta.tokens_used, 60);
             assert_eq!(meta.duration_ms, 90);
-            assert_eq!(meta.trace_id, "fan-in:trace-session-a");
+            assert_eq!(meta.trace_id, session_trace_id("parent-fan-out"));
         }
         other => panic!("expected merged summary, got {other:?}"),
     }
@@ -176,6 +181,15 @@ fn test_runtime(delay_ms: u64) -> TestRuntime {
         tools: Arc::new(tool_registry(vec!["ToolA"])),
         permissions: Arc::new(AllowAllGate),
         scratchpad: DurableScratchpad::new(root),
+        trace: ParentTraceContext {
+            trace_id: session_trace_id("parent-fan-out"),
+            span_id: session_span_id("parent-fan-out"),
+            agent_role: "main".into(),
+            model_id: "main".into(),
+            model_version: "test".into(),
+            config_snapshot_id: "cfg-parent".into(),
+            tracer: Arc::new(NoopTracer),
+        },
     };
 
     TestRuntime { parent }
@@ -186,6 +200,7 @@ fn sample_spec(id: &str) -> SubagentSpec {
         id: id.into(),
         system_prompt: "Be concise.".into(),
         allowed_tools: vec!["ToolA".into()],
+        agent_role: "worker".into(),
         model_role: "subagent-default".into(),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {
@@ -208,10 +223,22 @@ fn summary_output(
         text: text.into(),
         meta: SubagentSummary {
             session_id: SessionId(session_id.into()),
+            parent_session_id: SessionId("parent-fan-out".into()),
+            resume_session_id: Some(SessionId(session_id.into())),
+            spec_id: text.into(),
+            agent_role: "worker".into(),
+            parent_agent_role: "main".into(),
             turns,
             tokens_used,
             duration_ms,
-            trace_id: format!("trace-{session_id}"),
+            trace_id: session_trace_id("parent-fan-out"),
+            span_id: format!("subagent:{session_id}"),
+            parent_span_id: session_span_id("parent-fan-out"),
+            model_id: "main".into(),
+            model_version: "test".into(),
+            config_snapshot_id: "cfg-parent".into(),
+            permission_mode: PermissionMode::Default,
+            allowed_tools: vec!["ToolA".into()],
         },
     }
 }

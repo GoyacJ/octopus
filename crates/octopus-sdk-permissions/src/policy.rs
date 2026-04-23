@@ -1,8 +1,10 @@
 //! Rule evaluation types for permission policy merging.
 
+use std::collections::BTreeMap;
+
 use octopus_sdk_contracts::{
-    AskOption, AskPrompt, AskQuestion, PermissionMode, PermissionOutcome, ToolCallRequest,
-    ToolCategory,
+    AskOption, AskPrompt, AskQuestion, PermissionMode, PermissionOutcome, PermissionRuleSource,
+    ToolCallRequest, ToolCategory, ToolPermissionRulesBySource,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,35 +14,6 @@ pub enum PermissionBehavior {
     Allow,
     Deny,
     Ask,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PermissionRuleSource {
-    UserSettings,
-    ProjectSettings,
-    LocalSettings,
-    FlagSettings,
-    PolicySettings,
-    CliArg,
-    Command,
-    Session,
-}
-
-impl PermissionRuleSource {
-    #[must_use]
-    pub const fn priority(self) -> u8 {
-        match self {
-            Self::UserSettings => 0,
-            Self::ProjectSettings => 1,
-            Self::LocalSettings => 2,
-            Self::FlagSettings => 3,
-            Self::PolicySettings => 4,
-            Self::CliArg => 5,
-            Self::Command => 6,
-            Self::Session => 7,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +119,28 @@ impl PermissionPolicy {
     }
 
     #[must_use]
+    pub fn rules_by_source(
+        &self,
+        tool_name: &str,
+        behavior: PermissionBehavior,
+    ) -> ToolPermissionRulesBySource {
+        let mut grouped = BTreeMap::new();
+
+        for rule in &self.rules {
+            if !rule_matches_tool(rule, tool_name) || rule.behavior != behavior {
+                continue;
+            }
+
+            grouped
+                .entry(rule.source)
+                .or_insert_with(Vec::new)
+                .push(rule_content_entry(rule));
+        }
+
+        grouped
+    }
+
+    #[must_use]
     pub fn evaluate(&self, ctx: &PermissionContext) -> Option<PermissionOutcome> {
         let (allow_matches, deny_matches, ask_matches) = self.match_rules(&ctx.call);
 
@@ -184,6 +179,14 @@ fn normalize_rule_content(content: Option<&str>) -> Option<RuleMatcher<'_>> {
                 Some(RuleMatcher::Prefix(prefix))
             }),
     }
+}
+
+fn rule_matches_tool(rule: &PermissionRule, tool_name: &str) -> bool {
+    rule.tool_name == "*" || rule.tool_name == tool_name
+}
+
+fn rule_content_entry(rule: &PermissionRule) -> String {
+    rule.rule_content.clone().unwrap_or_else(|| "*".into())
 }
 
 fn extract_permission_subject(input: &serde_json::Value) -> Option<&str> {

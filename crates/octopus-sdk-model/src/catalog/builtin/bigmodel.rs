@@ -27,21 +27,47 @@ pub(crate) fn surfaces() -> Vec<Surface> {
 
 #[must_use]
 pub(crate) fn models() -> Vec<Model> {
-    vec![Model {
-        id: ModelId("glm-5".to_string()),
-        surface: SurfaceId("bigmodel.conversation".to_string()),
-        family: "glm-5".to_string(),
-        track: ModelTrack::Stable,
-        context_window: ContextWindow {
-            max_input_tokens: 128_000,
-            max_output_tokens: 8_192,
-            supports_1m: false,
+    vec![
+        Model {
+            id: ModelId("glm-5".to_string()),
+            surface: SurfaceId("bigmodel.conversation".to_string()),
+            family: "glm-5".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec!["glm".to_string()],
         },
-        aliases: vec!["glm".to_string()],
-    }]
+        Model {
+            id: ModelId("glm-5-turbo".to_string()),
+            surface: SurfaceId("bigmodel.conversation".to_string()),
+            family: "glm-5".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec!["glm-turbo".to_string()],
+        },
+        Model {
+            id: ModelId("glm-4.7".to_string()),
+            surface: SurfaceId("bigmodel.conversation".to_string()),
+            family: "glm-4.x".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec![],
+        },
+    ]
 }
 
 #[must_use]
 pub(crate) fn aliases() -> Vec<(&'static str, &'static str)> {
-    vec![("glm", "glm-5")]
+    vec![("glm", "glm-5"), ("glm-turbo", "glm-5-turbo")]
 }

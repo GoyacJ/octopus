@@ -13,6 +13,7 @@ futures = "0.3"
 globset.workspace = true
 ignore.workspace = true
 octopus-sdk-mcp = { path = "../octopus-sdk-mcp" }
+octopus-sdk-hooks = { path = "../octopus-sdk-hooks" }
 octopus-sdk-sandbox = { path = "../octopus-sdk-sandbox" }
 octopus-sdk-session = { path = "../octopus-sdk-session" }
 octopus-sdk-contracts = { path = "../octopus-sdk-contracts" }
@@ -33,5 +34,6 @@ workspace = true
 [dev-dependencies]
 octopus-sdk-context = { path = "../octopus-sdk-context" }
 octopus-sdk-model = { path = "../octopus-sdk-model" }
+octopus-sdk-observability = { path = "../octopus-sdk-observability" }
 octopus-sdk-subagent = { path = "../octopus-sdk-subagent" }
 wiremock = "0.6"

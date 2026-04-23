@@ -3,11 +3,11 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use octopus_sdk_contracts::{
     AskAnswer, AskError, AskPrompt, AskResolver, EventSink, PermissionGate, PermissionMode,
-    PermissionOutcome, SessionEvent, ToolCallId, ToolCallRequest, ToolCategory,
+    PermissionOutcome, PermissionRuleSource, SessionEvent, ToolCallId, ToolCallRequest,
+    ToolCategory,
 };
 use octopus_sdk_permissions::{
     ApprovalBroker, DefaultPermissionGate, PermissionBehavior, PermissionPolicy, PermissionRule,
-    PermissionRuleSource,
 };
 use serde_json::json;
 
@@ -254,4 +254,78 @@ async fn plan_mode_denies_subagent_tools() {
             reason: "tool 'subagent' is not allowed in plan mode".into(),
         }
     );
+}
+
+#[tokio::test]
+async fn dont_ask_mode_denies_shell_tools_without_prompt() {
+    let gate = gate(PermissionMode::DontAsk, Vec::new(), "approve");
+
+    let outcome = gate
+        .check(&tool_call("bash", json!({ "command": "git status" })))
+        .await;
+
+    assert_eq!(
+        outcome,
+        PermissionOutcome::Deny {
+            reason: "tool 'bash' requires approval in dont_ask mode".into(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn auto_mode_prompts_for_write_tools() {
+    let gate = gate(PermissionMode::Auto, Vec::new(), "deny");
+
+    let outcome = gate
+        .check(&tool_call("write_file", json!({ "path": "/tmp/demo.txt" })))
+        .await;
+
+    assert_eq!(
+        outcome,
+        PermissionOutcome::Deny {
+            reason: "tool 'write_file' denied by approval option 'deny'".into(),
+        }
+    );
+}
+
+#[test]
+fn tool_permission_context_groups_rules_by_source_for_the_selected_tool() {
+    let gate = gate(
+        PermissionMode::Bubble,
+        vec![
+            PermissionRule {
+                source: PermissionRuleSource::ProjectSettings,
+                behavior: PermissionBehavior::Allow,
+                tool_name: "bash".into(),
+                rule_content: Some("git status".into()),
+            },
+            PermissionRule {
+                source: PermissionRuleSource::Session,
+                behavior: PermissionBehavior::Deny,
+                tool_name: "bash".into(),
+                rule_content: Some("rm -rf:*".into()),
+            },
+            PermissionRule {
+                source: PermissionRuleSource::FlagSettings,
+                behavior: PermissionBehavior::Ask,
+                tool_name: "write_file".into(),
+                rule_content: Some("/tmp/demo.txt".into()),
+            },
+        ],
+        "approve",
+    );
+
+    let context = gate.tool_permission_context(PermissionMode::Bubble, "bash");
+
+    assert_eq!(context.mode, PermissionMode::Bubble);
+    assert_eq!(
+        context.always_allow_rules[&PermissionRuleSource::ProjectSettings],
+        ["git status"]
+    );
+    assert_eq!(
+        context.always_deny_rules[&PermissionRuleSource::Session],
+        ["rm -rf:*"]
+    );
+    assert!(context.always_ask_rules.is_empty());
+    assert_eq!(context.should_avoid_permission_prompts, Some(true));
 }

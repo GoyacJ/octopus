@@ -32,23 +32,26 @@ pub struct PluginManifest {
 
 impl PluginManifest {
     pub fn load_from_path(path: &Path) -> Result<Self, PluginError> {
+        Self::load_from_path_with_source(path, PluginSourceTag::Local)
+    }
+
+    pub fn load_from_path_with_source(
+        path: &Path,
+        source: PluginSourceTag,
+    ) -> Result<Self, PluginError> {
         let content = fs::read_to_string(path)
             .map_err(|_| PluginError::PathNotFound { path: path.into() })?;
-        let manifest: PluginManifest = serde_json::from_str::<PluginManifestRaw>(&content)
+        let mut manifest: PluginManifest = serde_json::from_str::<PluginManifestRaw>(&content)
             .map_err(|error| PluginError::ManifestParseError {
                 cause: error.to_string(),
             })?
             .try_into()?;
+        manifest.source = source;
         manifest.validate(path)?;
         Ok(manifest)
     }
 
     pub fn validate(&self, manifest_path: &Path) -> Result<(), PluginError> {
-        if self.source != PluginSourceTag::Local {
-            return Err(PluginError::UnsupportedSource {
-                source_kind: plugin_source_name(self.source).into(),
-            });
-        }
         validate_compat(&self.compat)?;
         validate_unique_component_ids(&self.components)?;
         validate_security_gates(manifest_path, self)?;
@@ -162,25 +165,42 @@ pub struct MemoryBackendDecl {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PluginDiscoveryConfig {
-    pub roots: Vec<PathBuf>,
+    pub roots: Vec<PluginDiscoveryRoot>,
     pub allow: Vec<String>,
     pub deny: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginDiscoveryRoot {
+    pub path: PathBuf,
+    pub source: PluginSourceTag,
+}
+
+impl PluginDiscoveryRoot {
+    #[must_use]
+    pub fn local(path: PathBuf) -> Self {
+        Self {
+            path,
+            source: PluginSourceTag::Local,
+        }
+    }
+
+    #[must_use]
+    pub fn bundled(path: PathBuf) -> Self {
+        Self {
+            path,
+            source: PluginSourceTag::Bundled,
+        }
+    }
+}
+
 #[must_use]
-pub fn default_roots() -> Vec<PathBuf> {
+pub fn default_roots() -> Vec<PluginDiscoveryRoot> {
     Vec::new()
 }
 
 fn default_manifest_source() -> String {
     "local".into()
-}
-
-fn plugin_source_name(source: PluginSourceTag) -> &'static str {
-    match source {
-        PluginSourceTag::Local => "local",
-        PluginSourceTag::Bundled => "bundled",
-    }
 }
 
 fn validate_compat(compat: &PluginCompat) -> Result<(), PluginError> {

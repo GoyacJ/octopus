@@ -8,13 +8,13 @@
 
 ## Status
 
-状态：`in_progress`
+状态：`done`
 
 ## Active Work
 
-当前 Task：`Task 2 · 收口 tool contract、tool exposure、UI intent 与 residual builtin tools`
+当前 Task：`tranche closeout`
 
-当前 Step：`Step 1 · 审计结论已回填到 tool surface / prompt surface / model catalog / plugin bootstrap / file-write / long-horizon / compat 清单；待按 Task 2 Step 1 起批`
+当前 Step：`all tasks done`
 
 ### Pre-Task Checklist（起稿阶段）
 
@@ -305,7 +305,7 @@ Step 3:
 
 ### Task 2: 收口 tool contract、tool exposure、UI intent 与 residual builtin tools
 
-Status: `in_progress`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-tools/src/{spec.rs,tool.rs,context.rs,registry.rs}`
@@ -345,7 +345,7 @@ Step 3:
 
 ### Task 3: 收口 model adapters、builtin catalog 与 role routing
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-model/src/{adapter/stubs.rs,adapter/mod.rs,adapter/openai_chat.rs,adapter/anthropic_messages.rs,provider_impl.rs,role_router.rs,lib.rs}`
@@ -376,7 +376,7 @@ Step 2:
 
 ### Task 4: 收口 plugin runtime bootstrap 与 bundled/local plugin 边界
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-plugin/src/{bundled.rs,lifecycle.rs,manifest.rs,registry.rs,api.rs,lib.rs}`
@@ -406,7 +406,7 @@ Step 2:
 
 ### Task 5: 收口 permissions、sandbox、hooks 与 tool execution governance 契约
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-contracts/src/{permissions.rs,hooks.rs,event.rs}`
@@ -447,7 +447,7 @@ Step 3:
 
 ### Task 6: 收口 query loop、observability、subagent coordination 与 replay 契约
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-observability/src/{tracer.rs,usage.rs,replay.rs}`
@@ -490,7 +490,7 @@ Step 4:
 
 ### Task 7: 收口 prompt cache、compaction 与 long-horizon 路径
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-sdk-core/src/{brain_loop.rs,session_boot.rs}`
@@ -528,7 +528,7 @@ Step 3:
 
 ### Task 8: 审计并收口 minimal scaffold 与 compatibility shims
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-platform/src/runtime_sdk/builder.rs`
@@ -559,7 +559,7 @@ Step 2:
 
 ### Task 9: 回填 contracts / docs / gates 并完成 tranche 收口
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/{02-crate-topology.md,03-legacy-retirement.md,14-residual-capability-closure.md,README.md}`
@@ -678,6 +678,151 @@ Step 2:
 - Next:
   - Task 2 Step 1
 
+## Checkpoint 2026-04-23 18:36
+
+- Batch: Task 2 Step 1 -> Step 3
+- Completed:
+  - 为 `Tool` 合同补入 `version`、`output_format`、`display_descriptor`、`validate` 默认入口，并把 `ToolContext` 显式拆成 `ToolUseContext` + `ToolPermissionContext`
+  - 新增 request-time `ToolSurface` / `ToolSurfaceState`，让 `brain_loop` 的 `request.tools` 与 `SystemPromptBuilder` 共用同一份 assembled surface，并补 deferred tool exposure 稳定性测试
+  - 把 `RenderLifecycle` 从 phase enum 收口成带 `phase + toolCallId + toolName` 的合同；把 `SessionEvent::Render` 扩成 `blocks`；补齐 `OnToolUse / OnToolRejected / OnToolError` writeback，并同步 platform / CLI / replay / session / subagent 路径
+  - 清掉 `todo_write` 直接双写 render 的重复路径，保留 stub builtin 仅作为非 live compat / test 边界
+- Verification:
+  - `cargo test -p octopus-sdk-tools -p octopus-sdk-contracts -p octopus-sdk-core -p octopus-platform` -> pass
+  - `cargo test -p octopus-sdk-context --test prompt_cache_fingerprint` -> pass
+  - `cargo test -p octopus-sdk-context --test prompt_stability` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 18:54
+
+- Batch: Task 3 Step 1 -> Step 2
+- Completed:
+  - 把 `octopus-sdk-model` 的 builtin live/compat catalog 收口到单一投影入口，按 `vendor-matrix` 保留 live provider 为 `anthropic/deepseek/minimax/moonshot/bigmodel/qwen`，把 `openai/google/ark` 收窄为 hidden compat metadata
+  - 补齐 live lineup 与 alias/default route：新增 `claude-sonnet-4-5`、`MiniMax-M2.*`、`kimi-k2-*`、`glm-*`、`qwen3-*`、`deepseek-reasoner` 等模型，并让 `RoleRouter` 与 platform default selections 共用同一份 builtin default route
+  - 重写 `runtime_sdk::registry_bridge` 的 builtin projection，让 platform snapshot / configuredModels compat 直接消费 `ModelCatalog` 与 hidden compat model projection，不再各自维护 provider/model/default 的独立硬编码清单
+- Verification:
+  - `cargo test -p octopus-sdk-model --test catalog_builtin` -> pass
+  - `cargo test -p octopus-sdk-model --test adapter_openai` -> pass
+  - `cargo test -p octopus-sdk-model --test role_router` -> pass
+  - `cargo test -p octopus-platform --test runtime_sdk_bridge` -> pass
+  - `cargo test -p octopus-platform --test runtime_config_bridge` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 19:06
+
+- Batch: Task 4 Step 1 -> Step 2
+- Completed:
+  - 把 plugin discovery root 显式扩成 `path + source`，让 bundled/workspace/home plugin 的 source 在 manifest discovery 阶段就固定；`PluginManifest` 新增按 source 加载入口，bundled manifest 不再依赖预载入 runtime 对象回填 source
+  - 把 `PluginLifecycle` 收口成 manifest-first bootstrap：先 discover + validate manifests，再按 `source + plugin_id` 从 `PluginRuntimeCatalog` 解析 runtime；新增 `boot(...) -> (PluginRegistry, PluginsSnapshot)`，live builder 不再从 `example_bundled_plugins()` 反推 manifest
+  - 把 bundled runtime truth 从 example object list 改成 `bundled_manifest + bundled_runtime_catalog`，并在 `PluginRegistry` 显式区分 decl-only vs runtime `Tool/Hook`；新增测试证明 local manifest-only tool 只进 snapshot/decl store，不进入 live tool registry
+  - 把 `octopus-platform::runtime_sdk::plugin_boot` 接到新 bootstrap owner，live roots 明确为 bundled + workspace + home，本地 source 为 `local`，bundled source 为 `bundled`
+- Verification:
+  - `cargo test -p octopus-sdk-plugin --test lifecycle --test registry --test manifest_validate` -> pass
+  - `cargo test -p octopus-sdk-core --test plugin_subagent_integration` -> pass
+  - `cargo test -p octopus-platform --test runtime_sdk_bridge` -> pass
+  - `cargo test -p octopus-sdk-core -p octopus-sdk-plugin -p octopus-platform` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 19:57
+
+- Batch: Task 5 Step 1 -> Step 3
+- Completed:
+  - 对齐 `PermissionMode` / `ToolPermissionContext` 与 rules-by-source bucket，补齐 `dontAsk` / `auto` / `bubble` 语义，并让权限决策进入事件流与 replay / usage 投影
+  - 把 `PreSampling` / `PostSampling` / `SubagentSpawn` / `SubagentReturn` / `OnToolError` / `PreFileWrite` / `PostFileWrite` 接到真实 owner，补齐 `fs_write` / `fs_edit` 与 subagent live 路径的 hook 发射与测试
+  - 收口 `tool_dispatch` 的治理管线：补齐 `OnToolUse / OnToolProgress / OnToolRejected / OnToolError` writeback、permission retry hint、sandbox provenance、hook timing 与 `tool_execution` trace span
+- Verification:
+  - `cargo test -p octopus-sdk-permissions -p octopus-sdk-hooks -p octopus-sdk-sandbox -p octopus-sdk-core` -> pass
+  - `cargo test -p octopus-sdk-tools --test builtin_fs_write` -> pass
+  - `cargo test -p octopus-sdk-tools --test agent_tool_task_fn` -> pass
+  - `cargo test -p octopus-sdk-hooks --test events_matrix` -> pass
+  - `cargo test -p octopus-sdk-contracts --test serialization_golden` -> pass
+  - `cargo test -p octopus-sdk-session --test sqlite_jsonl` -> pass
+  - `cargo test -p octopus-sdk-permissions -p octopus-sdk-hooks -p octopus-sdk-sandbox -p octopus-sdk-core -p octopus-sdk-observability` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 6 Step 1
+
+## Checkpoint 2026-04-23 21:05
+
+- Batch: Task 6 Step 1 -> Step 4
+- Completed:
+  - 补齐 `brain_loop` 的 session-owned continuation / recovery 合同，覆盖 stop-hook continuation、token-budget continuation、prompt-too-long recovery、retry-after-overflow，并把恢复态接回 `session_boot`
+  - 补齐事件级 tracing 与 replay/usage ledger/summary 面：`TraceSpan`、`PermissionDecision`、`subagent.spawn` / `subagent.summary` render payload、replay trace 上下文、usage counters 现在都能串起 `session -> tool -> subagent`
+  - 收口 subagent parent-child 合同：`TaskFn` 透传 parent `session_id + tool_call_id`，`SubagentSpec` / `SubagentSummary` 补齐 role / resume / trace / model / config / permission / tool surface 元数据，fan-in summary 固定为 `coordinator` 视角
+  - 修正 `trace_propagation` 用例让它走真实 fan-out/fan-in 路径，并给 `octopus-sdk-tools` 的 `agent_tool_task_fn` 测试补齐 `octopus-sdk-observability` 依赖
+- Verification:
+  - `cargo test -p octopus-sdk-core --test min_loop --test session_boot --test plugin_subagent_integration` -> pass
+  - `cargo test -p octopus-sdk-observability --test usage_replay` -> pass
+  - `cargo test -p octopus-sdk-subagent --test condensed_summary --test fan_in_fan_out --test context_isolation --test gen_eval_mock --test no_credentials_in_subagent_events --test trace_propagation` -> pass
+  - `cargo test -p octopus-sdk-tools --test agent_tool_task_fn` -> pass
+  - `cargo test -p octopus-sdk-hooks --test events_matrix` -> pass
+  - `cargo test -p octopus-sdk-observability -p octopus-sdk-subagent -p octopus-sdk-core` -> pass
+  - `cargo test -p octopus-sdk-context` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 7 Step 1
+
+## Checkpoint 2026-04-23 21:09
+
+- Batch: Task 7 Step 1 -> Step 3
+- Completed:
+  - 给 `brain_loop` 主请求与 compaction 请求补齐稳定的 prompt cache metadata，并把 continuation compaction 从 `Summarize` 收口到可执行的 `Hybrid`
+  - 打通 long-horizon 恢复链：`resume()` 现在恢复 `NOTES.md`、`runtime/notes/<session>.md`、`runtime/todos/<session>.json`，写入 `context_restored` render，并在下一次 `submit_turn()` 注入一次性 restore message
+  - 把 `TodoWrite` 落盘到 `runtime/todos/<session>.json`，并在 `docs/sdk/README.md` 追加 Fact-Fix，明确当前 live runtime 不内建读取 `last 5 commits`
+- Verification:
+  - `cargo test -p octopus-sdk-core -p octopus-sdk-model -p octopus-sdk-context` -> pass
+  - `cargo test -p octopus-sdk-tools --test builtin_ask` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 8 Step 1
+
+## Checkpoint 2026-04-23 21:20
+
+- Batch: Task 8 Step 1 -> Step 2
+- Completed:
+  - 删除未使用的 `RuntimeSdkDeps::minimal(...)`，把 CLI session snapshot id 从 `octopus-cli:minimal` 改成 `octopus-cli:local-run`，并移除 `octopus-sdk-{contracts,session,model}` crate-level minimal scaffold 注记
+  - 收紧 compat 边界：`hidden_builtin_model(...)` 不再能经 `builtin_model(...)` 回流进 live builtin catalog；`shim_tool_context()` 明确只服务 `SdkTransport::call_tool(...)` compat shim
+  - 回填 `03-legacy-retirement.md` 的 Task 8 审计结论，并补 `min_cli` 对新 snapshot id 的断言；同时修正 `subagent_runtime` 测试桩，使其满足当前 live `TaskFn` 先读取父 session snapshot 的前提
+- Verification:
+  - `rg -n "RuntimeSdkDeps::minimal|octopus-cli:minimal|intentionally keeps this crate as a minimal scaffold" crates/octopus-platform/src/runtime_sdk/builder.rs crates/octopus-cli/src/run_once.rs crates/octopus-sdk-contracts/src/lib.rs crates/octopus-sdk-session/src/lib.rs crates/octopus-sdk-model/src/lib.rs` -> 0 hits
+  - `rg -n "SkipLegacyRuntimeEnvelope|looks_like_legacy_runtime_envelope|parse_legacy_event_wrapper|legacy_event_id|migrate_legacy_tables" crates/octopus-sdk-session/src/jsonl.rs crates/octopus-sdk-session/src/sqlite/schema.rs` -> pass
+  - `rg -n "shim_tool_context|hidden_builtin_model|configuredModels" crates/octopus-sdk-tools/src/registry.rs crates/octopus-platform/src/runtime_sdk/registry_bridge/builtins.rs crates/octopus-platform/src/runtime_sdk/registry_bridge/snapshot.rs` -> pass
+  - `cargo test -p octopus-sdk-session -p octopus-cli -p octopus-platform -p octopus-sdk-tools` -> pass
+- Blockers:
+  - none
+- Next:
+  - Task 9 Step 1
+
+## Checkpoint 2026-04-23 21:38
+
+- Batch: Task 9 Step 2 closeout
+- Completed:
+  - 修复全量 `clippy` gate 命中的残余样式问题：收口 `stable_input_hash` 常量字面量、合并 `PermissionMode::Default / Auto` 重复分支、修正 replay / subagent tracing 的无损整数转换
+  - 把 `octopus-sdk-subagent` 的 orchestration helper / trace / noop 支撑拆到 `orchestrator_support.rs`，让 `orchestrator.rs` 降到 800 行以内
+  - 补齐前端工作区依赖后重跑 `apps/desktop` 测试，并把 `14` / `README` 状态切到 tranche 完成态
+- Verification:
+  - `cargo test --workspace` -> pass
+  - `cargo clippy --workspace -- -D warnings` -> pass
+  - `pnpm -C apps/desktop test` -> pass
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` -> pass
+  - `find docs/plans/sdk -maxdepth 1 -type f -name '[0-9][0-9]-*.md' | sort` -> pass
+  - `rg '^\\| `[0-9]{2}-' docs/plans/sdk/README.md` -> pass
+- Blockers:
+  - none
+- Next:
+  - tranche done
+
 ## Change Log
 
 | 日期 | 变更 | 责任人 |
@@ -688,3 +833,10 @@ Step 2:
 | 2026-04-23 | 四次审计 Claude Code 核心链路；把 `query loop / stop hook / token budget continuation`、`tool execution governance`、`render-writeback lifecycle` 与 span-lite observability 缺口回填到 matrix、Task 2 / 5 / 6、公共面登记与 Exit Gate | Codex |
 | 2026-04-23 | Task 1 收口：把冻结结果同步回 `02-crate-topology.md` 与 `03-legacy-retirement.md`，新增 minimal/compat/shim 审计登记，并将当前执行面切换到 `Task 2` | Codex |
 | 2026-04-23 | 汇总本轮 review findings；把 `Open Questions` 收束为 `Task 1 Freeze Result`，同步补齐 prompt-side tool surface、`vendor-matrix` 单一真相源、manifest-first plugin bootstrap、真实 file-write hook owner、context reset / handoff 与 compat 逐项验证要求，并把计划状态切到 `in_progress` | Codex |
+| 2026-04-23 | Task 2 收口：补齐 `Tool` 扩展合同与 `ToolUseContext` / `ToolPermissionContext`、引入 request-time `ToolSurface` 共用 prompt/request 组装、把 `RenderLifecycle` / `SessionEvent::Render` 扩成带 tool metadata 的 writeback contract，并同步 platform / CLI / replay / session / subagent 路径与 fixtures | Codex |
+| 2026-04-23 | Task 3 收口：把 builtin live/compat model catalog 收口到 `octopus-sdk-model` 单一投影，按 `vendor-matrix` 调整 live provider/model lineup，新增共享 builtin default routes，并让 platform snapshot / configuredModels compat 直接投影这份 catalog | Codex |
+| 2026-04-23 | Task 4 收口：把 plugin bootstrap 改成 manifest-first，区分 bundled/workspace/home source，收口 runtime / decl-only 边界，并让 platform live builder 直接消费新 bootstrap owner | Codex |
+| 2026-04-23 | Task 5 收口：补齐 permission mode / rule bucket、真实 file-write 与 subagent hook owner、`permission_decision` 事件与 replay 投影，并把 tool execution governance 扩到 denied / retry / progress / rejection / error writeback 与 execution tracing | Codex |
+| 2026-04-23 | Task 7 收口：补齐 prompt cache metadata、实现 `Hybrid` compaction、接通 `runtime/notes` / `runtime/todos` / `context_restored` 恢复链，并用 `docs/sdk/README.md` Fact-Fix 收窄 long-horizon 对 git history 的 live 承诺 | Codex |
+| 2026-04-23 | Task 8 收口：退役 `RuntimeSdkDeps::minimal(...)` 与 `octopus-cli:minimal`，移除 crate-level minimal scaffold 注记，收紧 hidden builtin compat 只走 `configuredModels`，并把 minimal / legacy / shim 审计结果回填到 `03-legacy-retirement.md` | Codex |
+| 2026-04-23 | Task 9 收口：修复全量 `clippy` 残余、拆分 `octopus-sdk-subagent` orchestration support 以满足 ≤ 800 行守护、补装前端依赖并重跑 desktop tests，随后把 `14` 与 `README` 切到 `done` | Codex |

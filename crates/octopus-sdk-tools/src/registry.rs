@@ -1,18 +1,115 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use futures::stream;
 use octopus_sdk_contracts::{
     AskAnswer, AskError, AskPrompt, AskResolver, EventId, EventSink, PermissionGate,
-    PermissionOutcome, SecretVault, SessionEvent, SessionId, ToolCallRequest, VaultError,
+    PermissionMode, PermissionOutcome, SecretVault, SessionEvent, SessionId, ToolCallRequest,
+    ToolPermissionContext, VaultError,
 };
+use octopus_sdk_hooks::HookRunner;
 use octopus_sdk_mcp::{McpError, McpTool, McpToolResult, ToolDirectory};
 use octopus_sdk_session::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use crate::{RegistryError, SandboxHandle, Tool, ToolContext, ToolSpec};
+use crate::{
+    RegistryError, SandboxHandle, Tool, ToolContext, ToolDisplayDescriptor, ToolOutputFormat,
+    ToolSpec,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolAvailability {
+    Live,
+    Deferred,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolSurfaceEntry {
+    pub spec: ToolSpec,
+    pub availability: ToolAvailability,
+    pub version: Option<String>,
+    pub output_format: ToolOutputFormat,
+    pub display_descriptor: Option<ToolDisplayDescriptor>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ToolSurface {
+    entries: Vec<ToolSurfaceEntry>,
+}
+
+impl ToolSurface {
+    #[must_use]
+    pub fn entries(&self) -> &[ToolSurfaceEntry] {
+        &self.entries
+    }
+
+    #[must_use]
+    pub fn request_tools(&self) -> Vec<octopus_sdk_contracts::ToolSchema> {
+        self.entries
+            .iter()
+            .map(|entry| entry.spec.to_mcp())
+            .collect::<Vec<_>>()
+    }
+
+    #[must_use]
+    pub fn prompt_lines(&self) -> Vec<String> {
+        self.entries
+            .iter()
+            .map(|entry| format!("- {}: {}", entry.spec.name, entry.spec.description))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn fingerprint(&self) -> String {
+        let joined = self
+            .entries
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{}\0{}\0{}\0{}\0{}\0{}",
+                    entry.spec.name,
+                    entry.spec.category.category_priority(),
+                    canonical_json_string(&entry.spec.input_schema),
+                    entry.version.as_deref().unwrap_or(""),
+                    match entry.availability {
+                        ToolAvailability::Live => "live",
+                        ToolAvailability::Deferred => "deferred",
+                    },
+                    serde_json::to_string(&entry.output_format)
+                        .expect("tool output format should serialize"),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!("{:x}", Sha256::digest(joined.as_bytes()))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ToolSurfaceState {
+    deferred: BTreeMap<String, ToolSurfaceEntry>,
+    exposed_deferred: BTreeSet<String>,
+}
+
+impl ToolSurfaceState {
+    #[must_use]
+    pub fn with_deferred(mut self, entry: ToolSurfaceEntry) -> Self {
+        self.deferred.insert(entry.spec.name.clone(), entry);
+        self
+    }
+
+    #[must_use]
+    pub fn expose(mut self, name: impl Into<String>) -> Self {
+        self.exposed_deferred.insert(name.into());
+        self
+    }
+}
 
 #[derive(Clone)]
 pub struct ToolRegistry {
@@ -66,22 +163,47 @@ impl ToolRegistry {
     }
 
     #[must_use]
-    pub fn tools_fingerprint(&self) -> String {
-        let joined = self
-            .schemas_sorted()
-            .into_iter()
-            .map(|spec| {
-                format!(
-                    "{}\0{}\0{}",
-                    spec.name,
-                    spec.category.category_priority(),
-                    canonical_json_string(&spec.input_schema)
-                )
+    pub fn assemble_surface(&self, state: &ToolSurfaceState) -> ToolSurface {
+        let mut entries = self
+            .tools
+            .values()
+            .map(|tool| ToolSurfaceEntry {
+                spec: tool.spec().clone(),
+                availability: ToolAvailability::Live,
+                version: tool.version().map(ToOwned::to_owned),
+                output_format: tool.output_format(),
+                display_descriptor: tool.display_descriptor(),
             })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .collect::<Vec<_>>();
 
-        format!("{:x}", Sha256::digest(joined.as_bytes()))
+        entries.extend(
+            state
+                .deferred
+                .iter()
+                .filter(|(name, _)| state.exposed_deferred.contains(*name))
+                .map(|(_, entry)| entry.clone()),
+        );
+
+        entries.sort_by(|left, right| {
+            (
+                left.spec.category.category_priority(),
+                left.spec.name.as_str(),
+                matches!(left.availability, ToolAvailability::Deferred),
+            )
+                .cmp(&(
+                    right.spec.category.category_priority(),
+                    right.spec.name.as_str(),
+                    matches!(right.availability, ToolAvailability::Deferred),
+                ))
+        });
+
+        ToolSurface { entries }
+    }
+
+    #[must_use]
+    pub fn tools_fingerprint(&self) -> String {
+        self.assemble_surface(&ToolSurfaceState::default())
+            .fingerprint()
     }
 }
 
@@ -143,10 +265,13 @@ fn canonicalize_value(value: &Value) -> Value {
 }
 
 fn shim_tool_context() -> ToolContext {
+    // MCP directory transport is a compat shim. Live tool execution must come
+    // from octopus-sdk-core::tool_dispatch with a runtime-owned ToolContext.
     let working_dir = std::env::current_dir().unwrap_or_else(|_| ".".into());
 
     ToolContext {
         session_id: SessionId("sdk-shim".into()),
+        tool_call_id: None,
         permissions: Arc::new(AllowAllPermissionGate),
         sandbox: SandboxHandle::new(working_dir.clone(), vec!["PATH".into()], "noop"),
         session_store: Arc::new(NoopSessionStore),
@@ -154,6 +279,8 @@ fn shim_tool_context() -> ToolContext {
         ask_resolver: Arc::new(NoopAskResolver),
         event_sink: Arc::new(NoopEventSink),
         working_dir,
+        hooks: Arc::new(HookRunner::new()),
+        permission_context: ToolPermissionContext::for_mode(PermissionMode::Default),
         cancellation: CancellationToken::new(),
     }
 }

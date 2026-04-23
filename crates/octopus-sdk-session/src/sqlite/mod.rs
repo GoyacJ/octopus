@@ -143,6 +143,7 @@ pub(crate) fn event_kind(event: &SessionEvent) -> &'static str {
         SessionEvent::UserMessage(_) => "user_message",
         SessionEvent::AssistantMessage(_) => "assistant_message",
         SessionEvent::ToolExecuted { .. } => "tool_executed",
+        SessionEvent::PermissionDecision { .. } => "permission_decision",
         SessionEvent::Render { .. } => "render",
         SessionEvent::Ask { .. } => "ask",
         SessionEvent::Checkpoint { .. } => "checkpoint",
@@ -162,6 +163,9 @@ pub(crate) fn serialize_permission_mode(mode: PermissionMode) -> &'static str {
         PermissionMode::Default => "default",
         PermissionMode::AcceptEdits => "accept_edits",
         PermissionMode::BypassPermissions => "bypass_permissions",
+        PermissionMode::DontAsk => "dont_ask",
+        PermissionMode::Auto => "auto",
+        PermissionMode::Bubble => "bubble",
         PermissionMode::Plan => "plan",
     }
 }
@@ -171,6 +175,9 @@ pub(crate) fn deserialize_permission_mode(value: &str) -> Result<PermissionMode,
         "default" => Ok(PermissionMode::Default),
         "accept_edits" => Ok(PermissionMode::AcceptEdits),
         "bypass_permissions" => Ok(PermissionMode::BypassPermissions),
+        "dont_ask" => Ok(PermissionMode::DontAsk),
+        "auto" => Ok(PermissionMode::Auto),
+        "bubble" => Ok(PermissionMode::Bubble),
         "plan" => Ok(PermissionMode::Plan),
         _ => Err(SessionError::Corrupted {
             reason: format!("unknown_permission_mode:{value}"),

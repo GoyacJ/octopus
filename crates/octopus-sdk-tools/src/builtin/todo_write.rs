@@ -1,9 +1,7 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{
-    ContentBlock, EventId, RenderBlock, RenderKind, RenderLifecycle, RenderMeta, SessionEvent,
-};
+use octopus_sdk_contracts::{ContentBlock, EventId, RenderBlock, RenderKind, RenderMeta};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -103,6 +101,7 @@ impl Tool for TodoWriteTool {
         let started = Instant::now();
         let input: TodoWriteInput = serde_json::from_value(input)?;
         validate_todos(&input.todos)?;
+        persist_todos(&ctx, &input.todos).await?;
 
         let render = RenderBlock {
             kind: RenderKind::Record,
@@ -115,11 +114,6 @@ impl Tool for TodoWriteTool {
             }),
             meta: render_meta(),
         };
-        ctx.event_sink.emit(SessionEvent::Render {
-            block: render.clone(),
-            lifecycle: RenderLifecycle::OnToolResult,
-        });
-
         Ok(ToolResult {
             content: vec![ContentBlock::Text {
                 text: format!("updated {} todos", input.todos.len()),
@@ -129,6 +123,31 @@ impl Tool for TodoWriteTool {
             render: Some(render),
         })
     }
+}
+
+async fn persist_todos(ctx: &ToolContext, todos: &[TodoItem]) -> Result<(), ToolError> {
+    let path = ctx
+        .working_dir
+        .join("runtime")
+        .join("todos")
+        .join(format!("{}.json", ctx.session_id.0));
+    let Some(parent) = path.parent() else {
+        return Err(ToolError::Execution {
+            message: "todo path has no parent".into(),
+        });
+    };
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|error| ToolError::Execution {
+            message: error.to_string(),
+        })?;
+    let payload = serde_json::to_string_pretty(todos)?;
+    tokio::fs::write(path, payload)
+        .await
+        .map_err(|error| ToolError::Execution {
+            message: error.to_string(),
+        })?;
+    Ok(())
 }
 
 fn validate_todos(todos: &[TodoItem]) -> Result<(), ToolError> {

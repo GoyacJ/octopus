@@ -5,6 +5,11 @@ use crate::{Model, ModelId, Provider, Surface};
 mod builtin;
 mod resolve;
 
+pub use builtin::{
+    builtin_canonical_model_id, builtin_catalog_version, builtin_compat_model,
+    builtin_compat_models, builtin_default_routes, BuiltinCompatModel, BuiltinDefaultRoute,
+};
+
 #[derive(Debug, Clone)]
 pub struct ModelCatalog {
     providers: Vec<Provider>,
@@ -57,6 +62,11 @@ impl ModelCatalog {
     #[must_use]
     pub fn list_models(&self) -> &[Model] {
         &self.models
+    }
+
+    #[must_use]
+    pub fn list_surfaces(&self) -> &[Surface] {
+        &self.surfaces
     }
 
     #[must_use]

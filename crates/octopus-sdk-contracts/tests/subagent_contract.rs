@@ -8,6 +8,7 @@ fn subagent_spec_serialization_is_stable() {
         id: "code-reviewer".into(),
         system_prompt: "Review the diff and report blockers.".into(),
         allowed_tools: vec!["fs_read".into(), "rg".into()],
+        agent_role: "worker".into(),
         model_role: "main".into(),
         permission_mode: PermissionMode::Plan,
         task_budget: TaskBudget {

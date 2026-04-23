@@ -13,8 +13,11 @@ use octopus_sdk_model::{
     ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
     ProviderId,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id, NoopTracer};
 use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
-use octopus_sdk_subagent::{Draft, Evaluator, Generator, GeneratorEvaluator, Planner};
+use octopus_sdk_subagent::{
+    Draft, Evaluator, Generator, GeneratorEvaluator, ParentTraceContext, Planner,
+};
 use octopus_sdk_tools::ToolRegistry;
 
 #[cfg(feature = "test-utils")]
@@ -262,6 +265,15 @@ async fn test_evaluator_runs_in_independent_child_session() {
         tools: Arc::new(ToolRegistry::new()),
         permissions: Arc::new(AllowAllGate),
         scratchpad: DurableScratchpad::new(root.path().to_path_buf()),
+        trace: ParentTraceContext {
+            trace_id: session_trace_id(&parent_session.0),
+            span_id: session_span_id(&parent_session.0),
+            agent_role: "main".into(),
+            model_id: "main".into(),
+            model_version: "test".into(),
+            config_snapshot_id: "cfg-parent".into(),
+            tracer: Arc::new(NoopTracer),
+        },
     });
 
     runtime
@@ -298,9 +310,21 @@ fn draft_text(draft: &Draft) -> &str {
 fn summary_meta(session_id: &str) -> SubagentSummary {
     SubagentSummary {
         session_id: SessionId(session_id.into()),
+        parent_session_id: SessionId("gen-eval-parent".into()),
+        resume_session_id: Some(SessionId(session_id.into())),
+        spec_id: "generator".into(),
+        agent_role: "worker".into(),
+        parent_agent_role: "main".into(),
         turns: 1,
         tokens_used: 10,
         duration_ms: 5,
-        trace_id: format!("trace-{session_id}"),
+        trace_id: session_trace_id("gen-eval-parent"),
+        span_id: format!("subagent:{session_id}"),
+        parent_span_id: session_span_id("gen-eval-parent"),
+        model_id: "main".into(),
+        model_version: "test".into(),
+        config_snapshot_id: "cfg-parent".into(),
+        permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+        allowed_tools: Vec::new(),
     }
 }

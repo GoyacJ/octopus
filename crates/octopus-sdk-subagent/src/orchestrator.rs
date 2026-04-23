@@ -1,20 +1,23 @@
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{collections::BTreeSet, sync::Arc, time::Instant};
 
 use futures::{future::join_all, StreamExt};
 use octopus_sdk_contracts::{
-    AskAnswer, AskError, AskPrompt, AskResolver, AssistantEvent, ContentBlock, EventId, EventSink,
-    Message, PermissionOutcome, RenderBlock, RenderKind, RenderLifecycle, RenderMeta, Role,
-    SecretValue, SecretVault, SessionEvent, SessionId, StopReason, SubagentError, SubagentOutput,
-    SubagentSpec, SubagentSummary, ToolCallRequest, Usage, VaultError,
+    AssistantEvent, ContentBlock, EventId, Message, PermissionOutcome, RenderLifecycle, Role,
+    SessionEvent, SessionId, StopReason, SubagentError, SubagentOutput, SubagentSpec,
+    SubagentSummary, ToolCallRequest, Usage,
 };
-use octopus_sdk_model::{
-    CacheControlStrategy, ModelId, ModelRequest, ModelRole, ResponseFormat, ThinkingConfig,
-};
+use octopus_sdk_model::ModelRequest;
+use octopus_sdk_observability::stable_input_hash;
 use octopus_sdk_sandbox::SandboxHandle;
-use serde_json::json;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
+use crate::orchestrator_support::{
+    build_request, emit_subagent_permission_trace, emit_subagent_summary_trace,
+    emit_subagent_tool_trace, max_turns_reached, memory_error, output_meta, provider_error,
+    relative_scratchpad_path, stop_message, storage_error, subagent_render_event, subagent_summary,
+    usage_message, NoopAskResolver, NoopEventSink, NoopSecretVault,
+};
 use crate::{ParentSessionContext, SubagentContext, FILE_REF_THRESHOLD};
 use async_trait::async_trait;
 use octopus_sdk_tools::{TaskFn, ToolContext, ToolError, ToolResult};
@@ -70,16 +73,34 @@ impl OrchestratorWorkers {
                 SubagentOutput::Json { value, .. } => format!("- json: {value}"),
             })
             .collect::<Vec<_>>();
+        let allowed_tools = outputs
+            .iter()
+            .flat_map(|output| output_meta(output).allowed_tools.iter().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
         let merged = outputs
             .iter()
             .map(output_meta)
             .fold(None, |state, meta| match state {
                 None => Some(SubagentSummary {
                     session_id: meta.session_id.clone(),
+                    parent_session_id: meta.parent_session_id.clone(),
+                    resume_session_id: None,
+                    spec_id: "fan-in".into(),
+                    agent_role: "coordinator".into(),
+                    parent_agent_role: meta.parent_agent_role.clone(),
                     turns: meta.turns,
                     tokens_used: meta.tokens_used,
                     duration_ms: meta.duration_ms,
-                    trace_id: format!("fan-in:{}", meta.trace_id),
+                    trace_id: meta.trace_id.clone(),
+                    span_id: format!("subagent-fan-in:{}", meta.parent_session_id.0),
+                    parent_span_id: meta.parent_span_id.clone(),
+                    model_id: meta.model_id.clone(),
+                    model_version: meta.model_version.clone(),
+                    config_snapshot_id: meta.config_snapshot_id.clone(),
+                    permission_mode: meta.permission_mode,
+                    allowed_tools: allowed_tools.clone(),
                 }),
                 Some(mut aggregate) => {
                     aggregate.turns = aggregate.turns.saturating_add(meta.turns);
@@ -90,10 +111,22 @@ impl OrchestratorWorkers {
             })
             .unwrap_or(SubagentSummary {
                 session_id: SessionId("fan-in-empty".into()),
+                parent_session_id: SessionId("fan-in-empty".into()),
+                resume_session_id: None,
+                spec_id: "fan-in".into(),
+                agent_role: "coordinator".into(),
+                parent_agent_role: "main".into(),
                 turns: 0,
                 tokens_used: 0,
                 duration_ms: 0,
-                trace_id: "fan-in:empty".into(),
+                trace_id: "trace:fan-in-empty".into(),
+                span_id: "subagent-fan-in:empty".into(),
+                parent_span_id: "session:fan-in-empty".into(),
+                model_id: "main".into(),
+                model_version: "unknown".into(),
+                config_snapshot_id: "fan-in-empty".into(),
+                permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+                allowed_tools,
             });
 
         SubagentOutput::Summary {
@@ -129,6 +162,28 @@ impl OrchestratorWorkers {
             .new_child_session(&context.parent_session, &spec)
             .await
             .map_err(storage_error)?;
+        let spawn_meta = subagent_summary(
+            &self.parent,
+            &context,
+            &child_session_id,
+            0,
+            0,
+            0,
+            Some(child_session_id.clone()),
+        );
+        context
+            .session_store
+            .append(
+                &child_session_id,
+                subagent_render_event("subagent.spawn", "", &spawn_meta),
+            )
+            .await
+            .map_err(storage_error)?;
+        emit_subagent_summary_trace(
+            self.parent.trace.tracer.as_ref(),
+            "subagent_spawn",
+            &spawn_meta,
+        );
         context
             .session_store
             .append(
@@ -218,13 +273,20 @@ impl OrchestratorWorkers {
             transcript.extend(tool_messages);
         }
 
-        let meta = SubagentSummary {
-            session_id: child_session_id.clone(),
-            turns: context.turns(),
-            tokens_used: context.tokens_used(),
-            duration_ms: started_at.elapsed().as_millis() as u64,
-            trace_id: format!("subagent:{}", child_session_id.0),
-        };
+        let meta = subagent_summary(
+            &self.parent,
+            &context,
+            &child_session_id,
+            context.turns(),
+            context.tokens_used(),
+            started_at.elapsed().as_millis() as u64,
+            Some(child_session_id.clone()),
+        );
+        emit_subagent_summary_trace(
+            self.parent.trace.tracer.as_ref(),
+            "subagent_complete",
+            &meta,
+        );
 
         if rendered_text.len() > FILE_REF_THRESHOLD {
             context
@@ -249,20 +311,24 @@ impl OrchestratorWorkers {
         &self,
         output: &SubagentOutput,
     ) -> Result<EventId, octopus_sdk_session::SessionError> {
+        let meta = output_meta(output);
         let SubagentOutput::Summary { text, .. } = output else {
             return self
                 .parent
                 .session_store
                 .append(
                     &self.parent.session_id,
-                    parent_summary_event("subagent output".into()),
+                    subagent_render_event("subagent.summary", "subagent output", meta),
                 )
                 .await;
         };
 
         self.parent
             .session_store
-            .append(&self.parent.session_id, parent_summary_event(text.clone()))
+            .append(
+                &self.parent.session_id,
+                subagent_render_event("subagent.summary", text.clone(), meta),
+            )
             .await
     }
 }
@@ -273,6 +339,12 @@ struct TurnOutput {
     text: String,
     usage: Usage,
     stop_reason: StopReason,
+}
+
+struct ToolExecutionRecord {
+    result: ToolResult,
+    permission_decision: String,
+    input_hash: String,
 }
 
 impl OrchestratorWorkers {
@@ -352,15 +424,34 @@ impl OrchestratorWorkers {
         let mut tool_messages = Vec::new();
 
         for call in tool_uses {
-            let result = self
+            let execution = self
                 .execute_tool(context, child_session_id, call.clone())
                 .await?;
+            emit_subagent_permission_trace(
+                self.parent.trace.tracer.as_ref(),
+                &self.parent,
+                context,
+                child_session_id,
+                call,
+                &execution.permission_decision,
+            );
+            emit_subagent_tool_trace(
+                self.parent.trace.tracer.as_ref(),
+                &self.parent,
+                context,
+                child_session_id,
+                call,
+                &execution.input_hash,
+                &execution.permission_decision,
+                execution.result.duration_ms,
+                execution.result.is_error,
+            );
             let tool_message = Message {
                 role: Role::Tool,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: call.id.clone(),
-                    content: result.content,
-                    is_error: result.is_error,
+                    content: execution.result.content.clone(),
+                    is_error: execution.result.is_error,
                 }],
             };
             context
@@ -370,20 +461,24 @@ impl OrchestratorWorkers {
                     SessionEvent::ToolExecuted {
                         call: call.id.clone(),
                         name: call.name.clone(),
-                        duration_ms: result.duration_ms,
-                        is_error: result.is_error,
+                        duration_ms: execution.result.duration_ms,
+                        is_error: execution.result.is_error,
                     },
                 )
                 .await
                 .map_err(storage_error)?;
-            if let Some(render) = result.render {
+            if let Some(render) = execution.result.render.clone() {
                 context
                     .session_store
                     .append(
                         child_session_id,
                         SessionEvent::Render {
-                            block: render,
-                            lifecycle: RenderLifecycle::OnToolResult,
+                            blocks: vec![render],
+                            lifecycle: RenderLifecycle::tool_phase(
+                                octopus_sdk_contracts::RenderPhase::OnToolResult,
+                                call.id.clone(),
+                                call.name.clone(),
+                            ),
                         },
                     )
                     .await
@@ -408,36 +503,54 @@ impl OrchestratorWorkers {
         context: &SubagentContext,
         child_session_id: &SessionId,
         call: ToolCallRequest,
-    ) -> Result<ToolResult, SubagentError> {
+    ) -> Result<ToolExecutionRecord, SubagentError> {
+        let input_hash = stable_input_hash(&call.input);
         let Some(tool) = context.tools.get(&call.name) else {
-            return Ok(ToolError::Execution {
-                message: format!("tool `{}` is not registered", call.name),
-            }
-            .as_tool_result());
+            return Ok(ToolExecutionRecord {
+                result: ToolError::Execution {
+                    message: format!("tool `{}` is not registered", call.name),
+                }
+                .as_tool_result(),
+                permission_decision: "tool_missing".into(),
+                input_hash,
+            });
         };
 
-        let effective_call = match context.permissions.check(&call).await {
-            PermissionOutcome::Allow => call,
+        let (effective_call, permission_decision) = match context.permissions.check(&call).await {
+            PermissionOutcome::Allow => (call, "allow".into()),
             PermissionOutcome::Deny { reason } => {
-                return Ok(ToolError::Permission { message: reason }.as_tool_result());
+                return Ok(ToolExecutionRecord {
+                    result: ToolError::Permission { message: reason }.as_tool_result(),
+                    permission_decision: "deny".into(),
+                    input_hash,
+                });
             }
             PermissionOutcome::AskApproval { prompt } => {
-                return Ok(ToolError::Permission {
-                    message: format!("approval required for {}", prompt.kind),
-                }
-                .as_tool_result());
+                return Ok(ToolExecutionRecord {
+                    result: ToolError::Permission {
+                        message: format!("approval required for {}", prompt.kind),
+                    }
+                    .as_tool_result(),
+                    permission_decision: "ask_approval".into(),
+                    input_hash,
+                });
             }
             PermissionOutcome::RequireAuth { prompt } => {
-                return Ok(ToolError::Permission {
-                    message: format!("authentication required for {}", prompt.kind),
-                }
-                .as_tool_result());
+                return Ok(ToolExecutionRecord {
+                    result: ToolError::Permission {
+                        message: format!("authentication required for {}", prompt.kind),
+                    }
+                    .as_tool_result(),
+                    permission_decision: "require_auth".into(),
+                    input_hash,
+                });
             }
         };
 
         let working_dir = std::env::current_dir().unwrap_or_else(|_| ".".into());
         let tool_context = ToolContext {
             session_id: child_session_id.clone(),
+            tool_call_id: Some(effective_call.id.clone()),
             permissions: Arc::clone(&context.permissions),
             sandbox: SandboxHandle::new(working_dir.clone(), vec!["PATH".into()], "noop"),
             session_store: Arc::clone(&context.session_store),
@@ -445,15 +558,26 @@ impl OrchestratorWorkers {
             ask_resolver: Arc::new(NoopAskResolver),
             event_sink: Arc::new(NoopEventSink),
             working_dir,
+            hooks: Arc::clone(&context.hooks),
+            permission_context: context
+                .permissions
+                .tool_permission_context(context.spec.permission_mode, &effective_call.name),
             cancellation: CancellationToken::new(),
         };
 
-        Ok(
-            match tool.execute(tool_context, effective_call.input).await {
+        tool.validate(&effective_call.input)
+            .map_err(|error| SubagentError::Provider {
+                reason: error.to_string(),
+            })?;
+
+        Ok(ToolExecutionRecord {
+            result: match tool.execute(tool_context, effective_call.input).await {
                 Ok(result) => result,
                 Err(error) => error.as_tool_result(),
             },
-        )
+            permission_decision,
+            input_hash,
+        })
     }
 }
 
@@ -468,144 +592,4 @@ impl TaskFn for OrchestratorTaskFn {
             .run_worker(spec.clone(), input.to_string())
             .await
     }
-}
-
-fn build_request(context: &SubagentContext, messages: &[Message]) -> ModelRequest {
-    let max_tokens = (context.spec.task_budget.total > 0).then_some(context.spec.task_budget.total);
-
-    ModelRequest {
-        model: ModelId(context.spec.model_role.clone()),
-        system_prompt: (!context.spec.system_prompt.is_empty())
-            .then_some(context.spec.system_prompt.clone())
-            .into_iter()
-            .collect::<Vec<_>>(),
-        messages: messages.to_vec(),
-        tools: context
-            .tools
-            .schemas_sorted()
-            .into_iter()
-            .map(|spec| spec.to_mcp())
-            .collect::<Vec<_>>(),
-        role: ModelRole::SubagentDefault,
-        cache_breakpoints: Vec::new(),
-        response_format: None::<ResponseFormat>,
-        thinking: None::<ThinkingConfig>,
-        cache_control: CacheControlStrategy::None,
-        max_tokens,
-        temperature: None,
-        stream: true,
-    }
-}
-
-fn usage_message(usage: &Usage) -> Result<Message, SubagentError> {
-    Ok(Message {
-        role: Role::Assistant,
-        content: vec![ContentBlock::Text {
-            text: serde_json::to_string(&AssistantEvent::Usage(*usage)).map_err(|error| {
-                SubagentError::Storage {
-                    reason: error.to_string(),
-                }
-            })?,
-        }],
-    })
-}
-
-fn stop_message(stop_reason: StopReason) -> Result<Message, SubagentError> {
-    Ok(Message {
-        role: Role::Assistant,
-        content: vec![ContentBlock::Text {
-            text: serde_json::to_string(&AssistantEvent::MessageStop { stop_reason }).map_err(
-                |error| SubagentError::Storage {
-                    reason: error.to_string(),
-                },
-            )?,
-        }],
-    })
-}
-
-fn relative_scratchpad_path(session_id: &SessionId) -> PathBuf {
-    PathBuf::from("runtime")
-        .join("notes")
-        .join(format!("{}.md", session_id.0))
-}
-
-fn parent_summary_event(text: String) -> SessionEvent {
-    SessionEvent::Render {
-        block: RenderBlock {
-            kind: RenderKind::Markdown,
-            payload: json!({
-                "title": "subagent.summary",
-                "text": text,
-            }),
-            meta: RenderMeta {
-                id: EventId::new_v4(),
-                parent: None,
-                ts_ms: now_millis(),
-            },
-        },
-        lifecycle: RenderLifecycle::OnToolResult,
-    }
-}
-
-fn output_meta(output: &SubagentOutput) -> &SubagentSummary {
-    match output {
-        SubagentOutput::Summary { meta, .. }
-        | SubagentOutput::FileRef { meta, .. }
-        | SubagentOutput::Json { meta, .. } => meta,
-    }
-}
-
-fn provider_error(error: octopus_sdk_model::ModelError) -> SubagentError {
-    SubagentError::Provider {
-        reason: error.to_string(),
-    }
-}
-
-fn storage_error(error: octopus_sdk_session::SessionError) -> SubagentError {
-    SubagentError::Storage {
-        reason: error.to_string(),
-    }
-}
-
-fn memory_error(error: octopus_sdk_contracts::MemoryError) -> SubagentError {
-    SubagentError::Storage {
-        reason: error.to_string(),
-    }
-}
-
-fn max_turns_reached(context: &SubagentContext) -> bool {
-    context.spec.max_turns > 0 && context.turns() >= context.spec.max_turns
-}
-
-struct NoopAskResolver;
-struct NoopEventSink;
-struct NoopSecretVault;
-
-#[async_trait]
-impl AskResolver for NoopAskResolver {
-    async fn resolve(&self, _prompt_id: &str, _prompt: &AskPrompt) -> Result<AskAnswer, AskError> {
-        Err(AskError::NotResolvable)
-    }
-}
-
-impl EventSink for NoopEventSink {
-    fn emit(&self, _event: SessionEvent) {}
-}
-
-#[async_trait]
-impl SecretVault for NoopSecretVault {
-    async fn get(&self, _ref_id: &str) -> Result<SecretValue, VaultError> {
-        Err(VaultError::NotFound)
-    }
-
-    async fn put(&self, _ref_id: &str, _value: SecretValue) -> Result<(), VaultError> {
-        Ok(())
-    }
-}
-
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock should be after unix epoch")
-        .as_millis() as i64
 }

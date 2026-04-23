@@ -10,38 +10,80 @@ pub(crate) fn provider() -> Provider {
         display_name: "Qwen".to_string(),
         status: ProviderStatus::Active,
         auth: AuthKind::ApiKey,
-        surfaces: vec![SurfaceId("qwen.conversation".to_string())],
+        surfaces: vec![
+            SurfaceId("qwen.conversation".to_string()),
+            SurfaceId("qwen.anthropic".to_string()),
+        ],
     }
 }
 
 #[must_use]
 pub(crate) fn surfaces() -> Vec<Surface> {
-    vec![Surface {
-        id: SurfaceId("qwen.conversation".to_string()),
-        provider_id: ProviderId("qwen".to_string()),
-        protocol: ProtocolFamily::OpenAiChat,
-        base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-        auth: AuthKind::ApiKey,
-    }]
+    vec![
+        Surface {
+            id: SurfaceId("qwen.conversation".to_string()),
+            provider_id: ProviderId("qwen".to_string()),
+            protocol: ProtocolFamily::OpenAiChat,
+            base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            auth: AuthKind::ApiKey,
+        },
+        Surface {
+            id: SurfaceId("qwen.anthropic".to_string()),
+            provider_id: ProviderId("qwen".to_string()),
+            protocol: ProtocolFamily::AnthropicMessages,
+            base_url: "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy".to_string(),
+            auth: AuthKind::ApiKey,
+        },
+    ]
 }
 
 #[must_use]
 pub(crate) fn models() -> Vec<Model> {
-    vec![Model {
-        id: ModelId("qwen3-coder-plus".to_string()),
-        surface: SurfaceId("qwen.conversation".to_string()),
-        family: "qwen3-coder".to_string(),
-        track: ModelTrack::Stable,
-        context_window: ContextWindow {
-            max_input_tokens: 128_000,
-            max_output_tokens: 8_192,
-            supports_1m: false,
+    vec![
+        Model {
+            id: ModelId("qwen3-max".to_string()),
+            surface: SurfaceId("qwen.conversation".to_string()),
+            family: "qwen3".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec!["qwen".to_string()],
         },
-        aliases: vec!["qwen-coder".to_string()],
-    }]
+        Model {
+            id: ModelId("qwen3-coder-plus".to_string()),
+            surface: SurfaceId("qwen.conversation".to_string()),
+            family: "qwen3-coder".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec!["qwen-coder".to_string()],
+        },
+        Model {
+            id: ModelId("qwen3-vl-plus".to_string()),
+            surface: SurfaceId("qwen.conversation".to_string()),
+            family: "qwen3-vl".to_string(),
+            track: ModelTrack::Stable,
+            context_window: ContextWindow {
+                max_input_tokens: 128_000,
+                max_output_tokens: 8_192,
+                supports_1m: false,
+            },
+            aliases: vec!["qwen-vl".to_string()],
+        },
+    ]
 }
 
 #[must_use]
 pub(crate) fn aliases() -> Vec<(&'static str, &'static str)> {
-    vec![("qwen-coder", "qwen3-coder-plus")]
+    vec![
+        ("qwen", "qwen3-max"),
+        ("qwen-coder", "qwen3-coder-plus"),
+        ("qwen-vl", "qwen3-vl-plus"),
+    ]
 }

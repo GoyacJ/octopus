@@ -14,9 +14,9 @@ use octopus_sdk_contracts::{
 };
 use octopus_sdk_hooks::{Hook, HookSource};
 use octopus_sdk_plugin::{
-    Plugin, PluginApi, PluginCompat, PluginComponent, PluginDiscoveryConfig, PluginError,
-    PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry,
-    PluginToolRegistration,
+    PluginApi, PluginCompat, PluginComponent, PluginDiscoveryConfig, PluginDiscoveryRoot,
+    PluginError, PluginHookRegistration, PluginLifecycle, PluginManifest, PluginRegistry,
+    PluginRuntime, PluginRuntimeCatalog, PluginToolRegistration,
 };
 use octopus_sdk_tools::{Tool, ToolContext, ToolResult, ToolSpec};
 use serde_json::json;
@@ -107,11 +107,7 @@ impl NoopPlugin {
     }
 }
 
-impl Plugin for NoopPlugin {
-    fn manifest(&self) -> &PluginManifest {
-        &self.manifest
-    }
-
+impl PluginRuntime for NoopPlugin {
     fn register(&self, api: &mut PluginApi<'_>) -> Result<(), PluginError> {
         api.register_tool(PluginToolRegistration {
             decl: tool_decl(),
@@ -138,9 +134,10 @@ fn test_register_noop_plugin() {
     let mut registry = PluginRegistry::new();
     let plugin = NoopPlugin::new(Arc::new(AtomicUsize::new(0)));
     let root = plugin_root(&plugin.manifest);
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(plugin)];
+    let plugin_id = plugin.manifest.id.clone();
+    let runtimes = runtime_catalog(&plugin_id, Arc::new(plugin));
 
-    PluginLifecycle::run(&mut registry, &config_for(root.path()), &plugins)
+    PluginLifecycle::run(&mut registry, &config_for(root.path()), &runtimes)
         .expect("plugin should register");
 
     let snapshot = registry.get_snapshot();
@@ -156,9 +153,10 @@ async fn test_register_api_unidirectional() {
     let mut registry = PluginRegistry::new();
     let plugin = NoopPlugin::new(Arc::clone(&hook_hits));
     let root = plugin_root(&plugin.manifest);
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(plugin)];
+    let plugin_id = plugin.manifest.id.clone();
+    let runtimes = runtime_catalog(&plugin_id, Arc::new(plugin));
 
-    PluginLifecycle::run(&mut registry, &config_for(root.path()), &plugins)
+    PluginLifecycle::run(&mut registry, &config_for(root.path()), &runtimes)
         .expect("plugin should register");
 
     assert!(registry.tools().get("noop-tool").is_some());
@@ -181,11 +179,12 @@ fn test_plugin_register_once() {
     let mut registry = PluginRegistry::new();
     let plugin = NoopPlugin::new(Arc::new(AtomicUsize::new(0)));
     let root = plugin_root(&plugin.manifest);
-    let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(plugin)];
+    let plugin_id = plugin.manifest.id.clone();
+    let runtimes = runtime_catalog(&plugin_id, Arc::new(plugin));
 
-    PluginLifecycle::run(&mut registry, &config_for(root.path()), &plugins)
+    PluginLifecycle::run(&mut registry, &config_for(root.path()), &runtimes)
         .expect("first register should pass");
-    let error = PluginLifecycle::run(&mut registry, &config_for(root.path()), &plugins)
+    let error = PluginLifecycle::run(&mut registry, &config_for(root.path()), &runtimes)
         .expect_err("second register should reject duplicate plugin");
 
     assert_eq!(
@@ -198,10 +197,18 @@ fn test_plugin_register_once() {
 
 fn config_for(root: &Path) -> PluginDiscoveryConfig {
     PluginDiscoveryConfig {
-        roots: vec![root.to_path_buf()],
+        roots: vec![PluginDiscoveryRoot::local(root.to_path_buf())],
         allow: Vec::new(),
         deny: Vec::new(),
     }
+}
+
+fn runtime_catalog(plugin_id: &str, runtime: Arc<dyn PluginRuntime>) -> PluginRuntimeCatalog {
+    let mut runtimes = PluginRuntimeCatalog::new();
+    runtimes
+        .register_local(plugin_id, runtime)
+        .expect("runtime ids should stay unique");
+    runtimes
 }
 
 fn plugin_root(manifest: &PluginManifest) -> tempfile::TempDir {

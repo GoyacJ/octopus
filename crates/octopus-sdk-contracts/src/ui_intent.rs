@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::EventId;
+use crate::{EventId, ToolCallId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenderMeta {
@@ -34,12 +34,45 @@ pub struct RenderBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RenderLifecycle {
+pub enum RenderPhase {
+    AssistantMessage,
     OnToolUse,
     OnToolProgress,
     OnToolResult,
     OnToolRejected,
     OnToolError,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderLifecycle {
+    pub phase: RenderPhase,
+    pub tool_call_id: Option<ToolCallId>,
+    pub tool_name: Option<String>,
+}
+
+impl RenderLifecycle {
+    #[must_use]
+    pub fn assistant_message() -> Self {
+        Self {
+            phase: RenderPhase::AssistantMessage,
+            tool_call_id: None,
+            tool_name: None,
+        }
+    }
+
+    #[must_use]
+    pub fn tool_phase(
+        phase: RenderPhase,
+        tool_call_id: ToolCallId,
+        tool_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            phase,
+            tool_call_id: Some(tool_call_id),
+            tool_name: Some(tool_name.into()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,16 +155,27 @@ mod tests {
 
     use super::{
         ArtifactKind, ArtifactRef, ArtifactStatus, AskOption, AskPrompt, AskQuestion, RenderBlock,
-        RenderKind, RenderLifecycle, RenderMeta,
+        RenderKind, RenderLifecycle, RenderMeta, RenderPhase,
     };
-    use crate::EventId;
+    use crate::{EventId, ToolCallId};
 
     #[test]
     fn render_lifecycle_uses_hook_phase_names() {
-        let value = serde_json::to_value(RenderLifecycle::OnToolProgress)
-            .expect("lifecycle should serialize");
+        let value = serde_json::to_value(RenderLifecycle::tool_phase(
+            RenderPhase::OnToolProgress,
+            ToolCallId("call-1".into()),
+            "grep",
+        ))
+        .expect("lifecycle should serialize");
 
-        assert_eq!(value, Value::String("on_tool_progress".into()));
+        assert_eq!(
+            value,
+            json!({
+                "phase": "on_tool_progress",
+                "toolCallId": "call-1",
+                "toolName": "grep"
+            })
+        );
     }
 
     #[test]
@@ -214,5 +258,22 @@ mod tests {
         assert_eq!(value["kind"], "record");
         assert_eq!(value["payload"]["title"], "Record");
         assert_eq!(value["meta"]["id"], "event-1");
+    }
+
+    #[test]
+    fn render_lifecycle_helpers_keep_tool_context() {
+        let lifecycle = RenderLifecycle::tool_phase(
+            RenderPhase::OnToolProgress,
+            ToolCallId("call-1".into()),
+            "grep",
+        );
+
+        assert_eq!(lifecycle.phase, RenderPhase::OnToolProgress);
+        assert_eq!(lifecycle.tool_call_id, Some(ToolCallId("call-1".into())));
+        assert_eq!(lifecycle.tool_name.as_deref(), Some("grep"));
+        assert_eq!(
+            RenderLifecycle::assistant_message().phase,
+            RenderPhase::AssistantMessage
+        );
     }
 }

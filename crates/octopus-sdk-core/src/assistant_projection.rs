@@ -9,6 +9,15 @@ use serde_json::json;
 
 use crate::RuntimeError;
 
+pub(crate) struct AssistantTraceContext<'a> {
+    pub trace_id: &'a str,
+    pub parent_span_id: &'a str,
+    pub session_id: &'a str,
+    pub model_id: &'a str,
+    pub model_version: &'a str,
+    pub config_snapshot_id: &'a str,
+}
+
 pub(crate) struct AssistantTurn {
     pub message: Option<Message>,
     pub tool_calls: Vec<ToolCallRequest>,
@@ -21,6 +30,7 @@ pub(crate) async fn collect_assistant_turn(
     mut stream: ModelStream,
     tracer: &dyn Tracer,
     usage_ledger: &UsageLedger,
+    trace_ctx: &AssistantTraceContext<'_>,
 ) -> Result<AssistantTurn, RuntimeError> {
     let mut rendered_text = String::new();
     let mut blocks = Vec::new();
@@ -28,10 +38,12 @@ pub(crate) async fn collect_assistant_turn(
     let mut usage = Usage::default();
     let mut stop_reason = StopReason::EndTurn;
 
+    let mut event_index = 0usize;
     while let Some(event) = stream.next().await {
         let event = event?;
-        tracer.record(trace_for_assistant_event(&event));
+        tracer.record(trace_for_assistant_event(&event, trace_ctx, event_index));
         usage_ledger.record_assistant_event(&event);
+        event_index = event_index.saturating_add(1);
 
         match event {
             AssistantEvent::TextDelta(delta) => {
@@ -100,7 +112,11 @@ pub(crate) fn text_render_block(rendered_text: &str, parent: Option<EventId>) ->
     }
 }
 
-fn trace_for_assistant_event(event: &AssistantEvent) -> TraceSpan {
+fn trace_for_assistant_event(
+    event: &AssistantEvent,
+    trace_ctx: &AssistantTraceContext<'_>,
+    event_index: usize,
+) -> TraceSpan {
     let kind = match event {
         AssistantEvent::TextDelta(_) => "text_delta",
         AssistantEvent::ToolUse { .. } => "tool_use",
@@ -109,7 +125,25 @@ fn trace_for_assistant_event(event: &AssistantEvent) -> TraceSpan {
         AssistantEvent::MessageStop { .. } => "message_stop",
     };
 
-    TraceSpan::new("assistant_event").with_field("kind", TraceValue::String(kind.into()))
+    TraceSpan::new("assistant_event")
+        .with_trace_id(trace_ctx.trace_id)
+        .with_span_id(format!("assistant:{}:{event_index}", trace_ctx.session_id))
+        .with_parent_span_id(trace_ctx.parent_span_id)
+        .with_agent_role("main")
+        .with_field("kind", TraceValue::String(kind.into()))
+        .with_field(
+            "session_id",
+            TraceValue::String(trace_ctx.session_id.into()),
+        )
+        .with_field("model_id", TraceValue::String(trace_ctx.model_id.into()))
+        .with_field(
+            "model_version",
+            TraceValue::String(trace_ctx.model_version.into()),
+        )
+        .with_field(
+            "config_snapshot_id",
+            TraceValue::String(trace_ctx.config_snapshot_id.into()),
+        )
 }
 
 fn now_ms() -> i64 {

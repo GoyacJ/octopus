@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use octopus_sdk_contracts::{
     ModelProviderDecl, PluginSourceTag, PluginSummary, PluginsSnapshot, SkillDecl, ToolDecl,
@@ -22,7 +25,7 @@ struct RegisteredPlugin {
 
 pub struct PluginRegistry {
     tools: ToolRegistry,
-    hooks: HookRunner,
+    hooks: Arc<HookRunner>,
     plugins: BTreeMap<String, RegisteredPlugin>,
     tool_decls: BTreeMap<String, ToolDecl>,
     skill_decls: BTreeMap<String, SkillDecl>,
@@ -51,7 +54,7 @@ impl PluginRegistry {
     pub fn new() -> Self {
         Self {
             tools: ToolRegistry::new(),
-            hooks: HookRunner::new(),
+            hooks: Arc::new(HookRunner::new()),
             plugins: BTreeMap::new(),
             tool_decls: BTreeMap::new(),
             skill_decls: BTreeMap::new(),
@@ -109,7 +112,22 @@ impl PluginRegistry {
 
     #[must_use]
     pub fn hooks(&self) -> &HookRunner {
-        &self.hooks
+        self.hooks.as_ref()
+    }
+
+    #[must_use]
+    pub fn hooks_arc(&self) -> Arc<HookRunner> {
+        Arc::clone(&self.hooks)
+    }
+
+    #[must_use]
+    pub fn has_runtime_tool(&self, id: &str) -> bool {
+        self.runtime_tools.contains(&component_key("tool", id))
+    }
+
+    #[must_use]
+    pub fn has_runtime_hook(&self, id: &str) -> bool {
+        self.runtime_hooks.contains(&component_key("hook", id))
     }
 
     #[must_use]

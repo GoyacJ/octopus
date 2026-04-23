@@ -3,67 +3,60 @@ use octopus_core::{
     ModelRegistryRecord, ModelSurfaceBinding, ProviderRegistryRecord, RuntimeExecutionClass,
     RuntimeExecutionProfile, SurfaceDescriptor,
 };
+use octopus_sdk::{
+    builtin_canonical_model_id, builtin_compat_model, builtin_compat_models, AuthKind, Model,
+    ModelCatalog, ModelTrack, ProtocolFamily, Provider, Surface,
+};
 use serde_json::{Map, Value};
 
 use crate::runtime_sdk::RuntimeSdkBridge;
 
-pub(crate) const CANONICAL_DEFAULTS: &[(&str, &str, &str, &str)] = &[
-    (
-        "conversation",
-        "anthropic",
-        "claude-sonnet-4-5",
-        "conversation",
-    ),
-    ("responses", "openai", "gpt-4o", "conversation"),
-    (
-        "fast",
-        "anthropic",
-        "claude-haiku-4-5-20251213",
-        "conversation",
-    ),
-];
+fn live_catalog() -> ModelCatalog {
+    ModelCatalog::new_builtin()
+}
 
-const CANONICAL_MODEL_ALIASES: &[(&str, &str)] = &[
-    ("opus", "claude-opus-4-6"),
-    ("sonnet", "claude-sonnet-4-5"),
-    ("haiku", "claude-haiku-4-5-20251213"),
-    ("grok", "grok-3"),
-    ("grok-3", "grok-3"),
-    ("grok-mini", "grok-3-mini"),
-    ("grok-3-mini", "grok-3-mini"),
-    ("grok-2", "grok-2"),
-];
+fn surface_name(surface_id: &str) -> String {
+    surface_id
+        .rsplit('.')
+        .next()
+        .unwrap_or(surface_id)
+        .to_string()
+}
 
-fn builtin_surface(
-    surface: &str,
-    protocol_family: &str,
-    execution_class: RuntimeExecutionClass,
-) -> ModelSurfaceBinding {
-    ModelSurfaceBinding {
-        surface: surface.into(),
-        protocol_family: protocol_family.into(),
-        enabled: execution_class != RuntimeExecutionClass::Unsupported,
-        execution_profile: RuntimeExecutionProfile {
-            execution_class,
-            tool_loop: execution_class == RuntimeExecutionClass::AgentConversation,
-            upstream_streaming: execution_class == RuntimeExecutionClass::AgentConversation,
+fn runtime_execution_profile(
+    protocol_family: &ProtocolFamily,
+    enabled: bool,
+) -> RuntimeExecutionProfile {
+    if !enabled {
+        return RuntimeExecutionProfile {
+            execution_class: RuntimeExecutionClass::Unsupported,
+            tool_loop: false,
+            upstream_streaming: false,
+        };
+    }
+
+    RuntimeExecutionProfile {
+        execution_class: match protocol_family {
+            ProtocolFamily::OpenAiResponses => RuntimeExecutionClass::SingleShotGeneration,
+            _ => RuntimeExecutionClass::AgentConversation,
         },
+        tool_loop: !matches!(protocol_family, ProtocolFamily::OpenAiResponses),
+        upstream_streaming: true,
     }
 }
 
-fn unsupported_provider_surface(
-    surface: &str,
-    protocol_family: &str,
-    base_url: &str,
-) -> SurfaceDescriptor {
-    let mut descriptor = provider_surface(surface, protocol_family, base_url);
-    descriptor.enabled = false;
-    descriptor.execution_profile = RuntimeExecutionProfile {
-        execution_class: RuntimeExecutionClass::Unsupported,
-        tool_loop: false,
-        upstream_streaming: false,
-    };
-    descriptor
+fn provider_surface_descriptor(surface: &Surface, enabled: bool) -> SurfaceDescriptor {
+    SurfaceDescriptor {
+        surface: surface_name(&surface.id.0),
+        protocol_family: surface.protocol.to_string(),
+        transport: vec!["https".into()],
+        auth_strategy: surface.auth.to_string(),
+        base_url: surface.base_url.clone(),
+        base_url_policy: "allow_override".into(),
+        enabled,
+        capabilities: Vec::new(),
+        execution_profile: runtime_execution_profile(&surface.protocol, enabled),
+    }
 }
 
 pub(crate) fn provider_surface(
@@ -75,15 +68,16 @@ pub(crate) fn provider_surface(
         surface: surface.into(),
         protocol_family: protocol_family.into(),
         transport: vec!["https".into()],
-        auth_strategy: "x_api_key".into(),
+        auth_strategy: AuthKind::ApiKey.to_string(),
         base_url: base_url.into(),
         base_url_policy: "allow_override".into(),
         enabled: true,
         capabilities: Vec::new(),
         execution_profile: RuntimeExecutionProfile {
-            execution_class: match surface {
-                "responses" => RuntimeExecutionClass::SingleShotGeneration,
-                _ => RuntimeExecutionClass::AgentConversation,
+            execution_class: if surface == "responses" {
+                RuntimeExecutionClass::SingleShotGeneration
+            } else {
+                RuntimeExecutionClass::AgentConversation
             },
             tool_loop: surface != "responses",
             upstream_streaming: true,
@@ -91,299 +85,221 @@ pub(crate) fn provider_surface(
     }
 }
 
-pub(crate) fn builtin_provider(provider_id: &str) -> ProviderRegistryRecord {
-    match provider_id {
-        "anthropic" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "Anthropic".into(),
-            enabled: true,
-            surfaces: vec![provider_surface(
-                "conversation",
-                "anthropic_messages",
-                "https://api.anthropic.com",
-            )],
-            metadata: Value::Object(Map::new()),
-        },
-        "openai" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "OpenAI".into(),
-            enabled: true,
-            surfaces: vec![
-                provider_surface("conversation", "openai_chat", "https://api.openai.com/v1"),
-                unsupported_provider_surface(
-                    "responses",
-                    "openai_responses",
-                    "https://api.openai.com/v1",
-                ),
-            ],
-            metadata: Value::Object(Map::new()),
-        },
-        "google" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "Google".into(),
-            enabled: false,
-            surfaces: vec![unsupported_provider_surface(
-                "conversation",
-                "gemini_native",
-                "https://generativelanguage.googleapis.com",
-            )],
-            metadata: Value::Object(Map::new()),
-        },
-        "minimax" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "MiniMax".into(),
-            enabled: false,
-            surfaces: vec![
-                unsupported_provider_surface(
-                    "conversation",
-                    "anthropic_messages",
-                    "https://api.minimax.chat",
-                ),
-                unsupported_provider_surface(
-                    "conversation",
-                    "openai_chat",
-                    "https://api.minimax.chat",
-                ),
-                unsupported_provider_surface(
-                    "conversation",
-                    "vendor_native",
-                    "https://api.minimax.chat",
-                ),
-            ],
-            metadata: Value::Object(Map::new()),
-        },
-        "xai" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "xAI".into(),
-            enabled: true,
-            surfaces: vec![provider_surface(
-                "conversation",
-                "openai_chat",
-                "https://api.x.ai/v1",
-            )],
-            metadata: Value::Object(Map::new()),
-        },
-        "custom" => ProviderRegistryRecord {
-            provider_id: provider_id.into(),
-            label: "Custom".into(),
-            enabled: true,
-            surfaces: vec![provider_surface(
-                "conversation",
-                "openai_chat",
-                "https://api.example.com/v1",
-            )],
-            metadata: Value::Object(Map::new()),
-        },
-        other => ProviderRegistryRecord {
-            provider_id: other.into(),
-            label: other.into(),
-            enabled: true,
-            surfaces: vec![provider_surface(
-                "conversation",
-                "openai_chat",
-                "https://api.example.com/v1",
-            )],
-            metadata: Value::Object(Map::new()),
-        },
+fn provider_record(
+    provider: &Provider,
+    surfaces: Vec<SurfaceDescriptor>,
+    enabled: bool,
+) -> ProviderRegistryRecord {
+    ProviderRegistryRecord {
+        provider_id: provider.id.0.clone(),
+        label: provider.display_name.clone(),
+        enabled,
+        surfaces,
+        metadata: Value::Object(Map::new()),
     }
 }
 
-pub(crate) fn builtin_model(model_id: &str, provider_id: &str) -> ModelRegistryRecord {
-    match model_id {
-        "claude-sonnet-4-5" => model_record(
-            model_id,
-            provider_id,
-            "Claude Sonnet 4.5",
-            "Balanced Anthropic conversation model.",
-            vec![builtin_surface(
-                "conversation",
-                "anthropic_messages",
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            Some(200_000),
-            Some(8_192),
-        ),
-        "claude-opus-4-6" => model_record(
-            model_id,
-            provider_id,
-            "Claude Opus 4.6",
-            "High-capability Anthropic conversation model.",
-            vec![builtin_surface(
-                "conversation",
-                "anthropic_messages",
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            Some(200_000),
-            Some(8_192),
-        ),
-        "claude-haiku-4-5-20251213" => model_record(
-            model_id,
-            provider_id,
-            "Claude Haiku 4.5",
-            "Fast Anthropic conversation model.",
-            vec![builtin_surface(
-                "conversation",
-                "anthropic_messages",
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            Some(200_000),
-            Some(8_192),
-        ),
-        "gpt-4o" => model_record(
-            model_id,
-            provider_id,
-            "GPT-4o",
-            "OpenAI conversation model.",
-            vec![builtin_surface(
-                "conversation",
-                "openai_chat",
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            Some(128_000),
-            Some(8_192),
-        ),
-        "grok-3" => model_record(
-            model_id,
-            provider_id,
-            "Grok 3",
-            "xAI conversation model.",
-            vec![builtin_surface(
-                "conversation",
-                "openai_chat",
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            Some(128_000),
-            Some(8_192),
-        ),
-        other => model_record(
-            other,
-            provider_id,
-            other,
-            "Workspace-configured model.",
-            vec![builtin_surface(
-                "conversation",
-                default_protocol_family(provider_id, other, "conversation"),
-                RuntimeExecutionClass::AgentConversation,
-            )],
-            None,
-            None,
-        ),
+fn capabilities() -> Vec<CapabilityDescriptor> {
+    vec![
+        CapabilityDescriptor {
+            capability_id: "streaming".into(),
+            label: "Streaming".into(),
+        },
+        CapabilityDescriptor {
+            capability_id: "tool_calling".into(),
+            label: "Tool Calling".into(),
+        },
+    ]
+}
+
+fn model_recommended_for(model: &Model) -> &'static str {
+    let model_id = model.id.0.as_str();
+    if model_id.contains("haiku")
+        || model_id.contains("flash")
+        || model_id.contains("turbo")
+        || model_id.contains("lite")
+    {
+        "fast"
+    } else if model_id.contains("coder") {
+        "coding"
+    } else if model_id.contains("vl") || model.family.contains("vl") {
+        "vision"
+    } else {
+        "general"
     }
+}
+
+fn project_model(
+    provider: &Provider,
+    surface: &Surface,
+    model: &Model,
+    enabled: bool,
+    availability: &str,
+    description: &str,
+) -> ModelRegistryRecord {
+    ModelRegistryRecord {
+        model_id: model.id.0.clone(),
+        provider_id: provider.id.0.clone(),
+        label: model.id.0.clone(),
+        description: description.into(),
+        family: model.family.clone(),
+        track: match model.track {
+            ModelTrack::Preview => "preview",
+            ModelTrack::Stable => "stable",
+            ModelTrack::LatestAlias => "latest_alias",
+            ModelTrack::Deprecated => "deprecated",
+            ModelTrack::Sunset => "sunset",
+        }
+        .into(),
+        enabled,
+        recommended_for: model_recommended_for(model).into(),
+        availability: availability.into(),
+        default_permission: "default".into(),
+        surface_bindings: vec![ModelSurfaceBinding {
+            surface: surface_name(&surface.id.0),
+            protocol_family: surface.protocol.to_string(),
+            enabled,
+            execution_profile: runtime_execution_profile(&surface.protocol, enabled),
+        }],
+        capabilities: capabilities(),
+        context_window: Some(model.context_window.max_input_tokens),
+        max_output_tokens: Some(model.context_window.max_output_tokens),
+        metadata: Value::Object(Map::new()),
+    }
+}
+
+fn live_provider_record(provider_id: &str) -> Option<ProviderRegistryRecord> {
+    let catalog = live_catalog();
+    let provider = catalog
+        .list_providers()
+        .iter()
+        .find(|provider| provider.id.0 == provider_id)?;
+    let surfaces = catalog
+        .list_surfaces()
+        .iter()
+        .filter(|surface| surface.provider_id == provider.id)
+        .map(|surface| provider_surface_descriptor(surface, true))
+        .collect::<Vec<_>>();
+    Some(provider_record(provider, surfaces, true))
+}
+
+fn live_model_record(model_id: &str) -> Option<ModelRegistryRecord> {
+    let catalog = live_catalog();
+    let model = catalog
+        .list_models()
+        .iter()
+        .find(|model| model.id.0 == model_id)?;
+    let surface = catalog
+        .list_surfaces()
+        .iter()
+        .find(|surface| surface.id == model.surface)?;
+    let provider = catalog
+        .list_providers()
+        .iter()
+        .find(|provider| provider.id == surface.provider_id)?;
+    Some(project_model(
+        provider,
+        surface,
+        model,
+        true,
+        "ga",
+        "Builtin live model derived from vendor matrix.",
+    ))
+}
+
+fn compat_provider_record(provider_id: &str) -> Option<ProviderRegistryRecord> {
+    let compat_models = builtin_compat_models()
+        .into_iter()
+        .filter(|entry| entry.provider.id.0 == provider_id)
+        .collect::<Vec<_>>();
+    let provider = compat_models.first()?.provider.clone();
+    let mut surface_ids = std::collections::BTreeSet::new();
+    let surfaces = compat_models
+        .into_iter()
+        .filter_map(|entry| {
+            if surface_ids.insert(entry.surface.id.0.clone()) {
+                Some(provider_surface_descriptor(&entry.surface, false))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    Some(provider_record(&provider, surfaces, false))
+}
+
+pub(crate) fn builtin_provider(provider_id: &str) -> ProviderRegistryRecord {
+    live_provider_record(provider_id)
+        .or_else(|| compat_provider_record(provider_id))
+        .unwrap_or_else(|| ProviderRegistryRecord {
+            provider_id: provider_id.into(),
+            label: provider_id.into(),
+            enabled: true,
+            surfaces: vec![provider_surface(
+                "conversation",
+                "openai_chat",
+                "https://api.example.com/v1",
+            )],
+            metadata: Value::Object(Map::new()),
+        })
+}
+
+pub(crate) fn builtin_model(model_id: &str, provider_id: &str) -> ModelRegistryRecord {
+    let canonical_id = builtin_canonical_model_id(model_id);
+
+    live_model_record(&canonical_id)
+        .filter(|record| record.provider_id == provider_id)
+        .unwrap_or_else(|| ModelRegistryRecord {
+            model_id: canonical_id.clone(),
+            provider_id: provider_id.into(),
+            label: canonical_id.clone(),
+            description: "Workspace-configured model.".into(),
+            family: provider_id.into(),
+            track: "workspace".into(),
+            enabled: true,
+            recommended_for: "general".into(),
+            availability: "workspace".into(),
+            default_permission: "default".into(),
+            surface_bindings: vec![ModelSurfaceBinding {
+                surface: "conversation".into(),
+                protocol_family: default_protocol_family(
+                    provider_id,
+                    &canonical_id,
+                    "conversation",
+                )
+                .into(),
+                enabled: true,
+                execution_profile: RuntimeExecutionProfile {
+                    execution_class: RuntimeExecutionClass::AgentConversation,
+                    tool_loop: true,
+                    upstream_streaming: true,
+                },
+            }],
+            capabilities: capabilities(),
+            context_window: None,
+            max_output_tokens: None,
+            metadata: Value::Object(Map::new()),
+        })
 }
 
 pub(crate) fn hidden_builtin_model(
     model_id: &str,
     provider_id: &str,
 ) -> Option<ModelRegistryRecord> {
-    let mut record = match model_id {
-        "gpt-5.4" => model_record(
-            model_id,
-            provider_id,
-            "GPT-5.4",
-            "Hidden from live surface until OpenAI Responses adapter lands.",
-            vec![builtin_surface(
-                "responses",
-                "openai_responses",
-                RuntimeExecutionClass::Unsupported,
-            )],
-            Some(200_000),
-            Some(32_000),
-        ),
-        "gpt-5.4-mini" => model_record(
-            model_id,
-            provider_id,
-            "GPT-5.4 Mini",
-            "Hidden from live surface until OpenAI Responses adapter lands.",
-            vec![builtin_surface(
-                "responses",
-                "openai_responses",
-                RuntimeExecutionClass::Unsupported,
-            )],
-            Some(128_000),
-            Some(16_384),
-        ),
-        "gemini-2.5-pro" => model_record(
-            model_id,
-            provider_id,
-            "Gemini 2.5 Pro",
-            "Hidden from live surface until Gemini native adapter lands.",
-            vec![builtin_surface(
-                "conversation",
-                "gemini_native",
-                RuntimeExecutionClass::Unsupported,
-            )],
-            Some(1_000_000),
-            Some(32_000),
-        ),
-        "gemini-2.5-flash" => model_record(
-            model_id,
-            provider_id,
-            "Gemini 2.5 Flash",
-            "Hidden from live surface until Gemini native adapter lands.",
-            vec![builtin_surface(
-                "conversation",
-                "gemini_native",
-                RuntimeExecutionClass::Unsupported,
-            )],
-            Some(1_000_000),
-            Some(16_384),
-        ),
-        "MiniMax-M2.7" => model_record(
-            model_id,
-            provider_id,
-            "MiniMax M2.7",
-            "Hidden from live surface until vendor-native adapter lands.",
-            vec![builtin_surface(
-                "conversation",
-                "vendor_native",
-                RuntimeExecutionClass::Unsupported,
-            )],
-            Some(200_000),
-            Some(16_384),
-        ),
-        _ => return None,
-    };
-
-    record.enabled = false;
-    record.availability = "unsupported".into();
-    Some(record)
-}
-
-fn model_record(
-    model_id: &str,
-    provider_id: &str,
-    label: &str,
-    description: &str,
-    surface_bindings: Vec<ModelSurfaceBinding>,
-    context_window: Option<u32>,
-    max_output_tokens: Option<u32>,
-) -> ModelRegistryRecord {
-    ModelRegistryRecord {
-        model_id: model_id.into(),
-        provider_id: provider_id.into(),
-        label: label.into(),
-        description: description.into(),
-        family: provider_id.into(),
-        track: "stable".into(),
-        enabled: true,
-        recommended_for: "general".into(),
-        availability: "ga".into(),
-        default_permission: "default".into(),
-        surface_bindings,
-        capabilities: vec![
-            CapabilityDescriptor {
-                capability_id: "streaming".into(),
-                label: "Streaming".into(),
-            },
-            CapabilityDescriptor {
-                capability_id: "tool_calling".into(),
-                label: "Tool Calling".into(),
-            },
-        ],
-        context_window,
-        max_output_tokens,
-        metadata: Value::Object(Map::new()),
+    // Hidden builtin metadata is only for configuredModels compat projection.
+    // It must not become part of the live builtin catalog.
+    let entry = builtin_compat_model(model_id)?;
+    if entry.provider.id.0 != provider_id {
+        return None;
     }
+
+    Some(project_model(
+        &entry.provider,
+        &entry.surface,
+        &entry.model,
+        false,
+        "unsupported",
+        "Configured builtin kept as runtime-unsupported compat metadata.",
+    ))
 }
 
 fn default_protocol_family(provider_id: &str, model_id: &str, surface: &str) -> &'static str {
@@ -400,11 +316,12 @@ pub(crate) fn infer_surface_bindings(
     model_id: &str,
     raw: Option<&Value>,
 ) -> Vec<ModelSurfaceBinding> {
+    let fallback = builtin_model(model_id, provider_id).surface_bindings;
     let Some(raw) = raw else {
-        return builtin_model(model_id, provider_id).surface_bindings;
+        return fallback;
     };
     let Some(items) = raw.as_array() else {
-        return builtin_model(model_id, provider_id).surface_bindings;
+        return fallback;
     };
 
     let mut bindings = Vec::new();
@@ -463,7 +380,7 @@ pub(crate) fn infer_surface_bindings(
     }
 
     if bindings.is_empty() {
-        builtin_model(model_id, provider_id).surface_bindings
+        fallback
     } else {
         bindings
     }
@@ -513,10 +430,5 @@ pub(crate) fn token_usage_summary(
 }
 
 pub(crate) fn canonical_model_id(model_id: &str) -> String {
-    let normalized = model_id.trim().to_ascii_lowercase();
-    CANONICAL_MODEL_ALIASES
-        .iter()
-        .find(|(alias, _)| alias == &normalized)
-        .map(|(_, canonical)| (*canonical).to_string())
-        .unwrap_or_else(|| model_id.trim().to_string())
+    builtin_canonical_model_id(model_id)
 }

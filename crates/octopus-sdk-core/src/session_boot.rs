@@ -1,6 +1,7 @@
 use futures::StreamExt;
 use octopus_sdk_contracts::{
-    AssistantEvent, CompactionStrategyTag, EventId, Message, Role, SessionEvent, SessionId,
+    AssistantEvent, CompactionResult, CompactionStrategyTag, ContentBlock, EventId, Message, Role,
+    SessionEvent, SessionId,
 };
 use octopus_sdk_session::{EventRange, SessionStore};
 
@@ -91,6 +92,7 @@ pub(crate) async fn load_transcript(
             SessionEvent::SessionStarted { .. }
             | SessionEvent::SessionPluginsSnapshot { .. }
             | SessionEvent::ToolExecuted { .. }
+            | SessionEvent::PermissionDecision { .. }
             | SessionEvent::Render { .. }
             | SessionEvent::Ask { .. }
             | SessionEvent::Checkpoint { .. }
@@ -122,4 +124,53 @@ fn is_usage_marker_message(message: &Message) -> Result<bool, RuntimeError> {
         Ok(AssistantEvent::Usage(_)) => Ok(true),
         Ok(_) | Err(_) => Ok(false),
     }
+}
+
+pub(crate) async fn persist_compaction_checkpoint(
+    session_store: &dyn SessionStore,
+    session_id: &SessionId,
+    event_ids: &mut [EventId],
+    result: &CompactionResult,
+) -> Result<(), RuntimeError> {
+    let Some(anchor_event_id) = result.folded_turn_ids.last().cloned() else {
+        return Ok(());
+    };
+    let checkpoint_event_id = session_store
+        .append(
+            session_id,
+            SessionEvent::Checkpoint {
+                id: format!("checkpoint:{}", EventId::new_v4().0),
+                anchor_event_id,
+                compaction: Some(result.clone()),
+            },
+        )
+        .await?;
+
+    if let Some(summary_event_id) = event_ids.first_mut() {
+        *summary_event_id = checkpoint_event_id;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn estimate_tokens(messages: &[Message]) -> u32 {
+    messages
+        .iter()
+        .flat_map(|message| &message.content)
+        .map(|block| match block {
+            ContentBlock::Text { text } | ContentBlock::Thinking { text } => text.len(),
+            ContentBlock::ToolUse { name, input, .. } => name.len() + input.to_string().len(),
+            ContentBlock::ToolResult { content, .. } => content
+                .iter()
+                .map(|child| match child {
+                    ContentBlock::Text { text } | ContentBlock::Thinking { text } => text.len(),
+                    ContentBlock::ToolUse { name, input, .. } => {
+                        name.len() + input.to_string().len()
+                    }
+                    ContentBlock::ToolResult { .. } => 0,
+                })
+                .sum::<usize>(),
+        })
+        .sum::<usize>()
+        .div_ceil(4) as u32
 }

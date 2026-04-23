@@ -18,8 +18,11 @@ use octopus_sdk_model::{
     ModelError, ModelProvider, ModelRequest, ModelStream, ProtocolFamily, ProviderDescriptor,
     ProviderId,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id, NoopTracer};
 use octopus_sdk_session::{SessionStore, SqliteJsonlSessionStore};
-use octopus_sdk_subagent::{OrchestratorWorkers, ParentSessionContext, SubagentContext};
+use octopus_sdk_subagent::{
+    OrchestratorWorkers, ParentSessionContext, ParentTraceContext, SubagentContext,
+};
 use octopus_sdk_tools::{Tool, ToolContext, ToolError, ToolRegistry, ToolResult, ToolSpec};
 
 struct AllowAllGate;
@@ -316,6 +319,7 @@ fn test_runtime_with_turns(turns: Vec<Vec<AssistantEvent>>, tool_names: Vec<&str
         tools: Arc::new(tool_registry(tool_names)),
         permissions: Arc::new(AllowAllGate),
         scratchpad: DurableScratchpad::new(root.clone()),
+        trace: parent_trace("parent-session"),
     };
 
     TestRuntime {
@@ -343,6 +347,7 @@ fn sample_spec(depth: u8, allowed_tools: Vec<&str>) -> SubagentSpec {
         id: "researcher".into(),
         system_prompt: "Be concise.".into(),
         allowed_tools: allowed_tools.into_iter().map(str::to_string).collect(),
+        agent_role: "worker".into(),
         model_role: "subagent-default".into(),
         permission_mode: PermissionMode::Default,
         task_budget: TaskBudget {
@@ -351,6 +356,18 @@ fn sample_spec(depth: u8, allowed_tools: Vec<&str>) -> SubagentSpec {
         },
         max_turns: 2,
         depth,
+    }
+}
+
+fn parent_trace(session_id: &str) -> ParentTraceContext {
+    ParentTraceContext {
+        trace_id: session_trace_id(session_id),
+        span_id: session_span_id(session_id),
+        agent_role: "main".into(),
+        model_id: "main".into(),
+        model_version: "test".into(),
+        config_snapshot_id: "cfg-parent".into(),
+        tracer: Arc::new(NoopTracer),
     }
 }
 

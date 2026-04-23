@@ -2,7 +2,8 @@ use std::{fs, path::Path};
 
 use octopus_sdk_contracts::PluginSourceTag;
 use octopus_sdk_plugin::{
-    default_roots, PluginDiscoveryConfig, PluginError, PluginManifest, SDK_PLUGIN_API_VERSION,
+    default_roots, PluginDiscoveryConfig, PluginDiscoveryRoot, PluginError, PluginManifest,
+    SDK_PLUGIN_API_VERSION,
 };
 use tempfile::tempdir;
 
@@ -98,7 +99,7 @@ fn test_default_roots_empty() {
     assert!(default_roots().is_empty());
     assert_eq!(
         PluginDiscoveryConfig::default().roots,
-        Vec::<std::path::PathBuf>::new()
+        Vec::<PluginDiscoveryRoot>::new()
     );
 }
 

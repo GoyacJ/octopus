@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 
-use octopus_sdk_contracts::{AssistantEvent, ContentBlock, Message, SessionEvent, Usage};
+use octopus_sdk_contracts::{
+    AssistantEvent, ContentBlock, Message, PermissionOutcome, SessionEvent, Usage,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -9,8 +11,12 @@ pub struct UsageLedgerSnapshot {
     pub sessions_started: u32,
     pub assistant_messages: u32,
     pub tool_calls: u32,
+    pub permission_decisions: u32,
+    pub permission_denials: u32,
     pub asks: u32,
     pub renders: u32,
+    pub subagent_spawns: u32,
+    pub subagent_summaries: u32,
 }
 
 #[derive(Debug, Default)]
@@ -37,11 +43,33 @@ impl UsageLedger {
             SessionEvent::ToolExecuted { .. } => {
                 snapshot.tool_calls = snapshot.tool_calls.saturating_add(1);
             }
+            SessionEvent::PermissionDecision { outcome, .. } => {
+                snapshot.permission_decisions = snapshot.permission_decisions.saturating_add(1);
+                if !matches!(outcome, PermissionOutcome::Allow) {
+                    snapshot.permission_denials = snapshot.permission_denials.saturating_add(1);
+                }
+            }
             SessionEvent::Ask { .. } => {
                 snapshot.asks = snapshot.asks.saturating_add(1);
             }
-            SessionEvent::Render { .. } => {
+            SessionEvent::Render { blocks, .. } => {
                 snapshot.renders = snapshot.renders.saturating_add(1);
+                for block in blocks {
+                    match block
+                        .payload
+                        .get("title")
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        Some("subagent.spawn") => {
+                            snapshot.subagent_spawns = snapshot.subagent_spawns.saturating_add(1);
+                        }
+                        Some("subagent.summary") => {
+                            snapshot.subagent_summaries =
+                                snapshot.subagent_summaries.saturating_add(1);
+                        }
+                        _ => {}
+                    }
+                }
             }
             SessionEvent::SessionPluginsSnapshot { .. }
             | SessionEvent::UserMessage(_)

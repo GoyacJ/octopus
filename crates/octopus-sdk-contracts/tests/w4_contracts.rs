@@ -6,7 +6,7 @@ use serde_json::json;
 
 #[test]
 fn hook_event_variant_count_is_stable() {
-    assert_eq!(HookEvent::VARIANT_COUNT, 8);
+    assert_eq!(HookEvent::VARIANT_COUNT, 15);
 }
 
 #[test]

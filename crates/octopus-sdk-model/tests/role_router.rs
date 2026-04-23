@@ -11,6 +11,10 @@ fn builtin_role_router_resolves_all_primary_roles() {
         ModelRole::Best,
         ModelRole::Plan,
         ModelRole::Compact,
+        ModelRole::Vision,
+        ModelRole::WebExtract,
+        ModelRole::Eval,
+        ModelRole::SubagentDefault,
     ] {
         assert!(
             router.resolve(role.clone()).is_some(),
@@ -23,10 +27,10 @@ fn builtin_role_router_resolves_all_primary_roles() {
 fn overrides_take_precedence_over_defaults() {
     let catalog = ModelCatalog::new_builtin();
     let router = RoleRouter::new_builtin(&catalog)
-        .with_override(ModelRole::Fast, ModelId("gpt-4o".to_string()));
+        .with_override(ModelRole::Fast, ModelId("glm-5-turbo".to_string()));
 
     assert_eq!(
         router.resolve(ModelRole::Fast),
-        Some(ModelId("gpt-4o".to_string()))
+        Some(ModelId("glm-5-turbo".to_string()))
     );
 }

@@ -1,12 +1,14 @@
 use std::{sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use octopus_sdk_contracts::{ContentBlock, SubagentOutput, SubagentSpec};
+use octopus_sdk_contracts::{
+    ContentBlock, HookEvent, SubagentOutput, SubagentSpec, SubagentSummary,
+};
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    with_task_parent_session, TaskFn, Tool, ToolCategory, ToolContext, ToolError, ToolResult,
+    with_task_parent_context, TaskFn, Tool, ToolCategory, ToolContext, ToolError, ToolResult,
     ToolSpec,
 };
 
@@ -131,13 +133,27 @@ impl Tool for AgentTool {
             serde_json::from_value(input).map_err(|error| ToolError::Validation {
                 message: error.to_string(),
             })?;
+        let hooks = Arc::clone(&ctx.hooks);
+        let parent_session = ctx.session_id.clone();
+        run_subagent_spawn_hook(hooks.as_ref(), &parent_session, &input.spec)
+            .await
+            .map_err(|message| ToolError::Execution { message })?;
 
-        with_task_parent_session(ctx.session_id.clone(), async {
+        with_task_parent_context(ctx.session_id.clone(), ctx.tool_call_id.clone(), async {
             match self.task_fn.run(&input.spec, &input.input).await {
-                Ok(output) => Ok(output_result(
-                    output,
-                    started_at.elapsed().as_millis() as u64,
-                )?),
+                Ok(output) => {
+                    run_subagent_return_hook(
+                        hooks.as_ref(),
+                        &parent_session,
+                        subagent_meta(&output),
+                    )
+                    .await
+                    .map_err(|message| ToolError::Execution { message })?;
+                    Ok(output_result(
+                        output,
+                        started_at.elapsed().as_millis() as u64,
+                    )?)
+                }
                 Err(error) => Ok(error_result(
                     error.to_string(),
                     started_at.elapsed().as_millis() as u64,
@@ -204,6 +220,54 @@ fn error_result(reason: String, duration_ms: u64) -> ToolResult {
         duration_ms,
         render: None,
     }
+}
+
+fn subagent_meta(output: &SubagentOutput) -> SubagentSummary {
+    match output {
+        SubagentOutput::Summary { meta, .. }
+        | SubagentOutput::FileRef { meta, .. }
+        | SubagentOutput::Json { meta, .. } => meta.clone(),
+    }
+}
+
+async fn run_subagent_spawn_hook(
+    hooks: &octopus_sdk_hooks::HookRunner,
+    parent_session: &octopus_sdk_contracts::SessionId,
+    spec: &SubagentSpec,
+) -> Result<(), String> {
+    let outcome = hooks
+        .run(HookEvent::SubagentSpawn {
+            parent_session: parent_session.clone(),
+            spec: spec.clone(),
+        })
+        .await
+        .map_err(|error| format!("subagent_spawn hook failed: {error}"))?;
+
+    if let Some(reason) = outcome.aborted {
+        return Err(reason);
+    }
+
+    Ok(())
+}
+
+async fn run_subagent_return_hook(
+    hooks: &octopus_sdk_hooks::HookRunner,
+    parent_session: &octopus_sdk_contracts::SessionId,
+    summary: SubagentSummary,
+) -> Result<(), String> {
+    let outcome = hooks
+        .run(HookEvent::SubagentReturn {
+            parent_session: parent_session.clone(),
+            summary,
+        })
+        .await
+        .map_err(|error| format!("subagent_return hook failed: {error}"))?;
+
+    if let Some(reason) = outcome.aborted {
+        return Err(reason);
+    }
+
+    Ok(())
 }
 
 define_stub_tool!(

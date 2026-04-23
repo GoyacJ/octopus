@@ -85,25 +85,85 @@ async fn clear_tool_results_updates_message_bodies_and_token_count() {
 }
 
 #[tokio::test]
-async fn hybrid_strategy_is_explicitly_aborted() {
+async fn hybrid_strategy_clears_tool_results_without_summary_when_clear_is_enough() {
     let mut messages = sample_messages();
+    let tokens_before = estimate_tokens(&messages);
     let mut session = SessionView {
-        tokens: estimate_tokens(&messages),
-        tokens_budget: estimate_tokens(&messages),
+        tokens: tokens_before,
+        tokens_budget: tokens_before,
         event_ids: sample_event_ids(messages.len()),
         messages: &mut messages,
     };
-    let compactor = Compactor::new(0.1, CompactionStrategyTag::Hybrid, Arc::new(NoopProvider));
+    let compactor = Compactor::new(1.0, CompactionStrategyTag::Hybrid, Arc::new(NoopProvider));
 
-    let error = compactor
+    let result = compactor
         .maybe_compact(&mut session)
         .await
-        .expect_err("hybrid should abort");
+        .expect("hybrid should succeed")
+        .expect("hybrid should return a result");
 
-    assert_eq!(
-        error.to_string(),
-        "compaction aborted: hybrid not implemented in W4"
+    assert_eq!(result.strategy, CompactionStrategyTag::Hybrid);
+    assert_eq!(result.summary, "");
+    assert_eq!(result.tool_results_cleared, 3);
+    assert_eq!(result.tokens_before, tokens_before);
+    assert!(result.tokens_after < tokens_before);
+}
+
+#[tokio::test]
+async fn hybrid_strategy_summarizes_when_clear_still_exceeds_threshold() {
+    let mut messages = sample_messages();
+    let tokens_before = estimate_tokens(&messages);
+    let removed_tokens = removed_tool_result_tokens(&messages);
+    let mut session = SessionView {
+        tokens: tokens_before,
+        tokens_budget: tokens_before - removed_tokens,
+        event_ids: sample_event_ids(messages.len()),
+        messages: &mut messages,
+    };
+    let compactor = Compactor::new(
+        1.0,
+        CompactionStrategyTag::Hybrid,
+        Arc::new(SummaryProvider {
+            summary: "ok".into(),
+        }),
     );
+
+    let result = compactor
+        .maybe_compact(&mut session)
+        .await
+        .expect("hybrid should succeed")
+        .expect("hybrid should return a result");
+
+    assert_eq!(result.strategy, CompactionStrategyTag::Hybrid);
+    assert_eq!(result.summary, "ok");
+    assert_eq!(result.tool_results_cleared, 3);
+    assert_eq!(result.tokens_before, tokens_before);
+    assert!(matches!(session.messages[0].role, Role::System));
+    assert_eq!(
+        session.messages[0].content,
+        vec![ContentBlock::Text { text: "ok".into() }]
+    );
+}
+
+struct SummaryProvider {
+    summary: String,
+}
+
+#[async_trait]
+impl ModelProvider for SummaryProvider {
+    async fn complete(&self, _req: ModelRequest) -> Result<ModelStream, ModelError> {
+        Ok(Box::pin(futures::stream::iter(vec![Ok(
+            octopus_sdk_contracts::AssistantEvent::TextDelta(self.summary.clone()),
+        )])))
+    }
+
+    fn describe(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            id: ProviderId("summary".into()),
+            supported_families: vec![ProtocolFamily::VendorNative],
+            catalog_version: "test".into(),
+        }
+    }
 }
 
 fn sample_messages() -> Vec<Message> {

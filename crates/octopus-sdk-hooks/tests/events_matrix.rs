@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use octopus_sdk_contracts::{
     CompactionCtx, CompactionResult, CompactionStrategyTag, ContentBlock, EndReason, EventId,
     HookDecision, HookEvent, HookToolResult, Message, RenderBlock, RenderKind, RenderMeta, Role,
-    SessionId, ToolCallId, ToolCallRequest, ToolCategory,
+    SessionId, StopReason, SubagentSpec, SubagentSummary, TaskBudget, ToolCallId, ToolCallRequest,
+    ToolCategory,
 };
 use octopus_sdk_hooks::runner::{Hook, HookError, HookRunner, HookSource};
 use serde_json::json;
@@ -163,6 +164,18 @@ struct EventCase {
 fn event_cases() -> Vec<EventCase> {
     vec![
         EventCase {
+            kind: "pre_sampling",
+            event: sample_pre_sampling(),
+            rewrite_payload: None,
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "post_sampling",
+            event: sample_post_sampling(),
+            rewrite_payload: None,
+            inject_allowed: false,
+        },
+        EventCase {
             kind: "pre_tool_use",
             event: sample_pre_tool_use(),
             rewrite_payload: Some(octopus_sdk_contracts::RewritePayload::ToolCall {
@@ -187,6 +200,39 @@ fn event_cases() -> Vec<EventCase> {
                     render: None,
                 },
             }),
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "on_tool_error",
+            event: sample_on_tool_error(),
+            rewrite_payload: None,
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "pre_file_write",
+            event: sample_pre_file_write(),
+            rewrite_payload: Some(octopus_sdk_contracts::RewritePayload::FileWrite {
+                path: "rewritten.txt".into(),
+                content: "rewritten".into(),
+            }),
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "post_file_write",
+            event: sample_post_file_write(),
+            rewrite_payload: None,
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "subagent_spawn",
+            event: sample_subagent_spawn(),
+            rewrite_payload: None,
+            inject_allowed: false,
+        },
+        EventCase {
+            kind: "subagent_return",
+            event: sample_subagent_return(),
+            rewrite_payload: None,
             inject_allowed: false,
         },
         EventCase {
@@ -244,6 +290,19 @@ fn invalid_rewrite_payload(message: &Message) -> octopus_sdk_contracts::RewriteP
     }
 }
 
+fn sample_pre_sampling() -> HookEvent {
+    HookEvent::PreSampling {
+        session: SessionId("session-1".into()),
+    }
+}
+
+fn sample_post_sampling() -> HookEvent {
+    HookEvent::PostSampling {
+        session: SessionId("session-1".into()),
+        stop_reason: StopReason::ToolUse,
+    }
+}
+
 fn sample_pre_tool_use() -> HookEvent {
     HookEvent::PreToolUse {
         call: ToolCallRequest {
@@ -277,6 +336,89 @@ fn sample_post_tool_use() -> HookEvent {
                     ts_ms: 1,
                 },
             }),
+        },
+    }
+}
+
+fn sample_on_tool_error() -> HookEvent {
+    HookEvent::OnToolError {
+        call: ToolCallRequest {
+            id: ToolCallId("call-1".into()),
+            name: "shell_exec".into(),
+            input: json!({ "command": "echo original" }),
+        },
+        result: HookToolResult {
+            content: vec![ContentBlock::Text {
+                text: "failed".into(),
+            }],
+            is_error: true,
+            duration_ms: 12,
+            render: None,
+        },
+    }
+}
+
+fn sample_pre_file_write() -> HookEvent {
+    HookEvent::PreFileWrite {
+        call: ToolCallRequest {
+            id: ToolCallId("call-1".into()),
+            name: "write_file".into(),
+            input: json!({ "path": "draft.txt" }),
+        },
+        path: "draft.txt".into(),
+        content: "original".into(),
+    }
+}
+
+fn sample_post_file_write() -> HookEvent {
+    HookEvent::PostFileWrite {
+        call: ToolCallRequest {
+            id: ToolCallId("call-1".into()),
+            name: "write_file".into(),
+            input: json!({ "path": "draft.txt" }),
+        },
+        path: "draft.txt".into(),
+    }
+}
+
+fn sample_subagent_spawn() -> HookEvent {
+    HookEvent::SubagentSpawn {
+        parent_session: SessionId("session-1".into()),
+        spec: SubagentSpec {
+            id: "worker-1".into(),
+            system_prompt: "Be concise.".into(),
+            allowed_tools: vec!["read_file".into()],
+            agent_role: "worker".into(),
+            model_role: "subagent-default".into(),
+            permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+            task_budget: TaskBudget::default(),
+            max_turns: 2,
+            depth: 1,
+        },
+    }
+}
+
+fn sample_subagent_return() -> HookEvent {
+    HookEvent::SubagentReturn {
+        parent_session: SessionId("session-1".into()),
+        summary: SubagentSummary {
+            session_id: SessionId("child-1".into()),
+            parent_session_id: SessionId("session-1".into()),
+            resume_session_id: Some(SessionId("child-1".into())),
+            spec_id: "worker-1".into(),
+            agent_role: "worker".into(),
+            parent_agent_role: "main".into(),
+            turns: 1,
+            tokens_used: 3,
+            duration_ms: 7,
+            trace_id: "trace:session-1".into(),
+            span_id: "subagent:child-1".into(),
+            parent_span_id: "session:session-1".into(),
+            model_id: "main".into(),
+            model_version: "test".into(),
+            config_snapshot_id: "cfg-1".into(),
+            permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+            allowed_tools: vec!["read_file".into()],
         },
     }
 }

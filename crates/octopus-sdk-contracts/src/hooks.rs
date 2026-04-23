@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CompactionResult, CompactionStrategyTag, ContentBlock, Message, RenderBlock, SessionId,
-    ToolCallRequest, ToolCategory,
+    StopReason, SubagentSpec, SubagentSummary, ToolCallRequest, ToolCategory,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,6 +37,7 @@ pub enum EndReason {
 pub enum RewritePayload {
     ToolCall { call: ToolCallRequest },
     ToolResult { result: HookToolResult },
+    FileWrite { path: String, content: String },
     UserPrompt { message: Message },
     Compaction { ctx: CompactionCtx },
 }
@@ -53,6 +54,13 @@ pub enum HookDecision {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum HookEvent {
+    PreSampling {
+        session: SessionId,
+    },
+    PostSampling {
+        session: SessionId,
+        stop_reason: StopReason,
+    },
     PreToolUse {
         call: ToolCallRequest,
         category: ToolCategory,
@@ -60,6 +68,27 @@ pub enum HookEvent {
     PostToolUse {
         call: ToolCallRequest,
         result: HookToolResult,
+    },
+    OnToolError {
+        call: ToolCallRequest,
+        result: HookToolResult,
+    },
+    PreFileWrite {
+        call: ToolCallRequest,
+        path: String,
+        content: String,
+    },
+    PostFileWrite {
+        call: ToolCallRequest,
+        path: String,
+    },
+    SubagentSpawn {
+        parent_session: SessionId,
+        spec: SubagentSpec,
+    },
+    SubagentReturn {
+        parent_session: SessionId,
+        summary: SubagentSummary,
     },
     Stop {
         session: SessionId,
@@ -85,5 +114,5 @@ pub enum HookEvent {
 }
 
 impl HookEvent {
-    pub const VARIANT_COUNT: usize = 8;
+    pub const VARIANT_COUNT: usize = 15;
 }

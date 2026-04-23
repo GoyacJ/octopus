@@ -13,6 +13,7 @@ use octopus_sdk::{
     SessionStore, SqliteJsonlSessionStore, StartSessionInput, StopReason, SubagentOutput,
     SubagentSpec, SubmitTurnInput, TaskBudget, TaskFn, ToolCallRequest, ToolRegistry, VaultError,
 };
+use octopus_sdk_observability::{session_span_id, session_trace_id};
 
 struct AllowAllGate;
 
@@ -150,10 +151,22 @@ impl TaskFn for StaticTaskFn {
             text: format!("subagent: {input}"),
             meta: octopus_sdk::SubagentSummary {
                 session_id: octopus_sdk::SessionId("subagent-1".into()),
+                parent_session_id: octopus_sdk::SessionId("session-1".into()),
+                resume_session_id: Some(octopus_sdk::SessionId("subagent-1".into())),
+                spec_id: "worker-1".into(),
+                agent_role: "worker".into(),
+                parent_agent_role: "main".into(),
                 turns: 1,
                 tokens_used: 3,
                 duration_ms: 1,
-                trace_id: "trace-subagent".into(),
+                trace_id: session_trace_id("session-1"),
+                span_id: "subagent:subagent-1".into(),
+                parent_span_id: session_span_id("session-1"),
+                model_id: "test-model".into(),
+                model_version: "test".into(),
+                config_snapshot_id: "cfg-1".into(),
+                permission_mode: octopus_sdk::PermissionMode::Default,
+                allowed_tools: vec!["task".into()],
             },
         })
     }
@@ -309,6 +322,7 @@ async fn runtime_sdk_bridge_executes_task_tool_when_task_fn_present() {
                             id: "worker-1".into(),
                             system_prompt: "Be concise.".into(),
                             allowed_tools: Vec::new(),
+                            agent_role: "worker".into(),
                             model_role: "subagent-default".into(),
                             permission_mode: octopus_sdk::PermissionMode::Default,
                             task_budget: TaskBudget {

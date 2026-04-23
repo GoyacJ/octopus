@@ -117,9 +117,8 @@ async fn ask_user_question_maps_resolver_errors() {
 }
 
 #[tokio::test]
-async fn todo_write_emits_render_event() {
+async fn todo_write_returns_render_payload() {
     let dir = tempdir().expect("tempdir should exist");
-    let events = Arc::new(support::RecordingEventSink::new());
     let result = TodoWriteTool::new()
         .execute(
             support::tool_context(
@@ -131,7 +130,7 @@ async fn todo_write_emits_render_event() {
                         text: "Proceed".into(),
                     }),
                 }),
-                events.clone(),
+                Arc::new(support::RecordingEventSink::new()),
             ),
             serde_json::json!({
                 "todos": [
@@ -143,9 +142,10 @@ async fn todo_write_emits_render_event() {
         .await
         .expect("todo write should succeed");
 
-    assert_eq!(support::text_output(result), "updated 2 todos");
-    assert!(events
-        .events()
-        .into_iter()
-        .any(|event| matches!(event, SessionEvent::Render { .. })));
+    assert_eq!(support::text_output(result.clone()), "updated 2 todos");
+    assert!(result.render.is_some());
+    let persisted = std::fs::read_to_string(dir.path().join("runtime/todos/session-1.json"))
+        .expect("todo file should persist");
+    assert!(persisted.contains("Implement transport"));
+    assert!(persisted.contains("in_progress"));
 }

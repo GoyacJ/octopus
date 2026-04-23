@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use octopus_sdk_contracts::{
     AskOption, AskPrompt, AskQuestion, PermissionGate, PermissionMode, PermissionOutcome,
-    ToolCallRequest, ToolCategory,
+    ToolCallRequest, ToolCategory, ToolPermissionContext,
 };
 
 use crate::{ApprovalBroker, PermissionBehavior, PermissionContext, PermissionPolicy};
@@ -56,6 +56,12 @@ impl PermissionGate for DefaultPermissionGate {
             return PermissionOutcome::Allow;
         }
 
+        if matches!(self.mode, PermissionMode::DontAsk) && tool_has_side_effects(category) {
+            return PermissionOutcome::Deny {
+                reason: format!("tool '{}' requires approval in dont_ask mode", call.name),
+            };
+        }
+
         if matches!(self.mode, PermissionMode::Plan) && tool_has_side_effects(category) {
             return PermissionOutcome::Deny {
                 reason: format!("tool '{}' is not allowed in plan mode", call.name),
@@ -77,11 +83,31 @@ impl PermissionGate for DefaultPermissionGate {
             outcome => outcome,
         }
     }
+
+    fn tool_permission_context(
+        &self,
+        mode: PermissionMode,
+        tool_name: &str,
+    ) -> ToolPermissionContext {
+        ToolPermissionContext {
+            mode,
+            always_allow_rules: self
+                .policy
+                .rules_by_source(tool_name, PermissionBehavior::Allow),
+            always_deny_rules: self
+                .policy
+                .rules_by_source(tool_name, PermissionBehavior::Deny),
+            always_ask_rules: self
+                .policy
+                .rules_by_source(tool_name, PermissionBehavior::Ask),
+            ..ToolPermissionContext::for_mode(mode)
+        }
+    }
 }
 
 fn default_mode_outcome(ctx: &PermissionContext) -> PermissionOutcome {
     match ctx.mode {
-        PermissionMode::Default => {
+        PermissionMode::Default | PermissionMode::Auto => {
             if matches!(ctx.category, ToolCategory::Read) {
                 PermissionOutcome::Allow
             } else {
@@ -99,6 +125,21 @@ fn default_mode_outcome(ctx: &PermissionContext) -> PermissionOutcome {
             },
         },
         PermissionMode::BypassPermissions => PermissionOutcome::Allow,
+        PermissionMode::DontAsk => {
+            if matches!(ctx.category, ToolCategory::Read) {
+                PermissionOutcome::Allow
+            } else {
+                PermissionOutcome::Deny {
+                    reason: format!(
+                        "tool '{}' requires approval in dont_ask mode",
+                        ctx.call.name
+                    ),
+                }
+            }
+        }
+        PermissionMode::Bubble => PermissionOutcome::AskApproval {
+            prompt: ask_prompt(ctx, PermissionBehavior::Ask),
+        },
         PermissionMode::Plan => {
             if matches!(ctx.category, ToolCategory::Read) {
                 PermissionOutcome::Allow

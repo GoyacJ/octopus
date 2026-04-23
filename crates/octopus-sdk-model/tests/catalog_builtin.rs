@@ -9,17 +9,14 @@ fn builtin_catalog_covers_expected_providers() {
         .map(|provider| provider.id.0.as_str())
         .collect::<Vec<_>>();
 
-    assert!(provider_ids.len() >= 9);
+    assert_eq!(provider_ids.len(), 6);
     for expected in [
         "anthropic",
-        "openai",
-        "google",
         "deepseek",
         "minimax",
         "moonshot",
         "bigmodel",
         "qwen",
-        "ark",
     ] {
         assert!(
             provider_ids.contains(&expected),
@@ -55,6 +52,9 @@ fn canonicalize_handles_bedrock_style_ids_and_unknown_models() {
     );
     assert!(catalog.resolve("gpt-5").is_none());
     assert!(catalog.resolve("gemini-flash").is_none());
-    assert!(catalog.resolve("minimax-m2").is_none());
+    assert_eq!(
+        catalog.resolve("minimax-m2").unwrap().model.id.0,
+        "MiniMax-M2"
+    );
     assert!(catalog.resolve("unknown/xxx").is_none());
 }

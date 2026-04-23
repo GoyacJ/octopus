@@ -177,8 +177,15 @@ impl HookRunner {
 
 fn event_kind(event: &HookEvent) -> &'static str {
     match event {
+        HookEvent::PreSampling { .. } => "pre_sampling",
+        HookEvent::PostSampling { .. } => "post_sampling",
         HookEvent::PreToolUse { .. } => "pre_tool_use",
         HookEvent::PostToolUse { .. } => "post_tool_use",
+        HookEvent::OnToolError { .. } => "on_tool_error",
+        HookEvent::PreFileWrite { .. } => "pre_file_write",
+        HookEvent::PostFileWrite { .. } => "post_file_write",
+        HookEvent::SubagentSpawn { .. } => "subagent_spawn",
+        HookEvent::SubagentReturn { .. } => "subagent_return",
         HookEvent::Stop { .. } => "stop",
         HookEvent::SessionStart { .. } => "session_start",
         HookEvent::SessionEnd { .. } => "session_end",
@@ -217,6 +224,20 @@ fn apply_rewrite(
         (HookEvent::PostToolUse { result, .. }, RewritePayload::ToolResult { result: next }) => {
             *result = next.clone();
             Ok(RewritePayload::ToolResult { result: next })
+        }
+        (
+            HookEvent::PreFileWrite { path, content, .. },
+            RewritePayload::FileWrite {
+                path: next_path,
+                content: next_content,
+            },
+        ) => {
+            *path = next_path.clone();
+            *content = next_content.clone();
+            Ok(RewritePayload::FileWrite {
+                path: next_path,
+                content: next_content,
+            })
         }
         (HookEvent::UserPromptSubmit { message }, RewritePayload::UserPrompt { message: next }) => {
             *message = next.clone();

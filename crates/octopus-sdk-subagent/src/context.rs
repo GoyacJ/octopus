@@ -8,8 +8,20 @@ use octopus_sdk_contracts::{
 };
 use octopus_sdk_hooks::HookRunner;
 use octopus_sdk_model::ModelProvider;
+use octopus_sdk_observability::Tracer;
 use octopus_sdk_session::SessionStore;
 use octopus_sdk_tools::ToolRegistry;
+
+#[derive(Clone)]
+pub struct ParentTraceContext {
+    pub trace_id: String,
+    pub span_id: String,
+    pub agent_role: String,
+    pub model_id: String,
+    pub model_version: String,
+    pub config_snapshot_id: String,
+    pub tracer: Arc<dyn Tracer>,
+}
 
 #[derive(Clone)]
 pub struct ParentSessionContext {
@@ -19,6 +31,7 @@ pub struct ParentSessionContext {
     pub tools: Arc<ToolRegistry>,
     pub permissions: Arc<dyn PermissionGate>,
     pub scratchpad: DurableScratchpad,
+    pub trace: ParentTraceContext,
 }
 
 pub struct SubagentContext {
@@ -103,6 +116,7 @@ impl SubagentContext {
                 id: evaluator_id,
                 system_prompt: "Judge the generator draft.".into(),
                 allowed_tools: Vec::new(),
+                agent_role: "sub.eval".into(),
                 model_role: "subagent-evaluator".into(),
                 permission_mode: PermissionMode::Default,
                 task_budget: TaskBudget::default(),

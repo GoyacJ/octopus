@@ -42,6 +42,7 @@ fn sandbox_handle_accessors_expose_inner_values() {
 fn sandbox_spec_keeps_w4_limits_shape() {
     let spec = SandboxSpec {
         fs_whitelist: vec![PathBuf::from("/tmp/workspace")],
+        network_allowlist: vec!["api.openai.com".into()],
         env_allowlist: vec!["PATH".into()],
         cpu_time_limit_ms: Some(100),
         wall_time_limit_ms: Some(200),
@@ -50,6 +51,7 @@ fn sandbox_spec_keeps_w4_limits_shape() {
     };
 
     assert_eq!(spec.fs_whitelist, [PathBuf::from("/tmp/workspace")]);
+    assert_eq!(spec.network_allowlist, ["api.openai.com"]);
     assert_eq!(spec.env_allowlist, ["PATH"]);
     assert_eq!(spec.cpu_time_limit_ms, Some(100));
     assert_eq!(spec.wall_time_limit_ms, Some(200));

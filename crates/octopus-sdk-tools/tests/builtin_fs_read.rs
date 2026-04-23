@@ -7,6 +7,7 @@ use octopus_sdk_contracts::{
     PermissionOutcome, SecretValue, SecretVault, SessionEvent, SessionId, ToolCallRequest,
     VaultError,
 };
+use octopus_sdk_hooks::HookRunner;
 use octopus_sdk_session::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
 use octopus_sdk_tools::{
     builtin::{FileReadTool, GlobTool, GrepTool},
@@ -99,6 +100,7 @@ impl SessionStore for SessionStub {
 fn tool_context(root: &Path) -> ToolContext {
     ToolContext {
         session_id: SessionId("session-1".into()),
+        tool_call_id: None,
         permissions: Arc::new(AllowAll),
         sandbox: octopus_sdk_tools::SandboxHandle::new(root.to_path_buf(), Vec::new(), "noop"),
         session_store: Arc::new(SessionStub),
@@ -106,6 +108,10 @@ fn tool_context(root: &Path) -> ToolContext {
         ask_resolver: Arc::new(AskStub),
         event_sink: Arc::new(EventStub),
         working_dir: root.to_path_buf(),
+        hooks: Arc::new(HookRunner::new()),
+        permission_context: octopus_sdk_contracts::ToolPermissionContext::for_mode(
+            octopus_sdk_contracts::PermissionMode::Default,
+        ),
         cancellation: CancellationToken::new(),
     }
 }

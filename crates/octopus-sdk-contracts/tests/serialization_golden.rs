@@ -2,8 +2,9 @@ use std::{fs, path::PathBuf};
 
 use octopus_sdk_contracts::{
     AskOption, AskPrompt, AskQuestion, AssistantEvent, ContentBlock, EndReason, EventId, Message,
-    PluginSourceTag, PluginSummary, PluginsSnapshot, RenderBlock, RenderKind, RenderLifecycle,
-    Role, SessionEvent, StopReason, ToolCallId, Usage,
+    PermissionMode, PermissionOutcome, PluginSourceTag, PluginSummary, PluginsSnapshot,
+    RenderBlock, RenderKind, RenderLifecycle, RenderPhase, Role, SessionEvent, StopReason,
+    ToolCallId, Usage,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -153,10 +154,25 @@ fn fixtures() -> Vec<FixtureCase> {
             },
         ),
         fixture_case(
+            "session_event/permission_decision",
+            &SessionEvent::PermissionDecision {
+                call: tool_call_id.clone(),
+                name: "read_file".into(),
+                mode: PermissionMode::Default,
+                outcome: PermissionOutcome::Deny {
+                    reason: "writes outside workspace are denied".into(),
+                },
+            },
+        ),
+        fixture_case(
             "session_event/render",
             &SessionEvent::Render {
-                block: render_block.clone(),
-                lifecycle: RenderLifecycle::OnToolResult,
+                blocks: vec![render_block.clone()],
+                lifecycle: RenderLifecycle::tool_phase(
+                    RenderPhase::OnToolResult,
+                    tool_call_id.clone(),
+                    "read_file",
+                ),
             },
         ),
         fixture_case(

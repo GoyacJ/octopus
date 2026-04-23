@@ -295,7 +295,7 @@ async fn runtime_config_bridge_builds_catalog_snapshot_with_usage() {
         "gpt-5.4",
         "gpt-5.4-mini",
         "gemini-2.5-flash",
-        "MiniMax-M2.7",
+        "doubao-seed-1.6",
     ] {
         assert!(
             snapshot

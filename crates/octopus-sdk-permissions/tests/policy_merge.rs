@@ -123,3 +123,34 @@ fn evaluate_returns_none_when_no_rule_matches() {
 
     assert_eq!(outcome, None);
 }
+
+#[test]
+fn rules_by_source_bucket_only_the_selected_tool() {
+    let policy = PermissionPolicy::from_sources(vec![
+        PermissionRule {
+            source: PermissionRuleSource::Session,
+            behavior: PermissionBehavior::Allow,
+            tool_name: "bash".into(),
+            rule_content: Some("git status".into()),
+        },
+        PermissionRule {
+            source: PermissionRuleSource::ProjectSettings,
+            behavior: PermissionBehavior::Allow,
+            tool_name: "write_file".into(),
+            rule_content: Some("/tmp/demo.txt".into()),
+        },
+        PermissionRule {
+            source: PermissionRuleSource::FlagSettings,
+            behavior: PermissionBehavior::Allow,
+            tool_name: "bash".into(),
+            rule_content: None,
+        },
+    ]);
+
+    let grouped = policy.rules_by_source("bash", PermissionBehavior::Allow);
+
+    assert_eq!(grouped.len(), 2);
+    assert_eq!(grouped[&PermissionRuleSource::Session], ["git status"]);
+    assert_eq!(grouped[&PermissionRuleSource::FlagSettings], ["*"]);
+    assert!(!grouped.contains_key(&PermissionRuleSource::ProjectSettings));
+}

@@ -18,6 +18,7 @@ octopus-core = { path = "../octopus-core" }
 octopus-persistence = { path = "../octopus-persistence" }
 octopus-sdk = { path = "../octopus-sdk" }
 octopus-sdk-context = { path = "../octopus-sdk-context" }
+octopus-sdk-observability = { path = "../octopus-sdk-observability" }
 octopus-sdk-plugin = { path = "../octopus-sdk-plugin" }
 octopus-sdk-session = { path = "../octopus-sdk-session" }
 octopus-sdk-subagent = { path = "../octopus-sdk-subagent" }

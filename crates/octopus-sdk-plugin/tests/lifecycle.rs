@@ -1,7 +1,8 @@
 use std::{fs, path::Path};
 
 use octopus_sdk_plugin::{
-    example_bundled_plugins, PluginDiscoveryConfig, PluginError, PluginLifecycle, PluginRegistry,
+    bundled_plugin_root, bundled_runtime_catalog, PluginDiscoveryConfig, PluginDiscoveryRoot,
+    PluginError, PluginLifecycle, PluginRegistry,
 };
 use tempfile::tempdir;
 
@@ -20,14 +21,17 @@ fn test_lifecycle_end_to_end() {
     );
 
     let config = PluginDiscoveryConfig {
-        roots: vec![bundled_root(), deny_root.path().to_path_buf()],
+        roots: vec![
+            PluginDiscoveryRoot::bundled(bundled_plugin_root()),
+            PluginDiscoveryRoot::local(deny_root.path().to_path_buf()),
+        ],
         allow: Vec::new(),
         deny: vec!["deny-tool".into()],
     };
     let mut registry = PluginRegistry::new();
-    let plugins = example_bundled_plugins();
+    let runtimes = bundled_runtime_catalog();
 
-    PluginLifecycle::run(&mut registry, &config, &plugins)
+    PluginLifecycle::run(&mut registry, &config, &runtimes)
         .expect("lifecycle should register bundled plugin");
 
     let snapshot = registry.get_snapshot();
@@ -52,11 +56,11 @@ fn test_error_manifest_parse() {
     let error = PluginLifecycle::run(
         &mut registry,
         &PluginDiscoveryConfig {
-            roots: vec![root.path().to_path_buf()],
+            roots: vec![PluginDiscoveryRoot::local(root.path().to_path_buf())],
             allow: Vec::new(),
             deny: Vec::new(),
         },
-        &example_bundled_plugins(),
+        &bundled_runtime_catalog(),
     )
     .expect_err("invalid manifest should fail");
 
@@ -89,11 +93,11 @@ fn test_error_world_writable() {
     let error = PluginLifecycle::run(
         &mut registry,
         &PluginDiscoveryConfig {
-            roots: vec![root.path().to_path_buf()],
+            roots: vec![PluginDiscoveryRoot::local(root.path().to_path_buf())],
             allow: Vec::new(),
             deny: Vec::new(),
         },
-        &example_bundled_plugins(),
+        &bundled_runtime_catalog(),
     )
     .expect_err("world-writable manifest should fail");
 
@@ -130,11 +134,11 @@ fn test_error_path_escape() {
     let error = PluginLifecycle::run(
         &mut registry,
         &PluginDiscoveryConfig {
-            roots: vec![root.path().to_path_buf()],
+            roots: vec![PluginDiscoveryRoot::local(root.path().to_path_buf())],
             allow: Vec::new(),
             deny: Vec::new(),
         },
-        &example_bundled_plugins(),
+        &bundled_runtime_catalog(),
     )
     .expect_err("path escape should fail");
 
@@ -159,11 +163,14 @@ fn test_error_duplicate_id() {
     let error = PluginLifecycle::run(
         &mut registry,
         &PluginDiscoveryConfig {
-            roots: vec![bundled_root(), duplicate_root.path().to_path_buf()],
+            roots: vec![
+                PluginDiscoveryRoot::bundled(bundled_plugin_root()),
+                PluginDiscoveryRoot::local(duplicate_root.path().to_path_buf()),
+            ],
             allow: Vec::new(),
             deny: Vec::new(),
         },
-        &example_bundled_plugins(),
+        &bundled_runtime_catalog(),
     )
     .expect_err("duplicate id should fail");
 
@@ -175,8 +182,48 @@ fn test_error_duplicate_id() {
     );
 }
 
-fn bundled_root() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("bundled")
+#[test]
+fn test_manifest_only_local_tool_stays_decl_only() {
+    let root = tempdir().expect("tempdir should exist");
+    write_manifest(
+        root.path(),
+        "decl-only-local",
+        r#"{
+  "id": "decl-only-local",
+  "version": "0.1.0",
+  "compat": { "pluginApi": "^1.0.0" },
+  "components": [
+    {
+      "kind": "tool",
+      "id": "decl-only-tool",
+      "name": "decl-only-tool",
+      "description": "decl only",
+      "schema": { "type": "object" },
+      "source": { "kind": "plugin", "plugin_id": "decl-only-local" }
+    }
+  ]
+}"#,
+    );
+
+    let (registry, snapshot) = PluginLifecycle::boot(
+        &PluginDiscoveryConfig {
+            roots: vec![PluginDiscoveryRoot::local(root.path().to_path_buf())],
+            allow: Vec::new(),
+            deny: Vec::new(),
+        },
+        &bundled_runtime_catalog(),
+    )
+    .expect("manifest-only local plugin should still be discoverable");
+
+    assert_eq!(snapshot.plugins.len(), 1);
+    assert_eq!(snapshot.plugins[0].id, "decl-only-local");
+    assert_eq!(
+        snapshot.plugins[0].source,
+        octopus_sdk_contracts::PluginSourceTag::Local
+    );
+    assert_eq!(snapshot.plugins[0].components_count, 1);
+    assert!(registry.tools().get("decl-only-tool").is_none());
+    assert!(!registry.has_runtime_tool("decl-only-tool"));
 }
 
 fn write_manifest(root: &Path, dir_name: &str, content: &str) -> std::path::PathBuf {

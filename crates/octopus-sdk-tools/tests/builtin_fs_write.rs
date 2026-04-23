@@ -1,12 +1,17 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use futures::stream;
 use octopus_sdk_contracts::{
-    AskAnswer, AskError, AskPrompt, AskResolver, EventId, EventSink, PermissionGate,
-    PermissionOutcome, SecretValue, SecretVault, SessionEvent, SessionId, ToolCallRequest,
-    VaultError,
+    AskAnswer, AskError, AskPrompt, AskResolver, EventId, EventSink, HookDecision, HookEvent,
+    PermissionGate, PermissionOutcome, RewritePayload, SecretValue, SecretVault, SessionEvent,
+    SessionId, ToolCallRequest, VaultError,
 };
+use octopus_sdk_hooks::{Hook, HookRunner, HookSource};
 use octopus_sdk_session::{EventRange, EventStream, SessionError, SessionSnapshot, SessionStore};
 use octopus_sdk_tools::{
     builtin::{FileEditTool, FileWriteTool},
@@ -102,8 +107,13 @@ impl SessionStore for SessionStub {
 }
 
 fn tool_context(root: &Path) -> ToolContext {
+    tool_context_with_hooks(root, Arc::new(HookRunner::new()))
+}
+
+fn tool_context_with_hooks(root: &Path, hooks: Arc<HookRunner>) -> ToolContext {
     ToolContext {
         session_id: SessionId("session-1".into()),
+        tool_call_id: None,
         permissions: Arc::new(PathGuard),
         sandbox: octopus_sdk_tools::SandboxHandle::new(root.to_path_buf(), Vec::new(), "noop"),
         session_store: Arc::new(SessionStub),
@@ -111,7 +121,47 @@ fn tool_context(root: &Path) -> ToolContext {
         ask_resolver: Arc::new(AskStub),
         event_sink: Arc::new(EventStub),
         working_dir: root.to_path_buf(),
+        hooks,
+        permission_context: octopus_sdk_contracts::ToolPermissionContext::for_mode(
+            octopus_sdk_contracts::PermissionMode::Default,
+        ),
         cancellation: CancellationToken::new(),
+    }
+}
+
+struct FileWriteHook {
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl Hook for FileWriteHook {
+    fn name(&self) -> &str {
+        "file-write-hook"
+    }
+
+    async fn on_event(&self, event: &HookEvent) -> HookDecision {
+        match event {
+            HookEvent::PreFileWrite { path, content, .. } => {
+                self.seen
+                    .lock()
+                    .expect("seen lock should stay available")
+                    .push(format!("pre:{path}:{content}"));
+                HookDecision::Rewrite(RewritePayload::FileWrite {
+                    path: path
+                        .replace("out.txt", "rewritten.txt")
+                        .replace("notes.txt", "rewritten.txt"),
+                    content: format!("{content}::hooked"),
+                })
+            }
+            HookEvent::PostFileWrite { path, .. } => {
+                self.seen
+                    .lock()
+                    .expect("seen lock should stay available")
+                    .push(format!("post:{path}"));
+                HookDecision::Continue
+            }
+            _ => HookDecision::Continue,
+        }
     }
 }
 
@@ -164,4 +214,81 @@ async fn file_write_respects_permission_denials() {
         .expect_err("write should be denied");
 
     assert!(matches!(error, ToolError::Permission { .. }));
+}
+
+#[tokio::test]
+async fn file_write_runs_pre_and_post_file_write_hooks_on_real_path() {
+    let dir = tempdir().expect("tempdir should exist");
+    let hooks = Arc::new(HookRunner::new());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    hooks.register(
+        "file-write-hook",
+        Arc::new(FileWriteHook {
+            seen: Arc::clone(&seen),
+        }),
+        HookSource::Workspace,
+        10,
+    );
+
+    FileWriteTool::new()
+        .execute(
+            tool_context_with_hooks(dir.path(), hooks),
+            serde_json::json!({ "path": "nested/out.txt", "content": "hello" }),
+        )
+        .await
+        .expect("write should succeed");
+
+    assert!(!dir.path().join("nested/out.txt").exists());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("nested/rewritten.txt"))
+            .expect("rewritten file should exist"),
+        "hello::hooked"
+    );
+    let seen = seen
+        .lock()
+        .expect("seen lock should stay available")
+        .clone();
+    assert_eq!(seen.len(), 2);
+    assert!(seen[0].ends_with("/nested/out.txt:hello"));
+    assert!(seen[1].ends_with("/nested/rewritten.txt"));
+}
+
+#[tokio::test]
+async fn file_edit_runs_file_write_hooks_on_the_edited_path() {
+    let dir = tempdir().expect("tempdir should exist");
+    fs::write(dir.path().join("notes.txt"), "alpha\nbeta\n").expect("file should write");
+    let hooks = Arc::new(HookRunner::new());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    hooks.register(
+        "file-write-hook",
+        Arc::new(FileWriteHook {
+            seen: Arc::clone(&seen),
+        }),
+        HookSource::Workspace,
+        10,
+    );
+
+    FileEditTool::new()
+        .execute(
+            tool_context_with_hooks(dir.path(), hooks),
+            serde_json::json!({ "path": "notes.txt", "old_string": "alpha", "new_string": "omega", "replace_all": false }),
+        )
+        .await
+        .expect("edit should succeed");
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("notes.txt")).expect("original file should remain"),
+        "alpha\nbeta\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rewritten.txt")).expect("rewritten file should exist"),
+        "omega\nbeta\n::hooked"
+    );
+    let seen = seen
+        .lock()
+        .expect("seen lock should stay available")
+        .clone();
+    assert_eq!(seen.len(), 2);
+    assert!(seen[0].ends_with("/notes.txt:omega\nbeta\n"));
+    assert!(seen[1].ends_with("/rewritten.txt"));
 }

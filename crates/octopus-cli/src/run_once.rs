@@ -27,7 +27,7 @@ use crate::automation::{
 use crate::init::initialize_repo;
 use crate::workspace::{handle_agents_slash_command, handle_skills_slash_command};
 
-const DEFAULT_CONFIG_SNAPSHOT_ID: &str = "octopus-cli:minimal";
+const CLI_CONFIG_SNAPSHOT_ID: &str = "octopus-cli:local-run";
 const DEFAULT_TOKEN_BUDGET: u32 = 8_192;
 const SCRIPTED_RESPONSE_ENV: &str = "OCTOPUS_CLI_SCRIPTED_RESPONSE";
 const PERMISSION_MODE_ENV: &str = "OCTOPUS_CLI_PERMISSION_MODE";
@@ -176,7 +176,7 @@ where
                     working_dir: cli.working_dir.clone(),
                     permission_mode: cli.permission_mode,
                     model: cli.model.clone(),
-                    config_snapshot_id: DEFAULT_CONFIG_SNAPSHOT_ID.into(),
+                    config_snapshot_id: CLI_CONFIG_SNAPSHOT_ID.into(),
                     effective_config_hash: format!(
                         "octopus-cli:{}:{:?}",
                         cli.model.0, cli.permission_mode
@@ -469,13 +469,26 @@ fn render_event<W: Write>(event: SessionEvent, out: &mut W) -> Result<(), CliErr
                 "[tool.executed] name={name} duration_ms={duration_ms} error={is_error}"
             )?;
         }
-        SessionEvent::Render { block, lifecycle } => {
+        SessionEvent::Render { blocks, lifecycle } => {
+            for block in blocks {
+                writeln!(
+                    out,
+                    "[render.block] lifecycle={lifecycle:?} kind={:?} payload={}",
+                    block.kind,
+                    serde_json::to_string(&block.payload)
+                        .map_err(|error| CliError::Setup(error.to_string()))?
+                )?;
+            }
+        }
+        SessionEvent::PermissionDecision {
+            name,
+            mode,
+            outcome,
+            ..
+        } => {
             writeln!(
                 out,
-                "[render.block] lifecycle={lifecycle:?} kind={:?} payload={}",
-                block.kind,
-                serde_json::to_string(&block.payload)
-                    .map_err(|error| CliError::Setup(error.to_string()))?
+                "[permission.decision] name={name} mode={mode:?} outcome={outcome:?}"
             )?;
         }
         SessionEvent::Ask { prompt } => {

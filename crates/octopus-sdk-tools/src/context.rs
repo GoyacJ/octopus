@@ -1,13 +1,18 @@
 use std::{path::PathBuf, sync::Arc};
 
-use octopus_sdk_contracts::{AskResolver, EventSink, PermissionGate, SecretVault, SessionId};
+use octopus_sdk_contracts::{
+    AskResolver, EventSink, PermissionGate, SecretVault, SessionId, ToolCallId,
+    ToolPermissionContext,
+};
+use octopus_sdk_hooks::HookRunner;
 pub use octopus_sdk_sandbox::SandboxHandle;
 use octopus_sdk_session::SessionStore;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
-pub struct ToolContext {
+pub struct ToolUseContext {
     pub session_id: SessionId,
+    pub tool_call_id: Option<ToolCallId>,
     pub permissions: Arc<dyn PermissionGate>,
     pub sandbox: SandboxHandle,
     pub session_store: Arc<dyn SessionStore>,
@@ -15,7 +20,18 @@ pub struct ToolContext {
     pub ask_resolver: Arc<dyn AskResolver>,
     pub event_sink: Arc<dyn EventSink>,
     pub working_dir: PathBuf,
+    pub hooks: Arc<HookRunner>,
+    pub permission_context: ToolPermissionContext,
     pub cancellation: CancellationToken,
+}
+
+pub type ToolContext = ToolUseContext;
+
+impl ToolUseContext {
+    #[must_use]
+    pub fn permission_context(&self) -> &ToolPermissionContext {
+        &self.permission_context
+    }
 }
 
 #[cfg(test)]
@@ -26,15 +42,16 @@ mod tests {
     use futures::stream;
     use octopus_sdk_contracts::{
         AskAnswer, AskError, AskPrompt, AskResolver, EventId, EventSink, PermissionGate,
-        PermissionOutcome, SecretValue, SecretVault, SessionEvent, SessionId, ToolCallRequest,
-        VaultError,
+        PermissionMode, PermissionOutcome, SecretValue, SecretVault, SessionEvent, SessionId,
+        ToolCallId, ToolCallRequest, ToolPermissionContext, VaultError,
     };
+    use octopus_sdk_hooks::HookRunner;
     use octopus_sdk_session::{
         EventRange, EventStream, SessionError, SessionSnapshot, SessionStore,
     };
     use tokio_util::sync::CancellationToken;
 
-    use super::{SandboxHandle, ToolContext};
+    use super::{SandboxHandle, ToolUseContext};
 
     struct MockPermissionGate;
     struct MockAskResolver;
@@ -134,8 +151,9 @@ mod tests {
 
     #[test]
     fn tool_context_constructs_with_mock_services() {
-        let context = ToolContext {
+        let context = ToolUseContext {
             session_id: SessionId("session-1".into()),
+            tool_call_id: Some(ToolCallId("tool-1".into())),
             permissions: Arc::new(MockPermissionGate),
             sandbox: SandboxHandle::new(
                 PathBuf::from("/tmp/workspace"),
@@ -147,13 +165,54 @@ mod tests {
             ask_resolver: Arc::new(MockAskResolver),
             event_sink: Arc::new(MockEventSink),
             working_dir: PathBuf::from("/tmp/workspace"),
+            hooks: Arc::new(HookRunner::new()),
+            permission_context: ToolPermissionContext::for_mode(PermissionMode::Default),
             cancellation: CancellationToken::new(),
         };
 
         assert_eq!(context.session_id.0, "session-1");
+        assert_eq!(
+            context.tool_call_id.as_ref().map(|id| id.0.as_str()),
+            Some("tool-1")
+        );
         assert_eq!(context.sandbox.cwd(), PathBuf::from("/tmp/workspace"));
         assert_eq!(context.sandbox.env_allowlist(), ["PATH", "HOME"]);
         assert_eq!(context.working_dir, PathBuf::from("/tmp/workspace"));
         assert!(!context.cancellation.is_cancelled());
+    }
+
+    #[test]
+    fn tool_permission_context_is_a_session_snapshot() {
+        let context = ToolUseContext {
+            session_id: SessionId("session-1".into()),
+            tool_call_id: None,
+            permissions: Arc::new(MockPermissionGate),
+            sandbox: SandboxHandle::new(
+                PathBuf::from("/tmp/workspace"),
+                vec!["PATH".into()],
+                "noop",
+            ),
+            session_store: Arc::new(MockSessionStore),
+            secret_vault: Arc::new(MockSecretVault),
+            ask_resolver: Arc::new(MockAskResolver),
+            event_sink: Arc::new(MockEventSink),
+            working_dir: PathBuf::from("/tmp/workspace"),
+            hooks: Arc::new(HookRunner::new()),
+            permission_context: ToolPermissionContext::for_mode(PermissionMode::Default),
+            cancellation: CancellationToken::new(),
+        };
+
+        let permission = ToolPermissionContext::for_mode(PermissionMode::DontAsk);
+        let context = ToolUseContext {
+            permission_context: permission.clone(),
+            ..context
+        };
+
+        assert_eq!(context.permission_context(), &permission);
+        assert_eq!(context.permission_context().mode, PermissionMode::DontAsk);
+        assert_eq!(
+            context.permission_context().should_avoid_permission_prompts,
+            Some(true)
+        );
     }
 }
