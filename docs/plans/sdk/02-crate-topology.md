@@ -450,6 +450,11 @@ impl SqliteJsonlSessionStore {
 > W5 前置合同：`plugins_snapshot` 优先扩进 `SessionEvent::SessionStarted` 与 `SessionSnapshot`；若 W1 首事件不能扩面，则退回紧随其后的 `SessionEvent::SessionPluginsSnapshot`，但 `SessionSnapshot` 仍必须持有快照。store 持久化、golden fixture、OpenAPI/schema 对齐在同一批次继续跟进，不能留到 session 尾部小补丁。
 >
 > W5 Task 10 当前落地：`append_session_started(..., Some(snapshot))` 走首事件内嵌分支，`append_session_started(..., None)` + `append(SessionPluginsSnapshot { ... })` 走次事件分支；`plugins_snapshot_stability` 合同测试同时锁住 JSONL、SQLite 投影和 reopen replay 的恢复结果。
+>
+> Post-14 residual closure 冻结：
+> - `implement now`：`RenderLifecycle` 不能只停在类型层；`SessionEvent::Render` 与 tool writeback 必须覆盖 `OnToolUse / OnToolProgress / OnToolRejected / OnToolError` 的真实 runtime emission。
+> - `implement now`：若要补 `permission_decision`、trace / replay 关键字段，必须同批扩 `octopus-sdk-contracts` 与 runtime emission；不接受只加占位字段。
+> - `supported compat`：`SessionEvent::ToolExecuted` 可以继续保留为粗粒度摘要事件，但不能再充当唯一 tool lifecycle 真相源。
 
 #### 契约不变量
 
@@ -1083,6 +1088,13 @@ impl DurableScratchpad {
 > Post-W8 live hardening 冻结：`register_builtins()`、`builtin_tool_catalog()` 与共享 capability projection 不允许继续把 stub tool 视为健康 live capability。若没有共享层显式建模 metadata-only builtin，则 `web_search`、`skill`、`task_list`、`task_get` 以及未注入 `TaskFn` 的 `task` 都必须保持 non-live。`skill` 资产的 catalog 暴露继续由 `octopus-infra` 的 skill inventory 负责，不等于 builtin runtime tool 仍可执行。
 >
 > formal closeout 补记：当前真正留在 deferred bucket 的 builtin 只剩 `web_search / skill / task_list / task_get`；`task` 已由 `octopus-platform::runtime_sdk::subagent_runtime::build_live_task_fn()` 持有 live owner。下一轮若要把这 4 项重新带回 live scope，必须先在共享层明确 runtime owner / transport source，再同批更新 `octopus-sdk-tools::{builtin/mod.rs,builtin/catalog.rs}`、`octopus-platform::runtime_sdk::builder`、shared capability projection、capability-facing contract/desktop fixtures 与控制文档。
+>
+> Post-14 residual closure 冻结：
+> - `implement now`：`ToolRegistry` 是 canonical inventory，不等于 request-time visible tool surface。
+> - `hide from live`：主循环与 provider request assembly 不得继续对全量 registry 直接 `schemas_sorted()`；未 discovery / exposure 的 deferred capability 不能进入 live tools block。
+> - `implement now`：`ToolSearch / deferred tools / discovered-exposed state` 的 owner 在 shared layer，不得下放到 `server / desktop / cli` 局部补丁。
+> - `supported compat`：`registry.rs::shim_tool_context()` 只能收窄为 shim / directory / test path 的 compat 入口，不能再被视为 live execution owner。
+> - `implement now`：`ToolResult.render` 只是 tool writeback 的一个入口，不是全部 lifecycle。
 
 > W4 Task 9 回填：`SystemPromptBuilder` 已落 `role / tools_guidance / process / safety / output` 五段内置段生成器；`tools_guidance` 只消费 `ToolRegistry::schemas_sorted()` 的 `name / description`，不把 `input_schema` 写进 system prompt。
 >
@@ -1162,6 +1174,10 @@ impl ApprovalBroker {
 ```
 
 > W4 Task 4 回填：`DefaultPermissionGate::check()` 按 `deny → allow → bypass → plan → ask → mode fallback` 执行 `canUseTool` 决策链；`ApprovalBroker` 负责 `SessionEvent::Ask` 发射与 `AskAnswer.option_id -> PermissionOutcome` 映射。
+>
+> Post-14 residual closure 冻结：
+> - `implement now`：当前 `PermissionContext` 只是最小面；下一 tranche 需要对齐 `ToolPermissionContext`、rules-by-source bucket、non-interactive modes 与可审计 `permission_decision`。
+> - `implement now`：permission contract 不得脱离 tool execution governance 单独演进；deny / ask / retry / auth 的事件与 trace 必须同批落地。
 
 ### 2.8 `octopus-sdk-sandbox`（Level 2）
 
@@ -1235,6 +1251,10 @@ pub fn default_backend_for_host() -> Arc<dyn SandboxBackend>;
 > W4 Task 5 回填：`sdk-tools::ToolContext.sandbox` 继续叫 `SandboxHandle`，但具体类型改由 `octopus-sdk-sandbox` 提供，现有 call-site 通过 `cwd()` / `env_allowlist()` getter 保持兼容。
 >
 > W4 Task 6 回填：`NoopBackend` 走 `tokio::process::Command + env_clear + allowlist env`，`SeatbeltBackend` 在 cwd 下生成 `.octopus-seatbelt.sb` 并用 `sandbox-exec -f` 执行，`BubblewrapBackend` 用 `bwrap --die-with-parent --new-session --unshare-all` 封装最小 Linux 沙箱；`default_backend_for_host()` 在 macOS/Linux 返回真实后端，在 Windows 回退 `NoopBackend` 并记录 `TODO(W8)` warn。
+>
+> Post-14 residual closure 冻结：
+> - `implement now`：sandbox spec 不是孤立能力；必须和 permission、hook、execution trace 一起形成 provenance / egress / denial contract。
+> - `hide from live`：缺失的 sandbox provenance 或 egress policy 不能继续由 host 侧兜底补丁补齐。
 
 ### 2.9 `octopus-sdk-hooks`（Level 2）
 
@@ -1470,6 +1490,10 @@ impl AgentRegistry {
 pub const FILE_REF_THRESHOLD: usize = 4_096;
 ```
 
+> Post-14 residual closure 冻结：
+> - `implement now`：当前 `OrchestratorWorkers` 与 `GeneratorEvaluator` 只是最小执行器；下一 tranche 要补 `coordinator / worker` role surface、resume metadata、parent-child summary / replay contract。
+> - `supported compat`：现有 fan-out / fan-in 和 evaluator loop 可以继续作为底层执行骨架，但不能再当成全部 subagent 公共合同。
+
 ### 2.11 `octopus-sdk-plugin`（Level 2）
 
 **职责**：Plugin Manifest / Registry / Lifecycle 三层。
@@ -1654,6 +1678,10 @@ pub fn new_diff(/* ... */) -> RenderBlock;
 // 其余 6 种同理
 ```
 
+> Post-14 residual closure 冻结：
+> - `implement now`：`RenderEmitter` 的 lifecycle 不是只有 `OnToolResult`；assistant/tool/writeback 都要能发 `RenderLifecycle`。
+> - `implement now`：`§6` 只登记 `kind`；真正的 writeback phase contract 在 `RenderLifecycle + SessionEvent::Render`，不能把两者混为一张表。
+
 ### 2.13 `octopus-sdk-observability`（Level 3）
 
 **职责**：Tracing / usage ledger / replay。
@@ -1683,6 +1711,10 @@ impl ReplayTracer {
     ) -> Result<(), ReplayError>;
 }
 ```
+
+> Post-14 residual closure 冻结：
+> - `implement now`：`TraceSpan { name, fields }` 是当前最小面，不是目标终态；下一 tranche 需要 `trace_id / span_id / parent_span_id / agent_role / input_hash / permission_decision / model_version`。
+> - `hide from live`：在 `session -> tool -> subagent` 追踪链补齐前，replay 不能宣称已具备端到端 tracing contract。
 
 ### 2.14 `octopus-sdk-core`（Level 4）
 
@@ -1753,6 +1785,11 @@ impl AgentRuntimeBuilder {
 
 > Post-W8 live hardening 冻结：builder 继续只消费注入物，不在 `build()` 内自行 discover；但 `octopus-platform` 作为 owner，必须在进入 builder 前先完成 live gating。也就是：只有真实可执行的 builtin tools、已跑完 lifecycle 的 plugin runtime registrations、以及已注入 `TaskFn` 的 `task` 才能进入 live runtime。缺失能力不能再靠下游 transport / desktop 本地过滤掩盖。
 
+> Post-14 residual closure 冻结：
+> - `implement now`：`AgentRuntime` / `submit_turn()` 的 owner 是 session/query 主循环；固定 `MAX_BRAIN_LOOP_ITERATIONS` 的最小脑循环不是目标终态。
+> - `implement now`：request-time tool exposure、stop hook continuation、token budget continuation、overflow / retry policy 都归这里统一收口。
+> - `hide from live`：`server / desktop / cli` 不得各自补本地 query loop 或 continuation patch。
+
 ### 2.15 `octopus-sdk`（Level 5，门面）
 
 **职责**：业务唯一入口；受控 re-export。**禁止**在本 crate 内定义新 trait / struct / fn；仅允许 `pub use` 与 `//!` 文档。
@@ -1804,6 +1841,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
 - 责任边界：`octopus-platform` 持有 `AgentRuntimeBuilder` 的组装权，并在 `runtime_sdk/*` 内完成 SDK event → legacy runtime DTO 投影；`octopus-server` / `octopus-desktop` 只消费 `PlatformServices`，不直接持有 `AgentRuntime`。
 - Post-W8 hardening ownership：builtin tool live gating、stub-backed model family 收口、plugin discovery/snapshot bootstrap、`TaskFn` live injection 都归 `runtime_sdk/*`。`octopus-server` / `octopus-desktop` / `octopus-cli` 不得各自维护本地 stub denylist、模型补丁表或空 plugin snapshot 修补逻辑。
+- Post-14 residual closure ownership：`runtime_sdk/*` 还负责 request-time tool surface、query loop policy、tool execution governance 与 `coordinator / worker` live gating；`server / desktop / cli` 不得各自补同义逻辑。
 - deferred capability re-entry checklist：
   - shared runtime ownership 先改 `runtime_sdk::{builder,plugin_boot,subagent_runtime}`，不要从 transport/UI 倒推 capability live 化。
   - shared truth source 同批改 `octopus-sdk-tools` / `octopus-sdk-model` / `octopus-sdk-plugin` 与 `registry_bridge::{builtins,snapshot,overrides}`，避免 catalog、snapshot、defaults 给出不同答案。
@@ -1907,6 +1945,9 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 14 | 2026-04-21 | `octopus-sdk-tools::partition_tool_calls` | `docs/sdk/03-tool-system.md §3.2` / future runtime orchestration contract | `partition_tool_calls.resource_bucket` 延后 | W3 只冻结"工具级"并发分区：读工具按 `is_concurrency_safe` 合批，写工具串行；资源级串行桶 `partition_tool_calls.resource_bucket` 明确延到 W4，由 `HookRunner / PermissionPolicy` 外层兜底，当前无需改 OpenAPI。 | `no-op` | `open` |
 | 15 | 2026-04-21 | `octopus-sdk-sandbox::default_backend_for_host` | `docs/sdk/06-permissions-sandbox.md §6.10` / Windows host runtime contract | Windows 沙箱后端延后 | W4 只落 `Noop / Seatbelt / Bubblewrap` 三后端；Windows 真实 AppContainer/Job Object 仍未实现，当前公共面固定为 `NoopBackend` fallback + `TODO(W8)` warning。 | `no-op` | `open` |
 | 16 | 2026-04-23 | Post-W8 live hardening (`octopus-sdk-tools` / `octopus-sdk-model` / `octopus-sdk-plugin` / `octopus-platform`) | `/api/v1/runtime/*` capability-facing DTO / `packages/schema/src/**` | live-only vs metadata-only capability split 未对外公开 | 当前实现将按 shared-layer policy 把 stub builtin tools、stub-backed model families、空 plugin snapshot 从 live runtime 收口；在 Task 6 前，OpenAPI/schema 仍缺“metadata 存在但 live 不可执行”的显式表达。 | `align-openapi` | `open` |
+| 17 | 2026-04-23 | `octopus-sdk-contracts::{RenderLifecycle, SessionEvent::Render}` / `octopus-sdk-core::{brain_loop,tool_dispatch}` | `contracts/openapi/src/components/schemas/runtime.yaml` / `packages/schema/src/**` runtime render / transcript shapes | tool lifecycle writeback 缺口 | 当前 contracts 已有 `OnToolUse / OnToolProgress / OnToolRejected / OnToolError`，但 live path 主要仍只在 assistant text 或 `ToolResult.render` 时回写；OpenAPI/schema 也缺等价的 render phase / transcript contract。 | `align-openapi` | `open` |
+| 18 | 2026-04-23 | `octopus-sdk-observability::TraceSpan` / `octopus-sdk-contracts::{SessionEvent,SubagentSummary}` | `/api/v1/runtime/*` trace / replay / subagent summary DTO | `permission_decision + trace ids + parent/worker replay metadata` 缺口 | 当前 tracer 只有 `name + fields`，session/subagent 侧也缺 `trace_id / span_id / parent_span_id / agent_role / permission_decision / model_version` 的统一对外合同；replay 仍无法稳定串起 `session -> tool -> subagent`。 | `align-openapi` | `open` |
+| 19 | 2026-04-23 | `octopus-sdk-core::brain_loop` / `octopus-sdk-tools::ToolRegistry` / `octopus-platform::runtime_sdk::registry_bridge` | `/api/v1/runtime/*` tool surface / capability projection DTO | request-time tool exposure / `ToolSearch` / deferred visible state 缺口 | 当前 live request 仍直接全量 `tools.schemas_sorted()`，但对外 DTO 没有“已发现未暴露 / 已暴露 / metadata-only”的显式状态模型；后续 `ToolSearch` 与 deferred capability 闭环无法稳定对外表达。 | `align-openapi` | `open` |
 
 **处理方式取值**：`align-openapi`（优先调整 OpenAPI）/ `align-sdk`（调整 SDK）/ `dual-carry`（短期双写 + deadline）/ `no-op`（仅命名差异，文档标注即可）。
 
@@ -1929,6 +1970,8 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 8 | `record` | 表格 / 档案行 | `fields: Map<String, Value>` | `sdk-ui-intent` | W4 |
 | 9 | `error` | 错误 | `title, detail, hint` | `sdk-ui-intent` | W4 |
 | 10 | `raw` | 逃生舱 | `value: JsonValue` | `sdk-ui-intent` | W4 |
+
+> Post-14 residual closure 冻结：本表是 `RenderKind` 登记表，不是 lifecycle 清单。assistant/tool/writeback phase 必须继续走 `RenderLifecycle + SessionEvent::Render` 的合同，不允许把生命周期信息偷塞进 `kind` 命名。
 
 ---
 
@@ -2031,3 +2074,4 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-23 | formal closeout 基线对齐：标题与 `§8` 显式区分“目标矩阵”与“live workspace 现状”；补记 `octopus-core / telemetry` 仍是 workspace 额外保留 crate，`telemetry` 的旧注记改为“当前无外部引用，待 `13` Task 2 冻结归属”。 | Codex |
 | 2026-04-23 | Task 2 收口：`§3` / `§8` 改成 formal closeout 后的现行控制面，确认 `octopus-core` 是共享业务 core crate；`crates/telemetry` 从 workspace 目标矩阵移除并登记退役，目录口径收口为 `21` 个 crate。 | Codex |
 | 2026-04-23 | Task 4 冻结 deferred capability 边界：`§2.3 / §2.4 / §2.11 / §3.1` 追加 formal closeout 补记，明确三类 deferred capability 的当前 owner、hidden/decl-only/unsupported 状态，以及下一轮 live re-entry 必须触达的 shared-layer / contract / desktop / docs 触点。 | Codex |
+| 2026-04-23 | Task 14 回填：`§2.1 / §2.4 / §2.7 / §2.8 / §2.10 / §2.12 / §2.13 / §2.14 / §3.1 / §5 / §6` 补记 residual closure 冻结；明确 query loop、tool execution governance、render-writeback lifecycle、coordinator/worker、request-time tool exposure 与 compat/shim 的 owner 与 contract 差异。 | Codex |

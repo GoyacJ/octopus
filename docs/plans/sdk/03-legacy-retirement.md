@@ -244,6 +244,34 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
 - 仓内除 crate 自身外无 Rust 代码引用；也未进入 workspace `default-members`。
 - 结论：不并入 SDK / 平台 / infra，直接按孤立 legacy helper 退役；无替代位置。
 
+### 7.10 `minimal entrypoints`（Task 1 freeze：`test-only` / `hide from live`）
+
+> Post-14 residual closure 回填：Task 1 已冻结这些条目的 live policy。`RuntimeSdkDeps::minimal(...)` 与 `octopus-cli:minimal` 只允许保留为 `test-only`；crate-level minimal scaffold 注记必须退出 live 控制面。
+
+| 旧入口 / 注记 | 主要符号 | 替代位置 | 迁移周 | 状态 |
+|---|---|---|---|---|
+| `crates/octopus-platform/src/runtime_sdk/builder.rs` | `RuntimeSdkDeps::minimal(...)` | `octopus-platform::runtime_sdk::RuntimeSdkFactory::build_live(...)` + 显式 `RuntimeSdkDeps` live 组装 | Post-W8 | test-only |
+| `crates/octopus-cli/src/run_once.rs` | `DEFAULT_CONFIG_SNAPSHOT_ID = "octopus-cli:minimal"` | `octopus-cli::run_once` 的 real config snapshot / runtime boot 路径 | Post-W8 | test-only |
+| `crates/octopus-sdk-contracts/src/lib.rs` | `W1 Task 1 intentionally keeps this crate as a minimal scaffold` 注记 | `docs/plans/sdk/02-crate-topology.md §2.1` 的正式公共面合同 | Post-W8 | hide from live |
+| `crates/octopus-sdk-session/src/lib.rs` | `W1 Task 1 intentionally keeps this crate as a minimal scaffold` 注记 | `docs/plans/sdk/02-crate-topology.md §2.2` 的正式 store / replay 合同 | Post-W8 | hide from live |
+| `crates/octopus-sdk-model/src/lib.rs` | `W2 Task 1 intentionally keeps this crate as a minimal scaffold` 注记 | `docs/plans/sdk/02-crate-topology.md §2.3` 的正式 model/catalog/router 合同 | Post-W8 | hide from live |
+
+### 7.11 `session compatibility`（Task 1 freeze：`supported compat`）
+
+| 兼容路径 | 主要符号 | 替代位置 | 迁移周 | 状态 |
+|---|---|---|---|---|
+| `crates/octopus-sdk-session/src/jsonl.rs` | legacy runtime envelope 读取：`SkipLegacyRuntimeEnvelope` / `looks_like_legacy_runtime_envelope(...)` | `octopus-sdk-session` 受支持 compat reader 边界 | Post-W8 | supported compat |
+| `crates/octopus-sdk-session/src/jsonl.rs` | legacy event wrapper / synthetic id：`parse_legacy_event_wrapper(...)` / `legacy_event_id(...)` | `octopus-sdk-session` JSONL 兼容回放路径 | Post-W8 | supported compat |
+| `crates/octopus-sdk-session/src/sqlite/schema.rs` | legacy SQLite table migration：`migrate_legacy_tables(...)` / `sessions -> runtime_session_store_sessions` / `events -> runtime_session_store_events` | `octopus-sdk-session` schema bootstrap | Post-W8 | supported compat |
+
+### 7.12 `runtime shims`（Task 1 freeze：`hide from live` / `supported compat`）
+
+| shim 路径 | 主要符号 | 替代位置 | 迁移周 | 状态 |
+|---|---|---|---|---|
+| `crates/octopus-sdk-tools/src/registry.rs` | `shim_tool_context()` | `octopus-sdk-core::tool_dispatch` 驱动的 runtime-owned `ToolContext` | Post-W8 | hide from live |
+| `crates/octopus-platform/src/runtime_sdk/registry_bridge/snapshot.rs` | `hidden_builtin_model(...)` 驱动的 `configuredModels` unsupported compat 投影 | `octopus-platform::runtime_sdk::registry_bridge` 的显式 compat projection contract | Post-W8 | supported compat |
+| `crates/octopus-platform/src/runtime_sdk/registry_bridge/builtins.rs` | hidden unsupported builtin metadata / `configuredModels` compat catalog | `octopus-platform::runtime_sdk::registry_bridge::{builtins,snapshot,overrides}` 统一 owner | Post-W8 | supported compat |
+
 ---
 
 ## 8. 守护扫描（自动核对本文档的完整性）
@@ -310,3 +338,4 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 | 2026-04-22 | W7 Weekly Gate 收尾：11 个 legacy crate 的删除态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、desktop 全量测试、legacy grep、`ls crates/` 与 Phase 4/8 治理脚本复核通过，W7 目录级退役状态冻结。 | Codex |
 | 2026-04-22 | W8 Weekly Gate 收尾：11 个 legacy crate 目录删除态经 `ls crates/` 复核继续成立；`runtime/sessions/*.json` 生产路径继续 0 命中；repo 级单文件 ≤ 800 行门禁已清零。 | Codex |
 | 2026-04-23 | formal closeout Task 2：补记孤立 `crates/telemetry` 的退役登记、守护扫描与完成记录；结论为“无仓内活调用方、无替代位置，直接删除目录”。 | Codex |
+| 2026-04-23 | Task 14 回填：`§7` 新增 `minimal entrypoints`、`session compatibility`、`runtime shims` 三个审计区；把 `RuntimeSdkDeps::minimal`、`octopus-cli:minimal`、legacy session 兼容读取与 runtime shim 从过渡审计项改写为显式冻结状态：`test-only`、`hide from live`、`supported compat`。 | Codex |

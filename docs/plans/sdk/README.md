@@ -23,6 +23,7 @@
 | `11-week-8-cleanup-and-split.md` | W8：文件级拆分、`octopus-persistence` 上线、legacy 文件退场 | `done` |
 | `12-post-w8-capability-hardening.md` | Post-W8：收口 live runtime 仍暴露的 stub tools / stub-backed models / plugin live bootstrap，并在稳定后回填 contracts | `done` |
 | `13-finalization-and-deferred-capabilities.md` | 收口 SDK 重构 formal completion：对齐控制文档、解决 crate / ≤ 800 行缺口，并冻结 deferred capability 边界 | `done` |
+| `14-residual-capability-closure.md` | 下一 tranche：收口未实现 capability、最小化 scaffold 与 compatibility shim，统一 live/runtime/contract 真相源 | `in_progress` |
 
 > 本索引随周计划产出逐步更新 `状态`。预登记周计划可保持 `pending` 且暂未建文件；文件创建后按 `draft → in_progress → blocked/done` 流转。
 >
@@ -49,4 +50,4 @@
 
 ---
 
-**最后更新**：2026-04-23（`13-finalization-and-deferred-capabilities.md` 已完成；SDK 重构 formal closeout 已收口为 `done`）
+**最后更新**：2026-04-23（`14-residual-capability-closure.md` 已转入 `in_progress`；当前控制面已冻结 prompt surface / model catalog / plugin bootstrap / file-write / long-horizon / compat 清单的收口要求）
