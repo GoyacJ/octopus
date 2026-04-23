@@ -8,29 +8,28 @@
 
 ## Status
 
-状态：`draft`
+状态：`done`
 
 ## Active Work
 
-当前 Task：`Task 1 · 控制面与退出条件复核`
+当前 Task：`完成 · SDK formal closeout 与 deferred capability freeze`
 
-当前 Step：`Step 1 · 对齐 README / 00 / 02 / 12 的现状口径`
+当前 Step：`Exit Gate satisfied · 状态 / checkpoint / 变更日志已收口`
 
 ### Pre-Task Checklist（起稿阶段）
 
-- [ ] 已复核 `12-post-w8-capability-hardening.md` 的完成 checkpoint 与 live surface freeze。
-- [ ] 已复核 `00-overview.md §5` 当前 DoD 剩余缺口。
-- [ ] 已复核 `02-crate-topology.md` 与 `ls crates/` 的 crate 集合是否一致。
-- [ ] 已复核 `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` 的现状输出。
-- [ ] 已识别本 tranche 是否触发 `docs/sdk/README.md` `## Fact-Fix 勘误`。
-- [ ] 已识别 `octopus-core / telemetry` 的 owner / target state 是否明确。
-- [ ] 当前 git 工作树状态已知；本批次 diff 计划 ≤ 800 行。
-- [ ] 已识别所有 `Stop if:` 条款。
+- [x] 已复核 `12-post-w8-capability-hardening.md` 的完成 checkpoint 与 live surface freeze。
+- [x] 已复核 `00-overview.md §5` 当前 DoD 剩余缺口。
+- [x] 已复核 `02-crate-topology.md` 与 `ls crates/` 的 crate 集合是否一致。
+- [x] 已复核 `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` 的现状输出。
+- [x] 已识别本 tranche 是否触发 `docs/sdk/README.md` `## Fact-Fix 勘误`。
+- [x] 已识别 `octopus-core / telemetry` 的 owner / target state 是否明确。
+- [x] 当前 git 工作树状态已知；本批次 diff 计划 ≤ 800 行。
+- [x] 已识别所有 `Stop if:` 条款。
 
 Open Questions：
 
-- `crates/telemetry` 是 refactor 目标态中的保留 crate，还是应并入 / 退役后从目标 crate 集合中删除。
-- `docs/sdk/*` 规范文本是否需要对 non-live / decl-only capability 边界做 Fact-Fix，还是控制面文档补充即可。
+- 无。
 
 ## Goal
 
@@ -65,7 +64,7 @@ Open Questions：
 
 | # | 风险 / 问题 | 决策建议 | 触发 Stop Condition |
 |---|---|---|---|
-| R1 | `00-overview.md` 的 target matrix 只写了 `15 + 5 = 20`，但 live crates 还多出 `octopus-core` 与 `telemetry`；如果这组额外 crate 的归属不收口，formal completion 的 crate DoD 会一直悬空。 | `octopus-core` 按已知业务共享 crate 收口到控制面；`telemetry` 再决定保留、并入还是退役。 | #1 / #2 |
+| R1 | `telemetry` 退役后若仍存在隐式引用、workspace 残留或控制文档漏改，formal completion 的 crate gate 仍会失真。 | 以目录实盘、Cargo/default-members 与 `00 / 02 / 03` 四处一致为准；任一处不一致即视为 Task 2 未完成。 | #1 / #2 |
 | R2 | 直接在 `support.rs` 拆文件时若顺手改了 runtime 行为，会把门禁修复和语义变更混在一起。 | 只做 test support 拆分；任何 contract 改动都回退。 | #3 |
 | R3 | deferred capability 若只写“以后再说”，下一轮实现仍会重复争论 live / non-live / decl-only 边界。 | Task 4 必须写 owner、entry criteria 和 contract touchpoints。 | #4 / #5 |
 | R4 | 若 `docs/sdk/*` 与当前冻结边界冲突，但不走 Fact-Fix，就会留下两份真相源。 | 一旦命中规范冲突，只能追加 `docs/sdk/README.md` `## Fact-Fix 勘误`。 | #5 |
@@ -74,12 +73,11 @@ Open Questions：
 ## 承 Post-W8 的现状
 
 - `12-post-w8-capability-hardening.md` 已完成：live runtime builder 已接上真实 `TaskFn`、plugin live bootstrap，stub-only builtin tools 与 stub-backed model families 已从 live surface 收口。
-- 当前 workspace gate 状态稳定：`cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 已通过；formal closeout 的主要缺口不在测试失败，而在控制文档和 ≤ 800 行硬门禁。
-- 当前 formal completion 仍有明确缺口：
-  - `docs/plans/sdk/README.md` 已新增本计划为 `draft`，说明 SDK 重构的 formal closeout 还未完成；`00` 的 DoD #9 仍未满足。
-  - `docs/plans/sdk/00-overview.md §5` 仍把目标 crate 集合写成 `15 个 SDK crate + 5 个业务 crate（共 20 个目录）`，但当前 `crates/` 目录实际是 `22` 个：额外还有 `crates/octopus-core` 与 `crates/telemetry`。
-  - `docs/plans/sdk/02-crate-topology.md §8` 已把 `octopus-core` 和 `telemetry` 写进 workspace members，但 `00-overview.md` 的 DoD 和矩阵口径没有同步；其中 `telemetry` 的“W6 被 observability 引用后评估是否并入”注记已过时，当前仓内没有它的外部引用。
-  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` 仍为 `812` 行；同目录已经有 `mod.rs`、`support_runtime.rs`（`487` 行）和 `support_workspace.rs`（`357` 行），但 repo 级 ≤ 800 行硬门禁仍命中 `support.rs`。
+- 当前 workspace gate 已复跑通过：`cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与 repo 级 `> 800` 行扫描全部通过。
+- 当前 formal completion 已收口：
+  - `docs/plans/sdk/README.md` 已把 `00 / 01 / 02 / 03 / 13` 统一收口为 `done`；`00-overview.md` 已补 `Completed 2026-04-23`，DoD #9 已满足。
+  - `docs/plans/sdk/00-overview.md §2 / §5` 与 `docs/plans/sdk/02-crate-topology.md §3 / §8` 已对齐到 `21` 个 crate 目录：`15` 个 SDK crate + `5` 个业务 crate + `1` 个共享业务 core crate `octopus-core`；孤立且无活调用方的 `crates/telemetry` 已登记退役并从 workspace 实盘删除。
+  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` 已收口为薄 re-export 门面；repo 级 ≤ 800 行硬门禁已不再命中。
 - 当前 deferred capability 的已知冻结面：
   - `web_search`、`skill`、`task_list`、`task_get` 已从 live runtime registry 和 live builtin catalog 隐藏，仍保持 non-live。
   - plugin `SkillDecl / ModelProviderDecl / McpServerDecl` 仍是 declaration-only registry data，不伪装成 live runtime capability。
@@ -95,11 +93,11 @@ Open Questions：
 
 ## 退役登记
 
-> 本 tranche 默认不新增 legacy 退役；`octopus-core` 已在 `03-legacy-retirement.md §7.7` 明确为保留 crate，仅 `telemetry` 可能触发退役或并入决策。
+> 本 tranche 默认不新增 legacy 退役；`octopus-core` 已在 `03-legacy-retirement.md §7.7` 明确为保留 crate。Task 2 已确认 `telemetry` 为孤立 legacy helper，并登记退役。
 
 | 潜在退役项 | `03` 回填位置 | 当前结论 | 触发条件 |
 |---|---|---|---|
-| `crates/telemetry` | `docs/plans/sdk/03-legacy-retirement.md §7`（新增对应小节） | 待 `Task 2` 冻结：保留并入目标矩阵，或登记退役。 | Task 2 选择 retire |
+| `crates/telemetry` | `docs/plans/sdk/03-legacy-retirement.md §7.9` + `§9` | 已退役；目录已删除，不再计入 workspace 目标矩阵。 | 已完成 |
 | `crates/octopus-core` | `docs/plans/sdk/03-legacy-retirement.md §7.7` | 已知保留，不在本 tranche 内讨论退役。 | 不适用 |
 | `workspace_runtime` 测试支撑旧文件边界 | 不涉及 `03` | 只拆分文件，不视为 legacy 退役。 | 不适用 |
 
@@ -126,7 +124,7 @@ Open Questions：
 
 ### Task 1: 复核 formal completion 差口并对齐控制面基线
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/README.md`
@@ -153,7 +151,7 @@ Step 2:
 
 ### Task 2: 对齐 `octopus-core / telemetry` 的控制面归属并消掉 crate 拓扑歧义
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/00-overview.md`
@@ -181,7 +179,7 @@ Step 2:
 
 ### Task 3: 拆分 `workspace_runtime` 测试支撑文件并过掉 ≤ 800 行硬门禁
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `crates/octopus-server/src/workspace_runtime/tests/support.rs`
@@ -208,7 +206,7 @@ Step 2:
 
 ### Task 4: 冻结 deferred capability 的下一轮边界
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/00-overview.md`
@@ -235,7 +233,7 @@ Step 2:
 
 ### Task 5: 跑 formal closeout gate 并把 SDK 重构状态收口到 `done`
 
-Status: `pending`
+Status: `done`
 
 Files:
 - Modify: `docs/plans/sdk/13-finalization-and-deferred-capabilities.md`
@@ -266,3 +264,140 @@ Step 2:
 |---|---|---|
 | 2026-04-23 | 首稿：新增 SDK 正式收口与 deferred capability 边界计划，聚焦 control-plane 对齐、`telemetry` 归属、`support.rs` ≤ 800 行门禁和 deferred capability 下一轮边界冻结。 | Codex |
 | 2026-04-23 | 审计修订：按当前实现状态把 crate 差口从单一 `telemetry` 修正为 `octopus-core + telemetry`，补记 workspace gate 已通过、`support.rs` 仍是唯一 >800 行命中，并把 deferred capability 细化为 `hidden runtime tools / decl-only plugin entries / config-visible but runtime-unsupported hidden models` 三类。 | Codex |
+| 2026-04-23 | Task 1 完成：同步 worktree 中的 `README / 00 / 02 / 12` 控制面基线，显式记录 formal closeout 仍被 `octopus-core / telemetry` 归属与 `support.rs` 行数门禁阻塞，并把本计划切到 `in_progress`。 | Codex |
+| 2026-04-23 | Task 2 完成：确认 `octopus-core` 为共享业务 core crate；确认 `telemetry` 为无活调用方、未进入 `default-members` 的孤立 legacy helper，补 `03-legacy-retirement.md` 后直接删除目录，并把 crate 控制面收口为 `15 + 5 + 1 = 21`。 | Codex |
+| 2026-04-23 | Task 3 完成：将 `support.rs` 改为薄 re-export 门面，复用 `support_runtime.rs` / `support_workspace.rs` 承载具体 helper；同步清理 `mod.rs`、`tests.rs`、`transport.rs` 的冗余导入与重复 helper，确保 `cargo test -p octopus-server` 通过且全仓不再命中 `> 800` 行。 | Codex |
+| 2026-04-23 | Task 4 完成：把 deferred capability 的三类冻结边界与下一轮 live re-entry 触点同步写入 `00-overview.md`、`02-crate-topology.md`、`12-post-w8-capability-hardening.md`，明确 shared-layer owner、contract/desktop/docs 的跟进顺序。 | Codex |
+| 2026-04-23 | Task 5 完成：复跑 `cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`pnpm -C apps/desktop test` 与 repo 级 `> 800` 行扫描；补齐 worktree 的前端依赖后确认全量 gate 通过，并将 `README` / `00-overview.md` / 本文件统一收口为 `done`。 | Codex |
+
+## Checkpoints
+
+## Checkpoint 2026-04-23 14:22
+
+- Week: Finalization
+- Batch: Task 1 Step 1 -> Task 1 Step 2
+- Completed:
+  - 将 `13-finalization-and-deferred-capabilities.md` 与 `docs/plans/sdk/README.md` 同步进 worktree，并把 `12-post-w8-capability-hardening.md` 的索引状态收口为 `done`
+  - 在 `00-overview.md` 显式补记 W1–W8 主线已完成但 formal closeout 仍挂在 `13`；DoD、风险登记与目标矩阵现状同步暴露 `22` 个 crate 目录这一差口
+  - 在 `02-crate-topology.md` 显式区分“目标矩阵”与“live workspace 现状”，并把 `telemetry` 的过时注记改成“当前无外部引用，待 Task 2 冻结归属”
+  - 在 `12-post-w8-capability-hardening.md` 补记 tranche 边界：capability hardening 已完成，formal closeout / crate 拓扑 / `support.rs` 门禁转交 `13`
+- Files changed:
+  - `docs/plans/sdk/README.md` (modified)
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/12-post-w8-capability-hardening.md` (modified)
+  - `docs/plans/sdk/13-finalization-and-deferred-capabilities.md` (added/modified)
+- Verification:
+  - `rg -n "13-finalization|Completed|15 个 SDK crate|5 个业务 crate|20 个目录|octopus-core|telemetry" docs/plans/sdk/{README.md,00-overview.md,02-crate-topology.md,12-post-w8-capability-hardening.md}` -> pass
+  - `find docs/plans/sdk -maxdepth 1 -type f -name '[0-9][0-9]-*.md' | sort` -> pass
+  - `rg '^\| \`[0-9]{2}-' docs/plans/sdk/README.md` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - `octopus-core / telemetry` 的最终控制面归属仍未冻结
+  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` 仍为 `812` 行
+- Next:
+  - Task 2 Step 1
+
+## Checkpoint 2026-04-23 15:07
+
+- Week: Finalization
+- Batch: Task 2 Step 1 -> Task 2 Step 2
+- Completed:
+  - 审计 `octopus-core` 的业务侧依赖面，确认它是共享业务 core crate，不属于 SDK 目标矩阵外的异常目录
+  - 审计 `crates/telemetry` 后确认其仅剩孤立 helper 实现、未进入 `default-members`、仓内无活 Rust 调用方，因此按 formal closeout 直接退役
+  - 同步更新 `00-overview.md`、`02-crate-topology.md`、`03-legacy-retirement.md`，把 crate 口径收口为 `15` 个 SDK crate + `5` 个业务 crate + `1` 个共享业务 core crate `octopus-core`，共 `21` 个目录
+  - 删除 `crates/telemetry` 目录
+- Files changed:
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/03-legacy-retirement.md` (modified)
+  - `docs/plans/sdk/13-finalization-and-deferred-capabilities.md` (modified)
+  - `crates/telemetry/Cargo.toml` (deleted)
+  - `crates/telemetry/src/lib.rs` (deleted)
+- Verification:
+  - `find crates -maxdepth 1 -mindepth 1 -type d | sort` -> pass (`21` dirs; no `crates/telemetry`)
+  - `test -d crates/telemetry && echo exists || echo removed` -> `removed`
+  - `rg -n "octopus-core|telemetry" Cargo.toml crates docs/plans/sdk docs/sdk` -> pass (`octopus-core` 仅保留业务共享依赖；`telemetry` 只剩文档/历史记录命中)
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` 仍为 `812` 行
+- Next:
+  - Task 3 Step 1
+
+## Checkpoint 2026-04-23 15:38
+
+- Week: Finalization
+- Batch: Task 3 Step 1 -> Task 3 Step 2
+- Completed:
+  - 将 `crates/octopus-server/src/workspace_runtime/tests/support.rs` 收口为薄 re-export 门面，把 runtime helper 与 workspace helper 分别落在 `support_runtime.rs`、`support_workspace.rs`
+  - 同步更新 `tests/mod.rs`，正式纳入 `support_runtime.rs` / `support_workspace.rs` 模块，保留 `support.rs` 作为新测试树的统一入口
+  - 清理 `tests/mod.rs`、`tests.rs`、`support.rs`、`support_workspace.rs` 的冗余导入，并把 `transport.rs` 改为复用共享 `sample_runtime_event()`，消掉 split 后新增的 warning
+- Files changed:
+  - `crates/octopus-server/src/workspace_runtime/tests/mod.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests/support.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests/support_runtime.rs` (modified earlier in batch)
+  - `crates/octopus-server/src/workspace_runtime/tests/support_workspace.rs` (modified)
+  - `crates/octopus-server/src/workspace_runtime/tests/transport.rs` (modified)
+- Verification:
+  - `cargo test -p octopus-server` -> pass
+  - `cargo check -p octopus-server --tests --message-format short 2>&1 | rg 'warning:'` -> pass (no output)
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` -> pass (no output)
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 4 Step 1
+
+## Checkpoint 2026-04-23 15:52
+
+- Week: Finalization
+- Batch: Task 4 Step 1 -> Task 4 Step 2
+- Completed:
+  - 在 `00-overview.md` 补记三类 deferred capability 的 formal closeout 冻结口径：non-live hidden builtin、decl-only plugin registry data、config-visible but runtime-unsupported hidden builtin model family
+  - 在 `02-crate-topology.md` 为 `sdk-model`、`sdk-tools`、`sdk-plugin` 和 `octopus-platform` 补齐 owner / 代码证据 / re-entry checklist，明确下一轮 live 化必须先改 shared runtime ownership，再动 contract 和 desktop
+  - 在 `12-post-w8-capability-hardening.md` 新增 `Deferred Capability Freeze` 汇总表，把这三类能力正式转交 `13` 继续维持，不回滚本 tranche 的 `done`
+- Files changed:
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/02-crate-topology.md` (modified)
+  - `docs/plans/sdk/12-post-w8-capability-hardening.md` (modified)
+  - `docs/plans/sdk/13-finalization-and-deferred-capabilities.md` (modified)
+- Verification:
+  - `rg -n "web_search|skill|task_list|task_get|SkillDecl|ModelProviderDecl|McpServerDecl|hidden_builtin_model|unsupported|openai_responses|gemini_native|vendor_native|plugin_boot|subagent_runtime|contracts/openapi|packages/schema|apps/desktop" docs/plans/sdk/{00-overview.md,02-crate-topology.md,12-post-w8-capability-hardening.md} crates/octopus-platform crates/octopus-sdk-tools crates/octopus-sdk-model crates/octopus-sdk-plugin` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - Task 5 Step 1
+
+## Checkpoint 2026-04-23 16:08
+
+- Week: Finalization
+- Batch: Task 5 Step 1 -> Task 5 Step 2
+- Completed:
+  - 复跑 `cargo test --workspace`，确认 workspace tests 全绿
+  - 复跑 `cargo clippy --workspace -- -D warnings`，确认 workspace clippy 全绿
+  - 在 worktree 内执行 `pnpm install --frozen-lockfile` 补齐前端依赖后，复跑 `pnpm -C apps/desktop test`，确认桌面端 `66` 个 test file、`580` 个测试全部通过
+  - 将 `docs/plans/sdk/README.md` 的剩余 `draft` 状态全部收口为 `done`，并在 `docs/plans/sdk/00-overview.md` 补记 `Completed 2026-04-23`
+- Files changed:
+  - `docs/plans/sdk/README.md` (modified)
+  - `docs/plans/sdk/00-overview.md` (modified)
+  - `docs/plans/sdk/13-finalization-and-deferred-capabilities.md` (modified)
+- Verification:
+  - `cargo test --workspace` -> pass
+  - `cargo clippy --workspace -- -D warnings` -> pass
+  - `pnpm install --frozen-lockfile` -> pass
+  - `pnpm -C apps/desktop test` -> pass (`66` files, `580` tests)
+  - `find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 800 { print }'` -> pass (no output)
+  - `awk -F'|' '/^\| `/{status=$4; gsub(/^ +| +$/,"",status); if(status!="`done`") print $0}' docs/plans/sdk/README.md` -> pass (no output)
+  - `rg -n "Completed 2026-" docs/plans/sdk/00-overview.md` -> pass
+- Exit state vs plan:
+  - matches
+- Blockers:
+  - none
+- Next:
+  - none

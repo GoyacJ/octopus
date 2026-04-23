@@ -1,6 +1,6 @@
 # 02 · SDK Crate 拓扑与公共面
 
-> 本文档定义 **SDK 15 个 crate + 业务 5 个 crate 的依赖方向、命名、对外 trait/struct 公共面、契约差异清单、UI Intent IR 登记表**。
+> 本文档定义 **SDK 15 个 crate + 业务 5 个 crate + 1 个共享业务 core crate 的目标依赖方向、命名、对外 trait/struct 公共面、契约差异清单、UI Intent IR 登记表**，并记录 formal closeout 后的 workspace 现行控制面。
 > 所有新增 `pub` 符号在合入前必须在此文档登记。
 > 本文档随 W1–W8 推进持续迭代；每次迭代必须在 `§变更日志` 追加条目。
 
@@ -617,6 +617,8 @@ impl DefaultModelProvider {
 ```
 
 > Post-W8 live hardening 冻结：凡是 live runtime 直接消费的 `ModelCatalog::new_builtin()` / `RoleRouter::new_builtin()` / platform snapshot/default selection，都只能暴露其 `ProtocolAdapter` 已真实实现的 model family。`OpenAiResponsesAdapter`、`GeminiNativeAdapter`、`VendorNativeAdapter` 在本 tranche 仍未落地 live adapter，因此对应 family 必须先从 live catalog、role defaults、platform snapshot 与 default selections 隐去，而不是继续以 `AdapterNotImplemented` 形式对外可见。
+>
+> formal closeout 补记：这类 family 不是“彻底删除”，而是由 `octopus-platform::runtime_sdk::registry_bridge::{builtins,snapshot,overrides}` 继续保留 `hidden_builtin_model()` + `status = unsupported` 的 config-visible hidden metadata，用于托住已有 `configuredModels`。下一轮若要让 `openai_responses / gemini_native / vendor_native` 重新进入 live scope，必须同批修改 `octopus-sdk-model` 的 adapter 实现、builtin catalog / role defaults、platform snapshot/default selections、capability-facing contract/desktop fixtures，以及本目录控制文档。
 
 ### 2.4 `octopus-sdk-tools`（Level 2）
 
@@ -1079,6 +1081,8 @@ impl DurableScratchpad {
 ```
 
 > Post-W8 live hardening 冻结：`register_builtins()`、`builtin_tool_catalog()` 与共享 capability projection 不允许继续把 stub tool 视为健康 live capability。若没有共享层显式建模 metadata-only builtin，则 `web_search`、`skill`、`task_list`、`task_get` 以及未注入 `TaskFn` 的 `task` 都必须保持 non-live。`skill` 资产的 catalog 暴露继续由 `octopus-infra` 的 skill inventory 负责，不等于 builtin runtime tool 仍可执行。
+>
+> formal closeout 补记：当前真正留在 deferred bucket 的 builtin 只剩 `web_search / skill / task_list / task_get`；`task` 已由 `octopus-platform::runtime_sdk::subagent_runtime::build_live_task_fn()` 持有 live owner。下一轮若要把这 4 项重新带回 live scope，必须先在共享层明确 runtime owner / transport source，再同批更新 `octopus-sdk-tools::{builtin/mod.rs,builtin/catalog.rs}`、`octopus-platform::runtime_sdk::builder`、shared capability projection、capability-facing contract/desktop fixtures 与控制文档。
 
 > W4 Task 9 回填：`SystemPromptBuilder` 已落 `role / tools_guidance / process / safety / output` 五段内置段生成器；`tools_guidance` 只消费 `ToolRegistry::schemas_sorted()` 的 `name / description`，不把 `input_schema` 写进 system prompt。
 >
@@ -1626,6 +1630,8 @@ impl PluginError {
 > W5 执行边界：`ToolDecl` / `HookDecl` 只用于 manifest、诊断、snapshot；真正接入 runtime 的是 `PluginToolRegistration` / `PluginHookRegistration`。`skills / model providers` 在 W5 仍先停留在 metadata + builder slot。
 
 > Post-W8 live hardening 冻结：live builder 不能再把 `PluginRegistry::new()` 的空实例当成 plugin 接线完成。`PluginLifecycle::run()` 必须由 `octopus-platform` 用明确的 discovery config + loaded plugin set 执行，再把 runtime `Tool` / `Hook` registration 注入 live runtime。`SkillDecl`、`ModelProviderDecl`、`McpServerDecl` 在本 tranche 继续停留在 decl-only / catalog-only，不得伪装成 live executable capability。
+>
+> formal closeout 补记：当前 live path 只包括 runtime `Tool` / `Hook` registration 与 `PluginsSnapshot`；`SkillDecl`、`ModelProviderDecl`、`McpServerDecl` 仍只落在 `PluginManifest` / `PluginRegistry` 的 declaration store。下一轮若要把这些 declaration 变成 live capability，必须先在 `octopus-platform::runtime_sdk::{plugin_boot,builder}` 明确 bootstrap owner，再扩到 shared registry bridge、contract/desktop fixtures 与控制文档；不能只在 manifest/registry 里补字段。
 
 ### 2.12 `octopus-sdk-ui-intent`（Level 2）
 
@@ -1778,7 +1784,7 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 
 ---
 
-## 3. 业务侧 crate
+## 3. 业务侧 crate + 共享业务 core
 
 ### 3.1 `octopus-platform`
 
@@ -1798,6 +1804,10 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   ```
 - 责任边界：`octopus-platform` 持有 `AgentRuntimeBuilder` 的组装权，并在 `runtime_sdk/*` 内完成 SDK event → legacy runtime DTO 投影；`octopus-server` / `octopus-desktop` 只消费 `PlatformServices`，不直接持有 `AgentRuntime`。
 - Post-W8 hardening ownership：builtin tool live gating、stub-backed model family 收口、plugin discovery/snapshot bootstrap、`TaskFn` live injection 都归 `runtime_sdk/*`。`octopus-server` / `octopus-desktop` / `octopus-cli` 不得各自维护本地 stub denylist、模型补丁表或空 plugin snapshot 修补逻辑。
+- deferred capability re-entry checklist：
+  - shared runtime ownership 先改 `runtime_sdk::{builder,plugin_boot,subagent_runtime}`，不要从 transport/UI 倒推 capability live 化。
+  - shared truth source 同批改 `octopus-sdk-tools` / `octopus-sdk-model` / `octopus-sdk-plugin` 与 `registry_bridge::{builtins,snapshot,overrides}`，避免 catalog、snapshot、defaults 给出不同答案。
+  - downstream 才允许改 `/api/v1/runtime/*`、`packages/schema/src/**`、`apps/desktop/**` 与 `docs/plans/sdk/{00,02,12,13}.md`；若规范正文与阶段性冻结冲突，只能走 `docs/sdk/README.md` `## Fact-Fix 勘误`。
 
 ### 3.2 `octopus-persistence`（新）
 
@@ -1836,6 +1846,12 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 - 唯一 CLI 入口；`claw` binary。
 - 依赖 `octopus-sdk` + `octopus-core`；**删除** `api / runtime / tools / plugins / commands / compat-harness / octopus-model-policy` 依赖。
 - `octopus-model-policy` 的内容迁入 `octopus-sdk-model` 作为内置 role router 策略。
+
+### 3.6 `octopus-core`
+
+- 共享业务 domain crate；承载 workspace / host / runtime_config / runtime_session / capability_management / access_control 等业务 DTO、错误与通用类型。
+- 只被业务侧 crate 依赖：`octopus-platform / octopus-infra / octopus-server / octopus-desktop / apps/desktop/src-tauri`；SDK crate 继续禁止依赖它。
+- 该 crate 是 formal closeout 后仍保留的非 SDK workspace 成员，不属于 legacy 例外或待退役目录。
 
 ---
 
@@ -1930,6 +1946,8 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 
 ## 8. Cargo Workspace 变更要点（供 W7 / W8 使用）
 
+> 现状注记（2026-04-23）：live workspace 继续由 `members = ["apps/desktop/src-tauri", "crates/*"]` 驱动，当前实盘共有 `21` 个 crate 目录。对应控制面为 `15` 个 SDK crate + `5` 个业务 crate + `1` 个共享业务 core crate `octopus-core`；原 `crates/telemetry` 已在 formal closeout 中登记退役。
+
 - W7 结束时 `members` 应为：
   ```
   apps/desktop/src-tauri,
@@ -1953,7 +1971,6 @@ pub use octopus_sdk_tools::builtin::register_builtins;
   crates/octopus-sdk-plugin,
   crates/octopus-sdk-observability,
   crates/octopus-sdk-core,
-  crates/telemetry,                 # 保留；W6 被 observability 引用后评估是否并入
   ```
 - W7 同步删除：`crates/runtime`、`crates/tools`、`crates/plugins`、`crates/api`、`crates/octopus-runtime-adapter`、`crates/commands`、`crates/compat-harness`、`crates/mock-anthropic-service`、`crates/rusty-claude-cli`、`crates/octopus-desktop-backend`、`crates/octopus-model-policy`。
 - W7 当前 `Cargo.toml` 继续使用 `members = ["apps/desktop/src-tauri", "crates/*"]`；目录删完后 workspace 实盘应只剩上述 crate。
@@ -2011,3 +2028,6 @@ pub use octopus_sdk_tools::builtin::register_builtins;
 | 2026-04-22 | W6 审计收口：`§2.14` builder 从 `PermissionPolicy` / `with_subagent_orchestrator(...)` 收敛为当前可装配执行链的 `PermissionGate / AskResolver / PluginsSnapshot / TaskFn / Tracer`；`build()` 明确不做 plugin discover；`cancel()` 语义收窄到当前进程内 active run；`§2.9` 增记 hooks source order 若偏离 `session > project > plugin > workspace > defaults` 则阻断 W6 plugin hook 接线 | Codex |
 | 2026-04-22 | W7 Weekly Gate 收尾：`§2.4 / §2.5` 的 builtin catalog 与 MCP discovery 公共面已被业务侧实用；`§8` 的 workspace 目标态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、legacy grep 与 `ls crates/` 守护复核通过。 | Codex |
 | 2026-04-23 | Post-W8 Task 1 冻结：`§2.3 / §2.4 / §2.11 / §2.14 / §3.1 / §5` 增记 live-only capability hardening 规则；明确 stub builtin tools、stub-backed model families、空 plugin snapshot 与未注入 `TaskFn` 都不能继续占 live surface。 | Codex |
+| 2026-04-23 | formal closeout 基线对齐：标题与 `§8` 显式区分“目标矩阵”与“live workspace 现状”；补记 `octopus-core / telemetry` 仍是 workspace 额外保留 crate，`telemetry` 的旧注记改为“当前无外部引用，待 `13` Task 2 冻结归属”。 | Codex |
+| 2026-04-23 | Task 2 收口：`§3` / `§8` 改成 formal closeout 后的现行控制面，确认 `octopus-core` 是共享业务 core crate；`crates/telemetry` 从 workspace 目标矩阵移除并登记退役，目录口径收口为 `21` 个 crate。 | Codex |
+| 2026-04-23 | Task 4 冻结 deferred capability 边界：`§2.3 / §2.4 / §2.11 / §3.1` 追加 formal closeout 补记，明确三类 deferred capability 的当前 owner、hidden/decl-only/unsupported 状态，以及下一轮 live re-entry 必须触达的 shared-layer / contract / desktop / docs 触点。 | Codex |

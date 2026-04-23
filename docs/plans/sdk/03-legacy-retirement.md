@@ -31,6 +31,7 @@
 | `crates/rusty-claude-cli` | **12 844**（W6 重点工作量） | W6 合并入 `octopus-cli` → W7 删目录 | `octopus-cli` |
 | `crates/octopus-desktop-backend` | **196** | W7 改名 → `octopus-desktop` | `octopus-desktop` |
 | `crates/octopus-model-policy` | **143** | W2 内嵌入 `sdk-model` → W7 删目录 | `octopus-sdk-model::RoleRouter` |
+| `crates/telemetry` | **539**（2026-04-23 实测） | Formal closeout 退役 | 无；孤立 legacy helper，无仓内活调用方 |
 
 > **W6 警示**：`rusty-claude-cli` 实测 12 844 行（是首稿估计的 8 倍以上）。W6 子 Plan 必须把"合并 CLI"作为独立 Task 组（不少于 3 个 Task），而不是子代理 / 插件周的附属动作。
 
@@ -236,6 +237,13 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
 - `resources_skills.rs`（2843）切 `resources.rs / skills.rs`。
 - 单文件 ≤ 800 行。
 
+### 7.9 `crates/telemetry`（formal closeout 退役，无替代）
+
+- 当前仅剩 `Cargo.toml` + `src/lib.rs`（共 `539` 行，2026-04-23 实测）。
+- 提供 `AnthropicRequestProfile`、`TelemetryEvent`、`TelemetrySink`、`MemoryTelemetrySink`、`JsonlTelemetrySink` 等 helper。
+- 仓内除 crate 自身外无 Rust 代码引用；也未进入 workspace `default-members`。
+- 结论：不并入 SDK / 平台 / infra，直接按孤立 legacy helper 退役；无替代位置。
+
 ---
 
 ## 8. 守护扫描（自动核对本文档的完整性）
@@ -244,7 +252,7 @@ let sdk = octopus_sdk::AgentRuntimeBuilder::new()
 
 ```bash
 # 遗留 crate 是否还在 Cargo workspace
-rg '^\s*"crates/(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy)"' Cargo.toml
+rg '^\s*"crates/(runtime|tools|plugins|api|octopus-runtime-adapter|commands|compat-harness|mock-anthropic-service|rusty-claude-cli|octopus-desktop-backend|octopus-model-policy|telemetry)"' Cargo.toml
 
 # 业务侧是否仍 use 遗留 crate
 rg 'use (runtime|tools|plugins|api|octopus_runtime_adapter|commands|compat_harness|octopus_model_policy)::' crates/octopus-{core,platform,persistence,server,desktop,cli}
@@ -263,6 +271,7 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 
 - W7 结束前 `Cargo.toml` 扫描命中 → 阻塞本周。
 - W7 结束后 `crates/{runtime,tools,plugins,api,octopus-runtime-adapter,commands,compat-harness,mock-anthropic-service,rusty-claude-cli,octopus-desktop-backend,octopus-model-policy}` 目录不存在 → 上述命令自然返回 0 hits。
+- formal closeout 完成后 `crates/telemetry` 目录也必须不存在。
 - W8 结束前上述行数检查命令必须为 0。
 
 ---
@@ -284,6 +293,7 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 | 2026-04-22 | `crates/rusty-claude-cli` | `octopus-cli` | working tree |
 | 2026-04-22 | `crates/octopus-desktop-backend` | `crates/octopus-desktop` | working tree |
 | 2026-04-22 | `crates/octopus-model-policy` | `octopus-sdk-model::RoleRouter` | working tree |
+| 2026-04-23 | `crates/telemetry` | deprecate-with-no-successor | working tree |
 
 ---
 
@@ -299,3 +309,4 @@ find crates -type f -name '*.rs' -exec wc -l {} + | awk '$2 != "total" && $1 > 8
 | 2026-04-22 | W7 Task 7：11 个 legacy crate 目录已从 workspace 实盘删除；`§9 已退役` 新增目录级完成记录，并声明目录删除态以 `§9` 为准 | Codex |
 | 2026-04-22 | W7 Weekly Gate 收尾：11 个 legacy crate 的删除态经 `cargo build --workspace`、`cargo clippy --workspace -- -D warnings`、desktop 全量测试、legacy grep、`ls crates/` 与 Phase 4/8 治理脚本复核通过，W7 目录级退役状态冻结。 | Codex |
 | 2026-04-22 | W8 Weekly Gate 收尾：11 个 legacy crate 目录删除态经 `ls crates/` 复核继续成立；`runtime/sessions/*.json` 生产路径继续 0 命中；repo 级单文件 ≤ 800 行门禁已清零。 | Codex |
+| 2026-04-23 | formal closeout Task 2：补记孤立 `crates/telemetry` 的退役登记、守护扫描与完成记录；结论为“无仓内活调用方、无替代位置，直接删除目录”。 | Codex |
