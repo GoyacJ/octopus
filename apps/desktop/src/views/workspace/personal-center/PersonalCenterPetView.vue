@@ -34,7 +34,7 @@ const quietHoursEnd = ref(DEFAULT_QUIET_HOURS_END)
 const runtimeSource = computed(() =>
   userProfileStore.runtimeConfig?.sources.filter(source => source.scope === 'user').at(-1),
 )
-const modelOptions = computed(() => catalogStore.configuredModelOptions.map(option => ({
+const modelOptions = computed(() => catalogStore.runnableConfiguredModelOptions.map(option => ({
   value: option.value,
   label: `${option.label} · ${option.providerLabel}`,
 })))
@@ -79,7 +79,7 @@ const runtimePreview = computed(() => JSON.stringify({
 }, null, 2))
 
 function resetForm() {
-  configuredModelId.value = petStore.preferredConfiguredModelId || modelOptions.value[0]?.value || ''
+  configuredModelId.value = petStore.resolvedConfiguredModelId || modelOptions.value[0]?.value || ''
   permissionMode.value = petStore.preferredPermissionMode
   displayName.value = petStore.profile.displayName
   greeting.value = petStore.profile.greeting
@@ -128,9 +128,11 @@ function updateQuietHoursEnd(value: string) {
 
 watch(
   () => [
+    userProfileStore.currentUser?.id ?? '',
     userProfileStore.runtimeConfig,
     petStore.profile.id,
     petStore.preferredConfiguredModelId,
+    petStore.resolvedConfiguredModelId,
     petStore.preferredPermissionMode,
     petStore.preferredReminderTtlMinutes,
     petStore.preferredQuietHours.enabled,

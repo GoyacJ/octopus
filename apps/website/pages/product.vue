@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { 
-  Puzzle, 
-  Terminal, 
-  Activity, 
-  Layers, 
-  Monitor, 
-  ShieldAlert
+import {
+  Activity,
+  LayoutDashboard,
+  Layers,
+  MessageSquare,
+  Monitor,
+  Puzzle,
+  Settings2,
+  ShieldAlert,
+  Terminal,
 } from 'lucide-vue-next'
 
 interface GovernanceItem {
   title: unknown
   desc: unknown
+}
+
+interface ModuleItem {
+  title: unknown
+  desc: unknown
+  tags: unknown[]
 }
 
 const { t, tm, rt } = useI18n()
@@ -28,20 +37,29 @@ const capabilities = [
   { key: 'enterprise', icon: ShieldAlert, img: '/screenshots/rbac.png' }
 ]
 
+const moduleIcons = [Layers, Settings2, LayoutDashboard, MessageSquare]
+
 const governanceItems = computed(() =>
   (tm('pages.product.governance.items') as GovernanceItem[]).map((item) => ({
     title: rt(item.title as Parameters<typeof rt>[0]),
     desc: rt(item.desc as Parameters<typeof rt>[0]),
   })),
 )
+
+const modules = computed(() =>
+  (tm('pages.product.modules.items') as ModuleItem[]).map((item, index) => ({
+    title: rt(item.title as Parameters<typeof rt>[0]),
+    desc: rt(item.desc as Parameters<typeof rt>[0]),
+    tags: item.tags.map((tag) => rt(tag as Parameters<typeof rt>[0])),
+    icon: moduleIcons[index] ?? Layers,
+  })),
+)
 </script>
 
 <template>
   <div class="relative min-h-screen pb-24">
-    <!-- Global Decorative Elements -->
     <div class="glow-orb w-[600px] h-[600px] bg-orange-500/20 top-[20%] right-[-300px]"></div>
 
-    <!-- Hero Section -->
     <UiSectionHero
       align="split"
       :badge="t('pages.product.heroBadge')"
@@ -59,18 +77,68 @@ const governanceItems = computed(() =>
       </template>
     </UiSectionHero>
 
-    <!-- Capabilities Grid -->
     <section class="section-padding relative">
       <div class="container-custom relative z-10">
+        <div class="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-start">
+          <div class="max-w-xl" v-reveal>
+            <h2 class="mb-6 text-4xl font-bold tracking-tight md:text-5xl">{{ t('pages.product.narrative.title') }}</h2>
+            <p class="text-xl leading-relaxed text-[var(--website-text-muted)]">{{ t('pages.product.narrative.body') }}</p>
+          </div>
+          <UiCard
+            variant="default"
+            padding="lg"
+            v-reveal
+            class="border-[var(--website-border-strong)] bg-[var(--website-surface)] shadow-[0_28px_70px_-36px_rgba(0,0,0,0.28)]"
+          >
+            <p class="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-[var(--website-accent)]/80">{{ t('pages.product.modules.title') }}</p>
+            <p class="text-base leading-relaxed text-[var(--website-text-muted)]">{{ t('pages.product.modules.body') }}</p>
+          </UiCard>
+        </div>
+
+        <div class="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2">
+          <UiCard
+            v-for="module in modules"
+            :key="module.title"
+            variant="default"
+            padding="lg"
+            hover
+            v-reveal
+            class="card-shine border-[var(--website-border-strong)] bg-[var(--website-surface)]"
+          >
+            <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--website-accent)]/10 text-[var(--website-accent)]">
+              <component :is="module.icon" class="w-7 h-7" />
+            </div>
+            <h3 class="mb-4 text-2xl font-bold tracking-tight">{{ module.title }}</h3>
+            <p class="mb-6 text-base leading-relaxed text-[var(--website-text-muted)]">{{ module.desc }}</p>
+            <div class="flex flex-wrap gap-2">
+              <span
+                v-for="tag in module.tags"
+                :key="tag"
+                class="rounded-full border border-[var(--website-border)] bg-[var(--website-surface-soft)] px-3 py-1 text-xs font-semibold tracking-[0.12em] text-[var(--website-text-muted)]"
+              >
+                {{ tag }}
+              </span>
+            </div>
+          </UiCard>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-padding relative bg-[var(--website-surface-soft)]/50">
+      <div class="container-custom relative z-10">
+        <div class="mb-14 max-w-3xl" v-reveal>
+          <h2 class="mb-5 text-4xl font-bold tracking-tight md:text-5xl">{{ t('pages.product.title') }}</h2>
+          <p class="text-xl leading-relaxed text-[var(--website-text-muted)]">{{ t('pages.product.body') }}</p>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          <div 
-            v-for="cap in capabilities" 
+          <div
+            v-for="cap in capabilities"
             :key="cap.key"
             class="group"
             v-reveal
           >
             <UiCard padding="none" hover class="h-full flex flex-col overflow-hidden card-shine border-[var(--website-border-strong)]">
-              <!-- Visual Preview -->
               <div class="aspect-video bg-[var(--website-surface-soft)] overflow-hidden relative border-b border-[var(--website-border)]">
                 <img
                   :src="cap.img"
@@ -79,8 +147,7 @@ const governanceItems = computed(() =>
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-[var(--website-surface)]/60 to-transparent"></div>
               </div>
-              
-              <!-- Content -->
+
               <div class="p-6 flex-grow">
                 <div class="w-10 h-10 rounded-lg bg-[var(--website-accent)]/10 flex items-center justify-center text-[var(--website-accent)] mb-4">
                   <component :is="cap.icon" class="w-5 h-5" />
@@ -96,8 +163,7 @@ const governanceItems = computed(() =>
       </div>
     </section>
 
-    <!-- Advanced Governance Section -->
-    <section class="section-padding bg-[var(--website-surface-soft)]/50">
+    <section class="section-padding">
       <div class="container-custom">
         <div class="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
           <div class="max-w-xl">

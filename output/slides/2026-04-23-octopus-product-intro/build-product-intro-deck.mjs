@@ -36,6 +36,10 @@ const ASSETS = {
   agent: path.join(ROOT, "apps", "website", "public", "screenshots", "agent.png"),
   builtin: path.join(ROOT, "apps", "website", "public", "screenshots", "builtin.png"),
   rbac: path.join(ROOT, "apps", "website", "public", "screenshots", "rbac.png"),
+  contentCreationLens: path.join(OUT_DIR, "assets", "scenarios", "content-creation-lens.jpg"),
+  officeWritingDesk: path.join(OUT_DIR, "assets", "scenarios", "office-writing-desk.jpg"),
+  softwareDevCode: path.join(OUT_DIR, "assets", "scenarios", "software-dev-code.jpg"),
+  financeOpsCalculator: path.join(OUT_DIR, "assets", "scenarios", "finance-ops-calculator.jpg"),
 }
 
 const imageCache = new Map()
@@ -53,6 +57,7 @@ async function main() {
   await buildSlide5(presentation.slides.add())
   await buildSlide6(presentation.slides.add())
   await buildSlide7(presentation.slides.add())
+  await buildSlide8(presentation.slides.add())
 
   const pptx = await PresentationFile.exportPptx(presentation)
   await pptx.save(OUTPUT_PPTX)
@@ -77,7 +82,14 @@ async function assertAssets() {
 async function getImageDataUrl(filePath) {
   if (!imageCache.has(filePath)) {
     const data = await fs.readFile(filePath)
-    const encoded = `data:image/png;base64,${data.toString("base64")}`
+    const extension = path.extname(filePath).toLowerCase()
+    const mimeType = {
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+    }[extension] ?? "application/octet-stream"
+    const encoded = `data:${mimeType};base64,${data.toString("base64")}`
     imageCache.set(filePath, encoded)
   }
   return imageCache.get(filePath)
@@ -340,9 +352,93 @@ async function buildSlide2(slide) {
 
 async function buildSlide3(slide) {
   setBackground(slide, C.base)
+  addSoftBlob(slide, { left: -120, top: 480, width: 320, height: 320 }, C.paleOrange)
+  addSoftBlob(slide, { left: 1020, top: 180, width: 260, height: 260 }, C.blueSoft)
   addHeader(
     slide,
     3,
+    "生而不同",
+    "不是把聊天做得更顺，而是把交付系统从一开始就按任务驱动设计。",
+  )
+
+  addCard(slide, { left: 72, top: 224, width: 1136, height: 92 }, {
+    fill: C.surface,
+    line: true,
+    lineColor: C.border,
+  })
+  addText(slide, "每个团队都有待交付的工作。Octopus 为每个任务分配自主 AI 智能体。", { left: 96, top: 244, width: 632, height: 24 }, {
+    fill: C.surface,
+    color: C.ink,
+    fontSize: 19,
+    bold: true,
+  })
+  addText(slide, "全量上下文，全程掌控，所有部门适用。免费开源，Apache 2.0。", { left: 96, top: 276, width: 620, height: 22 }, {
+    fill: C.surface,
+    color: C.muted,
+    fontSize: 15,
+  })
+
+  addChip(slide, "开源", { left: 826, top: 246, width: 82, height: 30 }, {
+    fill: C.warm,
+    color: C.primary,
+    fontSize: 13,
+  })
+  addChip(slide, "Apache 2.0", { left: 918, top: 246, width: 142, height: 30 }, {
+    fill: C.surface,
+    color: C.ink,
+    fontSize: 13,
+  })
+  addChip(slide, "免费使用", { left: 1070, top: 246, width: 106, height: 30 }, {
+    fill: C.blueCard,
+    color: C.ink,
+    fontSize: 13,
+  })
+
+  const principles = [
+    ["01", "1:1 任务 → 智能体", "一个任务，一个智能体。完整上下文，完整可追溯，零歧义。", C.surface, C.border],
+    ["02", "100% 本地 & 隐私", "一切运行在你的机器上。零遥测、零云端依赖，数据绝不外传。", C.warm, C.secondary],
+    ["03", "15+ 并行智能体", "同时交付 15+ 个任务。暂停和恢复任何智能体，上下文不丢失。", C.blueCard, C.blueSoft],
+    ["04", "4-Layer 深度上下文引擎", "组织知识、项目上下文、团队标准和任务级指令一起进入执行。", C.surface, C.border],
+  ]
+  const principleFrames = [
+    { left: 72, top: 350, width: 544, height: 132 },
+    { left: 664, top: 350, width: 544, height: 132 },
+    { left: 72, top: 506, width: 544, height: 132 },
+    { left: 664, top: 506, width: 544, height: 132 },
+  ]
+
+  principles.forEach(([number, title, body, fill, lineColor], idx) => {
+    const frame = principleFrames[idx]
+    addCard(slide, frame, {
+      fill,
+      line: true,
+      lineColor,
+    })
+    addText(slide, number, { left: frame.left + 20, top: frame.top + 16, width: 40, height: 24 }, {
+      fill,
+      color: C.primary,
+      fontSize: 18,
+      bold: true,
+    })
+    addText(slide, title, { left: frame.left + 20, top: frame.top + 46, width: 380, height: 26 }, {
+      fill,
+      color: C.ink,
+      fontSize: title === "4-Layer 深度上下文引擎" ? 18 : 20,
+      bold: true,
+    })
+    addText(slide, body, { left: frame.left + 20, top: frame.top + 82, width: 486, height: 34 }, {
+      fill,
+      color: C.muted,
+      fontSize: 14,
+    })
+  })
+}
+
+async function buildSlide4(slide) {
+  setBackground(slide, C.base)
+  addHeader(
+    slide,
+    4,
     "工作方式",
     "从一句任务描述开始，Octopus 自动把上下文、执行和交付串成闭环。",
   )
@@ -423,11 +519,11 @@ async function buildSlide3(slide) {
   })
 }
 
-async function buildSlide4(slide) {
+async function buildSlide5(slide) {
   setBackground(slide, C.base)
   addHeader(
     slide,
-    4,
+    5,
     "真实界面，不是概念演示",
     "产品已经覆盖任务入口、指挥中心、数字员工和工具工作台。",
   )
@@ -468,10 +564,10 @@ async function buildSlide4(slide) {
   }
 
   const rightCards = [
-    ["对话入口", "用户一句话下任务，任务目标、上下文、下一步动作都在同一界面推进。"],
-    ["状态监控", "项目仪表盘让会话、资源、知识、Agent 与动态一屏可见。"],
-    ["数字员工", "按角色建立 Agent 资源池，支持财务、研发、运营等岗位化配置。"],
-    ["工具工作台", "统一管理内置工具、技能目录与 MCP 服务，给智能体接上真实系统。"],
+    ["任务到智能体流水线", "内置任务追踪器，每个任务自动成为自主智能体。任务清单就是交付计划。"],
+    ["智能体能力", "技能库、团队规范、集成能力一起装备到智能体，确保理解业务并遵循流程。"],
+    ["智能体指挥中心", "实时看到当前任务、进度、操作审核与交付审批，一个屏幕全局可见。"],
+    ["随时随地工作", "通过 IM、调度和 Webhook 派发智能体与接收通知，重复工作可自动运行。"],
   ]
   const rightTops = [232, 334, 436, 538]
 
@@ -481,32 +577,32 @@ async function buildSlide4(slide) {
       line: true,
       lineColor: idx % 2 === 0 ? C.border : C.blueSoft,
     })
-    addText(slide, title, { left: 872, top: rightTops[idx] + 14, width: 150, height: 22 }, {
+    addText(slide, title, { left: 872, top: rightTops[idx] + 12, width: 226, height: 22 }, {
       fill: idx % 2 === 0 ? C.surface : C.blueCard,
       color: C.ink,
-      fontSize: 18,
+      fontSize: 17,
       bold: true,
     })
-    addText(slide, body, { left: 872, top: rightTops[idx] + 38, width: 304, height: 34 }, {
+    addText(slide, body, { left: 872, top: rightTops[idx] + 36, width: 304, height: 36 }, {
       fill: idx % 2 === 0 ? C.surface : C.blueCard,
       color: C.muted,
-      fontSize: 13,
+      fontSize: 12,
     })
   })
 
   addText(
     slide,
-    "同一套桌面工作台，把对话、工具、知识和治理放进同一个运行面板里。",
-    { left: 848, top: 640, width: 330, height: 36 },
+    "平台全貌不是单个页面，而是一套把任务、能力、监控和通知串起来的运行系统。",
+    { left: 848, top: 640, width: 332, height: 36 },
     { fill: C.base, color: C.primary, fontSize: 16, bold: true },
   )
 }
 
-async function buildSlide5(slide) {
+async function buildSlide6(slide) {
   setBackground(slide, C.base)
   addHeader(
     slide,
-    5,
+    6,
     "平台能力与治理边界",
     "它既能干活，也知道边界在哪里。",
   )
@@ -574,90 +670,143 @@ async function buildSlide5(slide) {
   })
 }
 
-async function buildSlide6(slide) {
+async function buildSlide7(slide) {
   setBackground(slide, C.base)
+  addSoftBlob(slide, { left: -120, top: 486, width: 280, height: 280 }, C.paleOrange)
+  addSoftBlob(slide, { left: 1010, top: 196, width: 250, height: 250 }, C.blueSoft)
   addHeader(
     slide,
-    6,
-    "它能帮哪些团队",
-    "从个人到企业，从市场到财务，Octopus 覆盖真实工作链路。",
+    7,
+    "它能帮哪些场景",
+    "不只会聊天。Octopus 能直接接入真实工作链路，覆盖内容创作、办公写作、软件研发和财务运营。",
   )
 
-  const segments = [
-    ["个人", "调研、写作、代码、知识管理，一个人也能并行推进多个任务。"],
-    ["团队", "围绕任务派发多个智能体，与人类成员并行协作。"],
-    ["企业", "私有化部署、权限治理、审计日志与信创底座一起落地。"],
-  ]
-  const segmentFills = [C.surface, C.warm, C.blueCard]
-  const segmentTops = [228, 384, 540]
-
-  segments.forEach(([title, body], idx) => {
-    addCard(slide, { left: 72, top: segmentTops[idx], width: 276, height: 124 }, {
-      fill: segmentFills[idx],
-      line: true,
-      lineColor: idx === 0 ? C.border : idx === 1 ? C.secondary : C.blueSoft,
-    })
-    addText(slide, title, { left: 96, top: segmentTops[idx] + 18, width: 120, height: 24 }, {
-      fill: segmentFills[idx],
-      color: idx === 1 ? C.primary : C.ink,
-      fontSize: 22,
-      bold: true,
-    })
-    addText(slide, body, { left: 96, top: segmentTops[idx] + 52, width: 228, height: 48 }, {
-      fill: segmentFills[idx],
-      color: C.muted,
-      fontSize: 14,
-    })
-  })
-
-  const cases = [
-    ["市场", "活动发布自动驾驶", "竞品分析、落地页文案、社媒素材包"],
-    ["销售", "客户情报分析", "EMEA SaaS 调研与个性化触达邮件"],
-    ["研发", "并行功能交付", "组件、接口、测试与 PR 摘要并行推进"],
-    ["内容运营", "跨平台发布", "Changelog 同步到博客、Twitter、LinkedIn"],
-    ["客户成功", "工单智能分拣", "分类、起草回复、升级紧急问题"],
-    ["财务", "董事会级报告", "收入趋势、燃烧率、Runway 预测"],
-  ]
-  const casePositions = [
-    { left: 390, top: 228 },
-    { left: 794, top: 228 },
-    { left: 390, top: 372 },
-    { left: 794, top: 372 },
-    { left: 390, top: 516 },
-    { left: 794, top: 516 },
-  ]
-
-  cases.forEach(([category, title, body], idx) => {
-    addCard(slide, { left: casePositions[idx].left, top: casePositions[idx].top, width: 340, height: 118 }, {
+  const scenarios = [
+    {
+      title: "内容创作",
+      summary: "短剧、漫剧、视觉素材和脚本节奏\n都能拆成连续任务链。",
+      note: "从灵感到交付，始终保留同一份上下文。",
+      tags: [
+        ["脚本拆解", 84],
+        ["素材整理", 84],
+      ],
+      image: ASSETS.contentCreationLens,
       fill: C.surface,
-      line: true,
       lineColor: C.border,
+      accent: C.primary,
+      tagFill: C.paleOrange,
+      tagColor: C.primary,
+      mediaFill: "#F8F0E7",
+    },
+    {
+      title: "办公写作",
+      summary: "会议纪要、方案初稿、周报月报\n和知识归档在同一上下文里完成。",
+      note: "写作不再回到空白页。",
+      tags: [
+        ["结构化写作", 92],
+        ["知识沉淀", 84],
+      ],
+      image: ASSETS.officeWritingDesk,
+      fill: "#FCFAF7",
+      lineColor: "#E9DED2",
+      accent: "#8B6C53",
+      tagFill: "#F3ECE5",
+      tagColor: "#8B6C53",
+      mediaFill: "#F6EFE8",
+    },
+    {
+      title: "软件研发",
+      summary: "需求拆解、代码实现、测试补齐\n和 PR 摘要持续推进。",
+      note: "从任务到提交，不再回到零上下文。",
+      tags: [
+        ["代码生成", 84],
+        ["测试补齐", 84],
+      ],
+      image: ASSETS.softwareDevCode,
+      fill: "#F7FAFE",
+      lineColor: C.blueSoft,
+      accent: "#3E648E",
+      tagFill: "#DCE9F8",
+      tagColor: "#355C8C",
+      mediaFill: "#EAF2FB",
+    },
+    {
+      title: "财务运营",
+      summary: "日报汇总、经营分析、预算对账\n与异常提醒形成稳定运营节奏。",
+      note: "报表、对账和提醒可以按周期自动执行。",
+      tags: [
+        ["报表生成", 84],
+        ["异常提醒", 84],
+      ],
+      image: ASSETS.financeOpsCalculator,
+      fill: "#F7FAF2",
+      lineColor: "#D6E4D1",
+      accent: "#73875C",
+      tagFill: "#DCE8D8",
+      tagColor: "#617349",
+      mediaFill: "#EAF3E8",
+    },
+  ]
+  const cardFrames = [
+    { left: 72, top: 228, width: 552, height: 192 },
+    { left: 656, top: 228, width: 552, height: 192 },
+    { left: 72, top: 444, width: 552, height: 192 },
+    { left: 656, top: 444, width: 552, height: 192 },
+  ]
+
+  for (const [idx, scenario] of scenarios.entries()) {
+    const frame = cardFrames[idx]
+    addCard(slide, frame, {
+      fill: scenario.fill,
+      line: true,
+      lineColor: scenario.lineColor,
     })
-    addChip(slide, category, {
-      left: casePositions[idx].left + 18,
-      top: casePositions[idx].top + 14,
-      width: 78,
-      height: 24,
-    }, {
-      fill: C.paleOrange,
-      color: C.primary,
-      fontSize: 12,
-    })
-    addText(slide, title, { left: casePositions[idx].left + 18, top: casePositions[idx].top + 44, width: 240, height: 22 }, {
-      fill: C.surface,
+
+    const accent = slide.shapes.add({ geometry: "roundRect" })
+    accent.frame = { left: frame.left + 20, top: frame.top + 18, width: 42, height: 6 }
+    accent.fill.color = scenario.accent
+    accent.line.visible = false
+
+    addText(slide, scenario.title, { left: frame.left + 20, top: frame.top + 36, width: 320, height: 28 }, {
+      fill: scenario.fill,
       color: C.ink,
-      fontSize: 18,
+      fontSize: 24,
       bold: true,
     })
-    addText(slide, body, { left: casePositions[idx].left + 18, top: casePositions[idx].top + 72, width: 292, height: 30 }, {
-      fill: C.surface,
+    addText(slide, scenario.summary, { left: frame.left + 20, top: frame.top + 80, width: 320, height: 48 }, {
+      fill: scenario.fill,
+      color: C.ink,
+      fontSize: 15,
+    })
+    addText(slide, scenario.note, { left: frame.left + 20, top: frame.top + 132, width: 320, height: 20 }, {
+      fill: scenario.fill,
       color: C.muted,
       fontSize: 13,
     })
-  })
+
+    let tagLeft = frame.left + 20
+    for (const [label, width] of scenario.tags) {
+      addChip(slide, label, { left: tagLeft, top: frame.top + 156, width, height: 24 }, {
+        fill: scenario.tagFill,
+        color: scenario.tagColor,
+        fontSize: 12,
+      })
+      tagLeft += width + 8
+    }
+
+    addCard(slide, { left: frame.left + 376, top: frame.top + 16, width: 156, height: 160 }, {
+      fill: scenario.mediaFill,
+      line: false,
+    })
+    await addImage(slide, scenario.image, { left: frame.left + 384, top: frame.top + 24, width: 140, height: 144 }, {
+      geometry: "roundRect",
+      fit: "cover",
+      alt: `${scenario.title} scene`,
+    })
+  }
 }
 
-async function buildSlide7(slide) {
+async function buildSlide8(slide) {
   setBackground(slide, C.dark)
   addSoftBlob(slide, { left: -180, top: -120, width: 520, height: 520 }, C.darkAlt)
   addSoftBlob(slide, { left: 910, top: 440, width: 340, height: 340 }, "#3A2413")
@@ -724,6 +873,12 @@ async function buildSlide7(slide) {
     "一个任务，一个智能体。让 AI 真正进入正式经营体系。",
     { left: 72, top: 610, width: 430, height: 34 },
     { fill: C.dark, color: C.darkMuted, fontSize: 15 },
+  )
+  addText(
+    slide,
+    "免费开源 · Apache 2.0 · 100% 本地",
+    { left: 72, top: 646, width: 360, height: 22 },
+    { fill: C.dark, color: C.darkMuted, fontSize: 13, bold: true },
   )
 
   addCard(slide, { left: 850, top: 536, width: 358, height: 122 }, {

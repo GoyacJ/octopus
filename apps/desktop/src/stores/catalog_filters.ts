@@ -28,6 +28,66 @@ import {
   type CatalogProviderSummary,
 } from './catalog_normalizers'
 
+const NON_RUNNABLE_CREDENTIAL_STATUSES = new Set<string>([
+  'missing',
+  'unconfigured',
+  'error',
+  'missing_credentials',
+  'disabled',
+])
+
+function providerRequiresConversationCredential(provider?: ProviderRegistryRecord) {
+  const conversationSurfaces = provider?.surfaces.filter(surface =>
+    surface.enabled && surface.surface === 'conversation',
+  ) ?? []
+
+  if (!conversationSurfaces.length) {
+    return true
+  }
+
+  return conversationSurfaces.some(surface => surface.authStrategy !== 'none')
+}
+
+function isRuntimeReadyConfiguredModel(
+  model: Pick<CatalogConfiguredModelRow, 'enabled' | 'supportsConversationExecution' | 'credentialConfigured' | 'credentialStatus'>,
+  provider?: ProviderRegistryRecord,
+) {
+  if (!model.enabled || !model.supportsConversationExecution) {
+    return false
+  }
+
+  if (!providerRequiresConversationCredential(provider)) {
+    return true
+  }
+
+  return model.credentialConfigured
+    && !NON_RUNNABLE_CREDENTIAL_STATUSES.has(String(model.credentialStatus))
+}
+
+function toConfiguredModelOptions(models: CatalogConfiguredModelRow[]): CatalogConfiguredModelOption[] {
+  return models.map(model => ({
+    value: model.configuredModelId,
+    label: model.name,
+    providerId: model.providerId,
+    providerLabel: model.providerLabel,
+    modelId: model.modelId,
+    modelLabel: model.modelLabel,
+  }))
+}
+
+function findDefaultSelection(options: CatalogConfiguredModelOption[], selection?: DefaultSelection) {
+  if (!selection) {
+    return undefined
+  }
+
+  return options.find(option => option.value === selection.configuredModelId)
+    ?? options.find(option =>
+      option.providerId === selection.providerId
+      && option.modelId === selection.modelId)
+    ?? options.find(option => option.modelId === selection.modelId)
+    ?? options.find(option => option.providerId === selection.providerId)
+}
+
 interface CatalogFilterContext {
   activeConnectionId: ComputedRef<string>
   snapshots: Ref<Record<string, ModelCatalogSnapshot>>
@@ -206,7 +266,25 @@ export function createCatalogFilters(context: CatalogFilterContext) {
       modelId: model.modelId,
       modelLabel: model.modelLabel,
     })))
-  const modelOptions = computed(() => configuredModelOptions.value.map(model => ({
+  const runnableConfiguredModelOptions = computed<CatalogConfiguredModelOption[]>(() => toConfiguredModelOptions(
+    configuredModelRows.value.filter(model =>
+      isRuntimeReadyConfiguredModel(model, providerMap.value.get(model.providerId))),
+  ))
+  const workspaceRunnableConfiguredModelOptions = computed<CatalogConfiguredModelOption[]>(() => toConfiguredModelOptions(
+    workspaceConfiguredModelRows.value.filter(model =>
+      isRuntimeReadyConfiguredModel(model, providerMap.value.get(model.providerId))),
+  ))
+  const conversationDefaultSelection = computed<DefaultSelection | undefined>(() =>
+    defaultSelections.value.conversation
+    ?? Object.values(defaultSelections.value).find(selection => selection.surface === 'conversation'),
+  )
+  const defaultConversationRunnableConfiguredModelOption = computed(() =>
+    findDefaultSelection(runnableConfiguredModelOptions.value, conversationDefaultSelection.value),
+  )
+  const workspaceDefaultConversationRunnableConfiguredModelOption = computed(() =>
+    findDefaultSelection(workspaceRunnableConfiguredModelOptions.value, conversationDefaultSelection.value),
+  )
+  const modelOptions = computed(() => runnableConfiguredModelOptions.value.map(model => ({
     value: model.value,
     label: model.label,
   })))
@@ -278,6 +356,10 @@ export function createCatalogFilters(context: CatalogFilterContext) {
     credentialIssueCount,
     configuredModelOptions,
     workspaceConfiguredModelOptions,
+    runnableConfiguredModelOptions,
+    workspaceRunnableConfiguredModelOptions,
+    defaultConversationRunnableConfiguredModelOption,
+    workspaceDefaultConversationRunnableConfiguredModelOption,
     modelOptions,
     getModelOptionsByProviderId,
     getProviderBaseUrl,

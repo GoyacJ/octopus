@@ -3225,6 +3225,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/configured-model:
+    post:
+      operationId: rebindRuntimeSessionConfiguredModel
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RebindRuntimeSessionConfiguredModelInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeSessionDetail"
+          description: Runtime session detail payload after rebinding the configured model.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/sessions/{sessionId}/events:
     get:
       operationId: listRuntimeSessionEvents
@@ -9429,6 +9457,14 @@ components:
         - enabled
         - surfaces
         - metadata
+      type: object
+    RebindRuntimeSessionConfiguredModelInput:
+      additionalProperties: false
+      properties:
+        selectedConfiguredModelId:
+          type: string
+      required:
+        - selectedConfiguredModelId
       type: object
     RegisterBootstrapAdminRequest:
       additionalProperties: false

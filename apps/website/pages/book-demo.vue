@@ -1,5 +1,10 @@
 <script setup lang="ts">
-const { t } = useI18n()
+interface ValuePropItem {
+  title: unknown
+  desc: unknown
+}
+
+const { t, tm, rt } = useI18n()
 const submitted = ref(false)
 const form = reactive({
   name: '',
@@ -12,8 +17,14 @@ useHead({
   title: t('pages.bookDemo.title')
 })
 
+const valueProps = computed(() =>
+  (tm('pages.bookDemo.valueProps.items') as ValuePropItem[]).map((item) => ({
+    title: rt(item.title as Parameters<typeof rt>[0]),
+    desc: rt(item.desc as Parameters<typeof rt>[0]),
+  })),
+)
+
 const submitForm = () => {
-  // Mock submission
   setTimeout(() => {
     submitted.value = true
   }, 600)
@@ -22,7 +33,6 @@ const submitForm = () => {
 
 <template>
   <div class="relative min-h-screen pb-24">
-    <!-- Hero -->
     <UiSectionHero
       align="left"
       :badge="t('pages.bookDemo.badge')"
@@ -30,12 +40,37 @@ const submitForm = () => {
       :subtitle="t('pages.bookDemo.body')"
     />
 
-    <!-- Form Section -->
     <section class="section-padding relative">
       <div class="container-custom relative z-10">
-        <div class="max-w-2xl mx-auto" v-reveal>
-          <Transition mode="out-in">
-            <div v-if="!submitted" key="form">
+        <Transition mode="out-in">
+          <div v-if="!submitted" key="form" class="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.04fr)]">
+            <div v-reveal class="space-y-8">
+              <div>
+                <p class="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-[var(--website-accent)]/80">{{ t('pages.bookDemo.valueProps.title') }}</p>
+                <h2 class="mb-5 text-4xl font-bold tracking-tight md:text-5xl">{{ t('pages.bookDemo.title') }}</h2>
+                <p class="text-xl leading-relaxed text-[var(--website-text-muted)]">{{ t('pages.bookDemo.valueProps.body') }}</p>
+              </div>
+
+              <div class="grid grid-cols-1 gap-5">
+                <UiCard
+                  v-for="item in valueProps"
+                  :key="item.title"
+                  variant="default"
+                  padding="lg"
+                  class="border-[var(--website-border-strong)] bg-[var(--website-surface)]"
+                >
+                  <h3 class="mb-3 text-xl font-bold tracking-tight">{{ item.title }}</h3>
+                  <p class="text-base leading-relaxed text-[var(--website-text-muted)]">{{ item.desc }}</p>
+                </UiCard>
+              </div>
+            </div>
+
+            <UiCard
+              variant="glass"
+              padding="lg"
+              v-reveal
+              class="border-[var(--website-border-strong)] bg-[var(--website-surface)]"
+            >
               <form @submit.prevent="submitForm" class="space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div class="space-y-3">
@@ -53,36 +88,30 @@ const submitForm = () => {
                 </div>
                 <div class="space-y-3">
                   <label class="text-sm font-bold ml-1 uppercase tracking-widest opacity-60">{{ t('pages.bookDemo.form.messageLabel') }}</label>
-                  <textarea v-model="form.message" rows="5" :placeholder="t('pages.bookDemo.form.messagePlaceholder')" class="w-full px-5 py-4 rounded-2xl border border-[var(--website-border-strong)] bg-[var(--website-surface-soft)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--website-accent)] transition-all glass"></textarea>
+                  <textarea v-model="form.message" rows="6" :placeholder="t('pages.bookDemo.form.messagePlaceholder')" class="w-full px-5 py-4 rounded-2xl border border-[var(--website-border-strong)] bg-[var(--website-surface-soft)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--website-accent)] transition-all glass"></textarea>
                 </div>
                 <UiButton type="submit" size="lg" class="w-full h-16 text-lg font-bold">
                   {{ t('pages.bookDemo.submit') }}
                 </UiButton>
               </form>
+            </UiCard>
+          </div>
+
+          <div v-else key="success" class="text-center py-20">
+            <div class="w-24 h-24 bg-green-500/10 text-green-500 rounded-3xl flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-green-500/20">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </div>
-            <div v-else key="success" class="text-center py-20">
-              <div class="w-24 h-24 bg-green-500/10 text-green-500 rounded-3xl flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-green-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
-              <h2 class="text-4xl font-bold mb-6 tracking-tight">{{ t('pages.bookDemo.successTitle') }}</h2>
-              <p class="text-xl text-[var(--website-text-muted)] mb-12 font-medium">{{ t('pages.bookDemo.successBody') }}</p>
-              <UiButton variant="outline" to="/" size="lg" class="glass px-10">{{ t('pages.bookDemo.backHome') }}</UiButton>
-            </div>
-          </Transition>
-        </div>
+            <h2 class="text-4xl font-bold mb-6 tracking-tight">{{ t('pages.bookDemo.successTitle') }}</h2>
+            <p class="text-xl text-[var(--website-text-muted)] mb-12 font-medium">{{ t('pages.bookDemo.successBody') }}</p>
+            <UiButton variant="outline" to="/" size="lg" class="glass px-10">{{ t('pages.bookDemo.backHome') }}</UiButton>
+          </div>
+        </Transition>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-@keyframes fade-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-.animate-fade-in {
-  animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 .v-enter-active, .v-leave-active { transition: opacity 0.3s ease; }
 .v-enter-from, .v-leave-to { opacity: 0; }
 </style>

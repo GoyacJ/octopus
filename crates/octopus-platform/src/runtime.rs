@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use octopus_core::{
     AppError, CancelRuntimeSubrunInput, CreateDeliverableVersionInput, CreateRuntimeSessionInput,
-    DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary, ModelCatalogSnapshot,
-    PromoteDeliverableInput, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
+    DeliverableDetail, DeliverableVersionContent, DeliverableVersionSummary,
+    ModelCatalogSnapshot, PromoteDeliverableInput, RebindRuntimeSessionConfiguredModelInput,
+    ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, RunRuntimeGenerationInput, RuntimeBootstrap,
     RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
@@ -28,6 +29,12 @@ pub trait RuntimeSessionService: Send + Sync {
         self.create_session_with_owner_ceiling(input, user_id, None)
             .await
     }
+    async fn rebind_session_configured_model(
+        &self,
+        session_id: &str,
+        input: RebindRuntimeSessionConfiguredModelInput,
+        user_id: &str,
+    ) -> Result<RuntimeSessionDetail, AppError>;
     async fn get_session(&self, session_id: &str) -> Result<RuntimeSessionDetail, AppError>;
     async fn get_deliverable_detail(
         &self,
@@ -496,6 +503,15 @@ mod tests {
             _input: CreateRuntimeSessionInput,
             _user_id: &str,
             _owner_permission_ceiling: Option<&str>,
+        ) -> Result<RuntimeSessionDetail, AppError> {
+            Ok(self.detail.clone())
+        }
+
+        async fn rebind_session_configured_model(
+            &self,
+            _session_id: &str,
+            _input: RebindRuntimeSessionConfiguredModelInput,
+            _user_id: &str,
         ) -> Result<RuntimeSessionDetail, AppError> {
             Ok(self.detail.clone())
         }

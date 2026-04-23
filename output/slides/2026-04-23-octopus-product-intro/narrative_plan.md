@@ -15,10 +15,12 @@
 ## Narrative Arc
 
 1. 先定义产品。
-2. 再解释工作流。
-3. 再用界面和能力证明产品不是概念。
-4. 再讲治理、部署和安全边界。
-5. 最后收束到业务价值。
+2. 再解释它为什么不是普通聊天工具。
+3. 再补充它的核心设计决策。
+4. 再解释工作流。
+5. 再用界面和能力证明产品不是概念。
+6. 再讲治理、部署和安全边界。
+7. 最后收束到业务价值。
 
 ## Visual System
 
@@ -72,6 +74,25 @@
 
 ### Slide 3
 
+- Title: `生而不同`
+- Message: Octopus 的差异，不是聊天更顺，而是交付系统从一开始就按任务驱动设计。
+- Supporting points:
+  - 1:1 任务 → 智能体
+  - 100% 本地 & 隐私
+  - 15+ 并行智能体
+  - 4-Layer 深度上下文引擎
+  - 免费开源，Apache 2.0
+- Visual:
+  - 顶部一条 summary bar，总结产品定义
+  - 下半部分 2x2 核心设计决策卡片
+- Sources:
+  - `apps/octopus-website/src/components/sections/hero.tsx`
+  - `apps/octopus-website/src/components/sections/features.tsx`
+  - `apps/octopus-website/src/components/sections/faq.tsx`
+  - `apps/octopus-website/src/components/sections/cta.tsx`
+
+### Slide 4
+
 - Title: `工作方式`
 - Message: 从一句任务描述开始，Octopus 自动把上下文、执行和交付串成闭环。
 - Supporting points:
@@ -88,7 +109,7 @@
   - `apps/octopus-website/src/components/sections/platform.tsx`
   - `apps/website/public/screenshots/conversation.png`
 
-### Slide 4
+### Slide 5
 
 - Title: `真实界面，不是概念演示`
 - Message: 产品已经覆盖任务入口、指挥中心、数字员工和工具工作台。
@@ -103,6 +124,7 @@
   - `apps/website/public/screenshots/dashboard.png`
   - `apps/website/public/screenshots/agent.png`
   - `apps/website/public/screenshots/builtin.png`
+  - 右侧文案改为 `平台全貌` 的四个模块定义
 - Sources:
   - `apps/octopus-website/src/components/sections/platform.tsx`
   - `apps/website/locales/zh-CN.json` -> `pages.product.features.desktop`
@@ -113,7 +135,7 @@
   - `apps/website/public/screenshots/agent.png`
   - `apps/website/public/screenshots/builtin.png`
 
-### Slide 5
+### Slide 6
 
 - Title: `平台能力与治理边界`
 - Message: 它既能干活，也知道边界在哪里。
@@ -136,23 +158,28 @@
   - `apps/website/locales/zh-CN.json` -> `pages.home.features.security`
   - `apps/website/public/screenshots/rbac.png`
 
-### Slide 6
-
-- Title: `它能帮哪些团队`
-- Message: 从个人到企业，从市场到财务，Octopus 覆盖真实工作链路。
-- Supporting points:
-  - 个人：调研、写作、代码、知识管理
-  - 团队：多智能体并行协作
-  - 企业：私有化、权限治理、审计日志
-  - 横向示例：市场、销售、研发、内容运营、客服、财务、人力
-- Visual:
-  - 左侧 3 个场景层级卡片
-  - 右侧 6 个典型任务胶囊卡片
-- Sources:
-  - `apps/website/locales/zh-CN.json` -> `pages.scenarios`
-  - `apps/octopus-website/src/components/sections/usecases.tsx`
-
 ### Slide 7
+
+- Title: `它能帮哪些场景`
+- Message: 不只会聊天。Octopus 能直接接入真实工作链路，覆盖内容创作、办公写作、软件研发和财务运营。
+- Supporting points:
+  - 内容创作：短剧分镜、漫剧设定、素材整理、发布节奏
+  - 办公写作：会议纪要、方案初稿、周报月报、知识归档
+  - 软件研发：需求拆解、代码实现、测试补齐、PR 摘要
+  - 财务运营：日报汇总、经营分析、预算对账、异常提醒
+- Visual:
+  - 2x2 场景卡，每张卡左文右图
+  - 每张卡只对应一个抽象使用场景，不引用具体品牌、组织或项目案例
+  - 图片统一换成无人物主体的高质量静物场景图，风格简洁、克制、接近壁纸质感
+  - 每张卡保留一句场景定义和两个能力标签，避免只剩装饰图
+- Sources:
+  - `apps/octopus-website/src/components/sections/usecases.tsx`
+  - `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/content-creation-lens.jpg`
+  - `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/office-writing-desk.jpg`
+  - `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/software-dev-code.jpg`
+  - `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/finance-ops-calculator.jpg`
+
+### Slide 8
 
 - Title: `把 AI 从零散工具，升级为正式生产体系`
 - Message: Octopus 的价值不只是提升单点效率，而是把执行、治理和沉淀放进同一平台。
@@ -161,6 +188,7 @@
   - 统一治理：权限、审批、审计进入系统层
   - 平台升级：知识、成果物和执行数据持续沉淀
   - Closing line: `任务进，结果出`
+  - 辅助信息：免费开源，Apache 2.0，100% 本地
 - Visual:
   - 中间 3 张价值卡片
   - 底部放一条简洁 closing statement 和小尺寸 `dashboard.png`
@@ -173,7 +201,13 @@
 
 - `output/docx-assets/*` 当前缺失，不作为依赖。
 - 本次 deck 先只用仓库现有截图与品牌图。
-- 若视觉密度不够，再补少量程序化形状和背景渐变，不引入会分散注意力的外部素材。
+- Task 5 为 `slide-07` 补充了新的场景图，并统一落到 `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/`。
+- `slide-07` 的图像选择不再使用具体案例或报道截图，改为无人物主体的静物场景图：
+  - `content-creation-lens.jpg`
+  - `office-writing-desk.jpg`
+  - `software-dev-code.jpg`
+  - `finance-ops-calculator.jpg`
+- 旧的案例型候选图保留在素材目录中，但不进入最终 builder。
 
 ## Editability Plan
 

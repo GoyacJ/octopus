@@ -3,8 +3,8 @@ use futures::StreamExt;
 use octopus_core::{
     AppError, CreateDeliverableVersionInput, CreateRuntimeSessionInput, DeliverableDetail,
     DeliverableVersionContent, DeliverableVersionSummary, PromoteDeliverableInput,
-    RuntimeBootstrap, RuntimeEventEnvelope, RuntimeExecutionClass, RuntimeSessionDetail,
-    RuntimeSessionSummary,
+    RebindRuntimeSessionConfiguredModelInput, RuntimeBootstrap, RuntimeEventEnvelope,
+    RuntimeExecutionClass, RuntimeSessionDetail, RuntimeSessionSummary,
 };
 use octopus_sdk::{ContentBlock, EventRange, Message, SessionEvent, StartSessionInput};
 
@@ -14,6 +14,13 @@ use super::{
     runtime_message, runtime_trace, RuntimeSdkBridge, RuntimeSessionMetadata,
     RuntimeSessionProjection,
 };
+
+struct ResolvedConfiguredModelBinding {
+    configured_model_id: Option<String>,
+    configured_model_name: Option<String>,
+    runtime_model_id: String,
+    started_from_scope_set: Vec<String>,
+}
 
 #[async_trait]
 impl RuntimeSessionService for RuntimeSdkBridge {
@@ -63,63 +70,18 @@ impl RuntimeSessionService for RuntimeSdkBridge {
             Some(requested_permission_mode.as_str()),
             self.state.default_permission_mode,
         )?;
-        let effective = match input.project_id.as_deref() {
-            Some(project_id) if !project_id.trim().is_empty() => {
-                RuntimeConfigService::get_project_config(self, project_id, user_id).await?
-            }
-            _ => RuntimeConfigService::get_user_config(self, user_id).await?,
-        };
-        let snapshot = super::build_catalog_snapshot(self, &effective.effective_config)?;
-        let selected_configured_model_id = input
-            .selected_configured_model_id
-            .clone()
-            .unwrap_or_else(|| self.state.default_model.clone());
-        let selected_model = snapshot
-            .configured_models
-            .iter()
-            .find(|record| record.configured_model_id == selected_configured_model_id)
-            .cloned();
-        let (configured_model_id, configured_model_name, runtime_model_id) = if let Some(
-            configured_model,
-        ) = selected_model
-        {
-            let model = snapshot
-                .models
-                .iter()
-                .find(|model| model.model_id == configured_model.model_id)
-                .ok_or_else(|| {
-                    AppError::invalid_input(format!(
-                        "configured model `{selected_configured_model_id}` is not registered"
-                    ))
-                })?;
-            let supports_runtime = model.surface_bindings.iter().any(|binding| {
-                binding.enabled
-                    && binding
-                        .execution_profile
-                        .supports(RuntimeExecutionClass::AgentConversation)
-            });
-            if !supports_runtime {
-                return Err(AppError::invalid_input(format!(
-                        "configured model `{selected_configured_model_id}` does not expose a runtime-supported surface"
-                    )));
-            }
-            (
-                Some(configured_model.configured_model_id.clone()),
-                Some(configured_model.name.clone()),
-                configured_model.model_id,
+        let resolved = self
+            .resolve_configured_model_binding(
+                input.project_id.as_deref(),
+                user_id,
+                input.selected_configured_model_id.as_deref(),
             )
-        } else {
-            (
-                Some(selected_configured_model_id.clone()),
-                Some(selected_configured_model_id.clone()),
-                selected_configured_model_id.clone(),
-            )
-        };
+            .await?;
         let now = RuntimeSdkBridge::now();
         let config_snapshot_id = format!("runtime-sdk:session:{}", now);
         let effective_config_hash = format!(
             "runtime-sdk:{}:{}",
-            self.state.workspace_id, runtime_model_id
+            self.state.workspace_id, resolved.runtime_model_id
         );
         let handle = self
             .state
@@ -128,7 +90,7 @@ impl RuntimeSessionService for RuntimeSdkBridge {
                 session_id: None,
                 working_dir: self.state.workspace_root.clone(),
                 permission_mode,
-                model: octopus_sdk::ModelId(runtime_model_id),
+                model: octopus_sdk::ModelId(resolved.runtime_model_id),
                 config_snapshot_id: config_snapshot_id.clone(),
                 effective_config_hash: effective_config_hash.clone(),
                 token_budget: self.state.default_token_budget,
@@ -149,13 +111,13 @@ impl RuntimeSessionService for RuntimeSdkBridge {
             title: input.title,
             session_kind,
             selected_actor_ref: input.selected_actor_ref,
-            configured_model_id,
-            configured_model_name,
+            configured_model_id: resolved.configured_model_id,
+            configured_model_name: resolved.configured_model_name,
             runtime_model_id: Some(handle.model.0.clone()),
             permission_mode,
             config_snapshot_id,
             effective_config_hash,
-            started_from_scope_set: vec!["workspace".into()],
+            started_from_scope_set: resolved.started_from_scope_set,
         };
         let run = RuntimeSdkBridge::build_run_snapshot(
             &metadata,
@@ -185,6 +147,118 @@ impl RuntimeSessionService for RuntimeSdkBridge {
             events,
             head_event_id: Some(head_event_id),
         };
+        self.upsert_projection(Box::new(projection)).await;
+        Ok(detail)
+    }
+
+    async fn rebind_session_configured_model(
+        &self,
+        session_id: &str,
+        input: RebindRuntimeSessionConfiguredModelInput,
+        user_id: &str,
+    ) -> Result<RuntimeSessionDetail, AppError> {
+        let mut projection = self.projection(session_id).await?;
+        let selected_configured_model_id = input.selected_configured_model_id.trim();
+        if selected_configured_model_id.is_empty() {
+            return Err(RuntimeSdkBridge::invalid_input(
+                "selected configured model id is required",
+            ));
+        }
+        if projection.metadata.configured_model_id.as_deref() == Some(selected_configured_model_id)
+        {
+            return Ok(projection.detail);
+        }
+
+        let project_id = projection.metadata.project_id.clone();
+        let resolved = self
+            .resolve_configured_model_binding(
+                if project_id.trim().is_empty() {
+                    None
+                } else {
+                    Some(project_id.as_str())
+                },
+                user_id,
+                Some(selected_configured_model_id),
+            )
+            .await?;
+        let runtime_session_id = projection.metadata.session_id.clone();
+        let existing_snapshot = self
+            .state
+            .runtime
+            .snapshot(&runtime_session_id)
+            .await
+            .map_err(RuntimeSdkBridge::runtime_error)?;
+        let now = RuntimeSdkBridge::now();
+        let config_snapshot_id = format!("runtime-sdk:session:{}", now);
+        let effective_config_hash = format!(
+            "runtime-sdk:{}:{}",
+            self.state.workspace_id, resolved.runtime_model_id
+        );
+        let handle = self
+            .state
+            .runtime
+            .start_session(StartSessionInput {
+                session_id: Some(runtime_session_id.clone()),
+                working_dir: existing_snapshot.working_dir,
+                permission_mode: projection.metadata.permission_mode,
+                model: octopus_sdk::ModelId(resolved.runtime_model_id.clone()),
+                config_snapshot_id: config_snapshot_id.clone(),
+                effective_config_hash: effective_config_hash.clone(),
+                token_budget: existing_snapshot.token_budget,
+            })
+            .await
+            .map_err(RuntimeSdkBridge::runtime_error)?;
+
+        projection.metadata.configured_model_id = resolved.configured_model_id;
+        projection.metadata.configured_model_name = resolved.configured_model_name;
+        projection.metadata.runtime_model_id = Some(handle.model.0.clone());
+        projection.metadata.config_snapshot_id = config_snapshot_id.clone();
+        projection.metadata.effective_config_hash = effective_config_hash.clone();
+        projection.metadata.started_from_scope_set = resolved.started_from_scope_set;
+
+        let session_policy = RuntimeSdkBridge::build_session_policy_snapshot(&projection.metadata);
+        projection.detail.summary.updated_at = now;
+        projection.detail.summary.config_snapshot_id = config_snapshot_id.clone();
+        projection.detail.summary.effective_config_hash = effective_config_hash.clone();
+        projection.detail.summary.started_from_scope_set =
+            projection.metadata.started_from_scope_set.clone();
+        projection.detail.summary.session_policy = session_policy.clone();
+
+        projection.detail.session_policy = session_policy;
+        projection.detail.run.updated_at = now;
+        projection.detail.run.configured_model_id = projection.metadata.configured_model_id.clone();
+        projection.detail.run.configured_model_name =
+            projection.metadata.configured_model_name.clone();
+        projection.detail.run.model_id = projection.metadata.runtime_model_id.clone();
+        projection.detail.run.config_snapshot_id = config_snapshot_id;
+        projection.detail.run.effective_config_hash = effective_config_hash;
+        projection.detail.run.started_from_scope_set =
+            projection.metadata.started_from_scope_set.clone();
+
+        let new_events = self
+            .collect_runtime_events(
+                &runtime_session_id,
+                projection.head_event_id.clone(),
+                &projection.detail,
+                projection.events.len() as u64,
+            )
+            .await?;
+        let head_event_id = self
+            .state
+            .runtime
+            .snapshot(&runtime_session_id)
+            .await
+            .map_err(RuntimeSdkBridge::runtime_error)?
+            .head_event_id;
+        projection.head_event_id = Some(head_event_id);
+        projection.events.extend(new_events.iter().cloned());
+
+        let sender = self.session_sender(session_id).await;
+        for event in &new_events {
+            let _ = sender.send(event.clone());
+        }
+
+        let detail = projection.detail.clone();
         self.upsert_projection(Box::new(projection)).await;
         Ok(detail)
     }
@@ -270,6 +344,82 @@ impl RuntimeSessionService for RuntimeSdkBridge {
 }
 
 impl RuntimeSdkBridge {
+    async fn resolve_configured_model_binding(
+        &self,
+        project_id: Option<&str>,
+        user_id: &str,
+        selected_configured_model_id: Option<&str>,
+    ) -> Result<ResolvedConfiguredModelBinding, AppError> {
+        let effective = match project_id {
+            Some(project_id) if !project_id.trim().is_empty() => {
+                RuntimeConfigService::get_project_config(self, project_id, user_id).await?
+            }
+            _ => RuntimeConfigService::get_user_config(self, user_id).await?,
+        };
+        let snapshot = super::build_catalog_snapshot(self, &effective.effective_config)?;
+        let selected_configured_model_id = selected_configured_model_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.state.default_model.clone());
+        let selected_model = snapshot
+            .configured_models
+            .iter()
+            .find(|record| record.configured_model_id == selected_configured_model_id)
+            .cloned();
+        let (configured_model_id, configured_model_name, runtime_model_id) = if let Some(
+            configured_model,
+        ) = selected_model
+        {
+            let model = snapshot
+                .models
+                .iter()
+                .find(|model| model.model_id == configured_model.model_id)
+                .ok_or_else(|| {
+                    AppError::invalid_input(format!(
+                        "configured model `{selected_configured_model_id}` is not registered"
+                    ))
+                })?;
+            let supports_runtime = model.surface_bindings.iter().any(|binding| {
+                binding.enabled
+                    && binding
+                        .execution_profile
+                        .supports(RuntimeExecutionClass::AgentConversation)
+            });
+            if !supports_runtime {
+                return Err(AppError::invalid_input(format!(
+                    "configured model `{selected_configured_model_id}` does not expose a runtime-supported surface"
+                )));
+            }
+            (
+                Some(configured_model.configured_model_id.clone()),
+                Some(configured_model.name.clone()),
+                configured_model.model_id,
+            )
+        } else {
+            (
+                Some(selected_configured_model_id.clone()),
+                Some(selected_configured_model_id.clone()),
+                selected_configured_model_id.clone(),
+            )
+        };
+
+        Ok(ResolvedConfiguredModelBinding {
+            configured_model_id,
+            configured_model_name,
+            runtime_model_id,
+            started_from_scope_set: if effective.sources.is_empty() {
+                vec!["workspace".into()]
+            } else {
+                effective
+                    .sources
+                    .iter()
+                    .map(|source| source.scope.clone())
+                    .collect()
+            },
+        })
+    }
+
     pub(crate) async fn collect_runtime_events(
         &self,
         session_id: &octopus_sdk::SessionId,

@@ -32,6 +32,14 @@ CreateRuntimeSessionInput:
     - selectedActorRef
     - executionPermissionMode
   type: object
+RebindRuntimeSessionConfiguredModelInput:
+  additionalProperties: false
+  properties:
+    selectedConfiguredModelId:
+      type: string
+  required:
+    - selectedConfiguredModelId
+  type: object
 MessageProcessEntry:
   additionalProperties: false
   properties:

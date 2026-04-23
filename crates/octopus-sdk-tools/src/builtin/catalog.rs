@@ -173,7 +173,10 @@ mod tests {
     fn builtin_tool_catalog_resolves_aliases_to_canonical_names() {
         let catalog = builtin_tool_catalog();
 
-        assert_eq!(catalog.resolve("read").map(|entry| entry.name), Some("read_file"));
+        assert_eq!(
+            catalog.resolve("read").map(|entry| entry.name),
+            Some("read_file")
+        );
         assert_eq!(catalog.resolve("rg").map(|entry| entry.name), Some("grep"));
         assert_eq!(
             catalog.resolve("AskUserQuestion").map(|entry| entry.name),
@@ -183,7 +186,10 @@ mod tests {
 
     #[test]
     fn builtin_tool_permissions_keep_catalog_strings() {
-        assert_eq!(BuiltinToolPermission::ReadOnly.as_catalog_value(), "readonly");
+        assert_eq!(
+            BuiltinToolPermission::ReadOnly.as_catalog_value(),
+            "readonly"
+        );
         assert_eq!(
             BuiltinToolPermission::WorkspaceWrite.as_catalog_value(),
             "workspace-write"

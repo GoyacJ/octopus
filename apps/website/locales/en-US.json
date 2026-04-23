@@ -1,7 +1,7 @@
 {
   "site": {
     "name": "Octopus",
-    "description": "Build your high-security private digital employee team. Based on the localization environment, protect data sovereignty and empower individual and enterprise knowledge brains.",
+    "description": "One task, one agent, direct delivery. Octopus moves AI from chat windows into real workflows. Free, open source, and 100% local.",
     "status": "Beta"
   },
   "nav": {
@@ -23,51 +23,196 @@
   },
   "pages": {
     "home": {
-      "title": "Your Private AI Digital Employee Team",
-      "highlight": "ready to deliver real work",
-      "subtitle": "Unite the power of AI while protecting data sovereignty. Deploy exclusive digital employee teams and knowledge brains in your localization environment or private cloud.",
+      "badge": "Open Source · Apache 2.0 · Beta",
+      "title": "Task lists do not ship themselves",
+      "highlight": "give each task an agent",
+      "subtitle": "Octopus turns AI chat into a task-driven delivery pipeline. Describe what needs to be shipped and each agent carries the right context to research, draft, execute, and return results. Free, open source, and 100% local.",
       "cta": {
-        "primary": "Get Started",
-        "secondary": "Learn More"
+        "primary": "Download Desktop",
+        "secondary": "Explore Product"
+      },
+      "foundation": {
+        "title": "Not a chat assistant, but a deliverable agent system",
+        "body": "The core idea is not more chat tabs. Octopus puts tasks, context, execution, approvals, and artifacts into one operating flow."
       },
       "consulting": {
-        "title": "Ready to bring agents into real work?",
+        "title": "Ready to move agents into real business workflows?",
         "body": "We help teams plan deployment, data boundaries, governance, and workflow integration before production rollout.",
-        "button": "Start Enterprise Consultation"
+        "button": "Book Enterprise Consultation"
       },
       "features": {
-        "private": {
-          "title": "Private Deployment",
-          "desc": "Data never leaves your domain, giving you complete control over your AI assets. Supports offline operation and intranet deployment."
+        "taskAgent": {
+          "title": "1 task = 1 agent",
+          "desc": "Every task gets a dedicated agent with a clear goal, isolated context, and a traceable execution path."
         },
-        "localization": {
-          "title": "Full localization Stack",
-          "desc": "Deeply adapted to domestic mainstream localization CPUs, operating systems, and database environments."
+        "local": {
+          "title": "100% local and private",
+          "desc": "Run everything on your machine or private environment with zero telemetry and no mandatory cloud dependency."
         },
-        "team": {
-          "title": "Digital Employee Team",
-          "desc": "Not just a single agent, but a collaborative digital employee team capable of parallel processing complex tasks."
+        "parallel": {
+          "title": "15+ parallel agents",
+          "desc": "Move more than 15 tasks forward at once, then pause, resume, and continue without losing context."
         },
-        "pet": {
-          "title": "Exclusive Private Pet",
-          "desc": "Warm AI interaction with exclusive companionship and personalized emotional bonding."
+        "context": {
+          "title": "4-layer deep context engine",
+          "desc": "Organization knowledge, project context, team standards, and task instructions all flow into execution together."
         },
-        "knowledge": {
-          "title": "Enterprise Knowledge Brain",
-          "desc": "Accumulate private organizational knowledge for efficient semantic search and automated Q&A."
+        "automation": {
+          "title": "Scheduling and automation",
+          "desc": "Recurring work can run on daily, weekly, or custom schedules so agents complete the full loop automatically."
         },
-        "security": {
-          "title": "Advanced Security",
-          "desc": "Enterprise-grade RBAC, sensitive data masking, and full-link audit traceability."
+        "visibility": {
+          "title": "Live visibility and approval gates",
+          "desc": "Every action, progress signal, artifact, and approval point stays visible for real team collaboration and governance."
         }
+      },
+      "workflow": {
+        "title": "Task in, result out",
+        "body": "Write a task, not a prompt. Create, dispatch, and deliver in three steps.",
+        "steps": [
+          {
+            "title": "Create",
+            "heading": "Write a task, not a prompt",
+            "desc": "Describe what needs to be delivered and Octopus attaches project files, past work, and linked tasks to define the expected artifact."
+          },
+          {
+            "title": "Dispatch",
+            "heading": "One task -> one agent",
+            "desc": "Each task gets its own autonomous agent with organization knowledge, team standards, and project context so many tasks can run in parallel."
+          },
+          {
+            "title": "Deliver",
+            "heading": "Review, approve, finish",
+            "desc": "Agents research, draft, build, and publish while keeping the process visible, the result reviewable, and the deliverables captured."
+          }
+        ]
+      },
+      "comparison": {
+        "title": "Chat windows were not built for real work",
+        "body": "Ephemeral conversations do not carry repeatable operations well. Octopus turns AI into a durable task system.",
+        "chatLabel": "Chat era",
+        "octopusLabel": "Octopus task-driven",
+        "items": [
+          {
+            "chat": "Constant copy-paste between AI chat and actual work",
+            "octopus": "Every agent is bound to one task, so the goal and reason stay explicit"
+          },
+          {
+            "chat": "All context disappears in the next conversation",
+            "octopus": "Full context stays persistent, so you can pause, resume, and recover any task"
+          },
+          {
+            "chat": "Outputs get buried in chat history and become hard to find later",
+            "octopus": "Deliverables are captured automatically, searchable, and easy to revisit"
+          },
+          {
+            "chat": "No way to track what AI is doing across the team",
+            "octopus": "A live dashboard keeps every agent's progress visible"
+          },
+          {
+            "chat": "No reliable way to automate repeated AI work",
+            "octopus": "Recurring tasks can be scheduled and executed by agents automatically"
+          },
+          {
+            "chat": "Little visibility into quality or progress",
+            "octopus": "Progress, quality, and approval points all remain transparent"
+          }
+        ]
+      },
+      "useCases": {
+        "title": "One task, one agent, for any team",
+        "body": "From market intelligence to feature delivery and finance reporting, once a task is defined clearly it can be handed to the right agent.",
+        "items": [
+          {
+            "category": "Research and intelligence",
+            "title": "Competitive intelligence tracking",
+            "task": "Track competitor changelogs, pricing shifts, and feature launches every week.",
+            "tags": ["Scheduling", "Browser actions", "Comparison reports"]
+          },
+          {
+            "category": "Product engineering",
+            "title": "Parallel feature delivery",
+            "task": "Read the spec and code context, then deliver components, APIs, tests, and a PR summary in parallel.",
+            "tags": ["Code generation", "Full context", "Test delivery"]
+          },
+          {
+            "category": "Finance",
+            "title": "Board-level reporting",
+            "task": "Pull revenue, burn, and runway data to generate a monthly board report with an executive summary.",
+            "tags": ["Report generation", "Charts and analysis", "Notifications"]
+          }
+        ]
+      },
+      "faq": {
+        "title": "Frequently asked questions",
+        "items": [
+          {
+            "question": "Who is Octopus for?",
+            "answer": "Any team with real work to ship. Marketing, sales, finance, HR, support, design, and engineering can all express work as tasks and let agents take it forward."
+          },
+          {
+            "question": "What is task-driven AI?",
+            "answer": "Each work unit starts as a task and gets its own autonomous agent. Context stays isolated, execution stays durable, and results become artifacts instead of disappearing into chat."
+          },
+          {
+            "question": "What kinds of tasks can agents handle?",
+            "answer": "Web research, content writing, data analysis, code generation, reporting, competitive intelligence, and design QA can all be completed end to end as tasks."
+          },
+          {
+            "question": "How is this different from ChatGPT-style tools?",
+            "answer": "Chat tools optimize for one-off conversations. Octopus optimizes for ongoing delivery with task context, execution traces, approval points, and captured outputs."
+          },
+          {
+            "question": "Can agents be paused and resumed?",
+            "answer": "Yes. Tasks, conversations, files, and progress are preserved so work can continue hours or days later."
+          },
+          {
+            "question": "Is it free?",
+            "answer": "Yes. Octopus is fully free and Apache 2.0 open source, without a hosted subscription requirement."
+          },
+          {
+            "question": "Does data get uploaded to the cloud?",
+            "answer": "No. Octopus supports fully local operation and keeps data inside your device or private environment by default."
+          }
+        ]
       }
     },
     "product": {
-      "title": "Digital Employee Stack",
+      "title": "Task-Driven Agent OS",
       "heroBadge": "Agent Operating System",
-      "heroTitle": "Turn agents into",
-      "heroHighlight": "deliverable digital employees",
-      "body": "Octopus brings models, tools, memory, permissions, and governance into one desktop workbench so agents move beyond demos and become assignable, collaborative, auditable digital employees for real enterprise work.",
+      "heroTitle": "Turn AI chat windows",
+      "heroHighlight": "into a task-driven delivery system",
+      "body": "Chat windows work for Q&A, not for delivery. Octopus gives every task a persistent agent with full context, live progress, and captured artifacts so AI can move from talking to shipping.",
+      "narrative": {
+        "title": "Not a chat box, but an operating system for delivery",
+        "body": "Tasks, context, tools, approvals, artifacts, and governance live in one desktop workbench so agents can keep operating instead of restarting from zero each time."
+      },
+      "modules": {
+        "title": "Keep task orchestration, capabilities, and governance in one surface",
+        "body": "These four modules make up the Octopus operating model.",
+        "items": [
+          {
+            "title": "Task-to-agent pipeline",
+            "desc": "The built-in tracker turns every task into an autonomous agent, with subtasks that can keep splitting into their own contextual work units.",
+            "tags": ["1 task = 1 agent", "Subtask hierarchy", "Artifact capture"]
+          },
+          {
+            "title": "Capabilities center",
+            "desc": "Package organization knowledge, standards, skills, and integrations into agents so they work by your rules instead of improvising from scratch.",
+            "tags": ["Skill library", "Team standards", "Integrations"]
+          },
+          {
+            "title": "Command center",
+            "desc": "Watch every agent's task, progress, action trail, and approval status from one screen instead of piecing updates together by hand.",
+            "tags": ["Live monitoring", "Approval gates", "Traceability"]
+          },
+          {
+            "title": "IM and automation entry points",
+            "desc": "Create tasks through Telegram, Discord, Feishu, WeChat, or schedulers so repeated work keeps running and exceptions surface immediately.",
+            "tags": ["IM dispatch", "Scheduling", "Webhooks"]
+          }
+        ]
+      },
       "governance": {
         "title": "Trustworthy, Controllable, Auditable",
         "items": [
@@ -87,60 +232,158 @@
       },
       "features": {
         "mcp": {
-          "title": "Unified Tool Protocol",
-          "desc": "Connect internal systems, databases, and APIs through MCP so every digital employee has a standard, extensible tool stack."
+          "title": "Give agents your real tools",
+          "desc": "Connect databases, internal systems, and APIs through standard protocols so agents can do real work instead of only answering."
         },
         "sandbox": {
-          "title": "Secure Execution And Built-ins",
-          "desc": "Agents do more than answer questions. Built-in tools and isolated execution let them act within clear authorization boundaries."
+          "title": "Autonomous research and execution",
+          "desc": "Built-in browsing and isolated execution let agents research the web, extract information, build charts, and act inside controlled boundaries."
         },
         "telemetry": {
-          "title": "Visible Process, Traceable Results",
-          "desc": "From conversation context to execution output, critical steps, calls, and artifacts stay observable, replayable, and reviewable."
+          "title": "Visible process, replayable results",
+          "desc": "From reasoning flow to tool calls and final artifacts, every critical step stays observable, reviewable, and replayable."
         },
         "plugin": {
-          "title": "Skills And Plugin Extensions",
-          "desc": "Package domain workflows, team SOPs, and custom capabilities into reusable skills and plugins that expand each digital employee role."
+          "title": "Turn team standards into skills",
+          "desc": "Package SOPs, role responsibilities, and domain workflows into reusable skills and plugins that expand each agent role."
         },
         "desktop": {
-          "title": "Unified Desktop Workbench",
-          "desc": "Bring conversations, knowledge, resources, digital employees, and governance into one desktop surface for continuous collaboration."
+          "title": "All tasks on one desktop workbench",
+          "desc": "Keep conversations, tasks, knowledge, resources, and artifacts on one desktop surface so work can pause and resume without losing state."
         },
         "enterprise": {
-          "title": "Enterprise Governance And RBAC",
-          "desc": "Apply roles, permissions, auditability, and security controls at the system layer so teams can operate confidently in real environments."
+          "title": "Permissions, approvals, and governance together",
+          "desc": "Move roles, permissions, approvals, and audit requirements into the system layer instead of leaving them as presentation-only ideas."
         }
       }
     },
     "scenarios": {
-      "title": "Wide Range of Scenarios",
-      "body": "Covering individual, team, and enterprise lifecycles, empowering every business stage.",
+      "title": "What can it do for you?",
+      "body": "These are not demo agents. They are task-oriented agents built to keep working across individual, team, and enterprise environments.",
       "segments": [
         {
           "title": "Individual: your always-on digital assistant",
-          "desc": "Stay supported on the desktop for daily research, coding, writing, and document work while keeping an assistant that remembers your habits and working context.",
-          "features": ["Fast response", "Local knowledge management", "Multimodal interaction"]
+          "desc": "Keep long-running context on the desktop for research, writing, coding, and document work instead of re-explaining your background every time.",
+          "features": ["Context memory", "Local knowledge management", "Multimodal input"]
         },
         {
           "title": "Team: a shared pool of digital employees",
-          "desc": "Dispatch specialized agents for planning, project follow-up, copywriting, or code review so AI teammates can work alongside human contributors in parallel.",
-          "features": ["Automatic task routing", "Multi-agent collaboration", "Shared team knowledge"]
+          "desc": "Dispatch agents for copywriting, research, project follow-up, and code review so AI teammates can work in parallel with human contributors.",
+          "features": ["Parallel dispatch", "Shared team standards", "Task-level collaboration"]
         },
         {
-          "title": "Enterprise: secure and governable by design",
-          "desc": "Deploy private, localization-friendly AI infrastructure for large organizations with strong permission controls, auditability, and data protection boundaries.",
-          "features": ["Localization-ready stack", "Fine-grained permissions", "Compliance audit logs"]
+          "title": "Enterprise: private, governable, auditable",
+          "desc": "Fit organizations with deployment boundaries and compliance requirements by pushing permissions, auditability, and data safety into the workflow itself.",
+          "features": ["Private deployment", "Fine-grained permissions", "Audit logs"]
         }
-      ]
+      ],
+      "useCases": {
+        "title": "Real task lists across teams",
+        "body": "Each example follows the same pattern: write the outcome as a task, then let the agent carry the context and finish the work.",
+        "items": [
+          {
+            "category": "Research and intelligence",
+            "title": "Competitive intelligence tracking",
+            "task": "Track competitor changelogs, pricing shifts, and feature launches every week.",
+            "workflow": ["Trigger automatically every Monday morning", "Collect competitor site updates and changelogs", "Generate a comparison report with highlighted changes", "Post the report to the strategy channel"],
+            "tags": ["Scheduling", "Browser actions", "Deliverables"]
+          },
+          {
+            "category": "Marketing",
+            "title": "Launch autopilot",
+            "task": "Prepare a Product Hunt launch with competitor analysis, landing page copy, and social assets.",
+            "workflow": ["Research the top competing products", "Draft positioning, messaging, and landing page copy", "Generate social posts for each channel", "Build a launch-day publishing schedule"],
+            "tags": ["Browser actions", "Scheduling", "Notifications"]
+          },
+          {
+            "category": "Sales",
+            "title": "Account intelligence analysis",
+            "task": "Research target companies and decision-makers, then draft personalized outreach emails.",
+            "workflow": ["Collect company profiles and funding updates", "Analyze tech stack, growth signals, and contacts", "Generate personalized outreach for each account", "Push account cards into the sales channel"],
+            "tags": ["Browser actions", "Deliverables", "Integrations"]
+          },
+          {
+            "category": "Design",
+            "title": "Automated design QA",
+            "task": "Compare production UI against design files, mark regressions, and suggest fixes.",
+            "workflow": ["Capture screenshots from core pages", "Compare them against the design source", "Turn visual diffs into annotated subtasks", "Generate pixel-level repair guidance"],
+            "tags": ["Browser actions", "Task tracking", "Deliverables"]
+          },
+          {
+            "category": "Product engineering",
+            "title": "Parallel feature delivery",
+            "task": "Build a profile page with avatar upload, bio editing, and activity feed support.",
+            "workflow": ["Read the spec and code context", "Implement components, routes, and data model changes", "Add unit and integration tests", "Open a pull request with a complete diff summary"],
+            "tags": ["Code generation", "Testing", "Full context"]
+          },
+          {
+            "category": "Finance",
+            "title": "Board-level reporting",
+            "task": "Generate a monthly board report with revenue trends, burn rate, and runway forecasts.",
+            "workflow": ["Pull data from finance systems", "Produce charts and variance analysis", "Format the report with an executive summary", "Distribute it with highlighted metrics"],
+            "tags": ["Report generation", "Charts and analysis", "Notifications"]
+          }
+        ]
+      }
     },
     "about": {
       "title": "About Octopus",
-      "body": "We are dedicated to providing secure, controllable, and intelligent AI infrastructure for every organization through open source and private technologies."
+      "body": "Octopus aims to move AI from one-off conversation tools into a local agent system that can actually deliver work.",
+      "story": {
+        "title": "What we are building",
+        "lead": "Every team has work to deliver, but chat-based AI usually stops at a single answer. Octopus connects tasks, context, execution, and governance into one operating system that can keep running.",
+        "detail": "That is why we chose a task-driven, fully local, open, and extensible path so individuals, teams, and enterprises can run controllable agents inside their own environments."
+      },
+      "highlights": ["Apache 2.0 open source", "100% local operation", "Task-driven Agent OS"],
+      "principles": {
+        "title": "Our design principles",
+        "body": "These principles explain why Octopus is built the way it is.",
+        "items": [
+          {
+            "title": "Tasks first, not chats first",
+            "desc": "Every unit of work should have a clear goal, context, and deliverable instead of being scattered through chat history."
+          },
+          {
+            "title": "Local first, data stays in-bounds",
+            "desc": "Privacy and control are not optional extras. Data should stay on your machine or inside your private environment by default."
+          },
+          {
+            "title": "Open and extensible",
+            "desc": "Skills, plugins, and standard protocols should connect agents to real toolchains instead of locking users into a closed box."
+          },
+          {
+            "title": "Governance before scale",
+            "desc": "Permissions, approvals, auditability, and replay have to work first before agents belong in real business operations."
+          }
+        ]
+      }
     },
     "bookDemo": {
       "badge": "Enterprise Consultation",
-      "title": "Enterprise Consultation",
-      "body": "Share your organization and current requirements. We will respond with consultation tailored to deployment options, governance expectations, and business workflows.",
+      "title": "Bring agents into real business workflows",
+      "body": "Share your organization and requirements. We will respond with advice grounded in deployment choices, data boundaries, governance controls, and workflow integration.",
+      "valueProps": {
+        "title": "What the consultation covers",
+        "body": "We focus on the points that usually block the move from trial to production.",
+        "items": [
+          {
+            "title": "Deployment path and environment choice",
+            "desc": "Evaluate local, intranet, private cloud, or hybrid options and define the rollout path."
+          },
+          {
+            "title": "Data boundaries and security policy",
+            "desc": "Map sensitive-data handling, secret management, logging scope, and permission isolation requirements."
+          },
+          {
+            "title": "Workflow and system integration",
+            "desc": "Identify the knowledge bases, databases, IM channels, approval chains, and internal systems that need to connect."
+          },
+          {
+            "title": "Task design and governance rules",
+            "desc": "Turn roles, approvals, auditing, and exception handling into an executable agent workflow."
+          }
+        ]
+      },
       "submit": "Submit Consultation Request",
       "successTitle": "Consultation request submitted",
       "successBody": "Thanks for reaching out. Our team will contact you within two business days to confirm your scenario, deployment approach, and governance requirements.",

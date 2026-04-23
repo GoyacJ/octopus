@@ -10,7 +10,9 @@ use crate::{
 };
 
 use super::{
-    append::project_usage, deserialize_permission_mode, event_kind, now_millis,
+    append::project_usage,
+    deserialize_permission_mode, event_kind, now_millis,
+    schema::{EVENTS_TABLE, SESSIONS_TABLE},
     serialize_permission_mode, SqliteJsonlSessionStore,
 };
 
@@ -130,8 +132,9 @@ impl SqliteJsonlSessionStore {
         let transaction = connection.transaction()?;
 
         transaction.execute(
-            "
-            INSERT INTO sessions (
+            &format!(
+                "
+            INSERT INTO {SESSIONS_TABLE} (
                 session_id,
                 working_dir,
                 permission_mode,
@@ -147,6 +150,7 @@ impl SqliteJsonlSessionStore {
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ",
+            ),
             params![
                 forked_session_id.0,
                 source.working_dir,
@@ -166,10 +170,12 @@ impl SqliteJsonlSessionStore {
         for (event_id, seq, kind, event) in cloned {
             let payload = serde_json::to_string(&event)?;
             transaction.execute(
-                "
-                INSERT INTO events (event_id, session_id, seq, kind, payload, created_at)
+                &format!(
+                    "
+                INSERT INTO {EVENTS_TABLE} (event_id, session_id, seq, kind, payload, created_at)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 ",
+                ),
                 params![event_id.0, forked_session_id.0, seq, kind, payload, now],
             )?;
         }
@@ -207,16 +213,17 @@ impl SqliteJsonlSessionStore {
         let now = now_millis();
         let transaction = connection.unchecked_transaction()?;
         transaction.execute(
-            "DELETE FROM events WHERE session_id = ?1",
+            &format!("DELETE FROM {EVENTS_TABLE} WHERE session_id = ?1"),
             [session_id.0.as_str()],
         )?;
         transaction.execute(
-            "DELETE FROM sessions WHERE session_id = ?1",
+            &format!("DELETE FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
             [session_id.0.as_str()],
         )?;
         transaction.execute(
-            "
-            INSERT INTO sessions (
+            &format!(
+                "
+            INSERT INTO {SESSIONS_TABLE} (
                 session_id,
                 working_dir,
                 permission_mode,
@@ -232,6 +239,7 @@ impl SqliteJsonlSessionStore {
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ",
+            ),
             params![
                 session_id.0,
                 expected.working_dir,
@@ -251,10 +259,12 @@ impl SqliteJsonlSessionStore {
         for (index, record) in records.iter().enumerate() {
             let payload = serde_json::to_string(&record.event)?;
             transaction.execute(
-                "
-                INSERT INTO events (event_id, session_id, seq, kind, payload, created_at)
+                &format!(
+                    "
+                INSERT INTO {EVENTS_TABLE} (event_id, session_id, seq, kind, payload, created_at)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 ",
+                ),
                 params![
                     record.event_id.0,
                     session_id.0,
@@ -279,7 +289,7 @@ fn session_exists(
 ) -> Result<bool, SessionError> {
     Ok(connection
         .query_row(
-            "SELECT 1 FROM sessions WHERE session_id = ?1",
+            &format!("SELECT 1 FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
             [session_id.0.as_str()],
             |row| row.get::<_, i64>(0),
         )
@@ -305,11 +315,13 @@ fn load_session_row(
 ) -> Result<Option<SessionRow>, SessionError> {
     connection
         .query_row(
-            "
+            &format!(
+                "
             SELECT working_dir, permission_mode, model, config_snapshot_id, effective_config_hash, token_budget, plugins_snapshot_json, head_event_id, usage_json
-            FROM sessions
+            FROM {SESSIONS_TABLE}
             WHERE session_id = ?1
             ",
+            ),
             [session_id.0.as_str()],
             |row| {
                 Ok(SessionRow {
@@ -333,14 +345,14 @@ fn load_event_ids(
     connection: &rusqlite::Connection,
     session_id: &SessionId,
 ) -> Result<Vec<String>, SessionError> {
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare(&format!(
         "
         SELECT event_id
-        FROM events
+        FROM {EVENTS_TABLE}
         WHERE session_id = ?1
         ORDER BY seq ASC
         ",
-    )?;
+    ))?;
     let rows = statement.query_map([session_id.0.as_str()], |row| row.get::<_, String>(0))?;
 
     rows.collect::<Result<Vec<_>, _>>()
@@ -354,15 +366,15 @@ fn load_event_records(
     limit: Option<i64>,
 ) -> Result<Vec<SessionRecord>, SessionError> {
     if let Some(limit) = limit {
-        let mut statement = connection.prepare(
+        let mut statement = connection.prepare(&format!(
             "
             SELECT event_id, payload
-            FROM events
+            FROM {EVENTS_TABLE}
             WHERE session_id = ?1 AND seq > ?2
             ORDER BY seq ASC
             LIMIT ?3
             ",
-        )?;
+        ))?;
         let rows = statement.query_map(params![session_id.0, after_seq, limit], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -376,14 +388,14 @@ fn load_event_records(
         })
         .collect()
     } else {
-        let mut statement = connection.prepare(
+        let mut statement = connection.prepare(&format!(
             "
             SELECT event_id, payload
-            FROM events
+            FROM {EVENTS_TABLE}
             WHERE session_id = ?1 AND seq > ?2
             ORDER BY seq ASC
             ",
-        )?;
+        ))?;
         let rows = statement.query_map(params![session_id.0, after_seq], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -406,11 +418,13 @@ fn event_sequence(
 ) -> Result<Option<i64>, SessionError> {
     connection
         .query_row(
-            "
+            &format!(
+                "
             SELECT seq
-            FROM events
+            FROM {EVENTS_TABLE}
             WHERE session_id = ?1 AND event_id = ?2
             ",
+            ),
             params![session_id.0, event_id.0],
             |row| row.get(0),
         )
@@ -423,14 +437,14 @@ fn load_events_through(
     session_id: &SessionId,
     max_seq: i64,
 ) -> Result<Vec<(i64, String, SessionEvent)>, SessionError> {
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare(&format!(
         "
         SELECT seq, kind, payload
-        FROM events
+        FROM {EVENTS_TABLE}
         WHERE session_id = ?1 AND seq <= ?2
         ORDER BY seq ASC
         ",
-    )?;
+    ))?;
     let rows = statement.query_map(params![session_id.0, max_seq], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -451,14 +465,14 @@ fn load_events_after_seq(
     session_id: &SessionId,
     after_seq: i64,
 ) -> Result<Vec<SessionEvent>, SessionError> {
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare(&format!(
         "
         SELECT payload
-        FROM events
+        FROM {EVENTS_TABLE}
         WHERE session_id = ?1 AND seq > ?2
         ORDER BY seq ASC
         ",
-    )?;
+    ))?;
     let rows = statement.query_map(params![session_id.0, after_seq], |row| {
         row.get::<_, String>(0)
     })?;
@@ -471,14 +485,14 @@ fn load_checkpoint_rows(
     connection: &rusqlite::Connection,
     session_id: &SessionId,
 ) -> Result<Vec<(i64, EventId)>, SessionError> {
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare(&format!(
         "
         SELECT seq, payload
-        FROM events
+        FROM {EVENTS_TABLE}
         WHERE session_id = ?1
         ORDER BY seq ASC
         ",
-    )?;
+    ))?;
     let rows = statement.query_map([session_id.0.as_str()], |row| {
         Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
     })?;
@@ -520,6 +534,17 @@ fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, Se
     let last = records.last().ok_or(SessionError::Corrupted {
         reason: "jsonl_session_has_no_events".into(),
     })?;
+    if !matches!(first.event, SessionEvent::SessionStarted { .. }) {
+        return Err(SessionError::Corrupted {
+            reason: "first_event_must_be_session_started".into(),
+        });
+    }
+    let last_session_started_index = records
+        .iter()
+        .rposition(|record| matches!(record.event, SessionEvent::SessionStarted { .. }))
+        .ok_or(SessionError::Corrupted {
+            reason: "first_event_must_be_session_started".into(),
+        })?;
 
     let SessionEvent::SessionStarted {
         working_dir,
@@ -529,7 +554,7 @@ fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, Se
         effective_config_hash,
         token_budget,
         plugins_snapshot,
-    } = &first.event
+    } = &records[last_session_started_index].event
     else {
         return Err(SessionError::Corrupted {
             reason: "first_event_must_be_session_started".into(),
@@ -538,7 +563,7 @@ fn expected_projection(records: &[JsonlRecord]) -> Result<ExpectedProjection, Se
 
     let mut resolved_plugins_snapshot = plugins_snapshot.clone().unwrap_or_default();
 
-    for record in &records[1..] {
+    for record in &records[(last_session_started_index + 1)..] {
         if let SessionEvent::SessionPluginsSnapshot { plugins_snapshot } = &record.event {
             resolved_plugins_snapshot = plugins_snapshot.clone();
         }

@@ -386,6 +386,29 @@ export const runtimeSessionActions = {
       return null
     }
   },
+  async rebindSessionConfiguredModel(this: any, sessionId: string, configuredModelId: string): Promise<RuntimeSessionDetail | null> {
+    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+    if (!resolvedClient) {
+      return null
+    }
+    const { connectionId, client } = resolvedClient
+
+    try {
+      const detail = await client.runtime.rebindSessionConfiguredModel(sessionId, {
+        selectedConfiguredModelId: configuredModelId,
+      })
+      if (this.activeWorkspaceConnectionId !== connectionId) {
+        return null
+      }
+
+      this.setActiveSession(detail)
+      this.saveActiveWorkspaceSnapshot()
+      return detail
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to rebind runtime session model'
+      return null
+    }
+  },
   enqueueTurn(this: any, input: RuntimeTurnDraftInput) {
     if (!this.activeSessionId) {
       return

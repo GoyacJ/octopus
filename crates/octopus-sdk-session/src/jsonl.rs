@@ -6,6 +6,7 @@ use std::{
 
 use octopus_sdk_contracts::{EventId, SessionEvent, SessionId};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::SessionError;
 
@@ -13,6 +14,11 @@ use crate::SessionError;
 pub(crate) struct JsonlRecord {
     pub event_id: EventId,
     pub event: SessionEvent,
+}
+
+enum ParsedJsonlLine {
+    Record(JsonlRecord),
+    SkipLegacyRuntimeEnvelope,
 }
 
 pub(crate) fn append_record(
@@ -58,14 +64,37 @@ pub(crate) fn read_records(
     let file = fs::File::open(path)?;
     let reader = BufReader::new(file);
     let mut records = Vec::new();
+    let mut saw_legacy_runtime_envelope = false;
 
-    for line in reader.lines() {
+    for (line_index, line) in reader.lines().enumerate() {
         let line = line?;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        records.push(serde_json::from_str::<JsonlRecord>(trimmed)?);
+
+        match parse_line(trimmed, session_id, line_index + 1)? {
+            ParsedJsonlLine::Record(record) => {
+                if saw_legacy_runtime_envelope {
+                    return Err(SessionError::Corrupted {
+                        reason: "mixed_legacy_runtime_envelope_and_session_records".into(),
+                    });
+                }
+                records.push(record);
+            }
+            ParsedJsonlLine::SkipLegacyRuntimeEnvelope => {
+                if !records.is_empty() {
+                    return Err(SessionError::Corrupted {
+                        reason: "mixed_session_records_and_legacy_runtime_envelope".into(),
+                    });
+                }
+                saw_legacy_runtime_envelope = true;
+            }
+        }
+    }
+
+    if saw_legacy_runtime_envelope {
+        return Ok(Vec::new());
     }
 
     Ok(records)
@@ -93,4 +122,82 @@ pub(crate) fn list_session_ids(jsonl_root: &Path) -> Result<Vec<SessionId>, Sess
     session_ids.sort_by(|left, right| left.0.cmp(&right.0));
 
     Ok(session_ids)
+}
+
+fn parse_line(
+    trimmed: &str,
+    session_id: &SessionId,
+    line_number: usize,
+) -> Result<ParsedJsonlLine, SessionError> {
+    match serde_json::from_str::<JsonlRecord>(trimmed) {
+        Ok(record) => Ok(ParsedJsonlLine::Record(record)),
+        Err(current_error) => parse_legacy_line(trimmed, session_id, line_number, current_error),
+    }
+}
+
+fn parse_legacy_line(
+    trimmed: &str,
+    session_id: &SessionId,
+    line_number: usize,
+    current_error: serde_json::Error,
+) -> Result<ParsedJsonlLine, SessionError> {
+    let value = match serde_json::from_str::<Value>(trimmed) {
+        Ok(value) => value,
+        Err(_) => return Err(SessionError::from(current_error)),
+    };
+
+    if looks_like_legacy_runtime_envelope(&value) {
+        return Ok(ParsedJsonlLine::SkipLegacyRuntimeEnvelope);
+    }
+
+    if let Some(record) = parse_legacy_event_wrapper(&value, session_id, line_number)? {
+        return Ok(ParsedJsonlLine::Record(record));
+    }
+
+    match serde_json::from_value::<SessionEvent>(value) {
+        Ok(event) => Ok(ParsedJsonlLine::Record(JsonlRecord {
+            event_id: legacy_event_id(session_id, line_number),
+            event,
+        })),
+        Err(_) => Err(SessionError::from(current_error)),
+    }
+}
+
+fn parse_legacy_event_wrapper(
+    value: &Value,
+    session_id: &SessionId,
+    line_number: usize,
+) -> Result<Option<JsonlRecord>, SessionError> {
+    let Value::Object(map) = value else {
+        return Ok(None);
+    };
+    let Some(event_value) = map.get("event").cloned() else {
+        return Ok(None);
+    };
+    let event = serde_json::from_value::<SessionEvent>(event_value)?;
+    let event_id = map
+        .get("event_id")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<EventId>(value).ok())
+        .or_else(|| {
+            map.get("id")
+                .and_then(|value| value.as_str())
+                .map(|value| EventId(value.to_owned()))
+        })
+        .unwrap_or_else(|| legacy_event_id(session_id, line_number));
+
+    Ok(Some(JsonlRecord { event_id, event }))
+}
+
+fn looks_like_legacy_runtime_envelope(value: &Value) -> bool {
+    let Value::Object(map) = value else {
+        return false;
+    };
+
+    map.contains_key("eventType")
+        || (map.contains_key("payload") && map.contains_key("sessionId") && map.contains_key("id"))
+}
+
+fn legacy_event_id(session_id: &SessionId, line_number: usize) -> EventId {
+    EventId(format!("legacy-{}-{}", session_id.0, line_number))
 }

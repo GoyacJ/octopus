@@ -13,7 +13,7 @@ const catalogStore = useCatalogStore()
 const petStore = usePetStore()
 
 const selectedModelSummary = computed(() => {
-  const configuredModelId = petStore.preferredConfiguredModelId || petStore.resolvedConfiguredModelId
+  const configuredModelId = petStore.resolvedConfiguredModelId || petStore.preferredConfiguredModelId
   const configuredModel = catalogStore.getConfiguredModelRowById(configuredModelId)
   return configuredModel?.name ?? t('common.na')
 })

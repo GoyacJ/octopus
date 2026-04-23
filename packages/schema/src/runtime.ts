@@ -6,6 +6,7 @@ export * from './capability-runtime'
 export * from './memory-runtime'
 export * from './runtime-policy'
 export type {
+  RebindRuntimeSessionConfiguredModelInput,
   RunRuntimeGenerationInput,
   RuntimeGenerationResult,
 } from './generated'

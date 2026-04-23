@@ -121,6 +121,32 @@ impl RuntimeSdkBridge {
         }
     }
 
+    pub(crate) fn build_session_policy_snapshot(
+        metadata: &RuntimeSessionMetadata,
+    ) -> RuntimeSessionPolicySnapshot {
+        RuntimeSessionPolicySnapshot {
+            selected_actor_ref: metadata.selected_actor_ref.clone(),
+            selected_configured_model_id: metadata
+                .configured_model_id
+                .clone()
+                .unwrap_or_default(),
+            execution_permission_mode: match metadata.permission_mode {
+                PermissionMode::Default | PermissionMode::Plan => {
+                    octopus_core::RUNTIME_PERMISSION_READ_ONLY.into()
+                }
+                PermissionMode::AcceptEdits => {
+                    octopus_core::RUNTIME_PERMISSION_WORKSPACE_WRITE.into()
+                }
+                PermissionMode::BypassPermissions => {
+                    octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS.into()
+                }
+            },
+            config_snapshot_id: metadata.config_snapshot_id.clone(),
+            manifest_revision: "sdk-bridge".into(),
+            ..RuntimeSessionPolicySnapshot::default()
+        }
+    }
+
     pub(crate) fn synthetic_run_id(session_id: &str) -> String {
         format!("run-{session_id}")
     }
@@ -206,7 +232,7 @@ impl RuntimeSdkBridge {
             started_from_scope_set: metadata.started_from_scope_set.clone(),
             selected_actor_ref: metadata.selected_actor_ref.clone(),
             manifest_revision: "sdk-bridge".into(),
-            session_policy: RuntimeSessionPolicySnapshot::default(),
+            session_policy: Self::build_session_policy_snapshot(&metadata),
             active_run_id: run.id.clone(),
             subrun_count: 0,
             workflow: None,
@@ -228,7 +254,7 @@ impl RuntimeSdkBridge {
             summary,
             selected_actor_ref: metadata.selected_actor_ref.clone(),
             manifest_revision: "sdk-bridge".into(),
-            session_policy: RuntimeSessionPolicySnapshot::default(),
+            session_policy: Self::build_session_policy_snapshot(&metadata),
             active_run_id: run.id.clone(),
             subrun_count: 0,
             workflow: None,

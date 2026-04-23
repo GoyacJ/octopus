@@ -120,6 +120,73 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('rebinds stale project sessions to the current runnable model before submit', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      preloadConversationMessages: true,
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const staleSession = state.runtimeSessions.get('rt-conv-redesign')
+        if (!staleSession) {
+          throw new Error('Expected rt-conv-redesign runtime session')
+        }
+
+        staleSession.detail.summary.sessionPolicy.selectedConfiguredModelId = 'minimax-primary'
+        staleSession.detail.sessionPolicy.selectedConfiguredModelId = 'minimax-primary'
+        staleSession.detail.run.configuredModelId = 'minimax-primary'
+        staleSession.detail.run.configuredModelName = 'Minimax Primary'
+        staleSession.detail.run.modelId = 'minimax-text-01'
+      },
+    })
+
+    let rebindCalls = 0
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async rebindSessionConfiguredModel(sessionId, input) {
+          rebindCalls += 1
+          return await client.runtime.rebindSessionConfiguredModel(sessionId, input)
+        },
+        async submitUserTurn(sessionId, input, idempotencyKey) {
+          const detail = await client.runtime.loadSession(sessionId)
+          if (detail.run.configuredModelId === 'minimax-primary') {
+            throw new Error('runtime error: missing auth secret for provider minimax')
+          }
+          return await client.runtime.submitUserTurn(sessionId, input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeSession?.run.configuredModelId === 'anthropic-primary')
+    expect(runtime.activeSession?.summary.sessionPolicy.selectedConfiguredModelId).toBe('anthropic-primary')
+    expect(rebindCalls).toBeGreaterThanOrEqual(1)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '继续推进真实 workspace API 收尾。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === '继续推进真实 workspace API 收尾。'))
+    await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
+    expect(runtime.error).toBe('')
+
+    mounted.destroy()
+  })
+
   it('renders active conversation controls as calm selected bands instead of raised chips', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?mode=context')
     await router.isReady()
@@ -1152,6 +1219,8 @@ describe('Conversation surfaces', () => {
                 },
                 enabled: true,
                 source: 'workspace',
+                status: 'configured',
+                configured: true,
               },
               {
                 configuredModelId: 'anthropic-alt',
@@ -1165,6 +1234,8 @@ describe('Conversation surfaces', () => {
                 },
                 enabled: true,
                 source: 'workspace',
+                status: 'configured',
+                configured: true,
               },
             ],
             defaultSelections: {
@@ -1207,10 +1278,9 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
-  it('falls back to seeded catalog models when project model settings are absent', async () => {
+  it('shows setup guidance when the project only has missing-credential models', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
-      preloadConversationMessages: true,
       stateTransform(state, connection) {
         if (connection.workspaceId !== 'ws-local') {
           return
@@ -1218,65 +1288,63 @@ describe('Conversation surfaces', () => {
 
         state.catalog.configuredModels = [
           {
-            configuredModelId: 'claude-sonnet-4-5',
-            name: 'Claude Sonnet 4.5',
+            configuredModelId: 'anthropic-primary',
+            name: 'Claude Primary',
             providerId: 'anthropic',
             modelId: 'claude-sonnet-4-5',
-            credentialRef: 'env:ANTHROPIC_API_KEY',
+            credentialRef: undefined,
             tokenUsage: {
               usedTokens: 0,
               exhausted: false,
             },
             enabled: true,
-            source: 'seeded',
-            status: 'unconfigured',
+            source: 'workspace',
+            status: 'missing_credentials',
             configured: false,
-          },
+          } as any,
         ]
         state.catalog.defaultSelections = {
           conversation: {
-            configuredModelId: 'claude-sonnet-4-5',
+            configuredModelId: 'anthropic-primary',
             providerId: 'anthropic',
             modelId: 'claude-sonnet-4-5',
             surface: 'conversation',
           },
         }
-
-        updateFixtureProjectSettings(state, 'proj-redesign', (current) => {
-          const next = { ...current }
-          delete next.models
-          return next
-        })
       },
     })
 
-    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    let createSessionCalls = 0
+    configureWorkspaceClient(client => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async createSession(input, idempotencyKey) {
+          createSessionCalls += 1
+          return await client.runtime.createSession(input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-missing-credential-model')
     await router.isReady()
 
     const mounted = mountApp()
-    const runtime = useRuntimeStore()
 
-    await waitFor(() => runtime.activeMessages.length >= 3)
-    await waitFor(() => {
-      const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
-      const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
-      return modelOptionLabels.includes('Claude Sonnet 4.5')
-    })
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-setup-callout"]') !== null)
 
     const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
-    expect(modelSelect).not.toBeNull()
-    const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
-    expect(modelOptionLabels).toContain('Claude Sonnet 4.5')
-    expect(modelSelect?.disabled).toBe(false)
-
     const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
-    textarea.value = '继续推进真实 workspace API 收尾。'
-    textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
     const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
-    expect(sendButton).not.toBeNull()
-    expect(sendButton?.disabled).toBe(false)
+
+    expect(createSessionCalls).toBe(0)
+    expect(modelSelect).not.toBeNull()
+    expect(modelSelect?.disabled).toBe(true)
+    expect(modelSelect?.querySelectorAll('option')).toHaveLength(0)
+    expect(textarea.disabled).toBe(true)
+    expect(sendButton?.disabled).toBe(true)
+    expect(mounted.container.textContent).toContain('还不能开始对话')
+    expect(mounted.container.textContent).toContain('当前项目还没有可用模型。先完成模型配置，再发起会话。')
 
     mounted.destroy()
   })

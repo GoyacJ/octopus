@@ -103,6 +103,33 @@ describe('useCatalogStore', () => {
     expect(catalog.configuredModelOptions.some(option => option.value === 'openai-generate')).toBe(false)
   })
 
+  it('keeps missing-credential models visible in management lists while excluding them from runtime-ready options', async () => {
+    const { catalog } = await prepareCatalogStore({
+      stateTransform(state, connection) {
+        if (connection.workspaceConnectionId !== 'conn-local') {
+          return
+        }
+
+        state.catalog.configuredModels = state.catalog.configuredModels.map(model => (
+          model.configuredModelId === 'anthropic-alt'
+            ? {
+                ...model,
+                credentialRef: undefined,
+                status: 'missing_credentials',
+                configured: false,
+              } as any
+            : model
+        ))
+      },
+    })
+
+    expect(catalog.configuredModelOptions.some(option => option.value === 'anthropic-alt')).toBe(true)
+    expect(catalog.workspaceConfiguredModelOptions.some(option => option.value === 'anthropic-alt')).toBe(true)
+    expect(catalog.runnableConfiguredModelOptions.some(option => option.value === 'anthropic-alt')).toBe(false)
+    expect(catalog.workspaceRunnableConfiguredModelOptions.some(option => option.value === 'anthropic-alt')).toBe(false)
+    expect(catalog.defaultConversationRunnableConfiguredModelOption?.value).toBe('anthropic-primary')
+  })
+
   it('keeps management entries in sync when disabling a builtin tool', async () => {
     const { catalog } = await prepareCatalogStore()
 

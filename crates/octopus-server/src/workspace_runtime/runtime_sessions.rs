@@ -170,6 +170,33 @@ pub(crate) async fn get_runtime_session(
     Ok(response)
 }
 
+pub(crate) async fn rebind_runtime_session_configured_model(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    Json(input): Json<octopus_core::RebindRuntimeSessionConfiguredModelInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.submit_turn",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
+    let detail = state
+        .services
+        .runtime_session
+        .rebind_session_configured_model(&session_id, input, &session.user_id)
+        .await?;
+    let payload = runtime_transport_payload(&detail, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
 pub(crate) async fn delete_runtime_session(
     State(state): State<ServerState>,
     headers: HeaderMap,

@@ -5,10 +5,13 @@ use octopus_sdk_contracts::{
     PluginSummary, PluginsSnapshot, RenderBlock, RenderKind, RenderLifecycle, RenderMeta, Role,
     SessionEvent, StopReason, ToolCallId, Usage,
 };
-use octopus_sdk_session::{EventRange, SessionStore, SqliteJsonlSessionStore};
+use octopus_sdk_session::{EventRange, SessionError, SessionStore, SqliteJsonlSessionStore};
 use rusqlite::params;
 use serde_json::json;
 use uuid::Uuid;
+
+const SESSIONS_TABLE: &str = "runtime_session_store_sessions";
+const EVENTS_TABLE: &str = "runtime_session_store_events";
 
 #[tokio::test]
 async fn test_append_roundtrip() {
@@ -115,13 +118,15 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
     let connection = rusqlite::Connection::open(&paths.db_path).expect("sqlite db should open");
     connection
         .execute(
-            "DELETE FROM events WHERE session_id = ?1 AND seq > 8",
+            &format!("DELETE FROM {EVENTS_TABLE} WHERE session_id = ?1 AND seq > 8"),
             params![session_id.0.as_str()],
         )
         .expect("tail rows should delete");
     connection
         .execute(
-            "UPDATE sessions SET head_event_id = ?2, usage_json = ?3 WHERE session_id = ?1",
+            &format!(
+                "UPDATE {SESSIONS_TABLE} SET head_event_id = ?2, usage_json = ?3 WHERE session_id = ?1"
+            ),
             params![
                 session_id.0.as_str(),
                 event_ids[7].0.as_str(),
@@ -150,6 +155,262 @@ async fn test_open_repairs_db_projection_from_jsonl_tail() {
             cache_read_input_tokens: 17,
         }
     );
+}
+
+#[tokio::test]
+async fn test_open_replays_legacy_event_only_jsonl_records() {
+    let paths = test_paths("legacy-event-only");
+    let session_id = octopus_sdk_contracts::SessionId("session-legacy-event-only".into());
+    let expected = sample_events();
+    let path = paths.jsonl_root.join(format!("{}.jsonl", session_id.0));
+
+    fs::create_dir_all(&paths.jsonl_root).expect("jsonl root should exist");
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            expected
+                .iter()
+                .map(|event| serde_json::to_string(event).expect("event should serialize"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    )
+    .expect("legacy jsonl should write");
+
+    let reopened = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should reopen");
+    let actual = read_all_events(&reopened, &session_id).await;
+    let snapshot = reopened
+        .snapshot(&session_id)
+        .await
+        .expect("snapshot should load after replay");
+
+    assert_eq!(actual, expected);
+    assert_eq!(
+        snapshot.head_event_id.0,
+        format!("legacy-{}-{}", session_id.0, snapshot_event_count())
+    );
+}
+
+#[tokio::test]
+async fn test_open_replays_latest_session_started_from_legacy_jsonl_records() {
+    let paths = test_paths("legacy-rebind-session-started");
+    let session_id = octopus_sdk_contracts::SessionId("session-legacy-rebind".into());
+    let path = paths.jsonl_root.join(format!("{}.jsonl", session_id.0));
+    let events = vec![
+        SessionEvent::SessionStarted {
+            working_dir: ".".into(),
+            permission_mode: octopus_sdk_contracts::PermissionMode::Default,
+            model: "main".into(),
+            config_snapshot_id: "cfg-1".into(),
+            effective_config_hash: "hash-1".into(),
+            token_budget: 8_192,
+            plugins_snapshot: Some(sample_plugins_snapshot()),
+        },
+        SessionEvent::UserMessage(Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text {
+                text: "Switch the configured model.".into(),
+            }],
+        }),
+        SessionEvent::SessionStarted {
+            working_dir: "./apps/desktop".into(),
+            permission_mode: octopus_sdk_contracts::PermissionMode::AcceptEdits,
+            model: "claude-sonnet-4-5".into(),
+            config_snapshot_id: "cfg-2".into(),
+            effective_config_hash: "hash-2".into(),
+            token_budget: 4_096,
+            plugins_snapshot: Some(sample_plugins_snapshot()),
+        },
+    ];
+
+    fs::create_dir_all(&paths.jsonl_root).expect("jsonl root should exist");
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            events
+                .iter()
+                .map(|event| serde_json::to_string(event).expect("event should serialize"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    )
+    .expect("legacy jsonl should write");
+
+    let reopened = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should reopen");
+    let actual = read_all_events(&reopened, &session_id).await;
+    let snapshot = reopened
+        .snapshot(&session_id)
+        .await
+        .expect("snapshot should load after replay");
+
+    assert_eq!(actual, events);
+    assert_eq!(snapshot.working_dir, PathBuf::from("./apps/desktop"));
+    assert_eq!(
+        snapshot.permission_mode,
+        octopus_sdk_contracts::PermissionMode::AcceptEdits
+    );
+    assert_eq!(snapshot.model, "claude-sonnet-4-5");
+    assert_eq!(snapshot.config_snapshot_id, "cfg-2");
+    assert_eq!(snapshot.effective_config_hash, "hash-2");
+    assert_eq!(snapshot.token_budget, 4_096);
+    assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
+    assert_eq!(snapshot.head_event_id.0, format!("legacy-{}-3", session_id.0));
+}
+
+#[tokio::test]
+async fn test_open_skips_legacy_runtime_envelope_jsonl_files() {
+    let paths = test_paths("legacy-runtime-envelope");
+    let session_id = octopus_sdk_contracts::SessionId("rt-legacy-runtime-envelope".into());
+    let path = paths.jsonl_root.join(format!("{}.jsonl", session_id.0));
+
+    fs::create_dir_all(&paths.jsonl_root).expect("jsonl root should exist");
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            serde_json::to_string(&json!({
+                "id": "evt-legacy-runtime-envelope",
+                "eventType": "runtime.session.updated",
+                "kind": "runtime.session.updated",
+                "sessionId": session_id.0,
+                "payload": {
+                    "summary": {
+                        "id": session_id.0,
+                        "status": "idle"
+                    }
+                }
+            }))
+            .expect("legacy runtime envelope should serialize")
+        ),
+    )
+    .expect("legacy runtime envelope should write");
+
+    let reopened = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should reopen");
+    let missing = reopened
+        .snapshot(&session_id)
+        .await
+        .expect_err("session should skip");
+    let connection = rusqlite::Connection::open(&paths.db_path).expect("sqlite db should open");
+    let sessions: i64 = connection
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
+            [session_id.0.as_str()],
+            |row| row.get(0),
+        )
+        .expect("count should query");
+
+    assert!(matches!(missing, SessionError::NotFound));
+    assert_eq!(sessions, 0);
+}
+
+#[tokio::test]
+async fn test_append_uses_namespaced_runtime_tables_when_auth_tables_exist() {
+    let paths = test_paths("auth-shared-db");
+    let session_id = octopus_sdk_contracts::SessionId("session-auth-shared-db".into());
+    let expected = sample_events();
+    let connection = rusqlite::Connection::open(&paths.db_path).expect("sqlite db should open");
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                client_app_id TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER
+            );
+
+            CREATE TABLE events (
+                event_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            ",
+        )
+        .expect("shared auth tables should create");
+    connection
+        .execute(
+            "
+            INSERT INTO sessions (
+                id,
+                workspace_id,
+                user_id,
+                client_app_id,
+                token,
+                status,
+                created_at,
+                expires_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ",
+            params![
+                "auth-session-1",
+                "workspace-1",
+                "user-1",
+                "desktop",
+                "token-1",
+                "active",
+                1_i64,
+                Option::<i64>::None
+            ],
+        )
+        .expect("auth session row should insert");
+    drop(connection);
+
+    let store = SqliteJsonlSessionStore::open(&paths.db_path, &paths.jsonl_root)
+        .expect("store should open");
+    for event in &expected {
+        store
+            .append(&session_id, event.clone())
+            .await
+            .expect("append should succeed");
+    }
+
+    let actual = read_all_events(&store, &session_id).await;
+    let snapshot = store
+        .snapshot(&session_id)
+        .await
+        .expect("snapshot should load");
+    let connection = rusqlite::Connection::open(&paths.db_path).expect("sqlite db should reopen");
+    let auth_sessions: i64 = connection
+        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+        .expect("auth session rows should query");
+    let legacy_events: i64 = connection
+        .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+        .expect("legacy event rows should query");
+    let runtime_sessions: i64 = connection
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
+            [session_id.0.as_str()],
+            |row| row.get(0),
+        )
+        .expect("runtime session rows should query");
+    let runtime_events: i64 = connection
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {EVENTS_TABLE} WHERE session_id = ?1"),
+            [session_id.0.as_str()],
+            |row| row.get(0),
+        )
+        .expect("runtime event rows should query");
+
+    assert_eq!(actual, expected);
+    assert_eq!(snapshot.id, session_id);
+    assert_eq!(snapshot.plugins_snapshot, sample_plugins_snapshot());
+    assert_eq!(auth_sessions, 1);
+    assert_eq!(legacy_events, 0);
+    assert_eq!(runtime_sessions, 1);
+    assert_eq!(runtime_events, expected.len() as i64);
 }
 
 struct TestPaths {
@@ -305,4 +566,8 @@ fn sample_plugins_snapshot() -> PluginsSnapshot {
             components_count: 1,
         }],
     }
+}
+
+fn snapshot_event_count() -> usize {
+    sample_events().len()
 }

@@ -4,6 +4,7 @@
   "version": "0.2.5",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/prepare-dev.mjs",
     "dev": "nuxt dev",
     "build": "nuxt build",
     "generate": "nuxt generate",

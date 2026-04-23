@@ -544,6 +544,10 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             "/sessions/:session_id",
             get(get_runtime_session).delete(delete_runtime_session),
         )
+        .route(
+            "/sessions/:session_id/configured-model",
+            post(rebind_runtime_session_configured_model),
+        )
         .route("/sessions/:session_id/turns", post(submit_runtime_turn))
         .route(
             "/sessions/:session_id/approvals/:approval_id",

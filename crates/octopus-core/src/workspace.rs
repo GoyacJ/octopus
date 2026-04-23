@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    task_records::{default_project_permission_allow, default_project_permission_inherit, TaskSummary},
+use crate::task_records::{
+    default_project_permission_allow, default_project_permission_inherit, TaskSummary,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -5,7 +5,11 @@ use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::SessionError;
 
-use super::{event_kind, now_millis, serialize_permission_mode, SqliteJsonlSessionStore};
+use super::{
+    event_kind, now_millis,
+    schema::{EVENTS_TABLE, SESSIONS_TABLE},
+    serialize_permission_mode, SqliteJsonlSessionStore,
+};
 
 impl SqliteJsonlSessionStore {
     pub(crate) fn append_event(
@@ -35,10 +39,12 @@ impl SqliteJsonlSessionStore {
         let now = now_millis();
 
         transaction.execute(
-            "
-            INSERT INTO events (event_id, session_id, seq, kind, payload, created_at)
+            &format!(
+                "
+            INSERT INTO {EVENTS_TABLE} (event_id, session_id, seq, kind, payload, created_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ",
+            ),
             params![
                 event_id.0,
                 session_id.0,
@@ -64,7 +70,7 @@ impl SqliteJsonlSessionStore {
     ) -> Result<(), SessionError> {
         let exists = transaction
             .query_row(
-                "SELECT 1 FROM sessions WHERE session_id = ?1",
+                &format!("SELECT 1 FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
                 [session_id.0.as_str()],
                 |row| row.get::<_, i64>(0),
             )
@@ -94,8 +100,9 @@ impl SqliteJsonlSessionStore {
         let now = now_millis();
 
         transaction.execute(
-            "
-            INSERT INTO sessions (
+            &format!(
+                "
+            INSERT INTO {SESSIONS_TABLE} (
                 session_id,
                 working_dir,
                 permission_mode,
@@ -111,6 +118,7 @@ impl SqliteJsonlSessionStore {
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ",
+            ),
             params![
                 session_id.0,
                 working_dir,
@@ -151,8 +159,9 @@ impl SqliteJsonlSessionStore {
                 plugins_snapshot,
             } => {
                 transaction.execute(
-                    "
-                    UPDATE sessions
+                    &format!(
+                        "
+                    UPDATE {SESSIONS_TABLE}
                     SET working_dir = ?2,
                         permission_mode = ?3,
                         model = ?4,
@@ -165,6 +174,7 @@ impl SqliteJsonlSessionStore {
                         updated_at = ?11
                     WHERE session_id = ?1
                     ",
+                    ),
                     params![
                         session_id.0,
                         working_dir,
@@ -182,14 +192,16 @@ impl SqliteJsonlSessionStore {
             }
             SessionEvent::SessionPluginsSnapshot { plugins_snapshot } => {
                 transaction.execute(
-                    "
-                    UPDATE sessions
+                    &format!(
+                        "
+                    UPDATE {SESSIONS_TABLE}
                     SET plugins_snapshot_json = ?2,
                         head_event_id = ?3,
                         usage_json = ?4,
                         updated_at = ?5
                     WHERE session_id = ?1
                     ",
+                    ),
                     params![
                         session_id.0,
                         serde_json::to_string(plugins_snapshot)?,
@@ -201,13 +213,15 @@ impl SqliteJsonlSessionStore {
             }
             _ => {
                 transaction.execute(
-                    "
-                    UPDATE sessions
+                    &format!(
+                        "
+                    UPDATE {SESSIONS_TABLE}
                     SET head_event_id = ?2,
                         usage_json = ?3,
                         updated_at = ?4
                     WHERE session_id = ?1
                     ",
+                    ),
                     params![session_id.0, event_id.0, usage_json, now],
                 )?;
             }
@@ -223,7 +237,7 @@ fn next_sequence(
 ) -> Result<i64, SessionError> {
     transaction
         .query_row(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM events WHERE session_id = ?1",
+            &format!("SELECT COALESCE(MAX(seq), 0) + 1 FROM {EVENTS_TABLE} WHERE session_id = ?1"),
             [session_id.0.as_str()],
             |row| row.get(0),
         )
@@ -236,7 +250,7 @@ fn session_exists(
 ) -> Result<bool, SessionError> {
     Ok(connection
         .query_row(
-            "SELECT 1 FROM sessions WHERE session_id = ?1",
+            &format!("SELECT 1 FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
             [session_id.0.as_str()],
             |row| row.get::<_, i64>(0),
         )
@@ -257,7 +271,7 @@ fn next_usage(
     }
 
     let usage_json: String = transaction.query_row(
-        "SELECT usage_json FROM sessions WHERE session_id = ?1",
+        &format!("SELECT usage_json FROM {SESSIONS_TABLE} WHERE session_id = ?1"),
         [session_id.0.as_str()],
         |row| row.get(0),
     )?;

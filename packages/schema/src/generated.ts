@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: af41c9e67017c40c12d0d15f4f95e16861b278ec08c61637b3bca8670676b912
+// Source hash: d41eccd8858845037e896e816166ad8691fda12c14c95677c703a6bac8c81902
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.5"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "af41c9e67017c40c12d0d15f4f95e16861b278ec08c61637b3bca8670676b912"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "d41eccd8858845037e896e816166ad8691fda12c14c95677c703a6bac8c81902"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1682,6 +1682,10 @@ export interface ProviderRegistryRecord {
   metadata: Record<string, unknown>
   providerId: string
   surfaces: SurfaceDescriptor[]
+}
+
+export interface RebindRuntimeSessionConfiguredModelInput {
+  selectedConfiguredModelId: string
 }
 
 export interface RegisterBootstrapAdminRequest {
@@ -3629,6 +3633,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/sessions/{sessionId}/auth-challenges/{challengeId}": {
     post: { operationId: "resolveRuntimeAuthChallenge"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/runtime/sessions/{sessionId}/configured-model": {
+    post: { operationId: "rebindRuntimeSessionConfiguredModel"; response: RuntimeSessionDetail; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/sessions/{sessionId}/events": {
     get: { operationId: "listRuntimeSessionEvents"; response: RuntimeEventEnvelope[]; error: ApiErrorEnvelope }

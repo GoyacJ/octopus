@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
-import { resolveRuntimePermissionMode, resolveUiPermissionMode, type AgentRecord, type ConversationActorKind, type Message, type PermissionMode, type TeamRecord, type WorkspaceResourceRecord } from '@octopus/schema'
+import { resolveRuntimePermissionMode, resolveUiPermissionMode, type AgentRecord, type ConversationActorKind, type Message, type PermissionMode, type RuntimeSessionDetail, type TeamRecord, type WorkspaceResourceRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
@@ -108,9 +108,9 @@ const project = computed(() =>
 const assignedConfiguredModelOptions = computed(() => {
   const assignedIds = resolveProjectGrantedModelIds(
     projectSettings.value,
-    catalogStore.configuredModelOptions.map(item => item.value),
+    catalogStore.runnableConfiguredModelOptions.map(item => item.value),
   )
-  return catalogStore.configuredModelOptions.filter(item => assignedIds.includes(item.value))
+  return catalogStore.runnableConfiguredModelOptions.filter(item => assignedIds.includes(item.value))
 })
 const resolvedModelSettings = computed(() =>
   resolveProjectModelSettings(
@@ -386,6 +386,35 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function resolveSessionConfiguredModelId(detail: RuntimeSessionDetail | null | undefined) {
+  if (!detail) {
+    return ''
+  }
+  return detail.run.configuredModelId
+    || detail.sessionPolicy.selectedConfiguredModelId
+    || detail.summary.sessionPolicy.selectedConfiguredModelId
+    || ''
+}
+
+function syncComposerSelectionsFromSession(detail: RuntimeSessionDetail | null | undefined) {
+  if (!detail) {
+    return
+  }
+
+  const configuredModelId = resolveSessionConfiguredModelId(detail)
+  if (configuredModelId && modelOptions.value.some(option => option.value === configuredModelId)) {
+    selectedModelId.value = configuredModelId
+  }
+
+  const selectedActorRef = detail.selectedActorRef
+    || detail.sessionPolicy.selectedActorRef
+    || detail.summary.selectedActorRef
+    || detail.summary.sessionPolicy.selectedActorRef
+  if (selectedActorRef && actorOptions.value.some(option => option.value === selectedActorRef)) {
+    selectedActorValue.value = selectedActorRef
+  }
+}
+
 function resolveProjectDefaultPermissionMode(): PermissionMode | null {
   const effectiveConfig = workspaceStore.activeProjectRuntimeConfig?.effectiveConfig
   if (!isObjectRecord(effectiveConfig)) {
@@ -572,15 +601,26 @@ async function ensureRuntimeSession() {
       && session.sessionKind !== 'pet')
 
     if (existingSession) {
-      await runtime.loadSession(existingSession.id)
-      void ensureConversationComposerContext(connectionId, nextProjectId)
+      let detail = await runtime.loadSession(existingSession.id)
+      await ensureConversationComposerContext(connectionId, nextProjectId)
+      const activeConfiguredModelId = resolveSessionConfiguredModelId(detail)
+      const preferredConfiguredModelId = selectedModelId.value || modelOptions.value[0]?.value || ''
+      if (
+        detail
+        && preferredConfiguredModelId
+        && activeConfiguredModelId
+        && !modelOptions.value.some(option => option.value === activeConfiguredModelId)
+      ) {
+        detail = await runtime.rebindSessionConfiguredModel(detail.summary.id, preferredConfiguredModelId) ?? detail
+      }
+      syncComposerSelectionsFromSession(detail)
       void ensureConversationContextPaneData(connectionId, nextProjectId)
       logDevTiming('session-load', startedAt, `${nextProjectId}:${nextConversationId}`)
       return
     }
 
     await ensureConversationComposerContext(connectionId, nextProjectId)
-    if (baseConversationSetupState.value) {
+    if (!hasModelOptions.value || !hasActorOptions.value) {
       logDevTiming('session-create-skipped', startedAt, `${nextProjectId}:${nextConversationId}`)
       return
     }
@@ -591,7 +631,7 @@ async function ensureRuntimeSession() {
       grantedAgents: grantedAgents.value,
       grantedTeams: grantedTeams.value,
     }) || actorOptions.value[0]?.value || ''
-    await runtime.ensureSession({
+    const detail = await runtime.ensureSession({
       conversationId: nextConversationId,
       projectId: nextProjectId,
       title: `Conversation ${nextConversationId.slice(-6)}`,
@@ -599,6 +639,7 @@ async function ensureRuntimeSession() {
       selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
       executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
     })
+    syncComposerSelectionsFromSession(detail)
     void ensureConversationContextPaneData(connectionId, nextProjectId)
     logDevTiming('session-create', startedAt, `${nextProjectId}:${nextConversationId}`)
   })()

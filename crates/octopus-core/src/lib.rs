@@ -1,8 +1,8 @@
+mod access_control;
 mod app;
 mod asset_bundle;
 mod asset_records;
 mod capability_management;
-mod access_control;
 mod host;
 mod model_catalog;
 mod operations;
@@ -13,11 +13,11 @@ mod runtime_session;
 mod task_records;
 mod workspace;
 
+pub use access_control::*;
 pub use app::*;
 pub use asset_bundle::*;
 pub use asset_records::*;
 pub use capability_management::*;
-pub use access_control::*;
 pub use host::*;
 pub use model_catalog::*;
 pub use operations::*;

@@ -153,9 +153,7 @@ impl DiscoveredMcpServerCapabilities {
 }
 
 #[must_use]
-pub fn parse_mcp_servers(
-    document: &Map<String, Value>,
-) -> BTreeMap<String, McpServerConfig> {
+pub fn parse_mcp_servers(document: &Map<String, Value>) -> BTreeMap<String, McpServerConfig> {
     document
         .get("mcpServers")
         .and_then(Value::as_object)
@@ -330,10 +328,7 @@ pub async fn discover_mcp_server_capabilities_best_effort(
         .collect()
 }
 
-fn client_for_server(
-    server_name: &str,
-    config: &McpServerConfig,
-) -> Result<McpClient, String> {
+fn client_for_server(server_name: &str, config: &McpServerConfig) -> Result<McpClient, String> {
     match config {
         McpServerConfig::Stdio(config) => {
             let transport = StdioTransport::spawn(
@@ -346,10 +341,7 @@ fn client_for_server(
                     .collect::<HashMap<_, _>>(),
             )
             .map_err(|error| error.to_string())?;
-            Ok(McpClient::new(
-                server_name.to_string(),
-                Arc::new(transport),
-            ))
+            Ok(McpClient::new(server_name.to_string(), Arc::new(transport)))
         }
         McpServerConfig::Http(config) => {
             let transport = HttpTransport::new(
@@ -361,10 +353,7 @@ fn client_for_server(
                     .collect::<HashMap<_, _>>(),
             )
             .map_err(|error| error.to_string())?;
-            Ok(McpClient::new(
-                server_name.to_string(),
-                Arc::new(transport),
-            ))
+            Ok(McpClient::new(server_name.to_string(), Arc::new(transport)))
         }
         unsupported => Err(format!(
             "transport {} is not supported by SDK MCP discovery (not supported transport)",
@@ -445,7 +434,10 @@ mod tests {
         } else {
             "mcp-echo-server"
         };
-        let candidate = manifest_dir.join("target").join(&profile).join(executable_name);
+        let candidate = manifest_dir
+            .join("target")
+            .join(&profile)
+            .join(executable_name);
         if candidate.exists() {
             return candidate;
         }
@@ -453,7 +445,12 @@ mod tests {
         let workspace_candidate = manifest_dir
             .parent()
             .and_then(Path::parent)
-            .map(|workspace_root| workspace_root.join("target").join(profile).join(executable_name))
+            .map(|workspace_root| {
+                workspace_root
+                    .join("target")
+                    .join(profile)
+                    .join(executable_name)
+            })
             .expect("workspace target should resolve");
         assert!(
             workspace_candidate.exists(),
@@ -553,9 +550,14 @@ mod tests {
 
         let discovered = discover_mcp_server_capabilities_best_effort(&servers).await;
 
-        let echo = discovered.get("echo").expect("echo server should be discovered");
+        let echo = discovered
+            .get("echo")
+            .expect("echo server should be discovered");
         assert_eq!(echo.availability, "healthy");
-        assert!(echo.tools.iter().any(|tool| tool.qualified_name == "mcp_tool__echo__echo"));
+        assert!(echo
+            .tools
+            .iter()
+            .any(|tool| tool.qualified_name == "mcp_tool__echo__echo"));
         assert!(echo.prompts.is_empty());
         assert!(echo.resources.is_empty());
 
@@ -563,12 +565,10 @@ mod tests {
             .get("remote")
             .expect("unsupported server should still be listed");
         assert_eq!(remote.availability, "attention");
-        assert!(
-            remote
-                .status_detail
-                .as_deref()
-                .is_some_and(|detail| detail.contains("transport ws"))
-        );
+        assert!(remote
+            .status_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("transport ws")));
 
         let _ = fs::remove_file(socket_path);
     }

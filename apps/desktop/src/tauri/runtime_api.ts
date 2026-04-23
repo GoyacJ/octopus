@@ -105,6 +105,20 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         },
       })
     },
+    async rebindSessionConfiguredModel(sessionId, input) {
+      return await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/sessions/{sessionId}/configured-model',
+        'post',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+          },
+          body: JSON.stringify(input),
+        },
+      )
+    },
     async getDeliverableDetail(deliverableId) {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/deliverables/{deliverableId}', 'get', {
         session: assertWorkspaceRequestReady(context),

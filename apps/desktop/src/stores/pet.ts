@@ -234,7 +234,8 @@ export const usePetStore = defineStore('pet', () => {
   )
   const resolvedConfiguredModelId = computed(() => {
     const projectSettings = workspaceStore.getProjectSettings(activeProjectId.value)
-    const isAllowed = (value: string) => value && (
+    const runnableConfiguredModelIds = new Set(catalog.runnableConfiguredModelOptions.map(option => option.value))
+    const isAllowed = (value: string) => value && runnableConfiguredModelIds.has(value) && (
       !allowedConfiguredModelIds.value.length || allowedConfiguredModelIds.value.includes(value)
     )
 
@@ -244,15 +245,21 @@ export const usePetStore = defineStore('pet', () => {
     if (isAllowed(projectSettings.models?.defaultConfiguredModelId ?? '')) {
       return projectSettings.models?.defaultConfiguredModelId ?? ''
     }
-    const allowedWorkspaceModel = catalog.workspaceConfiguredModelOptions.find(option => isAllowed(option.value))
+    if (isAllowed(catalog.defaultConversationRunnableConfiguredModelOption?.value ?? '')) {
+      return catalog.defaultConversationRunnableConfiguredModelOption?.value ?? ''
+    }
+    if (isAllowed(catalog.workspaceDefaultConversationRunnableConfiguredModelOption?.value ?? '')) {
+      return catalog.workspaceDefaultConversationRunnableConfiguredModelOption?.value ?? ''
+    }
+    const allowedWorkspaceModel = catalog.workspaceRunnableConfiguredModelOptions.find(option => isAllowed(option.value))
     if (allowedWorkspaceModel) {
       return allowedWorkspaceModel.value
     }
-    const allowedConfiguredModel = catalog.configuredModelOptions.find(option => isAllowed(option.value))
+    const allowedConfiguredModel = catalog.runnableConfiguredModelOptions.find(option => isAllowed(option.value))
     if (allowedConfiguredModel) {
       return allowedConfiguredModel.value
     }
-    return 'anthropic-primary'
+    return ''
   })
   const preferredActor = computed(() => {
     const projectSettings = workspaceStore.getProjectSettings()

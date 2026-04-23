@@ -54,11 +54,21 @@ export type ActorDialogTab = 'agents' | 'teams'
 export type ProjectCapabilityCardId = 'models' | 'tools' | 'agents' | 'teams'
 export type CapabilityDialogScope = 'workspace' | 'project'
 
-type DialogKey =
+type DialogOpenKey =
   | 'leader'
   | 'models'
   | 'tools'
   | 'actors'
+  | 'members'
+
+type DialogActionKey =
+  | 'leader'
+  | 'grantModels'
+  | 'grantTools'
+  | 'grantActors'
+  | 'runtimeModels'
+  | 'runtimeTools'
+  | 'runtimeActors'
   | 'members'
 
 const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
@@ -129,14 +139,14 @@ export function useProjectSettings() {
   const toolDialogScope = ref<CapabilityDialogScope>('workspace')
   const actorDialogScope = ref<CapabilityDialogScope>('workspace')
 
-  const dialogOpen = reactive<Record<DialogKey, boolean>>({
+  const dialogOpen = reactive<Record<DialogOpenKey, boolean>>({
     leader: false,
     models: false,
     tools: false,
     actors: false,
     members: false,
   })
-  const saving = reactive<Record<DialogKey, boolean>>({
+  const saving = reactive<Record<DialogActionKey, boolean>>({
     leader: false,
     grantModels: false,
     grantTools: false,
@@ -146,7 +156,7 @@ export function useProjectSettings() {
     runtimeActors: false,
     members: false,
   })
-  const dialogErrors = reactive<Record<DialogKey, string>>({
+  const dialogErrors = reactive<Record<DialogActionKey, string>>({
     leader: '',
     grantModels: '',
     grantTools: '',

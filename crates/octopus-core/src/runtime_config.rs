@@ -226,6 +226,12 @@ pub struct CreateRuntimeSessionInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RebindRuntimeSessionConfiguredModelInput {
+    pub selected_configured_model_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SubmitRuntimeTurnInput {
     pub content: String,
     pub permission_mode: Option<String>,

@@ -270,6 +270,60 @@ describe('personal center pet experience', () => {
     await mounted.destroy()
   })
 
+  it('falls back to a runnable pet model when the saved preference is missing credentials', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.catalog.configuredModels = state.catalog.configuredModels.map(model => (
+          model.configuredModelId === 'anthropic-alt'
+            ? {
+                ...model,
+                credentialRef: undefined,
+                status: 'missing_credentials',
+                configured: false,
+              } as any
+            : model
+        ))
+
+        const petConfig = {
+          configuredModelId: 'anthropic-alt',
+          permissionMode: 'read-only',
+        }
+
+        state.runtimeUserConfig.effectiveConfig = {
+          ...(state.runtimeUserConfig.effectiveConfig as Record<string, unknown>),
+          pet: petConfig,
+        }
+
+        const userSource = state.runtimeUserConfig.sources.find(source => source.scope === 'user' && source.ownerId === 'user-owner')
+        if (userSource) {
+          userSource.document = {
+            ...((userSource.document ?? {}) as Record<string, unknown>),
+            pet: petConfig,
+          }
+        }
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/personal-center/pet')
+
+    await waitForSelector(mounted.container, '[data-testid="personal-center-pet-preferences-panel"]')
+    await waitForText(mounted.container, '"configuredModelId": "anthropic-primary"')
+
+    const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="personal-center-pet-model-select"]')
+    const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+
+    expect(modelSelect).not.toBeNull()
+    expect(modelOptionLabels).toContain('Claude Primary · Anthropic')
+    expect(modelOptionLabels).not.toContain('Claude Alt · Anthropic')
+    expect(mounted.container.querySelector('[data-testid="personal-center-pet-model-summary"]')?.textContent).toContain('Claude Primary')
+
+    await mounted.destroy()
+  })
+
   it('keeps leaked pet records out of the generic workspace agent center list', async () => {
     installWorkspaceApiFixture({
       stateTransform(state, connection) {

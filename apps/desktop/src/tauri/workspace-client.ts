@@ -83,6 +83,7 @@ import type {
   ResolveRuntimeApprovalInput,
   ResolveRuntimeAuthChallengeInput,
   ResolveRuntimeMemoryProposalInput,
+  RebindRuntimeSessionConfiguredModelInput,
   RunRuntimeGenerationInput,
   ResourcePolicyRecord,
   ResourcePolicyUpsertRequest,
@@ -435,6 +436,10 @@ export interface WorkspaceClient {
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>
+    rebindSessionConfiguredModel: (
+      sessionId: string,
+      input: RebindRuntimeSessionConfiguredModelInput,
+    ) => Promise<RuntimeSessionDetail>
     getDeliverableDetail: (deliverableId: string) => Promise<DeliverableDetail>
     listDeliverableVersions: (deliverableId: string) => Promise<DeliverableVersionSummary[]>
     getDeliverableVersionContent: (

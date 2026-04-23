@@ -169,3 +169,168 @@ Step 2:
   - none
 - Next:
   - Hand off final `.pptx`
+
+### Task 4: Supplement the deck with `apps/octopus-website` product definitions
+
+Status: `done`
+
+Files:
+- Modify: `docs/plans/2026-04-23-product-intro-ppt.md`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/narrative_plan.md`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/output.pptx`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/preview/`
+
+Preconditions:
+- The first deck export is already readable and recoverable from Task 1-3 outputs.
+- `apps/octopus-website/src/components/sections/*` has been re-reviewed for product-definition language.
+
+Step 1:
+- Action: Extend the narrative plan with the additional product-definition points now confirmed from `apps/octopus-website`.
+- Done when: the plan records which new website-backed claims are being added to the deck and which slide carries them.
+- Verify: `sed -n '1,260p' output/slides/2026-04-23-octopus-product-intro/narrative_plan.md`
+- Stop if: the website language conflicts with the existing deck narrative and cannot be reconciled without changing source-of-truth wording.
+
+Step 2:
+- Action: Update the JS builder to add the missing website-backed product-definition content and rerender the deck.
+- Done when: the builder contains the supplemented slide copy/layout and `output.pptx` is regenerated successfully.
+- Verify: `'/Users/goya/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node' output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs`
+- Stop if: the updated layout causes export failure or severe visual regression.
+
+Step 3:
+- Action: Re-check previews and editable text coverage after the supplement pass.
+- Done when: the new or changed slides pass one visual QA pass and the key new copy is present in slide XML.
+- Verify: `find output/slides/2026-04-23-octopus-product-intro/preview -maxdepth 1 -type f | sort`
+- Verify: `PPTX='output/slides/2026-04-23-octopus-product-intro/output.pptx'; for f in $(zipinfo -1 "$PPTX" | rg '^ppt/slides/slide[0-9]+\\.xml$' | sort -V); do printf '=== %s ===\n' "$f"; unzip -p "$PPTX" "$f" | perl -ne 'while(/<a:t>([^<]*)<\\/a:t>/g){print "$1\n"}'; done | sed -n '1,260p'`
+- Stop if: the supplemental copy only appears in images or the rerender introduces blocking layout issues.
+
+## Checkpoint 2026-04-23 20:22
+
+- Batch: Task 4 complete
+- Current task:
+  - none
+- Completed:
+  - Re-reviewed `apps/octopus-website/src/components/sections/hero.tsx`, `features.tsx`, `platform.tsx`, `workflow.tsx`, `capabilities.tsx`, `comparison.tsx`, `faq.tsx`, `usecases.tsx`, `cta.tsx`
+  - Extended `output/slides/2026-04-23-octopus-product-intro/narrative_plan.md` with a new product-definition slide and updated slide numbering
+  - Updated `output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs` to add a new `slide-03` for core design decisions, align the interface page with `platform.tsx`, and add open-source/free/local positioning to the closing page
+  - Rerendered `output/slides/2026-04-23-octopus-product-intro/output.pptx`
+  - Regenerated `output/slides/2026-04-23-octopus-product-intro/preview/slide-01.png` to `slide-08.png`
+- Verification:
+  - `'/Users/goya/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node' output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs` -> deck exported successfully
+  - Visual QA on `preview/slide-03.png`, `slide-05.png`, `slide-08.png` -> no blocking layout issue found after supplement pass
+  - OOXML text inspection on `output.pptx` -> new website-backed copy is present as editable text in `ppt/slides/slide3.xml`, `slide5.xml`, and `slide8.xml`
+- Blockers:
+  - none
+- Next:
+  - Hand off updated `.pptx`
+
+### Task 5: Rebuild the scenario slide with four scene-first directions and calm still-life visuals
+
+Status: `done`
+
+Files:
+- Modify: `docs/plans/2026-04-23-product-intro-ppt.md`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/narrative_plan.md`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/output.pptx`
+- Modify: `output/slides/2026-04-23-octopus-product-intro/preview/`
+- Create: `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/`
+
+Preconditions:
+- Task 4 output is readable and still the active source deck.
+- `apps/octopus-website/src/components/sections/usecases.tsx` has been re-read as the scenario copy source.
+- Local scenario visuals under `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/` are readable and suitable for non-case, non-portrait scene cards.
+
+Step 1:
+- Action: Extend the narrative plan and this execution plan with the new four-direction scenario structure and the revised still-life asset mapping.
+- Done when: the plan records the chosen directions, each slide-7 scene description, and the local source for every scenario visual.
+- Verify: `sed -n '1,320p' output/slides/2026-04-23-octopus-product-intro/narrative_plan.md`
+- Verify: `sed -n '1,340p' docs/plans/2026-04-23-product-intro-ppt.md`
+- Stop if: the scenario directions cannot be grounded in product sources or the selected still-life visuals fail to communicate the scene cleanly.
+
+Step 2:
+- Action: Replace the old segment/case layout in `slide-07` with four scenario cards and wire the new assets into the builder.
+- Done when: `buildSlide7` renders four visually distinct scenario cards for 内容创作、办公写作、软件研发、财务运营, with image frames and concise task/capability copy.
+- Verify: `sed -n '620,860p' output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs`
+- Stop if: the new layout makes the slide too dense, export fails, or the selected visuals do not crop cleanly.
+
+Step 3:
+- Action: Rerender the deck and re-check `slide-07` preview plus editable text coverage.
+- Done when: `output.pptx` is regenerated, `preview/slide-07.png` matches the intended layout, and the new scenario copy appears in slide XML text nodes.
+- Verify: `'/Users/goya/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node' output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs`
+- Verify: `find output/slides/2026-04-23-octopus-product-intro/preview -maxdepth 1 -type f | sort`
+- Verify: `PPTX='output/slides/2026-04-23-octopus-product-intro/output.pptx'; unzip -p \"$PPTX\" ppt/slides/slide7.xml | perl -ne 'while(/<a:t>([^<]*)<\\/a:t>/g){print \"$1\\n\"}'`
+- Stop if: rerendering introduces blocking visual defects or the new copy only exists inside images.
+
+## Checkpoint 2026-04-23 09:20
+
+- Batch: Task 5 started
+- Current task:
+  - Task 5 Step 1
+- Completed:
+  - Re-read `apps/octopus-website/src/components/sections/usecases.tsx`
+  - Confirmed the old `slide-07` layout no longer matches the requested scenario framing
+  - Downloaded local scenario assets under `output/slides/2026-04-23-octopus-product-intro/assets/scenarios/`
+- Asset picks in progress:
+  - 内容创作：`content-film.jpg` + `content-comic.jpg`
+  - 办公写作：`office-writing.jpg`
+  - 软件研发：`software-tests.jpg`
+  - 财务运营：`finance-ops.jpg`
+- Verification:
+  - `file output/slides/2026-04-23-octopus-product-intro/assets/scenarios/*` -> selected scenario assets are readable local images
+- Blockers:
+  - none
+- Next:
+  - Update the narrative plan for the four-card scenario structure
+  - Replace `buildSlide7`
+  - Rerender and inspect `preview/slide-07.png`
+
+## Checkpoint 2026-04-23 11:10
+
+- Batch: Task 5 direction reset
+- Current task:
+  - Task 5 Step 1
+- Completed:
+  - Rejected the old scenario picks that leaned on concrete案例 or visually noisy imagery
+  - Reframed `slide-07` as four scene cards instead of industry case cards
+  - Locked the new visual rule: no人物主体, no具体品牌/组织案例, scene-first and wallpaper-like still-life quality
+- Active asset mapping:
+  - 内容创作：`content-creation-lens.jpg`
+  - 办公写作：`office-writing-desk.jpg`
+  - 软件研发：`software-dev-code.jpg`
+  - 财务运营：`finance-ops-calculator.jpg`
+- Deprecated candidates:
+  - `content-film.jpg`
+  - `content-comic.jpg`
+  - `office-writing.jpg`
+  - `software-tests.jpg`
+  - `finance-ops.jpg`
+- Verification:
+  - `file output/slides/2026-04-23-octopus-product-intro/assets/scenarios/*` -> new still-life assets are readable JPEG files
+- Blockers:
+  - none
+- Next:
+  - Update `narrative_plan.md` with the final four-card scene framing
+  - Replace `buildSlide7` and wire the new local image assets
+  - Rerender and inspect `preview/slide-07.png`
+
+## Checkpoint 2026-04-23 11:26
+
+- Batch: Task 5 complete
+- Current task:
+  - none
+- Completed:
+  - Updated `output/slides/2026-04-23-octopus-product-intro/narrative_plan.md` to the final four-scene framing
+  - Replaced `buildSlide7` with a 2x2 scene-card layout and connected the new still-life assets
+  - Fixed image data URL MIME detection so local `.jpg` assets render correctly
+  - Rerendered `output/slides/2026-04-23-octopus-product-intro/output.pptx`
+  - Regenerated `output/slides/2026-04-23-octopus-product-intro/preview/slide-01.png` to `slide-08.png`
+- Verification:
+  - `'/Users/goya/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node' output/slides/2026-04-23-octopus-product-intro/build-product-intro-deck.mjs` -> deck exported successfully
+  - `find output/slides/2026-04-23-octopus-product-intro/preview -maxdepth 1 -type f | sort` -> preview set present through `slide-08.png`
+  - `unzip -p output/slides/2026-04-23-octopus-product-intro/output.pptx ppt/slides/slide7.xml | perl ...` -> new scene copy is present as editable text nodes
+  - Visual QA on `output/slides/2026-04-23-octopus-product-intro/preview/slide-07.png` -> no blocking clipping or mismatched imagery found
+- Blockers:
+  - none
+- Next:
+  - Hand off the updated `.pptx`

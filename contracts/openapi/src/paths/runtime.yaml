@@ -202,6 +202,34 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}/configured-model:
+  post:
+    operationId: rebindRuntimeSessionConfiguredModel
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RebindRuntimeSessionConfiguredModelInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeSessionDetail"
+        description: Runtime session detail payload after rebinding the configured model.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}:
   post:
     operationId: resolveRuntimeApproval

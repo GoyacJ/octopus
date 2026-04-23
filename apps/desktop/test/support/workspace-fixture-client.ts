@@ -4738,6 +4738,34 @@ export function createWorkspaceClientFixture(
       async loadSession(sessionId) {
         return clone(ensureRuntimeState(sessionId).detail)
       },
+      async rebindSessionConfiguredModel(sessionId, input) {
+        const state = ensureRuntimeState(sessionId)
+        const configuredModelId = input.selectedConfiguredModelId
+        const configuredModel = workspaceState.catalog.configuredModels.find(model => model.configuredModelId === configuredModelId)
+        const registryModelId = configuredModel?.modelId ?? configuredModelId
+        const configuredModelName = configuredModel?.name ?? configuredModelId
+        const updatedAt = Date.now()
+        const configSnapshotId = `cfgsnap-${configuredModelId}`
+        const effectiveConfigHash = `cfg-hash-${configuredModelId}`
+
+        state.detail.summary.updatedAt = updatedAt
+        state.detail.summary.configSnapshotId = configSnapshotId
+        state.detail.summary.effectiveConfigHash = effectiveConfigHash
+        state.detail.summary.sessionPolicy.selectedConfiguredModelId = configuredModelId
+        state.detail.summary.sessionPolicy.configSnapshotId = configSnapshotId
+
+        state.detail.sessionPolicy.selectedConfiguredModelId = configuredModelId
+        state.detail.sessionPolicy.configSnapshotId = configSnapshotId
+
+        state.detail.run.updatedAt = updatedAt
+        state.detail.run.configuredModelId = configuredModelId
+        state.detail.run.configuredModelName = configuredModelName
+        state.detail.run.modelId = registryModelId
+        state.detail.run.configSnapshotId = configSnapshotId
+        state.detail.run.effectiveConfigHash = effectiveConfigHash
+
+        return clone(state.detail)
+      },
       async promoteDeliverable(deliverableId, input) {
         const artifact = workspaceState.deliverables.find(record => record.id === deliverableId)
         if (!artifact) {
