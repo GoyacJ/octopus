@@ -2,7 +2,7 @@
 
 - Files under `docs/**` are long-lived product, governance, audit, or design documents. Do not treat them as scratch notes.
 - Keep documents concise, normative, and actionable. Prefer rules and clear ownership statements over historical narration.
-- `docs/plans/**` are execution documents for humans and AI. The plan-specific operating rules live in `docs/plans/AGENTS.md`.
+- `docs/plans/**` are execution documents for humans and AI. 
 - If a plan changes repository policy, move the normative rule into the canonical governance doc or `AGENTS.md` first, then keep the plan focused on execution.
 - `docs/api-openapi-governance.md` is the canonical policy for frontend/backend HTTP contract work, OpenAPI source management, and adapter/server transport rules.
 - `docs/openapi-audit.md` is a status and coverage audit. Update it when coverage, allowlists, or migration state changes, but do not introduce new canonical rules there first.
