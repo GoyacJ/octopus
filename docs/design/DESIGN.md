@@ -2,6 +2,7 @@
 
 `docs/design/DESIGN.md` is the canonical visual and interaction standard for `apps/desktop` and `@octopus/ui`.
 All desktop UI changes must follow this document first. Preview files are reference renderings, not a second source of truth.
+For complex module content-area composition, follow `docs/design/MODULE_AREA_DESIGN.md` after this document.
 
 ## 1. Product Direction
 
@@ -328,6 +329,7 @@ Any new or changed desktop surface must satisfy all of the following:
 - uses shared `@octopus/ui` primitives or extends them first
 - consumes canonical tokens instead of page-local values
 - matches one of the page archetypes
+- follows `docs/design/MODULE_AREA_DESIGN.md` for complex module content areas
 - respects the shell and theme rules in this document
 - preserves the Calm Intelligence brand direction
 - does not introduce forbidden patterns
