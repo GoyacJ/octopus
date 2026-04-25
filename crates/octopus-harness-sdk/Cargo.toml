@@ -1,0 +1,116 @@
+[package]
+name = "octopus-harness-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "octopus_harness_sdk"
+
+[lints]
+workspace = true
+
+[features]
+default = [
+  "sqlite-store",
+  "jsonl-store",
+  "local-sandbox",
+  "interactive-permission",
+  "mcp-stdio",
+  "provider-anthropic",
+  "tool-search",
+  "steering-queue",
+]
+sqlite-store = ["octopus-harness-journal/sqlite"]
+jsonl-store = ["octopus-harness-journal/jsonl"]
+in-memory-store = ["octopus-harness-journal/in-memory"]
+provider-openai = ["octopus-harness-model/openai"]
+provider-anthropic = ["octopus-harness-model/anthropic"]
+provider-gemini = ["octopus-harness-model/gemini"]
+provider-openrouter = ["octopus-harness-model/openrouter"]
+provider-bedrock = ["octopus-harness-model/bedrock"]
+provider-codex = ["octopus-harness-model/codex"]
+provider-local-llama = ["octopus-harness-model/local-llama"]
+provider-deepseek = ["octopus-harness-model/deepseek"]
+provider-minimax = ["octopus-harness-model/minimax"]
+provider-qwen = ["octopus-harness-model/qwen"]
+provider-doubao = ["octopus-harness-model/doubao"]
+provider-zhipu = ["octopus-harness-model/zhipu"]
+provider-km = ["octopus-harness-model/km"]
+all-providers = [
+  "provider-openai",
+  "provider-anthropic",
+  "provider-gemini",
+  "provider-openrouter",
+  "provider-bedrock",
+  "provider-codex",
+  "provider-local-llama",
+  "provider-deepseek",
+  "provider-minimax",
+  "provider-qwen",
+  "provider-doubao",
+  "provider-zhipu",
+  "provider-km",
+]
+local-sandbox = ["octopus-harness-sandbox/local"]
+docker-sandbox = ["octopus-harness-sandbox/docker"]
+ssh-sandbox = ["octopus-harness-sandbox/ssh"]
+noop-sandbox = ["octopus-harness-sandbox/noop"]
+mcp-stdio = ["octopus-harness-mcp/stdio"]
+mcp-http = ["octopus-harness-mcp/http"]
+mcp-websocket = ["octopus-harness-mcp/websocket"]
+mcp-sse = ["octopus-harness-mcp/sse"]
+mcp-in-process = ["octopus-harness-mcp/in-process"]
+mcp-server-adapter = ["octopus-harness-mcp/server-adapter"]
+interactive-permission = ["octopus-harness-permission/interactive"]
+stream-permission = ["octopus-harness-permission/stream"]
+rule-engine-permission = ["octopus-harness-permission/rule-engine"]
+memory-builtin = ["octopus-harness-memory/builtin"]
+memory-external-slot = ["octopus-harness-memory/external-slot"]
+agents-subagent = ["dep:octopus-harness-subagent"]
+agents-team = ["dep:octopus-harness-team"]
+observability-replay = ["octopus-harness-observability/replay"]
+observability-otel = ["octopus-harness-observability/otel"]
+observability-prometheus = ["octopus-harness-observability/prometheus"]
+plugin-dynamic-load = ["octopus-harness-plugin/dynamic-load"]
+plugin-manifest-sign = ["octopus-harness-plugin/manifest-sign"]
+tool-search = ["dep:octopus-harness-tool-search", "tool-loading-anthropic", "tool-loading-inline"]
+tool-loading-anthropic = ["dep:octopus-harness-tool-search", "octopus-harness-tool-search/backend-anthropic"]
+tool-loading-inline = ["dep:octopus-harness-tool-search", "octopus-harness-tool-search/backend-inline"]
+tool-search-default-scorer = ["dep:octopus-harness-tool-search", "octopus-harness-tool-search/scorer-default"]
+programmatic-tool-calling = [
+  "octopus-harness-tool/programmatic-tool-calling",
+  "octopus-harness-sandbox/code-runtime",
+]
+steering-queue = [
+  "octopus-harness-session/steering",
+  "octopus-harness-engine/steering",
+]
+testing = [
+  "in-memory-store",
+  "noop-sandbox",
+  "octopus-harness-permission/mock",
+  "octopus-harness-model/mock",
+]
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-context = { path = "../octopus-harness-context" }
+octopus-harness-engine = { path = "../octopus-harness-engine" }
+octopus-harness-hook = { path = "../octopus-harness-hook" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+octopus-harness-mcp = { path = "../octopus-harness-mcp" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
+octopus-harness-model = { path = "../octopus-harness-model" }
+octopus-harness-observability = { path = "../octopus-harness-observability" }
+octopus-harness-permission = { path = "../octopus-harness-permission" }
+octopus-harness-plugin = { path = "../octopus-harness-plugin" }
+octopus-harness-sandbox = { path = "../octopus-harness-sandbox" }
+octopus-harness-session = { path = "../octopus-harness-session" }
+octopus-harness-skill = { path = "../octopus-harness-skill" }
+octopus-harness-subagent = { path = "../octopus-harness-subagent", optional = true }
+octopus-harness-team = { path = "../octopus-harness-team", optional = true }
+octopus-harness-tool = { path = "../octopus-harness-tool" }
+octopus-harness-tool-search = { path = "../octopus-harness-tool-search", optional = true }

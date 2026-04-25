@@ -1,0 +1,28 @@
+[package]
+name = "octopus-harness-team"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_team"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+coordinator-worker = []
+peer-to-peer = []
+role-routed = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+octopus-harness-session = { path = "../octopus-harness-session" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

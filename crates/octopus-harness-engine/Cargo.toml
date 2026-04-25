@@ -1,0 +1,39 @@
+[package]
+name = "octopus-harness-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_engine"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+subagent-tool = ["dep:octopus-harness-subagent"]
+parallel-tools = []
+steering = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-context = { path = "../octopus-harness-context" }
+octopus-harness-hook = { path = "../octopus-harness-hook" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+octopus-harness-mcp = { path = "../octopus-harness-mcp" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
+octopus-harness-model = { path = "../octopus-harness-model" }
+octopus-harness-permission = { path = "../octopus-harness-permission" }
+octopus-harness-sandbox = { path = "../octopus-harness-sandbox" }
+octopus-harness-session = { path = "../octopus-harness-session" }
+octopus-harness-skill = { path = "../octopus-harness-skill" }
+octopus-harness-subagent = { path = "../octopus-harness-subagent", optional = true }
+octopus-harness-tool = { path = "../octopus-harness-tool" }
+octopus-harness-tool-search = { path = "../octopus-harness-tool-search" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

@@ -1,0 +1,29 @@
+[package]
+name = "octopus-harness-observability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_observability"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+replay = []
+otel = []
+prometheus = []
+redactor = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
