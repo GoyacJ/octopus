@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./main.css": "./src/main.css",
+    "./tailwind-theme.css": "./src/tailwind-theme.css",
     "./tokens.css": "./src/tokens.css"
   },
   "dependencies": {

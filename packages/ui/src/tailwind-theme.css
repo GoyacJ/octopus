@@ -1,0 +1,98 @@
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--bg-main);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--bg-surface);
+  --color-surface-muted: var(--bg-surface-muted);
+  --color-sidebar: var(--bg-sidebar);
+  --color-subtle: var(--bg-subtle);
+  --color-muted: var(--bg-muted);
+  --color-card: var(--bg-card);
+  --color-popover: var(--bg-popover);
+  --color-accent: var(--bg-accent);
+  --color-secondary: var(--bg-secondary);
+  --color-input: var(--border-input);
+  --color-ring: var(--ring);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--brand-primary);
+  --color-primary-hover: var(--brand-primary-hover);
+  --color-primary-foreground: var(--text-on-brand);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-danger: var(--status-error);
+  --color-error: var(--error);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+  --color-status-info: var(--status-info);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --radius-xs: var(--radius-xs);
+  --radius-s: var(--radius-s);
+  --radius-sm: var(--radius-sm);
+  --radius-m: var(--radius-m);
+  --radius-md: var(--radius-md);
+  --radius-l: var(--radius-l);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-full: var(--radius-full);
+
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-serif: var(--font-serif), serif;
+  --font-mono: var(--font-mono), monospace;
+
+  --text-page-title: var(--font-size-page-title);
+  --text-page-title--line-height: var(--line-height-page-title);
+  --text-page-title--letter-spacing: var(--letter-spacing-page-title);
+  --text-section-title: var(--font-size-section-title);
+  --text-section-title--line-height: var(--line-height-section-title);
+  --text-section-title--letter-spacing: var(--letter-spacing-section-title);
+  --text-card-title: var(--font-size-card-title);
+  --text-card-title--line-height: var(--line-height-card-title);
+  --text-card-title--letter-spacing: var(--letter-spacing-card-title);
+  --text-body: var(--font-size-body);
+  --text-body--line-height: var(--line-height-body);
+  --text-body--letter-spacing: var(--letter-spacing-body);
+  --text-label: var(--font-size-label);
+  --text-label--line-height: var(--line-height-label);
+  --text-label--letter-spacing: var(--letter-spacing-label);
+  --text-caption: var(--font-size-caption);
+  --text-caption--line-height: var(--line-height-caption);
+  --text-caption--letter-spacing: var(--letter-spacing-caption);
+  --text-badge: var(--font-size-badge);
+  --text-badge--line-height: var(--line-height-badge);
+  --text-badge--letter-spacing: var(--letter-spacing-badge);
+  --text-micro: var(--font-size-micro);
+  --text-micro--line-height: var(--line-height-micro);
+  --text-micro--letter-spacing: var(--letter-spacing-micro);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+
+  --ease-apple: var(--ease-apple);
+}
+
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+
+@utility duration-normal {
+  transition-duration: var(--duration-normal);
+}
+
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}

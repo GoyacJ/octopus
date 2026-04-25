@@ -7,7 +7,8 @@ const packagesUiSrcDir = path.join(rootDir, 'packages/ui/src')
 const sharedUiComponentsDir = path.join(packagesUiSrcDir, 'components')
 const businessViewDir = path.join(desktopSrcDir, 'views')
 const businessLayoutDir = path.join(desktopSrcDir, 'components/layout')
-const rootTailwindConfigPath = path.join(rootDir, 'tailwind.config.js')
+const tailwindThemePath = path.join(rootDir, 'packages/ui/src/tailwind-theme.css')
+const uiTokensPath = path.join(rootDir, 'packages/ui/src/tokens.css')
 const ignoredSegments = new Set(['node_modules', '.git', 'dist', 'target', '.turbo'])
 const arbitraryPixelTextSizeRegex = /text-\[[0-9]+px\]/g
 const disallowedUiLibraries = [
@@ -244,7 +245,7 @@ async function main() {
   const repoFiles = await walk(rootDir)
 
   for (const filePath of repoFiles) {
-    if (!/\.(ts|tsx|js|mjs|vue)$/.test(filePath)) {
+    if (!/\.(ts|tsx|js|mjs|vue|css)$/.test(filePath)) {
       continue
     }
 
@@ -285,7 +286,8 @@ async function main() {
     }
 
     const shouldCheckTokenRegressions =
-      filePath === rootTailwindConfigPath
+      filePath === tailwindThemePath
+      || filePath === uiTokensPath
       || filePath.startsWith(desktopSrcDir)
       || filePath.startsWith(packagesUiSrcDir)
     if (shouldCheckTokenRegressions) {

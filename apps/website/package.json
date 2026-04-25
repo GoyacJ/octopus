@@ -17,7 +17,6 @@
     "@octopus/schema": "workspace:*",
     "@octopus/ui": "workspace:*",
     "@nuxtjs/i18n": "^10.2.4",
-    "@nuxtjs/tailwindcss": "^6.14.0",
     "@nuxtjs/color-mode": "^3.4.1",
     "lucide-vue-next": "^0.400.0",
     "nuxt": "^3.21.2"

@@ -362,6 +362,71 @@ describe('repository governance', () => {
     expect(tokens).not.toContain('--color-accent-hover: #6aabee;')
   })
 
+  it('uses Tailwind CSS v4 CSS-first configuration across frontend surfaces', () => {
+    const packageJson = JSON.parse(readRepoFile('package.json')) as {
+      devDependencies?: Record<string, string>
+    }
+    const desktopViteConfig = readRepoFile('apps', 'desktop', 'vite.config.ts')
+    const websiteNuxtConfig = readRepoFile('apps', 'website', 'nuxt.config.ts')
+    const uiPackageJson = JSON.parse(readRepoFile('packages', 'ui', 'package.json')) as {
+      exports?: Record<string, string>
+    }
+    const desktopCss = readRepoFile('packages', 'ui', 'src', 'main.css')
+    const websiteCss = readRepoFile('apps', 'website', 'assets', 'css', 'website.css')
+    const tailwindTheme = readRepoFile('packages', 'ui', 'src', 'tailwind-theme.css')
+    const frontendGovernance = readRepoFile('scripts', 'check-frontend-governance.mjs')
+
+    expect(packageJson.devDependencies?.['tailwindcss']).toMatch(/^\^4\./)
+    expect(packageJson.devDependencies?.['@tailwindcss/vite']).toMatch(/^\^4\./)
+    expect(packageJson.devDependencies).not.toHaveProperty('@tailwindcss/postcss')
+    expect(packageJson.devDependencies).not.toHaveProperty('autoprefixer')
+
+    expect(existsSync(path.join(repoRoot, 'tailwind.config.js'))).toBe(false)
+    expect(existsSync(path.join(repoRoot, 'apps', 'desktop', 'tailwind.config.js'))).toBe(false)
+    expect(existsSync(path.join(repoRoot, 'apps', 'website', 'tailwind.config.ts'))).toBe(false)
+    expect(existsSync(path.join(repoRoot, 'postcss.config.js'))).toBe(false)
+    expect(existsSync(path.join(repoRoot, 'apps', 'desktop', 'postcss.config.js'))).toBe(false)
+
+    expect(desktopViteConfig).toContain("from '@tailwindcss/vite'")
+    expect(desktopViteConfig).toContain('plugins: [vue(), tailwindcss()]')
+    expect(websiteNuxtConfig).toContain("from '@tailwindcss/vite'")
+    expect(websiteNuxtConfig).toContain('vite:')
+    expect(websiteNuxtConfig).toContain('plugins: [tailwindcss()]')
+    expect(websiteNuxtConfig).not.toContain('@nuxtjs/tailwindcss')
+
+    expect(uiPackageJson.exports?.['./tailwind-theme.css']).toBe('./src/tailwind-theme.css')
+
+    expect(desktopCss).toContain('@import "tailwindcss" source(none);')
+    expect(desktopCss).toContain('@import "./tailwind-theme.css";')
+    expect(desktopCss).toContain('@source "../../../apps/desktop/index.html";')
+    expect(desktopCss).toContain('@source "../../../apps/desktop/src";')
+    expect(desktopCss).toContain('@source ".";')
+    expect(desktopCss).not.toContain('@tailwind ')
+
+    expect(websiteCss).toContain('@import "tailwindcss" source(none);')
+    expect(websiteCss).toContain('@import "@octopus/ui/tailwind-theme.css";')
+    expect(websiteCss).toContain('@source "../../app.vue";')
+    expect(websiteCss).toContain('@source "../../components";')
+    expect(websiteCss).toContain('@source "../../pages";')
+    expect(websiteCss).toContain('@source "../../../../packages/ui/src";')
+    expect(websiteCss).not.toContain('@tailwind ')
+
+    expect(tailwindTheme).toContain('@theme inline')
+    expect(tailwindTheme).toContain('@custom-variant dark')
+    expect(tailwindTheme).toContain('--color-sidebar: var(--bg-sidebar);')
+    expect(tailwindTheme).toContain('--color-surface-muted: var(--bg-surface-muted);')
+    expect(tailwindTheme).toContain('--color-error: var(--error);')
+    expect(tailwindTheme).toContain('--text-page-title: var(--font-size-page-title);')
+    expect(tailwindTheme).toContain('--shadow-xs: var(--shadow-xs);')
+    expect(tailwindTheme).toContain('--ease-apple: var(--ease-apple);')
+    expect(tailwindTheme).toContain('@utility duration-fast')
+    expect(tailwindTheme).not.toContain('@config')
+
+    expect(frontendGovernance).toContain('tailwindThemePath')
+    expect(frontendGovernance).not.toContain('rootTailwindConfigPath')
+    expect(frontendGovernance).toContain('/\\.(ts|tsx|js|mjs|vue|css)$/')
+  })
+
   it('extends OpenAPI and generated transport coverage for the next workspace, catalog, and runtime clusters', () => {
     const openApiSpec = readRepoFile('contracts', 'openapi', 'octopus.openapi.yaml')
     const generatedSchema = readRepoFile('packages', 'schema', 'src', 'generated.ts')
