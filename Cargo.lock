@@ -3024,6 +3024,264 @@ dependencies = [
 ]
 
 [[package]]
+name = "octopus-harness-context"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-journal",
+ "octopus-harness-memory",
+ "octopus-harness-model",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-contracts"
+version = "0.2.5"
+
+[[package]]
+name = "octopus-harness-engine"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-context",
+ "octopus-harness-contracts",
+ "octopus-harness-hook",
+ "octopus-harness-journal",
+ "octopus-harness-mcp",
+ "octopus-harness-memory",
+ "octopus-harness-model",
+ "octopus-harness-permission",
+ "octopus-harness-sandbox",
+ "octopus-harness-session",
+ "octopus-harness-skill",
+ "octopus-harness-subagent",
+ "octopus-harness-tool",
+ "octopus-harness-tool-search",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-hook"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-journal"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "rusqlite",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-mcp"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-tool",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-memory"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-model"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-observability"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-journal",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "octopus-harness-permission"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-model",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-plugin"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-hook",
+ "octopus-harness-mcp",
+ "octopus-harness-skill",
+ "octopus-harness-tool",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-sandbox"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-sdk"
+version = "0.2.5"
+dependencies = [
+ "octopus-harness-context",
+ "octopus-harness-contracts",
+ "octopus-harness-engine",
+ "octopus-harness-hook",
+ "octopus-harness-journal",
+ "octopus-harness-mcp",
+ "octopus-harness-memory",
+ "octopus-harness-model",
+ "octopus-harness-observability",
+ "octopus-harness-permission",
+ "octopus-harness-plugin",
+ "octopus-harness-sandbox",
+ "octopus-harness-session",
+ "octopus-harness-skill",
+ "octopus-harness-subagent",
+ "octopus-harness-team",
+ "octopus-harness-tool",
+ "octopus-harness-tool-search",
+]
+
+[[package]]
+name = "octopus-harness-session"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-context",
+ "octopus-harness-contracts",
+ "octopus-harness-hook",
+ "octopus-harness-journal",
+ "octopus-harness-mcp",
+ "octopus-harness-memory",
+ "octopus-harness-permission",
+ "octopus-harness-skill",
+ "octopus-harness-tool",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-skill"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-memory",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-subagent"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-permission",
+ "octopus-harness-session",
+ "octopus-harness-tool",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-team"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-journal",
+ "octopus-harness-session",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-tool"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-permission",
+ "octopus-harness-sandbox",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "octopus-harness-tool-search"
+version = "0.2.5"
+dependencies = [
+ "async-trait",
+ "octopus-harness-contracts",
+ "octopus-harness-model",
+ "octopus-harness-tool",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "octopus-infra"
 version = "0.2.5"
 dependencies = [

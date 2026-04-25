@@ -1,7 +1,46 @@
 [workspace]
 members = [
   "apps/desktop/src-tauri",
-  "crates/*",
+  "crates/octopus-core",
+  "crates/octopus-persistence",
+  "crates/octopus-platform",
+  "crates/octopus-infra",
+  "crates/octopus-server",
+  "crates/octopus-desktop",
+  "crates/octopus-cli",
+  "crates/octopus-sdk-contracts",
+  "crates/octopus-sdk-model",
+  "crates/octopus-sdk-session",
+  "crates/octopus-sdk-tools",
+  "crates/octopus-sdk-mcp",
+  "crates/octopus-sdk-permissions",
+  "crates/octopus-sdk-sandbox",
+  "crates/octopus-sdk-hooks",
+  "crates/octopus-sdk-context",
+  "crates/octopus-sdk-subagent",
+  "crates/octopus-sdk-plugin",
+  "crates/octopus-sdk-observability",
+  "crates/octopus-sdk-core",
+  "crates/octopus-sdk",
+  "crates/octopus-harness-contracts",
+  "crates/octopus-harness-model",
+  "crates/octopus-harness-journal",
+  "crates/octopus-harness-sandbox",
+  "crates/octopus-harness-permission",
+  "crates/octopus-harness-memory",
+  "crates/octopus-harness-tool",
+  "crates/octopus-harness-tool-search",
+  "crates/octopus-harness-skill",
+  "crates/octopus-harness-mcp",
+  "crates/octopus-harness-hook",
+  "crates/octopus-harness-context",
+  "crates/octopus-harness-session",
+  "crates/octopus-harness-engine",
+  "crates/octopus-harness-subagent",
+  "crates/octopus-harness-team",
+  "crates/octopus-harness-plugin",
+  "crates/octopus-harness-observability",
+  "crates/octopus-harness-sdk",
 ]
 default-members = [
   "apps/desktop/src-tauri",
@@ -25,6 +64,25 @@ default-members = [
   "crates/octopus-sdk-observability",
   "crates/octopus-sdk-core",
   "crates/octopus-sdk",
+  "crates/octopus-harness-contracts",
+  "crates/octopus-harness-model",
+  "crates/octopus-harness-journal",
+  "crates/octopus-harness-sandbox",
+  "crates/octopus-harness-permission",
+  "crates/octopus-harness-memory",
+  "crates/octopus-harness-tool",
+  "crates/octopus-harness-tool-search",
+  "crates/octopus-harness-skill",
+  "crates/octopus-harness-mcp",
+  "crates/octopus-harness-hook",
+  "crates/octopus-harness-context",
+  "crates/octopus-harness-session",
+  "crates/octopus-harness-engine",
+  "crates/octopus-harness-subagent",
+  "crates/octopus-harness-team",
+  "crates/octopus-harness-plugin",
+  "crates/octopus-harness-observability",
+  "crates/octopus-harness-sdk",
 ]
 resolver = "2"
 
@@ -39,13 +97,20 @@ rust-version = "1.78"
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["http1", "json", "macros", "tokio"] }
+bytes = "1.11.1"
+chrono = { version = "0.4.42", features = ["serde"] }
+futures = "0.3.32"
 globset = "0.4.18"
+http = "1.4.0"
 ignore = "0.4.25"
 log = "0.4.29"
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
+schemars = { version = "0.8.22", features = ["chrono", "uuid1"] }
+secrecy = "0.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+strum = { version = "0.27.2", features = ["derive"] }
 tauri = "2.10.3"
 tauri-build = "2.5.6"
 tauri-plugin-log = "2.8.0"
@@ -58,6 +123,7 @@ toml = "1.1.2"
 tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.6.8", features = ["cors"] }
 tracing = "0.1.44"
+ulid = { version = "1.2.1", features = ["serde"] }
 uuid = { version = "1.23.1", features = ["serde", "v4"] }
 zeroize = "1.8.2"
 
