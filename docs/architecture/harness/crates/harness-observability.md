@@ -309,7 +309,7 @@ impl PrometheusExporter {
 |---|---|
 | `harness.session.run` | `session.id`, `tenant.id`, `run.id`, `input.tokens`, `output.tokens` |
 | `harness.model.infer` | `model.id`, `provider.id`, `api.mode`, `prompt.cache.hit_ratio` |
-| `harness.tool.invoke` | `tool.name`, `tool.use.id`, `duration.ms`, `exit.code` |
+| `harness.tool.execute` | `tool.name`, `tool.use.id`, `duration.ms`, `exit.code` |
 | `harness.hook.dispatch` | `hook.event`, `handler.id`, `outcome` |
 | `harness.permission.decide` | `request.id`, `decided.by`, `decision` |
 | `harness.subagent.run` | `subagent.id`, `parent.session.id`, `depth` |

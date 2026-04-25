@@ -136,7 +136,9 @@ pub enum EventKind {
 - `slow_consumer_timeout`：连续阻塞超过该时长会发 `Event::EventSinkStalled { consumer_id, elapsed }`，业务可据此切换降级模式
 
 **不可丢事件（硬编码白名单）**：
-`SessionCreated / SessionForked / SessionEnded / RunStarted / RunEnded / ToolUseRequested / ToolUseApproved / ToolUseDenied / PermissionRequested / PermissionResolved / PluginLoaded / PluginRejected / MemoryThreatDetected / SubagentSpawned / SubagentAnnounced / TeamCreated / TeamTerminated / EngineFailed / UnexpectedError`
+`SessionCreated / SessionForked / SessionEnded / SessionReloadRequested / SessionReloadApplied / RunStarted / RunEnded / ToolUseRequested / ToolUseApproved / ToolUseDenied / PermissionRequested / PermissionResolved / PluginLoaded / PluginRejected / ManifestValidationFailed / MemoryThreatDetected / SubagentSpawned / SubagentAnnounced / SubagentTerminated / SubagentSpawnPaused / TeamCreated / TeamTerminated / ExecuteCodeWhitelistExtended / EngineFailed / UnexpectedError`
+
+`ExecuteCodeStepInvoked` 默认仍可作为普通 UI 流的 lossy 候选，但合规 / SIEM 订阅必须在策略层提升为不可丢。Journal 写入不受 EventStream lossy 策略影响。
 
 ### 2.4 Hot Reload API（对齐 ADR-003）
 

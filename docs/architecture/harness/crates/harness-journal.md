@@ -7,6 +7,13 @@
 
 提供 **Append-Only Event Store + Projection + Snapshot + BlobStore** 的抽象与默认实现。是 ADR-001 Event Sourcing 的承载者。
 
+**Octopus 产品集成规则**：
+
+- `runtime/events/*.jsonl` 是产品内 runtime event / audit stream 的权威来源。
+- `data/main.db` 只保存结构化状态、projection、索引、hash 与元数据。
+- `SqliteEventStore` 是通用 SDK 后端，供独立嵌入方或非 Octopus 产品形态使用；不得在 Octopus 产品基线中用 `data/main.db` 作为 EventStore 真相源。
+- 如业务需要从 JSONL 构建 SQLite 查询面，应实现 projection writer，而不是双写两套事件真相源。
+
 **核心能力**：
 
 - Append-only Event 写入
@@ -565,9 +572,13 @@ impl Default for JsonlReadPolicy {
 
 - `tolerate_partial_tail = true`（默认）：流式读到 EOF 前最后一行解析失败时，视为正常截断，不报错；产生 `journal_jsonl_partial_tail_total` 指标。
 - `tolerate_invalid_lines`：默认 `false`，遇坏行直接 `JournalError::Serialization` 中断；改 `true` 时跳过坏行并通过旁路通道（不入 EventStore）发 `Event::JournalReadDegraded { offset, raw }` 给 observability。
-- **不实现 DLQ**：单文件场景下坏行罕见，DLQ 反增维护成本；如有需要应迁移到 SqliteEventStore。
+- **不实现 DLQ**：单文件场景下坏行罕见，DLQ 反增维护成本；如有需要应迁移到独立的 `SqliteEventStore` 数据库文件，不能复用产品 `data/main.db` 作为事件真相源。
 
-### 4.3 `SqliteEventStore`（对齐 HER-020/021/022）
+### 4.3 `SqliteEventStore`（通用 SDK 后端，对齐 HER-020/021/022）
+
+`SqliteEventStore` 将 event body 写入 SQLite。它是 SDK 的可选后端，不是
+Octopus 产品内 `data/main.db` 的默认职责。Octopus 产品内 SQLite 只承载
+projection / index；事件 replay 以 `JsonlEventStore` 的 JSONL 为准。
 
 ```rust
 pub struct SqliteEventStore {
@@ -900,9 +911,9 @@ pub enum JournalError {
 ## 10. 使用示例
 
 ```rust
-use octopus_harness_journal::sqlite::SqliteEventStore;
+use octopus_harness_journal::jsonl::JsonlEventStore;
 
-let store = SqliteEventStore::open("data/main.db").await?;
+let store = JsonlEventStore::open("runtime/events").await?;
 
 // Append
 store.append(

@@ -69,7 +69,7 @@ impl Tool for ExecuteCodeTool {
         input: &Value,
         ctx: &ToolContext,
     ) -> PermissionCheck {
-        // 1. trust_level == Builtin（注册期已校验）
+        // 1. origin == Builtin 或 Plugin{trust: AdminTrusted}（注册期已校验）
         // 2. ctx.caller_chain 末尾不能是 Subagent（Subagent 装配期已 blocklist，
         //    但运行期仍 fail-closed 双保险）
         // 3. 脚本本体由 PermissionBroker 按 ExecuteCodeScope 决议
@@ -92,37 +92,40 @@ impl Tool for ExecuteCodeTool {
 ### 2.3 ToolDescriptor 冻结字段
 
 ```rust
-ToolDescriptor {
-    name: "execute_code".into(),
-    title: "Programmatic Tool Calling",
-    description: include_str!("descriptions/execute_code.md"),
-    group: ToolGroup::Meta,
-    origin: ToolOrigin::Builtin,
-    trust_level: TrustLevel::Builtin,
-    properties: ToolProperties {
-        is_concurrency_safe: false,         // 串行
-        is_readonly: false,                  // 通过嵌入 read-only 工具是 readonly
-                                             //    但行为上仍按"破坏性元工具"处理
-        is_destructive: false,
-        ..
-    },
-    required_capabilities: bitflags![
-        ToolCapability::CodeRuntime,         // 新增（§2.7）
-        ToolCapability::EmbeddedToolDispatcher, // 新增（§2.7）
-    ],
-    provider_restriction: ProviderRestriction::All,
-    defer_policy: DeferPolicy::AlwaysLoad,    // ADR-0009 §2
-    budget: ResultBudget {
-        metric: BudgetMetric::Chars,
-        limit: 30_000,
-        on_overflow: OverflowAction::Offload, // ADR-0010 §2.2
-        preview_head_chars: 2_000,
-        preview_tail_chars: 2_000,
-    },
-    input_schema: include_str!("schemas/execute_code.input.json"),
-    output_schema: Some(include_str!("schemas/execute_code.output.json")),
-    search_hint: None,                        // 不参与 ToolSearch
-}
+static EXECUTE_CODE_DESC: std::sync::LazyLock<ToolDescriptor> = std::sync::LazyLock::new(|| {
+    ToolDescriptor {
+        name: "execute_code".into(),
+        display_name: "Programmatic Tool Calling".into(),
+        description: include_str!("descriptions/execute_code.md").into(),
+        category: "meta".into(),
+        group: ToolGroup::Meta,
+        version: semver::Version::new(1, 0, 0),
+        origin: ToolOrigin::Builtin,
+        trust_level: TrustLevel::AdminTrusted,
+        properties: ToolProperties {
+            is_concurrency_safe: false,         // 串行
+            is_read_only: false,                // 元工具按"破坏性"归口
+            is_destructive: false,
+            defer_policy: DeferPolicy::AlwaysLoad, // ADR-0009 §2
+            ..Default::default()
+        },
+        required_capabilities: vec![
+            ToolCapability::CodeRuntime,        // 新增（§2.7）
+            ToolCapability::EmbeddedToolDispatcher, // 新增（§2.7）
+        ],
+        provider_restriction: ProviderRestriction::All,
+        budget: ResultBudget {
+            metric: BudgetMetric::Chars,
+            limit: 30_000,
+            on_overflow: OverflowAction::Offload, // ADR-0010 §2.2
+            preview_head_chars: 2_000,
+            preview_tail_chars: 2_000,
+        },
+        input_schema: schema_from_str(include_str!("schemas/execute_code.input.json")),
+        output_schema: Some(schema_from_str(include_str!("schemas/execute_code.output.json"))),
+        search_hint: None,                       // 不参与 ToolSearch
+    }
+});
 ```
 
 输入 schema 关键字段：
@@ -254,7 +257,7 @@ impl EmbeddedToolWhitelist {
 **强制约束**：
 
 - 默认集合 **只含** §2.6 第一处声明的 7 个 read-only 工具，不可在不修改 ADR 的前提下经默认配置扩展为 write 工具
-- 业务侧若声明扩展，新加入工具的 `properties.is_destructive` / `is_readonly` 与 `trust_level` 必须满足：`is_destructive == false && trust_level ∈ {Builtin, Plugin{trust: AdminTrusted}}`，否则 `ConfigError::EmbeddedToolNotPermitted`
+- 业务侧若声明扩展，新加入工具的 `properties.is_destructive` / `is_read_only` 与 `origin + trust_level` 必须满足：`is_destructive == false && is_read_only == true && (origin == Builtin || origin == Plugin{trust: AdminTrusted})`，否则 `ConfigError::EmbeddedToolNotPermitted`
 - 任何写类 / 网络发起类 / 沙箱 shell 类工具（`Bash / FileWrite / FileEdit / SendMessage / WebFetch`）默认禁止嵌入
 - 白名单生效作用域是 **每个 Run** 的 `ExecuteCodeContext`，与 Permission rule 的 `RunScope` 同生命周期
 
@@ -410,6 +413,7 @@ pub struct CodeSandboxCapabilities {
 
 | Evidence ID | 来源 | 要点 |
 |---|---|---|
+| HER-015 | `reference-analysis/evidence-index.md` | Hermes `execute_code` 子集工具白名单与中间结果处理，是本 ADR 的直接 PTC 证据 |
 | HER-008 | `reference-analysis/evidence-index.md` | Hermes Agent-level intercepted tools `execute_code` 的存在与 Subagent 黑名单约束 |
 | HER-014 | 同上 | `DELEGATE_BLOCKED_TOOLS` 与 PTC 默认对 Subagent 不可见 |
 | CC-32 | 同上 | Claude Code 上下文压缩 pipeline 与 PTC 周边的预算/缓存协同 |

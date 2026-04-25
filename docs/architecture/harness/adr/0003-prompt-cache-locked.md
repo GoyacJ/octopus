@@ -49,13 +49,16 @@ impl SessionBuilder {
 对于动态扩展需求，通过 `Session::reload_with(ConfigDelta)` 实现，返回三档 `ReloadOutcome`：
 
 ```rust
+pub struct ReloadOutcome {
+    pub mode: ReloadMode,
+    pub new_session: Option<Session>,
+    pub effective_from: ReloadEffect,
+    pub cache_impact: CacheImpact,
+}
+
 pub enum ReloadMode {
-    AppliedInPlace { cache_impact: CacheImpact },
-    ForkedNewSession {
-        parent: SessionId,
-        child: SessionId,
-        cache_impact: CacheImpact,
-    },
+    AppliedInPlace,
+    ForkedNewSession { parent: SessionId, child: SessionId },
     Rejected { reason: String },
 }
 

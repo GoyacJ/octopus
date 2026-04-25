@@ -250,7 +250,7 @@ use octopus_harness_sdk::builtin::*;
 async fn bootstrap() -> Result<Harness> {
     HarnessBuilder::new()
         .with_model(AnthropicProvider::from_env()?)
-        .with_store(SqliteEventStore::open("data/main.db").await?)
+        .with_store(JsonlEventStore::open("runtime/events").await?)
         .with_sandbox(LocalSandbox::default())
         .with_permission_broker(
             DirectBroker::new(|req, _ctx| async move {

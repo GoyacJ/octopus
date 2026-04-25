@@ -156,17 +156,12 @@ pub struct ToolSearchTool {
 }
 
 impl Tool for ToolSearchTool {
-    fn descriptor(&self) -> ToolDescriptor { /* name = "tool_search" */ }
-    fn properties(&self) -> ToolProperties {
-        ToolProperties {
-            is_concurrency_safe: true,
-            is_read_only: true,
-            is_destructive: false,
-            defer_policy: DeferPolicy::AlwaysLoad,  // 自身必须永远可见
-            ..Default::default()
-        }
+    fn descriptor(&self) -> &ToolDescriptor { /* name = "tool_search" */ }
+    async fn execute(&self, input: Value, ctx: ToolContext)
+        -> Result<ToolStream, ToolError>
+    {
+        /* ... */
     }
-    async fn invoke(&self, input: Value, ctx: ToolContext) -> ToolResult { /* ... */ }
 }
 ```
 

@@ -43,20 +43,22 @@
 #[async_trait]
 pub trait Tool: Send + Sync + 'static {
     /// 单一权威元数据（包含 schema / properties / trust_level / capabilities / budget / origin / group 等）。
-    fn descriptor(&self) -> ToolDescriptor;
+    fn descriptor(&self) -> &ToolDescriptor;
 
-    /// 可选：动态 schema（依赖当前 session 状态生成）。返回 `None` 表示用 descriptor.input_schema。
-    async fn resolve_schema(&self, _ctx: &ToolContext) -> Option<JsonSchema> { None }
+    /// 可选：动态 schema（依赖当前 session 状态生成）。默认返回 descriptor.input_schema。
+    async fn resolve_schema(&self, ctx: &SchemaResolverContext) -> Result<JsonSchema, ToolError> {
+        Ok(self.descriptor().input_schema.clone())
+    }
 
     /// 执行期前置校验（类型/业务规则）。不做任何副作用。
-    async fn validate(&self, input: &Value, ctx: &ToolContext) -> Result<(), ToolError>;
+    async fn validate(&self, input: &Value, ctx: &ToolContext) -> Result<(), ValidationError>;
 
     /// 权限校验：返回 `Allow` / `AskUser { scope }` / `Deny` / `Escalate`。
     async fn check_permission(&self, input: &Value, ctx: &ToolContext) -> PermissionCheck;
 
     /// 真正的执行：返回流式事件。
     /// 业务可选 emit `Progress`（纯观测）/ `Partial`（可被 Hook 改写）/ `Final` / `Error`。
-    fn execute(&self, input: Value, ctx: ToolContext) -> ToolStream;
+    async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolStream, ToolError>;
 }
 
 pub type ToolStream = Pin<Box<dyn Stream<Item = ToolEvent> + Send + 'static>>;
@@ -83,8 +85,8 @@ pub struct ToolDescriptor {
     pub dynamic_schema: bool,                     // true 则运行期走 resolve_schema
 
     pub properties: ToolProperties,               // §3.3
-    pub trust_level: TrustLevel,                  // Builtin / AdminTrusted / UserControlled
-    pub required_capabilities: &'static [ToolCapability],  // ADR-011
+    pub trust_level: TrustLevel,                  // AdminTrusted / UserControlled；Builtin 由 origin 表示
+    pub required_capabilities: Vec<ToolCapability>,  // ADR-011
     pub budget: ResultBudget,                     // ADR-010
     pub origin: ToolOrigin,
     pub group: ToolGroup,                         // General / Filesystem / Shell / Meta / Network / Custom
@@ -102,7 +104,7 @@ impl Default for ToolProperties {
             is_concurrency_safe: false,
             is_read_only: false,
             is_destructive: true,                 // 默认当破坏性（拒绝自动化）
-            long_running: LongRunningPolicy::default(),  // 默认无心跳
+            long_running: None,                          // 默认无心跳
             defer_policy: DeferPolicy::AlwaysLoad,       // 默认永远可见（上层再按需降级）
         }
     }
@@ -134,40 +136,44 @@ pub struct SendInvoiceTool {
 
 #[async_trait]
 impl Tool for SendInvoiceTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            name: "send_invoice".into(),
-            display_name: "Send Invoice".into(),
-            description: "Send an invoice to a customer via email.".into(),
-            category: "business".into(),
-            version: "1.0.0".parse().unwrap(),
+    fn descriptor(&self) -> &ToolDescriptor {
+        static DESC: std::sync::LazyLock<ToolDescriptor> = std::sync::LazyLock::new(|| {
+            ToolDescriptor {
+                name: "send_invoice".into(),
+                display_name: "Send Invoice".into(),
+                description: "Send an invoice to a customer via email.".into(),
+                category: "business".into(),
+                version: "1.0.0".parse().unwrap(),
 
-            input_schema: SEND_INVOICE_INPUT_SCHEMA.clone(),
-            output_schema: Some(SEND_INVOICE_OUTPUT_SCHEMA.clone()),
-            dynamic_schema: false,
+                input_schema: SEND_INVOICE_INPUT_SCHEMA.clone(),
+                output_schema: Some(SEND_INVOICE_OUTPUT_SCHEMA.clone()),
+                dynamic_schema: false,
 
-            properties: ToolProperties {
-                is_concurrency_safe: false,
-                is_read_only: false,
-                is_destructive: true,
-                ..Default::default()
-            },
-            trust_level: TrustLevel::AdminTrusted,
-            required_capabilities: &[],                 // 不借用高权限 capability
-            budget: ResultBudget::chars(8 * 1024),
-            origin: ToolOrigin::Plugin {
-                plugin_id: "billing".into(),
-                trust: TrustLevel::AdminTrusted,
-            },
-            group: ToolGroup::Network,
-            provider_restriction: ProviderRestriction::default(),
-            search_hint: None,
-        }
+                properties: ToolProperties {
+                    is_concurrency_safe: false,
+                    is_read_only: false,
+                    is_destructive: true,
+                    ..Default::default()
+                },
+                trust_level: TrustLevel::AdminTrusted,
+                required_capabilities: vec![],              // 不借用高权限 capability
+                budget: ResultBudget::chars(8 * 1024),
+                origin: ToolOrigin::Plugin {
+                    plugin_id: "billing".into(),
+                    trust: TrustLevel::AdminTrusted,
+                },
+                group: ToolGroup::Network,
+                provider_restriction: ProviderRestriction::default(),
+                search_hint: None,
+            }
+        });
+
+        &DESC
     }
 
-    async fn validate(&self, input: &Value, _ctx: &ToolContext) -> Result<(), ToolError> {
+    async fn validate(&self, input: &Value, _ctx: &ToolContext) -> Result<(), ValidationError> {
         let _req: SendInvoiceInput = serde_json::from_value(input.clone())
-            .map_err(|e| ToolError::InvalidInput(e.to_string()))?;
+            .map_err(|e| ValidationError::InvalidInput(e.to_string()))?;
         Ok(())
     }
 
@@ -181,9 +187,9 @@ impl Tool for SendInvoiceTool {
         }
     }
 
-    fn execute(&self, input: Value, _ctx: ToolContext) -> ToolStream {
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolStream, ToolError> {
         let client = self.billing_client.clone();
-        Box::pin(async_stream::stream! {
+        Ok(Box::pin(async_stream::stream! {
             let req: SendInvoiceInput = match serde_json::from_value(input) {
                 Ok(v) => v,
                 Err(e) => {
@@ -197,7 +203,7 @@ impl Tool for SendInvoiceTool {
                 )),
                 Err(e) => yield ToolEvent::Error(ToolError::External(e.to_string())),
             }
-        })
+        }))
     }
 }
 ```
@@ -225,9 +231,9 @@ Builder 在 `build()` 阶段：
 
 | 条件 | 来源 | 校验时机 |
 |---|---|---|
-| `descriptor.is_destructive == false` | `harness-tool.md §3` | `ToolRegistry::build()` |
-| `descriptor.requires_human_in_loop == false` | `harness-tool.md §3` | `ToolRegistry::build()` |
-| `trust_level >= AdminTrusted` | `harness-plugin.md §6` | manifest 校验 |
+| `descriptor.properties.is_destructive == false` | `harness-tool.md §3` | `ToolRegistry::build()` |
+| `descriptor.properties.is_read_only == true` | `harness-tool.md §3` | `ToolRegistry::build()` |
+| `origin == Builtin` 或 `origin == Plugin{trust: AdminTrusted}` | `harness-plugin.md §6` / `harness-tool.md §4.7.3` | manifest 校验 + registry 校验 |
 | 业务通过 `team_config.toml` 显式列入白名单 | ADR-0016 §2.6 | Session 启动 |
 | `team_config.toml` 同时给出 `whitelist_reason` | ADR-0016 §2.6 | 审计 |
 
@@ -716,28 +722,10 @@ impl<T: MemoryStore + MemoryLifecycle> MemoryProvider for T {}
 
 ## 10. EventStore 扩展
 
-```rust
-#[async_trait]
-pub trait EventStore: Send + Sync + 'static {
-    async fn append(
-        &self,
-        tenant: TenantId,
-        session: SessionId,
-        events: &[Event],
-    ) -> Result<JournalOffset>;
-    async fn read(
-        &self,
-        tenant: TenantId,
-        session: SessionId,
-        cursor: ReplayCursor,
-    ) -> BoxStream<Event>;
-    async fn snapshot(
-        &self,
-        tenant: TenantId,
-        session: SessionId,
-    ) -> Result<Option<SessionSnapshot>>;
-}
-```
+`EventStore` 的完整 trait 签名以 `api-contracts.md §3.1` 为准。
+扩展实现必须覆盖 `append / read / snapshot / save_snapshot / compact_link /
+list_sessions / prune`，并保持 tenant 隔离、单调 `JournalOffset`、schema migration
+与 redaction 语义一致。
 
 内置：`InMemoryEventStore / JsonlEventStore / SqliteEventStore`。业务扩展常见：`PostgresEventStore / RedisEventStore / KafkaEventStore`。
 
@@ -826,7 +814,7 @@ ADR-0015 把 Discovery 与 Runtime Load 拆为两个 trait（`PluginManifestLoad
 
 | 反模式 | 原因 |
 |---|---|
-| 在 Tool 的 `invoke` 里写 UI 代码 | ADR-002（Tool 不含 UI） |
+| 在 Tool 的 `execute` 里写 UI 代码 | ADR-002（Tool 不含 UI） |
 | 在 Hook 的 `handle` 里循环 `tokio::spawn` | 阻塞 hook dispatcher |
 | 在 Plugin 加载时执行网络请求 | 违反 manifest-first / lazy runtime |
 | 在 Tool 描述里返回绝对路径 | 泄露本地文件系统信息 |

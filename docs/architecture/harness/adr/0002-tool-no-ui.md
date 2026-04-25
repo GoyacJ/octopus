@@ -30,14 +30,12 @@
 ```rust
 #[async_trait]
 pub trait Tool: Send + Sync + 'static {
-    fn descriptor(&self) -> ToolDescriptor;
-    fn input_schema(&self) -> &JsonSchema;
-    fn output_schema(&self) -> Option<&JsonSchema>;
-    fn properties(&self) -> ToolProperties;
-    async fn validate(&self, input: &Value, ctx: &ToolContext) -> Result<()>;
+    fn descriptor(&self) -> &ToolDescriptor;
+    async fn validate(&self, input: &Value, ctx: &ToolContext) -> Result<(), ValidationError>;
     async fn check_permission(&self, input: &Value, ctx: &ToolContext)
         -> PermissionCheck;
-    async fn invoke(&self, input: Value, ctx: ToolContext) -> ToolResult;
+    async fn execute(&self, input: Value, ctx: ToolContext)
+        -> Result<ToolStream, ToolError>;
 }
 ```
 

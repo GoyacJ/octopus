@@ -272,7 +272,7 @@ pub enum DecidedBy {
 ### 6.2 沙箱执行的审批路径
 
 ```text
-Tool::invoke(input, ctx)
+Tool::execute(input, ctx)
     │
     ▼
 [check_permission]   ← 永远执行，不因 sandbox 跳过

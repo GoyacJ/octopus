@@ -171,7 +171,7 @@ Harness
 
 ---
 
-## 4. 18 个 Crate 总览
+## 4. 19 个 Crate 总览
 
 ### 4.1 清单
 
@@ -184,17 +184,18 @@ Harness
 | 5 | `harness-permission` | L1 | 权限模型 + DirectBroker + StreamBroker + 规则引擎 |
 | 6 | `harness-memory` | L1 | Memdir（MEMORY.md/USER.md）+ 外部 Provider Slot + 威胁扫描 |
 | 7 | `harness-tool` | L2 | Tool trait + Registry + Pool + 并发编排 |
-| 8 | `harness-skill` | L2 | Skill Loader + 多源优先级 + Agent allowlist + SkillTool 三件套（list/view/invoke）+ 内容威胁扫描 |
-| 9 | `harness-mcp` | L2 | MCP Client（入站）+ Server Adapter（出站）+ OAuth |
-| 10 | `harness-hook` | L2 | Hook Dispatcher + Registry + 多 transport |
-| 11 | `harness-context` | L2 | Context 管线（`assemble` 含 ingest 决策 → compact → `after_turn`）|
-| 12 | `harness-session` | L2 | Session 生命周期 + Projection + Fork + Hot Reload |
-| 13 | `harness-engine` | L3 | 单 Agent 主循环（turn 编排、中断、预算）|
-| 14 | `harness-subagent` | L3 | 父→子 任务委派（有界搜索、sidechain）|
-| 15 | `harness-team` | L3 | 多 Agent 长期协同（Coordinator/P2P/RoleRouted）|
-| 16 | `harness-plugin` | L3 | 插件宿主 + 清单校验 + 信任域二分 |
-| 17 | `harness-observability` | L3 | Tracer + Usage + Replay + Redactor |
-| 18 | **`harness-sdk`** | **L4** | **对外门面**（业务层唯一直接依赖） |
+| 8 | `harness-tool-search` | L2 | Deferred Tool Loading + ToolSearchTool + 物化 backend + scorer |
+| 9 | `harness-skill` | L2 | Skill Loader + 多源优先级 + Agent allowlist + SkillTool 三件套（list/view/invoke）+ 内容威胁扫描 |
+| 10 | `harness-mcp` | L2 | MCP Client（入站）+ Server Adapter（出站）+ OAuth |
+| 11 | `harness-hook` | L2 | Hook Dispatcher + Registry + 多 transport |
+| 12 | `harness-context` | L2 | Context 管线（`assemble` 含 ingest 决策 → compact → `after_turn`）|
+| 13 | `harness-session` | L2 | Session 生命周期 + Projection + Fork + Hot Reload |
+| 14 | `harness-engine` | L3 | 单 Agent 主循环（turn 编排、中断、预算）|
+| 15 | `harness-subagent` | L3 | 父→子 任务委派（有界搜索、sidechain）|
+| 16 | `harness-team` | L3 | 多 Agent 长期协同（Coordinator/P2P/RoleRouted）|
+| 17 | `harness-plugin` | L3 | 插件宿主 + 清单校验 + 信任域二分 |
+| 18 | `harness-observability` | L3 | Tracer + Usage + Replay + Redactor |
+| 19 | **`harness-sdk`** | **L4** | **对外门面**（业务层唯一直接依赖） |
 
 ### 4.2 Crate 数量选择理由
 
@@ -321,7 +322,7 @@ Business: session.run_turn(input)
 [Hook] PreToolUse（可改写 input / 返回 permission decision）
     │
     ▼
-[Tool] invoke（sandbox + activity heartbeat）
+[Tool] execute（sandbox + activity heartbeat）
     │
     ▼
 [Hook] PostToolUse（可改写 result / transform）
@@ -426,7 +427,7 @@ use octopus_harness_sdk::builtin::*;
 async fn bootstrap() -> Result<Harness> {
     HarnessBuilder::new()
         .with_model(OpenAiProvider::from_env()?)
-        .with_store(SqliteEventStore::open("data/main.db").await?)
+        .with_store(JsonlEventStore::open("runtime/events").await?)
         .with_sandbox(LocalSandbox::default())
         .with_permission_broker(MyInteractiveBroker::new(tx))
         .with_memory(BuiltinMemory::at("data/memdir"))
@@ -504,8 +505,8 @@ async fn single_turn(harness: &Harness) -> Result<()> {
 
 | 治理规则 | 本架构映射 |
 |---|---|
-| `runtime/events/*.jsonl` append-only | `harness-journal` 的 `JsonlEventStore` 直接写到该路径 |
-| `data/main.db` 结构化投影 | `SqliteEventStore` 持久化 projection（`FTS5 + WAL + BEGIN IMMEDIATE 重试`，对齐 HER-021） |
+| `runtime/events/*.jsonl` append-only | `harness-journal` 的 `JsonlEventStore` 直接写到该路径，作为 Octopus 产品事件真相源 |
+| `data/main.db` 结构化投影 | 业务层 projection / session current-state / 索引写入 SQLite；不得把 `data/main.db` 当作产品 EventStore 真相源 |
 | `config/runtime/*.json` 分层配置 | 业务层读取后映射为 `HarnessOptions` 注入 SDK |
 | `config_snapshot_id / effective_config_hash` | SDK 的 `Session::snapshot_id()` 对外暴露 |
 | 运行中 session 绑定启动时配置 | Builder 模式 + Session 不可变配置副本 |

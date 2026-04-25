@@ -164,6 +164,8 @@ pub struct ToolDescriptor {
     pub properties: ToolProperties,
 
     /* —— Trust × Capability（ADR-006 + ADR-011）—— */
+    /// 与 `origin` 分维度建模：`Builtin` 是 `ToolOrigin`，不是 `TrustLevel`。
+    /// 内置工具固定 `origin = ToolOrigin::Builtin` 且 `trust_level = TrustLevel::AdminTrusted`。
     pub trust_level: TrustLevel,
     pub required_capabilities: Vec<ToolCapability>,
 
@@ -789,38 +791,44 @@ impl Tool for ExecuteCodeTool {
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolStream, ToolError>;
 }
 
-const EXECUTE_CODE_DESC: ToolDescriptor = ToolDescriptor {
-    name: "execute_code",
-    title: "Programmatic Tool Calling",
-    group: ToolGroup::Meta,
-    origin: ToolOrigin::Builtin,
-    trust_level: TrustLevel::Builtin,
-    properties: ToolProperties {
-        is_concurrency_safe: false,
-        is_readonly: false,        // 元工具按"破坏性"归口，不因嵌入工具集 read-only 而下调
-        is_destructive: false,
-        ..PROPERTIES_DEFAULTS
-    },
-    required_capabilities: bitflags![
-        ToolCapability::CodeRuntime,
-        ToolCapability::EmbeddedToolDispatcher,
-    ],
-    provider_restriction: ProviderRestriction::All,
-    defer_policy: DeferPolicy::AlwaysLoad,
-    budget: ResultBudget {
-        metric: BudgetMetric::Chars,
-        limit: 30_000,
-        on_overflow: OverflowAction::Offload,
-        preview_head_chars: 2_000,
-        preview_tail_chars: 2_000,
-    },
-    input_schema: include_str!("schemas/execute_code.input.json"),
-    output_schema: Some(include_str!("schemas/execute_code.output.json")),
-    search_hint: None,
-};
+static EXECUTE_CODE_DESC: std::sync::LazyLock<ToolDescriptor> = std::sync::LazyLock::new(|| {
+    ToolDescriptor {
+        name: "execute_code".into(),
+        display_name: "Programmatic Tool Calling".into(),
+        description: include_str!("descriptions/execute_code.md").into(),
+        category: "meta".into(),
+        group: ToolGroup::Meta,
+        version: semver::Version::new(1, 0, 0),
+        input_schema: schema_from_str(include_str!("schemas/execute_code.input.json")),
+        output_schema: Some(schema_from_str(include_str!("schemas/execute_code.output.json"))),
+        dynamic_schema: false,
+        properties: ToolProperties {
+            is_concurrency_safe: false,
+            is_read_only: false,       // 元工具按"破坏性"归口，不因嵌入工具集 read-only 而下调
+            is_destructive: false,
+            defer_policy: DeferPolicy::AlwaysLoad,
+            ..PROPERTIES_DEFAULTS
+        },
+        trust_level: TrustLevel::AdminTrusted,
+        required_capabilities: vec![
+            ToolCapability::CodeRuntime,
+            ToolCapability::EmbeddedToolDispatcher,
+        ],
+        budget: ResultBudget {
+            metric: BudgetMetric::Chars,
+            limit: 30_000,
+            on_overflow: OverflowAction::Offload,
+            preview_head_chars: 2_000,
+            preview_tail_chars: 2_000,
+        },
+        provider_restriction: ProviderRestriction::All,
+        origin: ToolOrigin::Builtin,
+        search_hint: None,
+    }
+});
 ```
 
-`ToolDescriptor` 字面冻结（ADR-0003）；`programmatic_tool_calling` flag 只控制
+`ToolDescriptor` 内容冻结（ADR-0003）；`programmatic_tool_calling` flag 只控制
 "是否被装配进 `ToolPool`"，descriptor 内容本身不随 flag 漂移。
 
 #### 4.7.2 执行流水线（与 ADR-0016 §2.4 对齐）
@@ -872,7 +880,8 @@ impl EmbeddedToolWhitelist {
 | 校验项 | 通过条件 |
 |---|---|
 | `properties.is_destructive` | 必须 `== false`，否则 `ConfigError::EmbeddedToolNotPermitted` |
-| `trust_level` | 必须 `∈ {Builtin, Plugin{trust: AdminTrusted}}`，user-controlled / mcp 一律拒绝 |
+| `properties.is_read_only` | 必须 `== true`，否则 `ConfigError::EmbeddedToolNotPermitted` |
+| `origin + trust_level` | 必须满足 `origin == ToolOrigin::Builtin`，或 `origin == ToolOrigin::Plugin { trust: AdminTrusted }`；user-controlled / mcp 一律拒绝 |
 | `is_concurrency_safe` | 不强制；orchestrator 在脚本内仍按 `false` 串行执行嵌入调用 |
 | 命中 `ToolDescriptor.search_hint = None` | 视为 `ToolSearchTool` 自身，强制保留（业务无法剔除 ToolSearch） |
 
@@ -1159,4 +1168,4 @@ impl Tool for AgentTool {
 - `crates/harness-tool-search.md`（`ToolSearchTool` 实体所在 crate）
 - `crates/harness-hook.md`（Hook 介入点完整清单）
 - `crates/harness-permission.md`（PermissionBroker / DecisionScope）
-- Evidence: CC-02, CC-03, CC-04, CC-07, CC-RES-1, OC-CAP-1, OC-ATT-1, HER-005, HER-008, HER-010, HER-TRUNC-1, HER-AGENTTOOLS-1
+- Evidence: CC-02, CC-03, CC-04, CC-07, CC-33, OC-16, OC-20, OC-21, HER-005, HER-008, HER-010, HER-015

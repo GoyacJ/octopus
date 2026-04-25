@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-定义 18 个 crate 之间**允许的依赖方向**与**禁止的耦合模式**。任何违反本文的代码评审**必须拒绝**。
+定义 19 个 crate 之间**允许的依赖方向**与**禁止的耦合模式**。任何违反本文的代码评审**必须拒绝**。
 
 ## 2. 分层编号约定
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | L0 契约 | `contracts` | harness-contracts |
 | L1 原语 | `P1..P5` | harness-model / journal / sandbox / permission / memory |
-| L2 复合能力 | `C1..C6` | harness-tool / skill / mcp / hook / context / session |
+| L2 复合能力 | `C1..C7` | harness-tool / tool-search / skill / mcp / hook / context / session |
 | L3 引擎与协作 | `E1..E5` | harness-engine / subagent / team / plugin / observability |
 | L4 门面 | `sdk` | harness-sdk |
 
@@ -41,6 +41,7 @@
 | Crate | 可依赖 | 说明 |
 |---|---|---|
 | `harness-tool` | `contracts`, `permission`, `sandbox` | 工具执行需要权限检查与沙箱；**不依赖 `model`**（避免 L2 交叉：Tool 本身不做推理，ToolContext 里的 model 通过 trait 对象间接访问） |
+| `harness-tool-search` | `contracts`, `tool`(trait), `model`(capabilities) | ADR-009 允许的 L2 同层白名单：只依赖 `harness-tool` 的 `Tool` / `ToolDescriptor` / `ToolContext` 公开 trait 与 `harness-model` 的 `ModelCapabilities`，不得反向进入 registry 内部实现 |
 | `harness-skill` | `contracts`, `memory`(读) | 无需沙箱、无需模型 |
 | `harness-mcp` | `contracts`, `tool`(trait 抽象注册) | MCP 动态工具接入 `ToolRegistry` |
 | `harness-hook` | `contracts` | Hook 事件分发 |
@@ -105,8 +106,8 @@
            └───────────┬───────┴──────┬────────────┘
                        ▼              ▼
                  L2 复合能力层（共享 trait 接口）
-           ┌──────┬──────┬──────┬──────┬──────┐
-         tool  skill  mcp   hook  context  session
+           ┌──────┬────────────┬──────┬──────┬──────┬──────┐
+         tool  tool-search  skill  mcp   hook  context  session
            │                                 │
            └────────────┬────────────────────┘
                         ▼
@@ -126,6 +127,7 @@
 |---|---|
 | `harness-engine` ↔ `harness-subagent` | Subagent 通过 `trait EngineRunner` 注入，不直接引用 `engine` 实现 |
 | `harness-tool` ↔ `harness-mcp` | MCP 客户端只实现 `trait Tool` 并注册到 `ToolRegistry`，`tool` crate 不感知 MCP |
+| `harness-tool-search` → `harness-tool` | ADR-009/ADR-008 登记的 L2 同层白名单；只允许用 `Tool` trait、descriptor、properties 和 context 公开面，不允许依赖 `ToolRegistry` 私有实现 |
 | `harness-session` ↔ `harness-context` | Session 拥有 `ContextEngine`，但 `ContextEngine` 不回调 Session 状态（读-only Projection） |
 | `harness-plugin` ↔ 被加载能力 | Plugin crate 只依赖各能力的 **trait**，不实例化业务实现 |
 | `harness-plugin` ↔ Loader（ADR-0015） | `PluginManifestLoader::enumerate` 返回 `Vec<ManifestRecord>`，**类型禁止**产出 `Arc<dyn Plugin>`；`PluginRuntimeLoader::load` 仅由 `PluginRegistry::activate` 调用。Loader 实现不得反向依赖 `PluginRegistry` 内部状态 |
@@ -171,6 +173,6 @@ multiple-versions = "deny"
 
 | 日期 | Crate A | Crate B | 原因 | ADR 链接 |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-04-25 | `harness-tool-search` | `harness-tool` | Deferred Tool Loading 需要以 `ToolSearchTool` 实现 `Tool` trait，并读取 `ToolDescriptor` / `ToolProperties` 做评分；注入由 L4 完成，避免反向依赖 | ADR-008 / ADR-009 |
 
-> 空表即为"目前无例外"。每新增一行必须附 ADR 链接。
+每新增一行必须附 ADR 链接。未登记的同层具体实现依赖按 §4.1 拒绝。

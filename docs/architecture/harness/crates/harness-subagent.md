@@ -399,7 +399,7 @@ impl SubagentRunnerCap for SubagentRunnerCapAdapter {
 >
 > 通过这个薄包装，`harness-tool` 始终只依赖 `harness-contracts`；`harness-subagent` 既保留它原本的 `SubagentRunner` 强类型 API（供 Engine 内部直接调用），又对工具层暴露 capability 投影（详见 `harness-engine.md §6.x · Capability 装配`）。
 
-**Trust 校验**：`CapabilityPolicy::default_locked()` 仅允许 `Trust::Builtin / AdminTrusted` 的 Tool 申请 `ToolCapability::SubagentRunner`；UserControlled Plugin 工具试图申请会在 `ToolRegistry::register` 阶段失败为 `RegistrationError::CapabilityNotPermitted`。
+**Trust 校验**：`CapabilityPolicy::default_locked()` 仅允许 `origin = ToolOrigin::Builtin` 或 `ToolOrigin::Plugin { trust: AdminTrusted }` 的 Tool 申请 `ToolCapability::SubagentRunner`；UserControlled Plugin 工具试图申请会在 `ToolRegistry::register` 阶段失败为 `RegistrationError::CapabilityNotPermitted`。
 
 ### 3.2 管理面：`SubagentAdmin`
 

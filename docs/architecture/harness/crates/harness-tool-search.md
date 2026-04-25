@@ -86,35 +86,39 @@ impl ToolSearchToolBuilder {
 
 #[async_trait]
 impl harness_tool::Tool for ToolSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            name: "tool_search".into(),
-            display_name: "Tool Search".into(),
-            description: TOOL_SEARCH_PROMPT.into(),          // §2.2.2
-            category: "meta".into(),
-            version: semver::Version::new(1, 0, 0),
-            origin: ToolOrigin::Builtin,
-            group: ToolGroup::Meta,                          // 元工具组
-            trust_level: TrustLevel::Builtin,
-            required_capabilities: &[],                      // 不借用任何高权限 capability
-            properties: ToolProperties {
-                is_concurrency_safe: true,
-                is_read_only: true,
-                is_destructive: false,
-                long_running: LongRunningPolicy::default(),
-                defer_policy: DeferPolicy::AlwaysLoad,       // 自身必须永远可见
-            },
-            input_schema: TOOL_SEARCH_INPUT_SCHEMA.clone(),
-            output_schema: Some(TOOL_SEARCH_OUTPUT_SCHEMA.clone()),
-            dynamic_schema: false,
-            provider_restriction: ProviderRestriction::default(),
-            search_hint: None,
-            budget: ResultBudget::bytes(32 * 1024),          // §2.5 与 ResultBudget 对接
-        }
-    }
+    fn descriptor(&self) -> &ToolDescriptor { &TOOL_SEARCH_DESC }
 
-    fn execute(&self, input: Value, ctx: ToolContext) -> ToolStream { /* §2.2.3 */ }
+    async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolStream, ToolError> {
+        todo!("see §2.2.3")
+    }
 }
+
+static TOOL_SEARCH_DESC: std::sync::LazyLock<ToolDescriptor> = std::sync::LazyLock::new(|| {
+    ToolDescriptor {
+        name: "tool_search".into(),
+        display_name: "Tool Search".into(),
+        description: TOOL_SEARCH_PROMPT.into(),              // §2.2.2
+        category: "meta".into(),
+        version: semver::Version::new(1, 0, 0),
+        origin: ToolOrigin::Builtin,
+        group: ToolGroup::Meta,                              // 元工具组
+        trust_level: TrustLevel::AdminTrusted,
+        required_capabilities: vec![],                       // 不借用任何高权限 capability
+        properties: ToolProperties {
+            is_concurrency_safe: true,
+            is_read_only: true,
+            is_destructive: false,
+            long_running: None,
+            defer_policy: DeferPolicy::AlwaysLoad,           // 自身必须永远可见
+        },
+        input_schema: TOOL_SEARCH_INPUT_SCHEMA.clone(),
+        output_schema: Some(TOOL_SEARCH_OUTPUT_SCHEMA.clone()),
+        dynamic_schema: false,
+        provider_restriction: ProviderRestriction::default(),
+        search_hint: None,
+        budget: ResultBudget::bytes(32 * 1024),              // §2.5 与 ResultBudget 对接
+    }
+});
 ```
 
 > `execute` 返回 `ToolStream = Pin<Box<dyn Stream<Item = ToolEvent>>>`，遵循 `harness-tool §2.1` 流式契约。本工具属于"小响应元工具"，正常情况下只 emit 一个 `ToolEvent::Final(ToolResult::Structured(...))`，因此对 `ResultBudget` 不敏感。
@@ -744,7 +748,7 @@ impl From<ToolLoadingError> for HarnessError {
 | 超时 | coalescer 窗口内无新 submit，deadline 到达触发 flush |
 | 契约 | `TOOL_SEARCH_PROMPT` / `DeferredToolsDelta::to_attachment_text` 文本 golden |
 | Backend | `AnthropicToolReferenceBackend` 产出 `NoInvalidation`；`InlineReinjectionBackend` 产出 `OneShotInvalidation` |
-| 事件 | 每个 `invoke` 至少 emit 一条 `ToolSearchQueried` + 至多一条 `ToolSchemaMaterialized` |
+| 事件 | 每次 `execute` 至少 emit 一条 `ToolSearchQueried` + 至多一条 `ToolSchemaMaterialized` |
 | Projection | `DiscoveredToolProjection` 在 Fork / Compact 下 discovered 集的传递与收敛 |
 
 ## 10. 反模式
