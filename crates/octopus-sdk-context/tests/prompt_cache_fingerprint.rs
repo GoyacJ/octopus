@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Write as _, sync::Arc};
 
 use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder};
@@ -82,16 +82,15 @@ fn prompt_and_tool_fingerprint_are_stable_and_sensitive_to_tool_set() {
 }
 
 fn combined_fingerprint(builder: &SystemPromptBuilder, ctx: &PromptCtx<'_>) -> String {
-    let prompt_hex = builder
-        .fingerprint(ctx)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let mut prompt_hex = String::new();
+    for byte in builder.fingerprint(ctx) {
+        write!(&mut prompt_hex, "{byte:02x}").expect("writing to String should not fail");
+    }
     let payload = format!("{prompt_hex}:{}", ctx.tools.fingerprint());
     format!("{:x}", Sha256::digest(payload.as_bytes()))
 }
 
-fn sample_ctx<'a>(tools: &'a ToolSurface) -> PromptCtx<'a> {
+fn sample_ctx(tools: &ToolSurface) -> PromptCtx<'_> {
     PromptCtx {
         session: SessionId("session-fingerprint".into()),
         mode: PermissionMode::Default,

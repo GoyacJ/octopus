@@ -120,6 +120,7 @@ struct RecordingHook {
 
 #[async_trait]
 impl Hook for RecordingHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "recording-hook"
     }

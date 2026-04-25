@@ -494,8 +494,8 @@ mod tests {
         append_request_headers(&mut headers, &ProtocolFamily::AnthropicMessages, &request);
 
         assert!(headers.iter().any(|(name, value)| {
-            name == &HeaderName::from_static("anthropic-beta")
-                && value == &HeaderValue::from_static("prompt-caching-2024-07-31")
+            name == HeaderName::from_static("anthropic-beta")
+                && value == HeaderValue::from_static("prompt-caching-2024-07-31")
         }));
     }
 

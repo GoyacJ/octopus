@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Write as _, sync::Arc};
 
 use async_trait::async_trait;
 use octopus_sdk_context::{PromptCtx, SystemPromptBuilder, SystemPromptSection};
@@ -122,7 +122,7 @@ fn sample_registry() -> ToolRegistry {
     registry
 }
 
-fn sample_ctx<'a>(tools: &'a ToolSurface) -> PromptCtx<'a> {
+fn sample_ctx(tools: &ToolSurface) -> PromptCtx<'_> {
     PromptCtx {
         session: SessionId("session-ctx".into()),
         mode: PermissionMode::Plan,
@@ -132,8 +132,9 @@ fn sample_ctx<'a>(tools: &'a ToolSurface) -> PromptCtx<'a> {
 }
 
 fn hex(bytes: [u8; 32]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
+    let mut output = String::new();
+    for byte in bytes {
+        write!(&mut output, "{byte:02x}").expect("writing to String should not fail");
+    }
+    output
 }

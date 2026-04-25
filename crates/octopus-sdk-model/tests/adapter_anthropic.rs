@@ -98,7 +98,7 @@ fn response_byte_stream(response: reqwest::Response) -> StreamBytes {
 }
 
 async fn send_request(server: &MockServer, request: &ModelRequest) -> Vec<AssistantEvent> {
-    let adapter = AnthropicMessagesAdapter::default();
+    let adapter = AnthropicMessagesAdapter;
     let client = reqwest::Client::new();
     let headers = adapter
         .auth_headers(&StaticVault, &anthropic_provider())

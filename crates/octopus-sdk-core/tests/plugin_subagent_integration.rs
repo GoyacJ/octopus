@@ -54,6 +54,7 @@ struct SessionStartHook;
 
 #[async_trait]
 impl Hook for SessionStartHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "session-start-hook"
     }

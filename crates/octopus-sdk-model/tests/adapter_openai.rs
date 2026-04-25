@@ -96,7 +96,7 @@ fn response_byte_stream(response: reqwest::Response) -> StreamBytes {
 }
 
 async fn send_request(server: &MockServer, request: &ModelRequest) -> Vec<AssistantEvent> {
-    let adapter = OpenAiChatAdapter::default();
+    let adapter = OpenAiChatAdapter;
     let client = reqwest::Client::new();
     let headers = adapter
         .auth_headers(&StaticVault, &compat_provider())

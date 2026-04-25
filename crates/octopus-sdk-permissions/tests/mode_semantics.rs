@@ -54,6 +54,7 @@ fn permission_mode_semantics_table_is_complete() {
 }
 
 #[test]
+#[allow(clippy::match_same_arms)]
 fn permission_mode_semantics_match_w4_decision_matrix() {
     for (mode, category, decision) in EXPECTED_DECISIONS {
         let expected = match (mode, category) {

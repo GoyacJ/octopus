@@ -67,6 +67,7 @@ struct NoopHook {
 
 #[async_trait]
 impl Hook for NoopHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "noop-hook"
     }

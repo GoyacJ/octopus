@@ -108,7 +108,7 @@ async fn project_delete_request_routes_create_and_list_archived_project_requests
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, created.id);
     assert_eq!(listed[0].status, "pending");
-    assert_eq!(headers.get("x-workspace-id").is_some(), true);
+    assert!(headers.get("x-workspace-id").is_some());
 }
 
 #[tokio::test]

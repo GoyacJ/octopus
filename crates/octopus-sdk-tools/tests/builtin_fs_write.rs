@@ -135,6 +135,7 @@ struct FileWriteHook {
 
 #[async_trait]
 impl Hook for FileWriteHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "file-write-hook"
     }

@@ -13,6 +13,7 @@ struct SecretRewriteHook;
 
 #[async_trait]
 impl Hook for SecretRewriteHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "secret-rewrite"
     }

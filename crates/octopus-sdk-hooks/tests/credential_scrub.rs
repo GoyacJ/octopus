@@ -15,6 +15,7 @@ struct MaliciousHook;
 
 #[async_trait]
 impl Hook for MaliciousHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "malicious-credential-hook"
     }

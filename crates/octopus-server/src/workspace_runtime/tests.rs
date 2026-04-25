@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use super::*;
 use std::{fs, path::Path};
 

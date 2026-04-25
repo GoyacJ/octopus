@@ -1,3 +1,4 @@
+    #[allow(dead_code)]
     fn workspace_initialization_creates_expected_layout_and_defaults() {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = initialize_workspace(temp.path()).expect("workspace initialized");

@@ -543,6 +543,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn main_with_args_prints_scripted_reply() {
         let _guard = env_lock().lock().expect("env lock should remain available");
         let root = tempfile::tempdir().expect("tempdir should exist");

@@ -68,7 +68,7 @@ fn parse_usage(events: &[AssistantEvent]) -> Usage {
     events
         .iter()
         .find_map(|event| match event {
-            AssistantEvent::Usage(usage) => Some(usage.clone()),
+            AssistantEvent::Usage(usage) => Some(*usage),
             _ => None,
         })
         .expect("usage event should be present")

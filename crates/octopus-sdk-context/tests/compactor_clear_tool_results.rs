@@ -250,6 +250,6 @@ fn chars_to_tokens(chars: usize) -> u32 {
     if chars == 0 {
         0
     } else {
-        ((chars as u32) + 3) / 4
+        u32::try_from(chars).unwrap_or(u32::MAX).div_ceil(4)
     }
 }

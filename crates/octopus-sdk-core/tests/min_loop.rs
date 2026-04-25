@@ -49,6 +49,7 @@ struct InjectOnceStopHook {
 
 #[async_trait]
 impl Hook for InjectOnceStopHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "inject-once-stop"
     }
@@ -399,7 +400,7 @@ async fn test_resume_replays_compaction_summary_instead_of_folded_prefix() {
 
     let request_text = flatten_request_text(&resumed_requests[1].messages);
 
-    assert!(request_text.contains("R"));
+    assert!(request_text.contains('R'));
     assert!(request_text.contains("continue after resume"));
     assert!(!request_text.contains("very long prefix user prompt that must be folded"));
 }
@@ -461,7 +462,7 @@ async fn test_token_budget_compaction_continues_sampling() {
     assert_eq!(requests[2].model.0, "test-model");
 
     let resumed_text = flatten_request_text(&requests[2].messages);
-    assert!(resumed_text.contains("S"));
+    assert!(resumed_text.contains('S'));
     assert!(
         resumed_text.contains("a very long prompt that should force compaction before sampling")
     );
@@ -572,7 +573,7 @@ async fn test_prompt_too_long_recovers_via_compaction() {
     assert_eq!(requests[2].model.0, "test-model");
 
     let resumed_text = flatten_request_text(&requests[2].messages);
-    assert!(resumed_text.contains("S"));
+    assert!(resumed_text.contains('S'));
     assert!(!resumed_text.contains("oversized request payload for recovery"));
 }
 

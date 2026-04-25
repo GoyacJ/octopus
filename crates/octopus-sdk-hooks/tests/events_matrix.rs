@@ -92,29 +92,26 @@ async fn hook_event_matrix_is_stable() {
             HookSource::Workspace,
             10,
         );
-        match case.rewrite_payload.clone() {
-            Some(expected) => {
-                let rewrite_outcome = rewrite_runner
-                    .run(case.event.clone())
-                    .await
-                    .expect("rewrite should succeed for allowed events");
-                assert_eq!(
-                    rewrite_outcome.final_payload,
-                    Some(expected),
-                    "{}",
-                    case.kind
-                );
-            }
-            None => {
-                let err = rewrite_runner
-                    .run(case.event.clone())
-                    .await
-                    .expect_err("rewrite should fail for disallowed events");
-                assert!(matches!(
-                    err,
-                    HookError::RewriteNotAllowed { event_kind } if event_kind == case.kind
-                ));
-            }
+        if let Some(expected) = case.rewrite_payload.clone() {
+            let rewrite_outcome = rewrite_runner
+                .run(case.event.clone())
+                .await
+                .expect("rewrite should succeed for allowed events");
+            assert_eq!(
+                rewrite_outcome.final_payload,
+                Some(expected),
+                "{}",
+                case.kind
+            );
+        } else {
+            let err = rewrite_runner
+                .run(case.event.clone())
+                .await
+                .expect_err("rewrite should fail for disallowed events");
+            assert!(matches!(
+                err,
+                HookError::RewriteNotAllowed { event_kind } if event_kind == case.kind
+            ));
         }
 
         let inject_runner = HookRunner::new();

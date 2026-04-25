@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use super::tasks_support::{
     build_task_run_record, task_prompt_from_record, update_task_record_from_run,
 };

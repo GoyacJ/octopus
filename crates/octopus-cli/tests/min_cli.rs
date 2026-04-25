@@ -4,6 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::StreamExt;
 use octopus_cli::run_once::{main_with_args, run_once};
 use octopus_sdk::{
     builtin::register_builtins, AgentRuntime, AskAnswer, AskError, AskPrompt, AskResolver,
@@ -140,7 +141,6 @@ async fn test_run_once_uses_sdk_runtime() {
             .await
             .expect("stream should open");
         let mut events = Vec::new();
-        use futures::StreamExt;
         while let Some(event) = stream.next().await {
             events.push(event.expect("event should decode"));
         }
@@ -157,6 +157,7 @@ async fn test_run_once_uses_sdk_runtime() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn main_with_args_supports_init_command() {
     let _guard = env_lock().lock().expect("env lock should remain available");
     let root = tempfile::tempdir().expect("tempdir should exist");
@@ -179,6 +180,7 @@ async fn main_with_args_supports_init_command() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn main_with_args_supports_slash_help() {
     let _guard = env_lock().lock().expect("env lock should remain available");
     let root = tempfile::tempdir().expect("tempdir should exist");
@@ -201,6 +203,7 @@ async fn main_with_args_supports_slash_help() {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn main_with_args_prints_scripted_reply() {
     let _guard = env_lock().lock().expect("env lock should remain available");
     let root = tempfile::tempdir().expect("tempdir should exist");

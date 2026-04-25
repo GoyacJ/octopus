@@ -49,6 +49,7 @@ struct SecretRewriteHook;
 
 #[async_trait]
 impl Hook for SecretRewriteHook {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "secret-rewrite"
     }
@@ -184,11 +185,11 @@ async fn test_parent_session_events_do_not_include_secret_after_hook_and_permiss
     let permission_outcome = context.permissions.check(&rewritten_call).await;
     assert_eq!(permission_outcome, PermissionOutcome::Allow);
 
-    for event in emitted_events
+    let events = emitted_events
         .lock()
         .expect("events mutex should stay available")
-        .clone()
-    {
+        .clone();
+    for event in events {
         store
             .append(&parent_session, event)
             .await

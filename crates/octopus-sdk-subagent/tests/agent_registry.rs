@@ -25,7 +25,7 @@ fn test_parse_reviewer_md() {
     );
     assert_eq!(spec.max_turns, 20);
     assert_eq!(spec.task_budget.total, 40_000);
-    assert_eq!(spec.task_budget.completion_threshold, 0.9);
+    assert!((spec.task_budget.completion_threshold - 0.9).abs() < f32::EPSILON);
     assert_eq!(spec.depth, 1);
     assert!(spec.system_prompt.contains("Review Checklist"));
 }
@@ -57,13 +57,13 @@ fn test_invalid_id_rejected() {
     write_agent(
         root.path(),
         "invalid.md",
-        r#"---
+        r"---
 name: Reviewer!
 model: claude-sonnet-4-5
 ---
 
 invalid
-"#,
+",
     );
 
     let error =
