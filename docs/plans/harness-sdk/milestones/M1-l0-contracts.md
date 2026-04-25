@@ -442,11 +442,10 @@ test "$(grep -E '^    [A-Z][a-zA-Z]+\(' crates/octopus-harness-contracts/src/eve
 | **预期 diff** | < 300 行 |
 
 **SPEC 锚点**：
-- `harness-contracts.md` §3.6（BlobStore trait + BlobMeta + BlobRetention + BlobError）
-- `harness-contracts.md` §3.4（ToolCapability + CapabilityRegistry + 7 个 *Cap 窄接口）
-- `harness-contracts.md` §3.4（DecisionScope）
-- `api-contracts.md` §18.2（**Redactor trait 权威定义**：`fn redact(&self, input: &str, rules: &RedactRules) -> String`）
-- `harness-observability.md` §2.5.0（"必经管道"是**装配点契约**，6 个挂钩点由调用方负责把字符串过 `redact()`，不是 trait 多 method）
+- `docs/architecture/harness/crates/harness-contracts.md` §3.6（BlobStore trait + BlobMeta + BlobRetention + BlobError，L1364-L1415）
+- `docs/architecture/harness/crates/harness-contracts.md` §3.4（DecisionScope，L284-L335；ToolCapability，L589-L609）
+- `docs/architecture/harness/api-contracts.md` §18.2（Redactor + RedactRules 权威定义，L946-L1001）
+- `docs/architecture/harness/crates/harness-observability.md` §2.5.0（Redactor 必经挂钩点，L232-L249）
 
 **ADR 锚点**：
 - ADR-0011 / ADR-012（capability handle）
@@ -462,7 +461,25 @@ test "$(grep -E '^    [A-Z][a-zA-Z]+\(' crates/octopus-harness-contracts/src/eve
       fn redact(&self, input: &str, rules: &RedactRules) -> String;
   }
 
-  pub struct RedactRules { /* 字段以 SPEC 为准 */ }
+  pub struct RedactRules {
+      pub scope: RedactScope,
+      pub replacement: String,
+      pub pattern_set: RedactPatternSet,
+  }
+
+  impl Default for RedactRules {
+      fn default() -> Self {
+          Self {
+              scope: RedactScope::EventBody,
+              replacement: "[REDACTED]".into(),
+              pattern_set: RedactPatternSet::Default,
+          }
+      }
+  }
+
+  pub enum RedactScope { All, TraceOnly, EventBody, LogOnly }
+  pub enum RedactPatternSet { Default, AllBuiltins, Only(Vec<RedactPatternKind>), None }
+  pub enum RedactPatternKind { ApiKey, BearerToken, PrivateKey, OAuthCode, DatabaseUrl, PrivateIp, Email, Custom(String) }
 
   pub struct NoopRedactor;
   impl Redactor for NoopRedactor {

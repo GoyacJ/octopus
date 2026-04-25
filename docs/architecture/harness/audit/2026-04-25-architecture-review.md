@@ -217,7 +217,7 @@
 - **P2-4** ✅ 已修订：`harness-sdk.md §8.1` 新增 Builder 幂等覆盖语义；§8.2 显式声明 Session 不走 type-state（运行时 Result 校验），与 type-state 二分边界明确。
 - **P2-5** ✅ 已修订：`event-schema.md §3.1.1` 新增 `GraceCallTriggeredEvent`（带 usage_snapshot），§2 总览同步登记；`harness-engine.md §4.1` 增加发出契约。
 - **P2-6** ✅ 已修订：`harness-tool.md §2.7` 显式声明"bool 二档（is_concurrency_safe），不存在三桶"，并解释为何不引入三档枚举（KISS）；`overview.md §7.1` 流程图同步标注。
-- **P2-7** ✅ 已修订：`harness-observability.md §2.5.0` 新增"Redactor 必经管道契约"段，覆盖 6 条数据流的挂钩点；`harness-journal.md §2.1` 头注同步声明 EventStore 实现必须装配 `Arc<Redactor>` 并通过 `RedactorContractTest` 套件验证。
+- **P2-7** ✅ 已修订：`harness-observability.md §2.5.0` 新增"Redactor 必经管道契约"段，覆盖 6 条数据流的挂钩点；`harness-journal.md §2.1` 头注同步声明 EventStore 实现必须装配 `Arc<dyn Redactor>` 并通过 `RedactorContractTest` 套件验证。
 
 ### 2.4 P3 · 建议性
 

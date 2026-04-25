@@ -50,12 +50,12 @@ AI 在以下场景容易"幻觉"（生成与 SPEC 不一致的代码）：
 
 ## 3. SPEC 锚点格式规范
 
-任务卡中的 SPEC 锚点**必须**精确到三段信息：
+任务卡中的 SPEC 锚点至少必须精确到两段信息；承载 trait / enum / event / schema / provider / hook / session 行为签名的锚点必须带行号区间：
 
 ```markdown
 - 文件路径：docs/architecture/harness/crates/harness-permission.md
 - 章节号：§3.1
-- 行号区间：L147-L218（可选但强烈建议）
+- 行号区间：L147-L218（签名类锚点必填）
 ```
 
 **示例（好）**：
@@ -76,17 +76,27 @@ AI 在以下场景容易"幻觉"（生成与 SPEC 不一致的代码）：
 **强制 grep 自检模板**（任务卡撰写者必跑、CI 验证）：
 
 ```bash
-# 抽出每个里程碑文件的所有任务卡 SPEC 锚点段
+failed=0
+# Maintainer 在任务卡进入派发窗口前，把对应 ID 加入本列表。
+line_required_cards='M1-T07|M2-S01|M3-S01|M3-S02'
+
 for f in docs/plans/harness-sdk/milestones/*.md; do
-  # 锚点行没有 L<digit> 即视为锚点不精确
-  awk '/^\*\*SPEC 锚点\*\*/,/^---|^### |^\*\*ADR/' "$f" \
-    | grep -E '^- ' \
-    | grep -vE 'L[0-9]+|（必读|^- $|^- *$' \
-    && echo "FAIL in $f"
+  awk -v cards="$line_required_cards" '
+    /^### / { in_card = ($0 ~ cards); in_spec = 0 }
+    in_card && /^\*\*SPEC 锚点\*\*/ { in_spec = 1; next }
+    in_spec && (/^---/ || /^### / || /^\*\*/) { in_spec = 0 }
+    in_card && in_spec && /^- `docs\/architecture\/harness/ && $0 !~ /L[0-9]+/ {
+      print FILENAME ":" FNR ": missing line range: " $0
+      failed = 1
+    }
+    END { exit failed }
+  ' "$f" || failed=1
 done
+
+exit "$failed"
 ```
 
-**渐进收敛策略**：M0/M1/M2/M3 关键路径任务卡必须 100% 行号；M4 之后允许"章节 + 行号"二选一，但 CI 必须有工具粗略校验。
+**渐进收敛策略**：M0/M1/M2/M3 中承载 trait / enum / event / schema / provider / hook / session 行为签名的任务卡必须带行号。内部 plan 锚点、ADR 锚点、依赖 PR 锚点可用文件 + 章节号；PR checklist 必须声明已确认其精度足够。进入派发窗口前，maintainer 必须把对应任务卡 ID 加入上方 `line_required_cards`，让 CI 变成阻断项。
 
 ---
 
@@ -131,7 +141,7 @@ Codex 单次会话 context 有限。上下文锚定必须**精打细算**：
 
 ```markdown
 ## 防幻觉自检
-- [ ] 我已读取所有 SPEC 锚点的精确行号片段
+- [ ] 我已读取所有带行号的 SPEC 锚点片段；无行号的内部 plan / ADR / PR 锚点已按章节全文确认
 - [ ] 我已读取所有 ADR 锚点全文
 - [ ] 我已读取所有依赖任务卡的 PR diff
 - [ ] 我的实现 trait 签名与 SPEC 逐字一致（已用 grep 验证）

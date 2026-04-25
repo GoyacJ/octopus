@@ -27,9 +27,9 @@
 |---|---|---|
 | **范围** | 全量 19 crate + 业务层切换（M0~M9） | SDK 是基础设施，半成品对业务无价值 |
 | **AI 并行度** | M2/L1 与 M4/L2 扩展层并行 5~3 路；L0/L4/M3 串行 | L1 五原语正交无耦合；聚合层须串行避免分支冲突 |
-| **旧 SDK** | M0 删除旧 SDK + `_octopus-bridge-stub` 临时桩；**M3 末 cli 最简入口先行接入真 harness-sdk**（业务面渐进切换） | 临时桩让 M0~M7 业务层可编译；M3 渐进切换让真集成风险前移到 M3 而非 M8 |
+| **旧 SDK** | M0 删除旧 SDK + `_octopus-bridge-stub` 临时桩；**M3 末 cli 最简入口先行接入 lower-level harness driver（非 facade）** | 临时桩让 M0~M7 业务层可编译；M3 渐进切换让真集成风险前移到 M3 而非 M8；`octopus-harness-sdk` 门面仍在 M7 交付 |
 | **测试** | 严格：每 crate mock + contract-test + ≥1 正反用例 | 对齐 ADR-012；AI 易在边界条件偷工，必须用例兜底 |
-| **POC 时机** | **3 个 spike 前置（M2/M3 末尾），M9 做端到端集成验证** | 评审报告 §4.4 三个高风险点的失败代价是 2-4 周返工，必须在 M5/M6/M7 之前用最小 prototype 把假设钉死 |
+| **验证时机** | **3 个 spike 前置（M2/M3 末尾），M9 只做 post-spike 集成回归与端到端验收** | 评审报告 §4.4 三个高风险点的失败代价是 2-4 周返工，必须在 M5/M6/M7 之前用最小 prototype 把假设钉死 |
 
 ---
 
@@ -65,7 +65,7 @@ docs/plans/harness-sdk/
     ├── M6-l3-agents.md             ← L3 多 Agent（subagent/team）
     ├── M7-l4-facade.md             ← L4 门面（harness-sdk）
     ├── M8-business-cutover.md      ← 业务层切换（octopus-server/desktop/cli）
-    └── M9-poc-and-acceptance.md    ← 三大 POC + E2E 验收
+    └── M9-poc-and-acceptance.md    ← post-spike 集成验证 + E2E 验收
 ```
 
 ---
@@ -80,7 +80,7 @@ docs/plans/harness-sdk/
 4. ✅ `cargo test --workspace --all-features` 全部 green
 5. ✅ `cargo clippy --workspace --all-targets -- -D warnings` 零警告
 6. ✅ `cargo deny check` 通过（含 D2 §10 例外登记表的 feature 矩阵）
-7. ✅ M9 三个 POC 输出验证报告，结论可入档
+7. ✅ M9 三个 post-spike 集成验证报告归档
 8. ✅ `apps/desktop` Tauri 端可启动并跑通"用户提问 → 工具调用 → 流式输出"完整闭环
 
 ---
@@ -104,14 +104,14 @@ docs/plans/harness-sdk/
 |---|---|---|
 | M0 Bootstrap | 待开始 | workspace 清理 + 过渡 stub crate + 19 crate 空骨架 |
 | M1 L0 Contracts | 待开始 | `harness-contracts` 全量类型 + Redactor trait + NoopRedactor |
-| M2 L1 Primitives | 待开始 | 5 原语 trait + builtin（EventStore 装配 Redactor） |
+| M2 L1 Primitives | 待开始 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
 | M3 L2 Core | 待开始 | 最小可运行 SDK 闭环 + dep 预注入 |
 | M4 L2 Extensions | 待开始 | tool-search / skill / mcp |
 | M5 L3 Engine | 待开始 | 单 Agent 主循环（DefaultRedactor 替换 Noop）|
 | M6 L3 Agents | 待开始 | Subagent + Team |
 | M7 L4 Facade | 待开始 | `harness-sdk` 整合 |
 | M8 Business Cutover | 待开始 | 业务层完全迁移 + `_octopus-bridge-stub` `git rm` |
-| M9 POC + Acceptance | 待开始 | 端到端验收报告 |
+| M9 Integration Verification + Acceptance | 待开始 | 集成回归 + 端到端验收报告 |
 
 ---
 

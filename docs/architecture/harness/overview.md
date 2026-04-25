@@ -420,13 +420,15 @@ impl SessionBuilder {
 
 ## 9. 业务层调用示例
 
+示例使用 `AnthropicProvider`。同一注入点可替换为任一启用的内置 Provider，如 `OpenAiProvider`、`GeminiProvider`、`QwenProvider` 或业务私有 Provider。
+
 ```rust
 use octopus_harness_sdk::prelude::*;
 use octopus_harness_sdk::builtin::*;
 
 async fn bootstrap() -> Result<Harness> {
     HarnessBuilder::new()
-        .with_model(OpenAiProvider::from_env()?)
+        .with_model(AnthropicProvider::from_env()?)
         .with_store(JsonlEventStore::open("runtime/events").await?)
         .with_sandbox(LocalSandbox::default())
         .with_permission_broker(MyInteractiveBroker::new(tx))

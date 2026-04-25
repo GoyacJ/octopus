@@ -288,14 +288,23 @@ cargo metadata --format-version 1 --no-deps \
 
 # scripts/feature-matrix.sh
 # 跑 D10 所有 typical profile 组合的 cargo check
-for profile in default "sqlite-store,local-sandbox,interactive-permission,provider-anthropic" "all-features"; do
-    cargo check --workspace --features "$profile" || exit 1
-done
+cargo check --workspace
+cargo check --workspace --features "sqlite-store,local-sandbox,interactive-permission,provider-anthropic"
+cargo check --workspace --features all-providers
+cargo test --workspace --features all-providers
+cargo check --workspace --all-features
 
 # scripts/depgraph-snapshot.sh
 # 生成依赖图 SVG 并与 D2 §5 期望图比对（MD5 / 图同构）
+test -f docs/architecture/harness/expected-depgraph.dot || {
+    echo "FAIL: missing docs/architecture/harness/expected-depgraph.dot"
+    exit 1
+}
 cargo depgraph --workspace-only > target/depgraph.dot
-diff <(sort target/depgraph.dot) <(sort docs/architecture/harness/expected-depgraph.dot) || echo "FAIL: 依赖图与 D2 §5 不一致"
+diff <(sort target/depgraph.dot) <(sort docs/architecture/harness/expected-depgraph.dot) || {
+    echo "FAIL: 依赖图与 D2 §5 不一致"
+    exit 1
+}
 ```
 
 PR 流水线必须接入这 3 个脚本（见 §7.1 matrix.deny / boundary 段）。
@@ -340,9 +349,15 @@ jobs:
   check:
     strategy:
       matrix:
-        features: [default, all-features, "interactive,sqlite-store"]
+        profile: [default, all-providers, all-features, typical]
     steps:
-      - run: cargo check --workspace --features ${{ matrix.features }}
+      - run: |
+          case "${{ matrix.profile }}" in
+            default) cargo check --workspace ;;
+            all-providers) cargo check --workspace --features all-providers ;;
+            all-features) cargo check --workspace --all-features ;;
+            typical) cargo check --workspace --features "sqlite-store,local-sandbox,interactive-permission,provider-anthropic" ;;
+          esac
 
   clippy:
     steps:
@@ -351,9 +366,15 @@ jobs:
   test:
     strategy:
       matrix:
-        features: [default, all-features, testing]
+        profile: [default, all-providers, all-features, testing]
     steps:
-      - run: cargo test --workspace --features ${{ matrix.features }}
+      - run: |
+          case "${{ matrix.profile }}" in
+            default) cargo test --workspace ;;
+            all-providers) cargo test --workspace --features all-providers ;;
+            all-features) cargo test --workspace --all-features ;;
+            testing) cargo test --workspace --features testing ;;
+          esac
 
   deny:
     steps:
@@ -394,7 +415,7 @@ jobs:
 `v1.0.0-rc.x` tag 触发：
 
 - 跑全 PR + nightly 流水线
-- 跑 M9 POC 用例
+- 跑 M9 post-spike 集成验证用例
 - 生成 SDK 用户文档（`cargo doc`）
 - 发布到内部 registry
 

@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：无 · 阻塞：所有后续里程碑
 > 关键交付：14 旧 crate 移除 · 19 新 crate 空骨架 · 过渡 stub crate · CI 接入 · `cargo check --workspace` 绿
-> 预计任务卡：15 张（T01a/b/c/d + T01.5/T01.6 + T02a/b/c/d + T03-T08）· 预计累计工时：AI 7 小时 + 人类评审 3.5 小时
+> 预计任务卡：16 张（T01a/b/c/d + T01.5/T01.6 + T02a/b/c/d + T03-T08）· 预计累计工时：AI 7 小时 + 人类评审 3.5 小时
 > 并行度：1（串行，因 workspace 文件互斥）
 
 ---
@@ -245,7 +245,7 @@ grep -q 'M8.*git rm' crates/_octopus-bridge-stub/src/lib.rs
 **验收命令**：
 
 ```bash
-ls crates/ | grep -E '^octopus-sdk-(contracts|core|model)$' && echo "FAIL" || echo "OK"
+! ls crates/ | grep -E '^octopus-sdk-(contracts|core|model)$'
 cargo check --workspace
 ```
 
@@ -268,7 +268,7 @@ cargo check --workspace
 **验收命令**：
 
 ```bash
-ls crates/ | grep -E '^octopus-sdk-(tools|permissions|sandbox|hooks)$' && echo "FAIL" || echo "OK"
+! ls crates/ | grep -E '^octopus-sdk-(tools|permissions|sandbox|hooks)$'
 cargo check --workspace
 ```
 
@@ -291,7 +291,7 @@ cargo check --workspace
 **验收命令**：
 
 ```bash
-ls crates/ | grep -E '^octopus-sdk-(context|session|subagent|observability)$' && echo "FAIL" || echo "OK"
+! ls crates/ | grep -E '^octopus-sdk-(context|session|subagent|observability)$'
 cargo check --workspace
 ```
 
@@ -339,7 +339,7 @@ grep -rE 'TODO\(M8-T[0-9]+' crates/octopus-server crates/octopus-desktop crates/
 
 ---
 
-### M0-T02 · 创建 19 个新 `octopus-harness-*` crate 空骨架（拆 4 子卡）
+## 2.7 M0-T02a-d 共享模板 · 创建 19 个新 `octopus-harness-*` crate 空骨架
 
 > **拆分理由**（实施前评估 P1-5）：原单卡 ~600 行违反 00-strategy 铁律 2 ≤ 500 行硬上限。按 5 层依赖拆 4 子卡，每卡 ≤ 200 行。
 
@@ -445,6 +445,64 @@ cargo doc --no-deps --workspace           # 必须绿
 for c in contracts model journal sandbox permission memory tool tool-search skill mcp hook context session engine subagent team plugin observability sdk; do
     test -d "crates/octopus-harness-$c" || echo "MISSING: octopus-harness-$c"
 done
+```
+
+### M0-T02a · 创建 L0 `harness-contracts` 空骨架
+
+**依赖**：M0-T01d
+
+**预期产物**：按本节共享模板创建 `crates/octopus-harness-contracts/`。
+
+**验收命令**：
+
+```bash
+test -d crates/octopus-harness-contracts
+cargo check -p octopus-harness-contracts
+```
+
+### M0-T02b · 创建 L1 五原语 crate 空骨架
+
+**依赖**：M0-T02a
+
+**预期产物**：按本节共享模板创建 `model / journal / sandbox / permission / memory` 五个 crate。
+
+**验收命令**：
+
+```bash
+for c in model journal sandbox permission memory; do
+    test -d "crates/octopus-harness-$c"
+done
+cargo check -p octopus-harness-model -p octopus-harness-journal -p octopus-harness-sandbox -p octopus-harness-permission -p octopus-harness-memory
+```
+
+### M0-T02c · 创建 L2 七复合能力 crate 空骨架
+
+**依赖**：M0-T02b
+
+**预期产物**：按本节共享模板创建 `tool / tool-search / skill / mcp / hook / context / session` 七个 crate。
+
+**验收命令**：
+
+```bash
+for c in tool tool-search skill mcp hook context session; do
+    test -d "crates/octopus-harness-$c"
+done
+cargo check -p octopus-harness-tool -p octopus-harness-tool-search -p octopus-harness-skill -p octopus-harness-mcp -p octopus-harness-hook -p octopus-harness-context -p octopus-harness-session
+```
+
+### M0-T02d · 创建 L3+L4 六 crate 空骨架
+
+**依赖**：M0-T02c
+
+**预期产物**：按本节共享模板创建 `engine / subagent / team / plugin / observability / sdk` 六个 crate。
+
+**验收命令**：
+
+```bash
+for c in engine subagent team plugin observability sdk; do
+    test -d "crates/octopus-harness-$c"
+done
+cargo check -p octopus-harness-engine -p octopus-harness-subagent -p octopus-harness-team -p octopus-harness-plugin -p octopus-harness-observability -p octopus-harness-sdk
 ```
 
 ---
@@ -593,6 +651,7 @@ gh workflow list
 - `scripts/feature-matrix.sh`（cargo check 全 feature profile 跑一遍，对齐 D10 §3.1-§3.4）
 - `scripts/dep-boundary-check.sh` + `scripts/check_layer_boundaries.py`（cargo metadata 解析 + crate 维度白名单校验，覆盖别名导入、间接依赖、feature 触发依赖、L1 反向依赖等 grep 漏检场景）
 - `scripts/depgraph-snapshot.sh`（cargo depgraph + 与 D2 §5 期望图差异检查）
+- `docs/architecture/harness/expected-depgraph.dot`（D2 §5 的期望依赖图快照；缺失时 `depgraph-snapshot.sh` 必须失败）
 
 **关键不变量**：
 

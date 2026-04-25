@@ -1,21 +1,21 @@
-# M9 · POC + Acceptance · 三大 POC + 端到端验收
+# M9 · Integration Verification + Acceptance · 集成回归 + 端到端验收
 
 > 状态：待启动 · 依赖：M8 完成
-> 关键交付：3 份 POC 报告 + 1 份端到端验收报告 + v1.0 Release Tag
+> 关键交付：3 份 post-spike 集成验证报告 + 1 份端到端验收报告 + v1.0 Release Tag
 > 预计任务卡：8 张 · 累计工时：AI 12 小时 + 人类评审 16 小时
-> 并行度：1（串行；POC 之间有依赖）
+> 并行度：1（串行；集成验证项之间有依赖）
 
 ---
 
 ## 0. 里程碑级注意事项
 
-1. **POC 是端到端集成验证**（实施前评估 P1-3 修订）：
-   - 三个高风险设计点的"最小可行"假设已在 **M2-S01 / M3-S01 / M3-S02 spike** 中前置验证（不再是事后发现）
-   - M9 的 POC 是**集成态长场景验证**：验证 Spike 假设在完整 SDK + 业务层下仍然成立、跨 turn 不退化、跨 session 长稳
-2. **POC 失败的处理**：
-   - 若 spike 通过但集成 POC 失败 → 通常是装配 / 业务层接入 bug，可定位回 M5/M6/M7/M8 的具体任务卡
-   - 若集成 POC 与 spike 同时失败 → 召开架构 review，可能 ADR 修订（但概率显著低于无前置 spike 的情况）
-3. **POC 仍包含真实环境数据**（非单元测试）
+1. **M9 不承担首次验证 ADR 假设**（实施前评估 P1-3 修订）：
+   - 三个高风险设计点的"最小可行"假设必须已在 **M2-S01 / M3-S01 / M3-S02 spike** 中前置验证
+   - M9 只验证完整 SDK + 业务层装配后，这些已验证性质在长场景、跨 turn、跨 session 下不退化
+2. **集成验证失败的处理**：
+   - 默认先按 provider 行为变化、装配错误、业务层接入 bug 定位
+   - 只有新证据证明前置 spike 证据已失效时，才暂停并重审对应 ADR
+3. **集成验证仍包含真实环境数据**（非单元测试）
 4. **验收报告必须归档**：`docs/architecture/harness/audit/2026-XX-implementation-acceptance.md`
 
 ---
@@ -24,9 +24,9 @@
 
 | ID | 任务 | 输入 | 输出 |
 |---|---|---|---|
-| **M9-P01** | POC-1 · Prompt Cache 命中率实测 | M8 完成的 Anthropic provider | 命中率报告 |
-| **M9-P02** | POC-2 · Steering Queue 长 turn 语义 | M5 完成的 steering | 行为正确性报告 |
-| **M9-P03** | POC-3 · Hook 多 transport 失败模式 | M3 完成的 hook | failure_mode + replay 报告 |
+| **M9-P01** | 集成验证-1 · Prompt Cache 命中率复测 | M2-S01 证据 + M8 完成的 Anthropic provider | 命中率报告 |
+| **M9-P02** | 集成验证-2 · Steering Queue 长 turn 复测 | M3-S02 证据 + M5 完成的 steering | 行为正确性报告 |
+| **M9-P03** | 集成验证-3 · Hook 多 transport 失败模式复测 | M3-S01 证据 + M3 完成的 hook | failure_mode + replay 报告 |
 | **M9-T01** | E2E 验收：Desktop 完整闭环 | M8 完成 | 录屏 + 截图 |
 | **M9-T02** | E2E 验收：Server 完整闭环 | M8 完成 | API 调用日志 |
 | **M9-T03** | E2E 验收：CLI 完整闭环 | M8 完成 | terminal 输出录屏 |
@@ -35,14 +35,14 @@
 
 ---
 
-## 2. POC 详情
+## 2. 集成验证详情
 
-### M9-P01 · POC-1 · Prompt Cache 命中率实测
+### M9-P01 · 集成验证-1 · Prompt Cache 命中率复测
 
 **评审报告锚点**：
 - `docs/architecture/harness/audit/2026-04-25-architecture-review.md` §4.4 第 1 项
 
-**目标**：验证 ADR-003 的核心假设——Anthropic `system_and_3` cache 在多轮对话 + reload_with(AppliedInPlace, OneShotInvalidation) 场景下确实"一次性代价后续恢复命中"。
+**目标**：在 M2-S01 已验证 ADR-003 最小假设的基础上，复测完整 SDK + 业务层接入后 Anthropic `system_and_3` cache 在多轮对话 + reload_with(AppliedInPlace, OneShotInvalidation) 场景下没有退化。
 
 **测试场景**：
 
@@ -62,11 +62,11 @@
 | **L3 · 理想** | 连续 7 天 nightly job 收集 | 理想（不阻塞 M9 Gate） | 趋势报告归档；用于发版后真值校准 |
 
 **预期产物**：
-- `crates/octopus-harness-sdk/tests/poc_prompt_cache.rs`：分两组用例
+- `crates/octopus-harness-sdk/tests/integration_prompt_cache.rs`：分两组用例
   - `mod l1_mock { ... }`：默认运行，无环境变量要求
   - `mod l2_live { ... }`：`#[ignore] live`，需 `ANTHROPIC_API_KEY`
-- `.github/workflows/poc-nightly.yml`：调度 L3 nightly job，结果写入 `audit/2026-XX-poc-prompt-cache-trend.md`
-- 报告：`docs/architecture/harness/audit/2026-XX-poc-prompt-cache.md`（标注实测路径："L1 / L2 / L3"）
+- `.github/workflows/harness-integration-nightly.yml`：调度 L3 nightly job，结果写入 `audit/2026-XX-integration-prompt-cache-trend.md`
+- 报告：`docs/architecture/harness/audit/2026-XX-integration-prompt-cache.md`（标注实测路径："L1 / L2 / L3"）
 
 **通过判据**：
 - ✅ **L1 必通过**（M9 Gate 必要条件）：mock 路径下 SDK 内部 cache breakpoint 注入次数、`cache_read_tokens` 字段在 ModelStreamEvent 中正确路由、reload_with 三档全部通过
@@ -75,18 +75,18 @@
 
 **失败处理**：
 - L1 失败 → SDK 实现缺陷，必修；可能是 reload_with 路由 bug 或 cache_read_tokens 解析 bug
-- L2 失败但 L1 通过 → 重试 3 次后仍失败再判：若多模型多账号都失败 → ADR-003 假设不成立，回到架构层；若仅特定账号失败 → 转 nightly 长期观察
+- L2 失败但 L1 通过 → 重试 3 次后仍失败再判：先按 provider 行为变化或集成层破坏 cache 定位；若多模型多账号都失败且与 M2-S01 spike 证据冲突，再回到架构层重审 ADR-003；若仅特定账号失败 → 转 nightly 长期观察
 - L2 第 2-3 轮仍 miss → InlineReinjectionBackend 可能没有按预期工作 → tool-search crate 修订
 
 **预期工时**：L1 2 小时；L2 2 小时；L3 持续（不计本卡工时）
 
 ---
 
-### M9-P02 · POC-2 · Steering Queue 长 turn 语义
+### M9-P02 · 集成验证-2 · Steering Queue 长 turn 语义
 
 **评审报告锚点**：第 2 项
 
-**目标**：验证 ADR-0017 在长 turn 场景（10+ tool calls）中 SteeringQueue.drain_and_merge 不破坏 prompt cache 的语义。
+**目标**：在 M3-S02 已验证 ADR-0017 最小假设的基础上，复测完整 turn 编排中 SteeringQueue.drain_and_merge 不破坏 prompt cache 的语义。
 
 **测试场景**：
 
@@ -99,8 +99,8 @@
 | L5 · TTL 过期 | push 1 次 → 等 TTL+1s | 该消息 expire；下次 drain 跳过 |
 
 **预期产物**：
-- `crates/octopus-harness-sdk/tests/poc_steering.rs`（mock LLM 即可，无需真实 API）
-- 报告：`docs/architecture/harness/audit/2026-XX-poc-steering.md`
+- `crates/octopus-harness-sdk/tests/integration_steering.rs`（mock LLM 即可，无需真实 API）
+- 报告：`docs/architecture/harness/audit/2026-XX-integration-steering.md`
 
 **通过判据**：
 - ✅ L1-L5 全部按期望行为
@@ -114,11 +114,11 @@
 
 ---
 
-### M9-P03 · POC-3 · Hook 多 transport 失败模式 + replay 幂等
+### M9-P03 · 集成验证-3 · Hook 多 transport 失败模式 + replay 幂等
 
 **评审报告锚点**：第 3 项
 
-**目标**：验证三种 transport 在故障场景下的真实行为，确保 v1.8.1 P0-1（FailOpen）+ P1-4（事务语义）落地正确。
+**目标**：在 M3-S01 已验证 hook 事务语义的基础上，复测三种 transport 在完整 SDK 装配下的故障行为，确保 v1.8.1 P0-1（FailOpen）+ P1-4（事务语义）没有被后续接入破坏。
 
 **测试场景**：
 
@@ -134,8 +134,8 @@
 | **All** | replay 同一段事件 → hook 调用次数 | 与首次一致（幂等）|
 
 **预期产物**：
-- `crates/octopus-harness-sdk/tests/poc_hook_transports.rs`
-- 报告：`docs/architecture/harness/audit/2026-XX-poc-hook-transports.md`
+- `crates/octopus-harness-sdk/tests/integration_hook_transports.rs`
+- 报告：`docs/architecture/harness/audit/2026-XX-integration-hook-transports.md`
 
 **通过判据**：
 - ✅ 8 个场景全部按期望行为
@@ -216,7 +216,7 @@
   - SPEC 实施完整度（19 crate × 完成度百分比）
   - 5 道质量闸门历史通过率
   - feature 矩阵覆盖率
-  - 3 POC 结论
+  - 3 个 post-spike 集成验证结论
   - 3 E2E 结论
   - 与原架构评审报告（v1.8.1）P0/P1/P2 修订对应实施情况
   - 已知缺陷登记
@@ -244,15 +244,15 @@
 
 ---
 
-## 5. POC 失败影响矩阵（实施前评估 P2-5）
+## 5. 集成验证失败影响矩阵（实施前评估 P2-5）
 
-每个 POC 失败时受影响的回滚边界与最小代价：
+每个集成验证项失败时受影响的回滚边界与最小代价：
 
-| POC | 失败模式 | 受影响 crate | 最小回滚边界 | 重做工作量估算 |
+| 验证项 | 失败模式 | 受影响 crate | 最小回滚边界 | 重做工作量估算 |
 |---|---|---|---|---|
 | **P01** L1 失败 | SDK reload_with 路由 / cache_read_tokens 解析 bug | `harness-session`（reload）+ `harness-model`（anthropic 解析）| M5-T11（主循环 turn 编排）回到 in-progress | 1-2 工作日（局部修补，不动 ADR）|
 | **P01** L2 失败 | 真实 API 命中率 < 90% | 同上 + `harness-tool-search/inline backend` + `harness-context/stages` | 回到 M3 Gate（重审 ContextEngine 5 阶段稳定性）| 5-7 工作日 |
-| **P01** L2/L3 持续失败 | ADR-003 假设不成立 | 全栈 | 回到架构层重设计 ADR-003，可能影响 ADR-009/0017 | 2-4 周（含 ADR 重审）|
+| **P01** L2/L3 持续失败 | 与 M2-S01 spike 证据相冲突，可能是 provider 行为变化或集成层破坏 cache | 全栈 | 先按集成回归定位；若确认 spike 证据已失效，再回到架构层重审 ADR-003 | 2-4 周（仅在 ADR 重审成立时）|
 | **P02** L1-L4 失败 | SteeringQueue capacity / TTL / DropOldest bug | `harness-session/steering`（M3-T19）| 任务卡 M3-T19 reset 重派 | 1 工作日 |
 | **P02** L2 cache 下降 > 10% | drain_and_merge 时机错误 | `harness-engine/turn`（M5-T11）+ `harness-session/steering` | 任务卡 M5-T11 + M3-T19 双 reset | 3-5 工作日 |
 | **P02** 全失败 | ADR-0017 设计不成立 | 全栈 | 回到 ADR-0017 重审；可能引入 ADR-0019（替代方案）| 2-3 周 |
@@ -262,7 +262,7 @@
 | **P03** Replay 不幂等 | EventStore 装配 / Hook side-effect 失控 | `harness-journal/store` + `harness-hook` | M2-T06 / M2-T07-08 + M3-T07 全栈 reset | 3-5 工作日 |
 
 **通用回滚原则**：
-1. POC 失败首选**任务卡 reset**（铁律 3）而非"打补丁";
+1. 集成验证失败首选**任务卡 reset**（铁律 3）而非"打补丁";
 2. 回滚边界尽量限制在单 crate / 单任务卡;
 3. 跨多 crate / 跨多任务卡的失败 → 必须开 retro 任务卡，由 maintainer + 架构 reviewer 共同决定回滚策略;
 4. 涉及 ADR 假设不成立的失败 → 暂停所有 Codex 会话（00-strategy §7 紧急熔断条款），先开架构修订 ADR。
@@ -282,7 +282,7 @@
 - [x] `cargo test --workspace --all-features` 全绿
 - [x] `cargo clippy --workspace -- -D warnings` 零警告
 - [x] `cargo deny check` 通过
-- [x] 3 POC 报告归档（含 P01 至少 L1 通过、L2 应通过）
+- [x] 3 个 post-spike 集成验证报告归档（含 P01 至少 L1 通过、L2 应通过）
 - [x] 端到端验收通过
 
 ---

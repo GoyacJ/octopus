@@ -9,9 +9,9 @@
 
 **核心能力**：
 
-- 多 Provider 支持（OpenAI / Anthropic / Gemini / OpenRouter / Bedrock / Codex / Local Llama）
+- 多 Provider 支持（OpenAI / Anthropic / Gemini / OpenRouter / Bedrock / Codex / Local Llama / DeepSeek / Minimax / Qwen / Doubao / Zhipu / KM）
 - 凭证池（多 key 轮转 + 冷却 + 策略选择，对齐 HER-048）
-- Prompt Cache 策略适配（Anthropic system_and_3 / OpenAI auto / Gemini context caching）
+- Prompt Cache 策略适配（Anthropic system_and_3 / OpenAI auto / Gemini context caching / 兼容 Provider 按能力降级）
 - 消息归一化（把不同厂商的 tool_use 格式归一为 `harness-contracts::MessagePart`）
 - 流式推理（返回 `BoxStream<ModelStreamEvent>`）
 
@@ -549,11 +549,11 @@ pub trait InferMiddleware: Send + Sync + 'static {
 
 **反模式**：Middleware 不得改写 `messages` 内容（会破坏 Prompt Cache，违反 P5）；改写请用 `PreLlmCall` hook（在 Engine 层）。
 
-## 3. 内置实现
+## 3. 内置 Provider 实现
 
 ```rust
 #[cfg(feature = "openai")]
-pub struct OpenAiProvider { /* ... */ }
+pub struct OpenAiProvider { /* OpenAI Responses / Chat adapters */ }
 
 #[cfg(feature = "anthropic")]
 pub struct AnthropicProvider { /* ... */ }
@@ -562,7 +562,7 @@ pub struct AnthropicProvider { /* ... */ }
 pub struct GeminiProvider { /* ... */ }
 
 #[cfg(feature = "openrouter")]
-pub struct OpenRouterProvider { /* ... */ }
+pub struct OpenRouterProvider { /* OpenAI-compatible */ }
 
 #[cfg(feature = "bedrock")]
 pub struct BedrockProvider { /* ... */ }
@@ -571,7 +571,25 @@ pub struct BedrockProvider { /* ... */ }
 pub struct CodexResponsesProvider { /* ... */ }
 
 #[cfg(feature = "local-llama")]
-pub struct LocalLlamaProvider { /* ... */ }
+pub struct LocalLlamaProvider { /* OpenAI-compatible local endpoint */ }
+
+#[cfg(feature = "deepseek")]
+pub struct DeepSeekProvider { /* OpenAI-compatible */ }
+
+#[cfg(feature = "minimax")]
+pub struct MinimaxProvider { /* OpenAI-compatible */ }
+
+#[cfg(feature = "qwen")]
+pub struct QwenProvider { /* OpenAI-compatible */ }
+
+#[cfg(feature = "doubao")]
+pub struct DoubaoProvider { /* OpenAI-compatible */ }
+
+#[cfg(feature = "zhipu")]
+pub struct ZhipuProvider { /* OpenAI-compatible */ }
+
+#[cfg(feature = "km")]
+pub struct KmProvider { /* OpenAI-compatible */ }
 
 #[cfg(feature = "mock")]
 pub struct MockModelProvider { /* ... */ }
@@ -597,7 +615,7 @@ pub enum CassetteMode {
 }
 ```
 
-对齐 HER-048 / HER-049。
+v1.0 所有上述 provider feature 都必须提供可用 `ModelProvider` 实现，并通过同一套 contract test。OpenAI-compatible Provider 可复用共享 HTTP / SSE / tool-call 聚合底座，但必须暴露独立 provider type、provider_id、默认 base_url、认证环境变量与模型能力声明。对齐 HER-048 / HER-049。
 
 ## 4. 错误类型
 
@@ -800,15 +818,25 @@ impl AnthropicProvider {
 }
 ```
 
-对齐 HER-049：Anthropic / Bedrock / Codex 通过独立适配器模块把 provider API 归一到 OpenAI-style chat，但**对外保留原生 ApiMode** 供业务按需启用。
+对齐 HER-049：所有内置 Provider 都必须把自身 API 归一到 `ModelProvider`，同时保留原生 `ApiMode` 供业务按需启用。OpenAI / OpenRouter / Codex / DeepSeek / Minimax / Qwen / Doubao / Zhipu / KM / Local Llama 走 OpenAI-compatible adapter；Anthropic、Gemini、Bedrock 走 provider-specific adapter。
 
 ## 7. 认证支持（对齐 HER-049）
 
-Anthropic 支持三种认证：
+内置 Provider 必须声明认证来源、环境变量名和 secret ref key。首批规则：
 
-- `x-api-key`（普通 API）
-- `Bearer OAuth`（Anthropic-beta）
-- Claude Code credentials（读 `~/.claude/credentials.json`）
+- Anthropic：`ANTHROPIC_API_KEY` / Bearer OAuth / Claude Code credentials（读 `~/.claude/credentials.json`）
+- OpenAI：`OPENAI_API_KEY`
+- OpenRouter：`OPENROUTER_API_KEY`
+- Gemini：`GEMINI_API_KEY` / OAuth
+- Bedrock：AWS credential provider chain
+- Codex：`CODEX_API_KEY` 或 OpenAI-compatible credential source
+- Local Llama：本地 endpoint + 可选 bearer token
+- DeepSeek：`DEEPSEEK_API_KEY`
+- Minimax：`MINIMAX_API_KEY`
+- Qwen：`QWEN_API_KEY`
+- Doubao：`DOUBAO_API_KEY`
+- Zhipu：`ZHIPU_API_KEY`
+- KM：`KM_API_KEY`
 
 ```rust
 pub enum AnthropicAuth {
@@ -847,19 +875,43 @@ let provider = AnthropicProvider::with_credential_pool(pool);
 ```toml
 [features]
 default = ["rate-limit-observer"]
-openai = ["dep:async-openai"]
-anthropic = ["dep:anthropic-sdk"]
-gemini = ["dep:google-generative-ai"]
-openrouter = ["openai"]   # 复用 OpenAI 协议
-bedrock = ["dep:aws-sdk-bedrockruntime"]
-codex = ["openai"]
-local-llama = ["dep:llama-cpp-bindings"]
 mock = []
 cassette = ["dep:serde_json"]
 rate-limit-observer = []
 oauth = ["dep:oauth2"]
 redactor = ["dep:octopus-harness-observability"]
 otel = ["dep:opentelemetry"]
+
+http-client = ["dep:reqwest", "dep:eventsource-stream"]
+openai-compatible = ["http-client"]
+openai = ["openai-compatible"]
+anthropic = ["http-client", "dep:anthropic-tokenizer"]
+gemini = ["http-client"]
+openrouter = ["openai-compatible"]
+bedrock = ["dep:aws-sdk-bedrockruntime"]
+codex = ["openai-compatible"]
+local-llama = ["openai-compatible"]
+deepseek = ["openai-compatible"]
+minimax = ["openai-compatible"]
+qwen = ["openai-compatible"]
+doubao = ["openai-compatible"]
+zhipu = ["openai-compatible"]
+km = ["openai-compatible"]
+all-providers = [
+    "openai",
+    "anthropic",
+    "gemini",
+    "openrouter",
+    "bedrock",
+    "codex",
+    "local-llama",
+    "deepseek",
+    "minimax",
+    "qwen",
+    "doubao",
+    "zhipu",
+    "km",
+]
 ```
 
 ## 10. 测试策略

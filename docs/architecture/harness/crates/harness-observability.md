@@ -23,7 +23,7 @@
 pub struct Observer {
     pub tracer: Arc<dyn Tracer>,
     pub usage: Arc<UsageAccumulator>,
-    pub redactor: Arc<Redactor>,
+    pub redactor: Arc<dyn Redactor>,
     pub replay: Option<Arc<ReplayEngine>>,
 }
 
@@ -40,7 +40,7 @@ impl ObserverBuilder {
     pub fn with_service_name(self, name: impl AsRef<str>) -> Self;
     pub fn with_prometheus(self, bind: SocketAddr) -> Self;
     pub fn with_replay_enabled(self, enabled: bool) -> Self;
-    pub fn with_redactor(self, redactor: Redactor) -> Self;
+    pub fn with_redactor(self, redactor: Arc<dyn Redactor>) -> Self;
     pub fn build(self) -> Result<Observer, ObservabilityError>;
 }
 ```
@@ -235,23 +235,23 @@ pub enum ExportFormat {
 
 | 数据流 | 出口 | 必经挂钩点 | 落地位置 |
 |---|---|---|---|
-| Event 写入 Journal | `EventStore::append` | `Redactor::redact_event(...)` 在 `append` 进入持久化前先跑 | `harness-journal` 默认实现 `JsonlEventStore` / `SqliteEventStore` 在内部装配 `Arc<Redactor>`（`harness-journal.md §2.1`） |
-| Event 流出 SDK 给业务方 | `EventStream` | 由 `Harness::event_stream()` 包装层在 yield 前再跑一次（防止业务方绕过 Journal 订阅原始 Event） | `harness-sdk` 门面 |
-| OpenTelemetry Span 出口 | `Tracer::record_event` | `Redactor::redact_value(...)` 在 attribute 序列化前 | `harness-observability §3` |
-| Tracing log 出口 | `tracing::Subscriber` | 自定义 layer 在 `on_event` 时调 `Redactor::redact(text, RedactScope::LogOnly)` | `harness-observability §2.5.X` |
+| Event 写入 Journal | `EventStore::append` | 在 `append` 进入持久化前，对可序列化字符串字段逐一调用 `redactor.redact(field, &RedactRules { scope: EventBody, .. })` | `harness-journal` 默认实现 `JsonlEventStore` / `SqliteEventStore` 在内部装配 `Arc<dyn Redactor>`（`harness-journal.md §2.1`） |
+| Event 流出 SDK 给业务方 | `EventStream` | `Harness::event_stream()` 包装层在 yield 前对业务可见字符串字段再跑 `redact(..., EventBody)`（防止业务方绕过 Journal 订阅原始 Event） | `harness-sdk` 门面 |
+| OpenTelemetry Span 出口 | `Tracer::record_event` | attribute 序列化成字符串后调用 `redact(..., TraceOnly)` | `harness-observability §3` |
+| Tracing log 出口 | `tracing::Subscriber` | 自定义 layer 在 `on_event` 时调用 `redact(..., LogOnly)` | `harness-observability §2.5.X` |
 | Replay 输出 | `ReplayEngine::replay(...)` 流 | Replay 复算时**不再**执行 Redactor（事件已在 append 阶段脱敏，不重复消耗）；若启用"加密事件流"特性，Replay 在解密后重新跑 Redactor | `harness-observability §2.4` |
-| Tool 输出回填到 Context | `ContextEngine::merge_tool_result` | 工具产出已是 `RedactScope::All` 跑过的，不再重复；Redactor 不裁剪 tool result 内容（避免破坏模型理解力），只在写入 Journal 时再扫一次 `EventBody` 范围 | `harness-context` |
+| Tool 输出回填到 Context | `ContextEngine::merge_tool_result` | Redactor 不裁剪 tool result 内容（避免破坏模型理解力）；仅在写入 Journal 或流出 SDK 边界时按 `EventBody` / `All` 范围脱敏 | `harness-context` |
 
 **禁止**：
-- 业务方绕过门面直接调 `EventStore::append` 而不带 `Redactor`：`HarnessBuilder::with_store(...)` 在装配阶段会把 `Arc<Redactor>` 注入到内置 EventStore 实现；自定义 `EventStore` 实现必须在文档中显式声明"已遵守必经管道契约"，并在 CI 通过 `RedactorContractTest` 套件验证。
-- `Redactor::default().disable()` 之类禁用 API：`Redactor` 没有"全局关闭"API；如需调试可用 `RedactScope::TraceOnly` 关闭 Trace 层但保留 EventBody 层。
+- 业务方绕过门面直接调 `EventStore::append` 而不带 `Redactor`：`HarnessBuilder::with_store(...)` 在装配阶段会把 `Arc<dyn Redactor>` 注入到内置 EventStore 实现；自定义 `EventStore` 实现必须在文档中显式声明"已遵守必经管道契约"，并在 CI 通过 `RedactorContractTest` 套件验证。
+- `redactor.disable()` 之类禁用 API：`Redactor` 是 contracts 层 trait，没有"全局关闭"API；如需调试只能在具体调用点选择 `RedactRules`，不得关闭 EventBody 层。
 
 **审计断言**：`security-trust.md §12 安全基线断言`（"`Debug`/`Display` 不得泄漏密文"）由本管道兜底；任何业务测试中发现 sk-* / Bearer / SecretString 形态字符串出现在 Journal 文件内，视为 P0 安全 bug。
 
 #### 2.5.1 数据结构
 
 ```rust
-pub struct Redactor {
+pub struct DefaultRedactor {
     patterns: Arc<RwLock<Vec<RedactPattern>>>,
     default_replacement: String,
 }
@@ -260,24 +260,19 @@ pub struct RedactPattern {
     pub id: String,
     pub regex: Regex,
     pub replacement: String,
-    pub scope: RedactScope,
+    pub scope: RedactScope, // 来自 octopus-harness-contracts
 }
 
-pub enum RedactScope {
-    All,
-    TraceOnly,
-    EventBody,
-    LogOnly,
-}
-
-impl Redactor {
+impl DefaultRedactor {
     pub fn default() -> Self;
     pub fn add_pattern(&self, pattern: RedactPattern);
-    pub fn redact(&self, text: &str, scope: RedactScope) -> String;
-    pub fn redact_value(&self, v: Value, scope: RedactScope) -> Value;
 }
 
-impl Default for Redactor {
+impl Redactor for DefaultRedactor {
+    fn redact(&self, input: &str, rules: &RedactRules) -> String;
+}
+
+impl Default for DefaultRedactor {
     fn default() -> Self {
         // 默认内置：
         // - OpenAI API Key (sk-...)
@@ -381,7 +376,7 @@ let observer = Observer::builder()
     .with_otel_endpoint("http://otel-collector:4317")
     .with_prometheus("0.0.0.0:9100".parse()?)
     .with_replay_enabled(true)
-    .with_redactor(Redactor::default())
+    .with_redactor(Arc::new(DefaultRedactor::default()))
     .build()?;
 
 let harness = HarnessBuilder::new()
@@ -422,7 +417,7 @@ println!("  Tool divergence: {:?}", diff.tool_divergence);
 ### 8.4 Redactor
 
 ```rust
-let redactor = Redactor::default();
+let redactor = DefaultRedactor::default();
 redactor.add_pattern(RedactPattern {
     id: "internal-user-id".into(),
     regex: Regex::new(r"user-\d{10}").unwrap(),
@@ -431,7 +426,16 @@ redactor.add_pattern(RedactPattern {
 });
 
 let text = "User user-1234567890 did something";
-let redacted = redactor.redact(text, RedactScope::All);
+let redacted = redactor.redact(
+    text,
+    &RedactRules {
+        scope: RedactScope::All,
+        replacement: "[REDACTED]".into(),
+        pattern_set: RedactPatternSet::Only(vec![
+            RedactPatternKind::Custom("internal-user-id".into()),
+        ]),
+    },
+);
 assert_eq!(redacted, "User [USER_ID] did something");
 ```
 

@@ -35,7 +35,7 @@ pub trait ModelProvider: Send + Sync + 'static {
 }
 ```
 
-- **实现者**：`both`（内置 `OpenAi / Anthropic / Gemini / OpenRouter / Bedrock / Codex / LocalLlama`；业务侧可实现私有 provider）
+- **实现者**：`both`（v1.0 内置 `OpenAI / Anthropic / Gemini / OpenRouter / Bedrock / Codex / LocalLlama / DeepSeek / Minimax / Qwen / Doubao / Zhipu / KM`；业务侧可实现私有 provider）
 - **对象安全**：是
 - **`InferContext`**：详细字段见 `crates/harness-model.md` §2.1.0；包含 `tenant_id / cancel / retry_policy / tracing / middlewares` 等
 
@@ -949,10 +949,56 @@ pub trait Tracer: Send + Sync + 'static {
 pub trait Redactor: Send + Sync + 'static {
     fn redact(&self, input: &str, rules: &RedactRules) -> String;
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RedactRules {
+    pub scope: RedactScope,
+    pub replacement: String,
+    pub pattern_set: RedactPatternSet,
+}
+
+impl Default for RedactRules {
+    fn default() -> Self {
+        Self {
+            scope: RedactScope::EventBody,
+            replacement: "[REDACTED]".into(),
+            pattern_set: RedactPatternSet::Default,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub enum RedactScope {
+    All,
+    TraceOnly,
+    EventBody,
+    LogOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub enum RedactPatternSet {
+    Default,
+    AllBuiltins,
+    Only(Vec<RedactPatternKind>),
+    None,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub enum RedactPatternKind {
+    ApiKey,
+    BearerToken,
+    PrivateKey,
+    OAuthCode,
+    DatabaseUrl,
+    PrivateIp,
+    Email,
+    Custom(String),
+}
 ```
 
 - **实现者**：`built`（对齐 HER-051）
 - **对象安全**：是
+- **类型归属**：`Redactor / RedactRules / RedactScope / RedactPatternSet / RedactPatternKind` 均定义在 `octopus-harness-contracts`。`harness-observability` 只提供 `DefaultRedactor` 实现与默认正则集。
 
 ### 18.3 `ReplayEngine`（具体类型）
 

@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：M3 完成（与 M5 可并行）
 > 关键交付：3 个 L2 扩展 crate 完整可用 + Mock + Contract test
-> 预计任务卡：18 张 · 累计工时：AI 22 小时（3 路并行约 8 小时墙钟）+ 人类评审 8 小时
+> 预计任务卡：19 张 · 累计工时：AI 22 小时（3 路并行约 8 小时墙钟）+ 人类评审 8 小时
 > 并行度：**3 路并行**（tool-search / skill / mcp 互相正交）
 
 ---
@@ -20,7 +20,7 @@
 
 | Crate | 任务卡 | 内容 |
 |---|---|---|
-| **tool-search** | M4-T01 ~ T05 | DeferPolicy + ToolSearchTool + Anthropic / Inline backend + Scorer |
+| **tool-search** | M4-T01 ~ T05.5 | DeferPolicy + ToolSearchTool + Anthropic / Inline backend + Scorer + Session 集成补丁 |
 | **skill** | M4-T06 ~ T10 | SkillLoader + 3 Source + frontmatter + SkillTool 三件套 + ThreatScanner |
 | **mcp** | M4-T11 ~ T18 | Client transport 5 种 + ServerAdapter + OAuth + Elicitation + 治理矩阵 |
 

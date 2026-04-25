@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：M2 完成 · 阻塞：M4 / M5 / M6 / M7
 > 关键交付：tool / hook / context / session 四 crate 完整 + 临时 driver 跑通 E2E
-> 预计任务卡：20 张 · 累计工时：AI 25 小时（串行）+ 人类评审 10 小时
+> 预计任务卡：25 张 · 累计工时：AI 25 小时（串行）+ 人类评审 10 小时
 > 并行度：1（强制串行 4 步：tool → hook → context → session）
 
 ---
@@ -26,7 +26,7 @@
 | **context** | M3-T11 ~ T15 | 5 阶段管线 + ContextProvider + budget + microcompact / autocompact |
 | **session** | M3-T16 ~ T20 | 生命周期 + Projection + Fork + HotReload + SteeringQueue + E2E driver |
 | **chore** | M3-T21 | M4 / M5 依赖预注入到 `[workspace.dependencies]`（避免后续并行 PR 共改冲突）|
-| **cutover** | M3-T22 | CLI 最简入口先行接入真 harness-sdk（业务面渐进切换 spike）|
+| **cutover** | M3-T22 | CLI 最简入口先行接入 M3 lower-level harness driver（非 facade，业务面渐进切换 spike）|
 | **spike** | M3-S01 / S02 | Hook replay 幂等 + Steering Queue 长 turn 验证（评审报告 §4.4 第 2/3 项前置）|
 
 ---
@@ -89,11 +89,11 @@
 
 ---
 
-### M3-T04 · 内置工具集（9 个，拆 2 子卡）
+### M3-T04a · 文件 IO 工具集（5 个）
 
 > **拆分理由**（实施前评估 P1-5）：原标题写"8 个"实际列了 9 个工具（Read/Write/ListDir/Bash/Grep/WebSearch/Clarify/SendMessage/ReadBlob），含测试 ≤ 500 行不现实。按文件 IO / 执行类两组拆 2 子卡。
 
-#### M3-T04a · 文件 IO 工具集（5 个）
+**范围**：Read / Write / ListDir / Grep / ReadBlob。
 
 **SPEC 锚点**：
 - `harness-tool.md` §6（内置工具集）
@@ -111,7 +111,7 @@
 
 **预期 diff**：< 350 行
 
-#### M3-T04b · 执行类工具集（4 个）
+### M3-T04b · 执行类工具集（4 个）
 
 **SPEC 锚点**：
 - `harness-tool.md` §6（内置工具集）
@@ -521,9 +521,10 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 评审报告 §4.4 第 3 项指出 Hook 多 transport 失败模式 + replay 幂等是高风险点。原计划放 M9-P03，但 Hook 实际在 M3 完成；不前置则 M5/M6 都基于"假设可行"的 Hook 推进，失败时回滚成本巨大。
 
 **SPEC 锚点**：
-- `harness-hook.md` §2.6.2（Hook 失败的事务语义，v1.8.1 P1-4）
-- `harness-hook.md` §4.1-§4.3（in-process / Exec / HTTP transport）
-- `audit/2026-04-25-architecture-review.md` §4.4 第 3 项
+- `docs/architecture/harness/crates/harness-hook.md` §2.6.2（Hook 失败事务语义，L441-L466）
+- `docs/architecture/harness/crates/harness-hook.md` §3.1-§3.3（in-process / Exec / HTTP transport，L527-L703）
+- `docs/architecture/harness/crates/harness-hook.md` §11（Replay 幂等契约，L949-L987）
+- `docs/architecture/harness/audit/2026-04-25-architecture-review.md` §4.4 第 3 项（L295-L298）
 
 **预期产物**：
 - `crates/octopus-harness-hook/tests/spike_replay_idempotent.rs`：
@@ -542,7 +543,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 ---
 
-### M3-T22 · CLI 最简入口先行接入真 harness（业务面渐进切换）
+### M3-T22 · CLI 最简入口先行接入 M3 lower-level harness driver（业务面渐进切换）
 
 | 字段 | 值 |
 |---|---|
@@ -553,26 +554,27 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 **背景**（实施前评估 P1-4 修订）：
 
-原计划在 M0~M7 期间业务层全部走 `_octopus-bridge-stub` 桩，runtime 不可用，真集成风险推迟到 M8。本卡把 **CLI 最简非交互入口**（`octopus run --once <prompt>`）从 stub 切到真 `octopus-harness-sdk`（M3 MVP 已具备 create_session + run_turn + ListDir + 流式输出能力），让真集成风险**前移**到 M3 后即可观察。
+原计划在 M0~M7 期间业务层全部走 `_octopus-bridge-stub` 桩，runtime 不可用，真集成风险推迟到 M8。本卡把 **CLI 最简非交互入口**（`octopus run --once <prompt>`）从 stub 切到 M3 已完成的 lower-level harness driver（M3 MVP 已具备 create_session + run_turn + ListDir + 流式输出能力），让真集成风险**前移**到 M3 后即可观察。
 
 > 这不是 M8 业务切换的提前完成，仅是单一最简入口的 spike-cutover；其它入口仍走 stub，保留 M8 的全面切换。
 
 **SPEC 锚点**：
 - M3-T20 PR（mini-engine + 完整闭环）
-- `harness-sdk.md` §4-§5（HarnessBuilder / Harness API）
+- `harness-session.md` §2 / §3（Session 生命周期 + run_turn）
+- `harness-tool.md` §6（ListDir 内置工具）
+- `harness-journal.md` §2.1（EventStore append + Redactor 必经管道）
 - `AGENTS.md` § Persistence Governance
 
 **预期产物**：
-- `crates/octopus-cli/src/run_once.rs`：把 `unimplemented!("TODO(M8-...)")` 桩替换为真 `octopus_harness_sdk::HarnessBuilder` 调用：
+- `crates/octopus-cli/src/run_once.rs`：把 `unimplemented!("TODO(M8-...)")` 桩替换为 M3 临时 driver 调用：
   ```rust
-  let harness = HarnessBuilder::new()
-      .with_model(MockProvider::default())   // M3 期允许 mock；M8 切真 anthropic
-      .with_store(InMemoryEventStore::new(redactor.clone()))
-      .with_sandbox(NoopSandbox)
-      .build()
-      .await?;
-  let session = harness.create_session(SessionOptions { workspace_root, ... }).await?;
-  let stream = session.run_turn(TurnInput::user(prompt)).await?;
+  let driver = M3RunOnceDriver::new(
+      MockProvider::default(),     // M3 期允许 mock；M8 切真 anthropic
+      InMemoryEventStore::new(redactor.clone()),
+      NoopSandbox,
+  );
+  let session = driver.create_session(SessionOptions { workspace_root, ... }).await?;
+  let stream = driver.run_turn(&session, TurnInput::user(prompt)).await?;
   // 流式打印 AssistantDelta + ToolUse* 事件
   ```
 - `crates/octopus-cli/tests/run_once_smoke.rs`：跑一次 `cargo run -p octopus-cli -- run --once "list cwd"` 验证流程
@@ -581,11 +583,13 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 **关键不变量**：
 - 仅 cli 单一入口切换，不动 server / desktop
 - workspace_root 走环境变量或参数传入，对齐 M3-T16 SessionPaths
+- 本卡不得引用 `octopus-harness-sdk` / `HarnessBuilder`；M7 才定义 facade，M8-T10 再把本入口切到正式 `octopus-harness-sdk`
 - 该入口在 M8 时被覆盖（M8-T10 接管）
 
 **禁止行为**：
 - 不要扩展到 server / desktop（保持范围)
 - 不要在本卡接 Anthropic 真 provider（用 MockProvider 即可，M8 才接真）
+- 不要提前创建或依赖 `octopus_harness_sdk::HarnessBuilder`
 
 **验收命令**：
 
@@ -611,9 +615,9 @@ cargo test -p octopus-cli run_once_smoke
 评审报告 §4.4 第 2 项。Steering 涉及主循环 safe-merge-point 时机选择，错误会破坏 prompt cache。原计划 M9 验证太晚（M5/M6/M7 都已基于此推进），失败回滚 2-3 周。
 
 **SPEC 锚点**：
-- `harness-session.md` §6（SteeringQueue）
-- ADR-0017
-- `audit/2026-04-25-architecture-review.md` §4.4 第 2 项
+- `docs/architecture/harness/crates/harness-session.md` §2.7（SteeringQueue 数据结构与规则，L290-L389）
+- `docs/architecture/harness/adr/0017-steering-queue.md` §2.1-§2.7（Safe Merge Point + Source Capability，L49-L245）
+- `docs/architecture/harness/audit/2026-04-25-architecture-review.md` §4.4 第 2 项（L295-L298）
 
 **预期产物**：
 - `crates/octopus-harness-session/tests/spike_steering.rs`：

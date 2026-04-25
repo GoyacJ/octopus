@@ -42,11 +42,13 @@
 - `crates/octopus-harness-sdk/Cargo.toml`：
   - `[features]` 段与 `feature-flags.md` §2.1 完全一致（约 50 个 feature）
   - default 集合：`sqlite-store / jsonl-store / local-sandbox / interactive-permission / mcp-stdio / provider-anthropic / tool-search / steering-queue`
+  - `all-providers` 必须汇总全部 `provider-*` feature；default 只代表默认启用集合，不代表 Provider 支持范围
   - 所有 feature 触发的 dep:* 必须在根 `deny.toml` 与 D2 §10 例外表登记
 
 **关键不变量**：
 - default 集合与 D10 §2.1 字面量一致
 - 所有 feature 都有对应的内部 crate feature 转发
+- Provider feature 必须覆盖 `provider-openai / provider-anthropic / provider-gemini / provider-openrouter / provider-bedrock / provider-codex / provider-local-llama / provider-deepseek / provider-minimax / provider-qwen / provider-doubao / provider-zhipu / provider-km`
 
 **预期 diff**：< 200 行
 
@@ -107,13 +109,17 @@
 **预期产物**：
 - `src/builtin.rs`：根据 feature flag re-export 内置实现
   - `#[cfg(feature = "provider-anthropic")] pub use octopus_harness_model::anthropic::AnthropicProvider;`
+  - `#[cfg(feature = "provider-openai")] pub use octopus_harness_model::openai::OpenAiProvider;`
+  - `#[cfg(feature = "provider-deepseek")] pub use octopus_harness_model::deepseek::DeepSeekProvider;`
+  - 其他 provider：`GeminiProvider / OpenRouterProvider / BedrockProvider / CodexResponsesProvider / LocalLlamaProvider / MinimaxProvider / QwenProvider / DoubaoProvider / ZhipuProvider / KmProvider`
   - `#[cfg(feature = "sqlite-store")] pub use octopus_harness_journal::sqlite::SqliteEventStore;`
   - `#[cfg(feature = "local-sandbox")] pub use octopus_harness_sandbox::local::LocalSandbox;`
-  - …约 30 条 re-export
+  - …约 45 条 re-export
 
 **关键不变量**：
 - 每条 re-export 都必须有对应 feature gate
 - 编译期：仅启用 feature 的 re-export 才生效
+- 所有 `provider-*` feature 对应 Provider 都必须 re-export；不得只导出 Anthropic
 
 **预期 diff**：< 350 行
 

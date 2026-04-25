@@ -175,7 +175,7 @@ grep 'PermissionContext' crates/octopus-harness-permission/src/broker/direct.rs
 |---|---|---|
 | `Mx-Tyy` | `M2-T03` | 第 x 里程碑第 yy 张普通任务卡 |
 | `Mx-Tyy[a-z]` | `M3-T05a` | 任务卡因 diff 过大被拆分 |
-| `Mx-Pyy` | `M9-P02` | POC 任务卡（仅 M9）|
+| `Mx-Pyy` | `M9-P02` | post-spike 集成验证任务卡（仅 M9）|
 | `Mx-Gyy` | `M3-G01` | Review Gate 检查任务卡 |
 | `Mx-Hyy` | `M0-H01` | Hot-fix（紧急修复）任务卡 |
 
@@ -206,16 +206,22 @@ grep 'PermissionContext' crates/octopus-harness-permission/src/broker/direct.rs
 
 如你（人类）正在为新任务卡补充内容：
 
-1. **SPEC 锚点必精确到行号片段**：不要写 "见 harness-tool.md"，要写 "harness-tool.md §3.5 (L420-L455)"
+1. **签名类 SPEC 锚点必精确到行号片段**：不要写 "见 harness-tool.md"，要写 "harness-tool.md §3.5 (L420-L455)"。内部 plan / ADR / 依赖 PR 可用文件 + 章节号。
    - **强制 grep 自检**（撰写完后必跑）：
      ```bash
-     # 任务卡的每条 SPEC 锚点必须含 "L<digit>" 行号
-     awk '/SPEC 锚点/,/^---|^### /' docs/plans/harness-sdk/milestones/<file>.md \
-         | grep -E '^- ' \
-         | grep -vE 'L[0-9]+|§[0-9]+\.[0-9]+\.[0-9]+|（必读' \
-         && echo "FAIL: 锚点缺行号片段"
+     failed=0
+     awk '
+       /^\*\*SPEC 锚点\*\*/ { in_spec = 1; next }
+       in_spec && (/^---/ || /^### / || /^\*\*/) { in_spec = 0 }
+       in_spec && /^- `docs\/architecture\/harness/ && $0 !~ /L[0-9]+/ {
+         print FILENAME ":" FNR ": missing line range: " $0
+         failed = 1
+       }
+       END { exit failed }
+     ' docs/plans/harness-sdk/milestones/<file>.md || failed=1
+     exit "$failed"
      ```
-   - 抽样补行号优先级（按风险）：M0-T01.5（platform 反向解耦）/ M1-T07（Redactor）/ M2-T01-05（model）/ M3-T01-T05（tool）/ M3-T11-T15（context）/ M4-T11-T18（mcp）。其他卡可允许仅章节号，但必须在 PR 评审 checklist 中显式勾选"已确认 SPEC 锚点精度可接受"。
+   - 补行号优先级（按风险）：M0-T01.5（platform 反向解耦）/ M1-T07（Redactor）/ M2-T01-05（model）/ M3-T01-T05（tool）/ M3-T11-T15（context）/ M4-T11-T18（mcp）。其他卡可允许仅章节号，但必须在 PR 评审 checklist 中显式勾选"已确认 SPEC 锚点精度可接受"。
 2. **预期产物清单必完整**：列出所有文件路径，AI 不会自行决定文件位置
 3. **关键不变量必显式**：哪怕看似显然（如 Fail-Closed），也要写出来防止 AI 偷工
 4. **禁止行为必兜底**：列出常见的踩坑（错误依赖、错误 use 路径等）

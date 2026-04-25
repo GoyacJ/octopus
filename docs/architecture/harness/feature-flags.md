@@ -36,6 +36,7 @@ jsonl-store           = ["octopus-harness-journal/jsonl"]
 in-memory-store       = ["octopus-harness-journal/in-memory"]
 
 # --- LLM Provider ---
+# v1.0 内置 Provider 全部是可用实现；default 只默认启用 Anthropic。
 provider-openai       = ["octopus-harness-model/openai"]
 provider-anthropic    = ["octopus-harness-model/anthropic"]
 provider-gemini       = ["octopus-harness-model/gemini"]
@@ -43,6 +44,27 @@ provider-openrouter   = ["octopus-harness-model/openrouter"]
 provider-bedrock      = ["octopus-harness-model/bedrock"]
 provider-codex        = ["octopus-harness-model/codex"]
 provider-local-llama  = ["octopus-harness-model/local-llama"]
+provider-deepseek     = ["octopus-harness-model/deepseek"]
+provider-minimax      = ["octopus-harness-model/minimax"]
+provider-qwen         = ["octopus-harness-model/qwen"]
+provider-doubao       = ["octopus-harness-model/doubao"]
+provider-zhipu        = ["octopus-harness-model/zhipu"]
+provider-km           = ["octopus-harness-model/km"]
+all-providers = [
+    "provider-openai",
+    "provider-anthropic",
+    "provider-gemini",
+    "provider-openrouter",
+    "provider-bedrock",
+    "provider-codex",
+    "provider-local-llama",
+    "provider-deepseek",
+    "provider-minimax",
+    "provider-qwen",
+    "provider-doubao",
+    "provider-zhipu",
+    "provider-km",
+]
 
 # --- 沙箱 ---
 local-sandbox         = ["octopus-harness-sandbox/local"]
@@ -114,7 +136,7 @@ testing = [
 | Crate | 提供的 features |
 |---|---|
 | `harness-contracts` | — |
-| `harness-model` | `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / mock` |
+| `harness-model` | `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / deepseek / minimax / qwen / doubao / zhipu / km / all-providers / mock` |
 | `harness-journal` | `sqlite / jsonl / in-memory` |
 | `harness-sandbox` | `local / docker / ssh / noop / code-runtime`（ADR-0016） |
 | `harness-permission` | `interactive / stream / rule-engine / mock` |
@@ -208,14 +230,14 @@ octopus-harness-sdk = { version = "1", features = ["testing"] }
 | `local-sandbox` | 零额外依赖、启动最快；Docker/SSH 按需启用 |
 | `interactive-permission` | CLI / Desktop 场景的默认交互模式；Stream/Rule/Auto 按需启用 |
 | `mcp-stdio` | MCP 最通用 transport；http/ws 按需启用 |
-| `provider-anthropic` | 内置首批 Provider：Anthropic 对 Prompt Cache `system_and_3` 模式支持最完整，与 ADR-003 对齐度最高 |
+| `provider-anthropic` | 默认启用 Provider：Anthropic 对 Prompt Cache `system_and_3` 模式支持最完整，与 ADR-003 对齐度最高；默认启用不代表 Provider 支持范围 |
 | `tool-search` | ADR-009 默认开启：主流场景下 MCP 工具数量不可控，开启 Tool Search 可让 `DeferPolicy::AutoDefer` 工具不破坏 Prompt Cache；关闭时全部降级为 AlwaysLoad |
 | `steering-queue` | ADR-0017 默认开启：软引导是普适的"插话"语义，关闭后业务侧需自管 buffer 与硬中断的语义边界；开启时若不调 `push_steering` 则零开销 |
 
 **不默认开的原因**：
 
 - `programmatic-tool-calling`：ADR-0016 默认 **off**；M1 期由业务显式启用、灰度评估后改 default-on（需配合系统提示模板更新）
-- `provider-openai / provider-gemini / ...`：首批不开避免用户"一个 feature 拉三个 SDK"的编译时间；业务层按需显式启用
+- `provider-openai / provider-gemini / provider-openrouter / provider-bedrock / provider-codex / provider-local-llama / provider-deepseek / provider-minimax / provider-qwen / provider-doubao / provider-zhipu / provider-km`：均为可用实现，但默认不开；原因是真实 HTTP 依赖、认证方式、区域可用性和模型价格策略差异较大，业务 profile 必须显式选择
 - `docker-sandbox / ssh-sandbox`：外部依赖（docker CLI / ssh）不是必然存在
 - `stream-permission / rule-engine-permission`：仅 Server / CI 需要，默认 CLI 不需要
 - `agents-team / agents-subagent`：高级特性，默认 off 减少编译体积
@@ -267,18 +289,86 @@ pub mod openai;
 
 #[cfg(feature = "anthropic")]
 pub mod anthropic;
+
+#[cfg(feature = "gemini")]
+pub mod gemini;
+
+#[cfg(feature = "openrouter")]
+pub mod openrouter;
+
+#[cfg(feature = "bedrock")]
+pub mod bedrock;
+
+#[cfg(feature = "codex")]
+pub mod codex;
+
+#[cfg(feature = "local-llama")]
+pub mod local_llama;
+
+#[cfg(feature = "deepseek")]
+pub mod deepseek;
+
+#[cfg(feature = "minimax")]
+pub mod minimax;
+
+#[cfg(feature = "qwen")]
+pub mod qwen;
+
+#[cfg(feature = "doubao")]
+pub mod doubao;
+
+#[cfg(feature = "zhipu")]
+pub mod zhipu;
+
+#[cfg(feature = "km")]
+pub mod km;
 ```
 
 ### 5.2 builtin re-export（harness-sdk）
 
 ```rust
 // harness-sdk/src/builtin.rs
+#[cfg(feature = "provider-anthropic")]
+pub use octopus_harness_model::anthropic::AnthropicProvider;
+
 #[cfg(feature = "provider-openai")]
 pub use octopus_harness_model::openai::OpenAiProvider;
 
-#[cfg(feature = "provider-anthropic")]
-pub use octopus_harness_model::anthropic::AnthropicProvider;
+#[cfg(feature = "provider-gemini")]
+pub use octopus_harness_model::gemini::GeminiProvider;
+
+#[cfg(feature = "provider-openrouter")]
+pub use octopus_harness_model::openrouter::OpenRouterProvider;
+
+#[cfg(feature = "provider-bedrock")]
+pub use octopus_harness_model::bedrock::BedrockProvider;
+
+#[cfg(feature = "provider-codex")]
+pub use octopus_harness_model::codex::CodexResponsesProvider;
+
+#[cfg(feature = "provider-local-llama")]
+pub use octopus_harness_model::local_llama::LocalLlamaProvider;
+
+#[cfg(feature = "provider-deepseek")]
+pub use octopus_harness_model::deepseek::DeepSeekProvider;
+
+#[cfg(feature = "provider-minimax")]
+pub use octopus_harness_model::minimax::MinimaxProvider;
+
+#[cfg(feature = "provider-qwen")]
+pub use octopus_harness_model::qwen::QwenProvider;
+
+#[cfg(feature = "provider-doubao")]
+pub use octopus_harness_model::doubao::DoubaoProvider;
+
+#[cfg(feature = "provider-zhipu")]
+pub use octopus_harness_model::zhipu::ZhipuProvider;
+
+#[cfg(feature = "provider-km")]
+pub use octopus_harness_model::km::KmProvider;
 ```
+
+所有 `provider-*` feature 对应的可用 Provider 都必须在 `builtin` 中 gated re-export。`builtin` 不得 re-export 未通过 contract test 的 Provider。
 
 ### 5.3 测试专用
 
@@ -301,7 +391,7 @@ pub use octopus_harness_sandbox::noop::NoopSandbox;
 matrix:
   - default
   - sqlite-store,local-sandbox,interactive-permission,provider-anthropic
-  - all-providers  # 内部组合 feature
+  - all-providers  # 所有内置 Provider 可用实现
   - server-profile
   - testing
 ```
@@ -338,8 +428,11 @@ matrix:
 business 侧仅启用自己会用到的 feature，减少攻击面与编译时间：
 
 ```toml
-# 只用 Anthropic + 本地沙箱 + SQLite
+# Anthropic profile + 本地沙箱 + SQLite
 features = ["provider-anthropic", "local-sandbox", "sqlite-store", "mcp-stdio"]
+
+# 启用全部内置 Provider
+features = ["all-providers", "local-sandbox", "sqlite-store", "mcp-stdio"]
 ```
 
 ### 8.2 feature 查询

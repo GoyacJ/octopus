@@ -237,8 +237,14 @@ pub struct CredentialValue {
 ```json
 {
   "providers": {
+    "anthropic": {
+      "api_key_ref": "vault:octopus/anthropic/prod/key"
+    },
     "openai": {
       "api_key_ref": "vault:octopus/openai/prod/key"
+    },
+    "qwen": {
+      "api_key_ref": "vault:octopus/qwen/prod/key"
     }
   }
 }
@@ -248,18 +254,19 @@ pub struct CredentialValue {
 
 ```rust
 pub trait Redactor: Send + Sync + 'static {
-    fn redact(&self, text: &str) -> String;
-    fn register_pattern(&mut self, pattern: Regex);
+    fn redact(&self, input: &str, rules: &RedactRules) -> String;
 }
 ```
 
 用于：
 
 - Trace span 属性
-- Event body（选择性开启）
+- Event body（写入前强制）
 - 日志输出
 
-默认模式库：OpenAI/Anthropic/Google API key 格式、JWT、常见云厂商密钥格式。
+`Redactor / RedactRules / RedactScope` 的权威签名见 `api-contracts.md §18.2`，由 `octopus-harness-contracts` 定义。`harness-observability` 只提供 `DefaultRedactor` 与内置规则集，不新增 trait method。
+
+默认模式库：OpenAI / Anthropic / Gemini 及 OpenAI-compatible Provider 常见 API key 格式、JWT、常见云厂商密钥格式。
 
 ### 6.4 决策持久化的完整性保护（HMAC）
 

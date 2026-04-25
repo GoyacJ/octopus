@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：M3 完成（与 M4 可并行）· 阻塞：M6
 > 关键交付：单 Agent 主循环（engine）+ Tracer / Replay / Redactor + Plugin 宿主
-> 预计任务卡：15 张 · 累计工时：AI 20 小时 + 人类评审 10 小时
+> 预计任务卡：17 张 · 累计工时：AI 21 小时 + 人类评审 10.5 小时
 > 并行度：1（内部 3 步串行：observability → plugin → engine）
 
 ---
@@ -21,8 +21,8 @@
 
 | Crate | 任务卡 | 内容 |
 |---|---|---|
-| **observability** | M5-T01 ~ T04 | Tracer + Usage + Replay + Redactor 必经管道 |
-| **plugin** | M5-T05 ~ T09 | ManifestLoader + RuntimeLoader + TrustedSignerStore + Capability handles |
+| **observability** | M5-T01 ~ T04（含 T03.5） | Tracer + Usage + Replay + Redactor 必经管道 + Journal 装配集成测试 |
+| **plugin** | M5-T05 ~ T09（含 T09.5） | ManifestLoader + RuntimeLoader + TrustedSignerStore + Capability handles + Skill plugin source 集成 |
 | **engine** | M5-T10 ~ T15 | LoopState 主循环 + 中断 + iteration budget + grace call + EngineRunner trait |
 
 ---

@@ -62,6 +62,7 @@ pub mod prelude {
 pub mod ext {
     pub use octopus_harness_contracts::{
         BlobStore, BlobMeta, BlobRetention, BlobError,
+        Redactor, RedactRules, RedactScope, RedactPatternSet, RedactPatternKind,
     };
     pub use octopus_harness_model::{ModelProvider, CredentialSource};
     pub use octopus_harness_journal::{EventStore, Projection};
@@ -73,7 +74,7 @@ pub mod ext {
     pub use octopus_harness_mcp::{McpTransport, McpClient, McpConnection, ElicitationHandler};
     pub use octopus_harness_hook::{HookHandler, HookEvent, HookOutcome};
     pub use octopus_harness_plugin::{Plugin, PluginManifest, TrustLevel};
-    pub use octopus_harness_observability::{Tracer, Redactor};
+    pub use octopus_harness_observability::Tracer;
 }
 ```
 
@@ -82,12 +83,32 @@ pub mod ext {
 ```rust
 pub mod builtin {
     // Provider
-    #[cfg(feature = "provider-openai")]
-    pub use octopus_harness_model::openai::OpenAiProvider;
     #[cfg(feature = "provider-anthropic")]
     pub use octopus_harness_model::anthropic::AnthropicProvider;
+    #[cfg(feature = "provider-openai")]
+    pub use octopus_harness_model::openai::OpenAiProvider;
     #[cfg(feature = "provider-gemini")]
     pub use octopus_harness_model::gemini::GeminiProvider;
+    #[cfg(feature = "provider-openrouter")]
+    pub use octopus_harness_model::openrouter::OpenRouterProvider;
+    #[cfg(feature = "provider-bedrock")]
+    pub use octopus_harness_model::bedrock::BedrockProvider;
+    #[cfg(feature = "provider-codex")]
+    pub use octopus_harness_model::codex::CodexResponsesProvider;
+    #[cfg(feature = "provider-local-llama")]
+    pub use octopus_harness_model::local_llama::LocalLlamaProvider;
+    #[cfg(feature = "provider-deepseek")]
+    pub use octopus_harness_model::deepseek::DeepSeekProvider;
+    #[cfg(feature = "provider-minimax")]
+    pub use octopus_harness_model::minimax::MinimaxProvider;
+    #[cfg(feature = "provider-qwen")]
+    pub use octopus_harness_model::qwen::QwenProvider;
+    #[cfg(feature = "provider-doubao")]
+    pub use octopus_harness_model::doubao::DoubaoProvider;
+    #[cfg(feature = "provider-zhipu")]
+    pub use octopus_harness_model::zhipu::ZhipuProvider;
+    #[cfg(feature = "provider-km")]
+    pub use octopus_harness_model::km::KmProvider;
 
     // Journal (EventStore)
     #[cfg(feature = "sqlite-store")]
@@ -131,6 +152,7 @@ pub mod builtin {
     // Observability
     #[cfg(feature = "observability-otel")]
     pub use octopus_harness_observability::OtelTracer;
+    pub use octopus_harness_observability::DefaultRedactor;
 }
 ```
 
@@ -421,6 +443,8 @@ default = [
     "provider-anthropic",
 ]
 ```
+
+其他内置 Provider 通过各自 `provider-*` feature 或 `all-providers` 启用；默认集合不缩减 v1.0 Provider 支持范围。
 
 ## 11. 错误类型
 

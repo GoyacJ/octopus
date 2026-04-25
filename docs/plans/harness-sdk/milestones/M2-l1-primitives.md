@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：M1 完成 · 阻塞：M3
 > 关键交付：5 个 L1 crate 完整可用（trait + builtin + mock + contract-test）
-> 预计任务卡：25 张（每 crate 5 张）· 累计工时：AI 24 小时（5 路并行约 5 小时墙钟）+ 人类评审 12 小时
+> 预计任务卡：34 张（每 crate 5 张 + T02/T08 拆分 + T04.5~T04.10 + S01）· 累计工时：AI 38.5 小时（5 路并行约 8 小时墙钟）+ 人类评审 18 小时
 > 并行度：**5 路并行**（每 crate 一个 codex 会话）
 
 ---
@@ -17,12 +17,12 @@
 
 ---
 
-## 1. 任务卡总览（25 张）
+## 1. 任务卡总览（34 张）
 
 | Crate | 任务卡 | 内容 | 并行性 |
 |---|---|---|:---:|
-| **model** | M2-T01 ~ T05 | trait + AnthropicProvider + Mock + AuxModel + contract-test | 与其他 4 路并行 |
-| **journal** | M2-T06 ~ T10 | EventStore trait + Jsonl + Sqlite + InMemory + BlobStore | 与其他 4 路并行 |
+| **model** | M2-T01 ~ T05（T02 拆 a/b，另有 T04.5~T04.10 + S01） | trait + 全量内置 Provider + Mock + AuxModel + contract-test + prompt-cache spike | 与其他 4 路并行 |
+| **journal** | M2-T06 ~ T10（T08 拆 a/b） | EventStore trait + Jsonl + Sqlite + InMemory + BlobStore | 与其他 4 路并行 |
 | **sandbox** | M2-T11 ~ T15 | trait + Local + Noop + heartbeat + contract-test | 与其他 4 路并行 |
 | **permission** | M2-T16 ~ T20 | DirectBroker + StreamBroker + RuleEngine + DangerousPatternLibrary | 与其他 4 路并行 |
 | **memory** | M2-T21 ~ T25 | Store + Lifecycle + Memdir + ThreatScanner + contract-test | 与其他 4 路并行 |
@@ -55,11 +55,11 @@
 
 ---
 
-### M2-T02 · AnthropicProvider 实现（拆 2 子卡）
+### M2-T02a · AnthropicClient + 重试限流
 
 > **拆分理由**（实施前评估 P1-5）：原单卡含 client + streaming + cache + tokenizer + e2e tests，500 行紧。拆为 client/transport 与 cache/streaming/tokenizer 两卡。
 
-#### M2-T02a · AnthropicClient + 重试限流
+**范围**：Anthropic client / transport / 错误映射。
 
 **SPEC 锚点**：
 - `harness-model.md` §3.1（Anthropic 实现详情）
@@ -78,7 +78,7 @@
 
 **预期 diff**：< 350 行
 
-#### M2-T02b · SSE 流解析 + Prompt Cache 注入 + Tokenizer
+### M2-T02b · SSE 流解析 + Prompt Cache 注入 + Tokenizer
 
 **SPEC 锚点**：
 - `harness-model.md` §3.1
@@ -137,47 +137,166 @@
 
 ---
 
-### M2-T04.5 · 5 个 provider feature stub（占位，对齐 D10 §2.2）
+### M2-T04.5 · OpenAI-compatible 底座 + OpenAI / OpenRouter
 
 | 字段 | 值 |
 |---|---|
 | **依赖** | M2-T04 |
-| **预期 diff** | < 200 行 |
+| **预期 diff** | < 400 行 |
 
 **背景**（实施前评估 P2-1 修订）：
 
-D10 §2.2 要求 `harness-model` 提供 `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / mock` 共 8 个 feature。M2 的 T01-T05 仅落地 `anthropic + mock`。M7-T04 builtin 模块在 `#[cfg(feature = "provider-openai")]` 等时会因 `octopus_harness_model::openai` 不存在导致编译失败。
+D10 §2.2 要求 `harness-model` 提供全量 provider feature。除 Anthropic 外，OpenAI-compatible Provider 共享 HTTP / SSE / tool-call 聚合底座，但必须暴露独立 provider type、认证来源、默认 base_url、模型能力声明和 cassette 测试。
 
-本卡为 5 个未实现的 provider 落 feature stub（可编译的占位 module），M7 builtin re-export 不破。后续 v1.1 才填入真实现。
+本卡先落共享底座，并交付 OpenAI / OpenRouter 两个可用 Provider。
 
 **SPEC 锚点**：
-- `feature-flags.md` §2.2（harness-model features 列表）
-- `harness-model.md` §3（provider 实现章节）
+- `feature-flags.md` §2.1 / §2.2 / §5.2（provider feature 与 builtin re-export）
+- `harness-model.md` §3（provider 类型清单）
+- `harness-model.md` §6（API Mode 路由）
 
 **预期产物**：
 
-- `crates/octopus-harness-model/src/openai.rs`：feature gate `#[cfg(feature = "openai")]`，仅含一个 `pub struct OpenAiProvider;` + `impl ModelProvider for OpenAiProvider { ... }` 全 `unimplemented!("TODO(v1.1): implement OpenAI provider")`
-- 同模式生成 `gemini.rs / openrouter.rs / bedrock.rs / codex.rs / local_llama.rs`
-- `src/lib.rs`：5 行 `#[cfg(feature = "...")] pub mod ...;`
-- `Cargo.toml`：5 个 feature 项 `openai = []` / `gemini = []` / ...（不引入真实 dep）
+- `src/openai_compatible/`：共享 request / SSE / error / tool-call delta 聚合
+- `src/openai.rs`：`OpenAiProvider`
+- `src/openrouter.rs`：`OpenRouterProvider`
+- `tests/provider_openai.rs`、`tests/provider_openrouter.rs`：mock HTTP + cassette 回放
 
 **关键不变量**：
 
-- 5 个 stub provider 编译通过（feature on）
-- 不引入新 dep（`reqwest / google-cloud-sdk / aws-sdk` 等留给 v1.1）
-- 所有方法 `unimplemented!()`，且通过 contract test（必须显式 fail：M2-T05 contract test 加 `#[should_panic]` 用例验证 stub 正确"假装失败"）
+- Provider 必须真实实现 `infer` / streaming / error mapping / `supported_models`
+- Provider ID 稳定：`openai` / `openrouter`
+- 不允许 `unimplemented!()` / `todo!()` / panic 占位
+- contract test 必须接入这两个 Provider（用 mock HTTP / cassette，不打真实 API）
 
 **禁止行为**：
 
-- 不要在本卡引入实际 HTTP 依赖
-- 不要让 stub default 启用（对齐 D10 §3.5：default 集只含 anthropic）
+- 不要把多个 hosted provider 合并成一个对外 `OpenAiProvider`
+- 不要把 API key env var 写死到共享底座；每个 Provider 独立声明
 
 **验收命令**：
 
 ```bash
 cargo check -p octopus-harness-model --features openai
-cargo check -p octopus-harness-model --features gemini
 cargo check -p octopus-harness-model --features openrouter
+cargo test -p octopus-harness-model provider_openai
+cargo test -p octopus-harness-model provider_openrouter
+```
+
+---
+
+### M2-T04.6 · 国产 OpenAI-compatible Provider 套件
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04.5 |
+| **预期 diff** | < 450 行 |
+
+**预期产物**：
+- `src/deepseek.rs`：`DeepSeekProvider`
+- `src/minimax.rs`：`MinimaxProvider`
+- `src/qwen.rs`：`QwenProvider`
+- `src/doubao.rs`：`DoubaoProvider`
+- `src/zhipu.rs`：`ZhipuProvider`
+- `src/km.rs`：`KmProvider`
+- 每个 Provider 的 mock HTTP / cassette 测试
+
+**关键不变量**：
+- 全部复用 `openai_compatible` 底座，但 provider_id、base_url、auth env、默认模型、能力矩阵必须独立
+- Feature 名称固定为 `deepseek / minimax / qwen / doubao / zhipu / km`
+- SDK 门面 feature 名称固定为 `provider-deepseek / provider-minimax / provider-qwen / provider-doubao / provider-zhipu / provider-km`
+- 不允许任何 Provider 只是 marker/config；必须能完成一次 mock streaming infer
+
+**验收命令**：
+
+```bash
+cargo check -p octopus-harness-model --features "deepseek,minimax,qwen,doubao,zhipu,km"
+cargo test -p octopus-harness-model provider_deepseek
+cargo test -p octopus-harness-model provider_minimax
+cargo test -p octopus-harness-model provider_qwen
+cargo test -p octopus-harness-model provider_doubao
+cargo test -p octopus-harness-model provider_zhipu
+cargo test -p octopus-harness-model provider_km
+```
+
+---
+
+### M2-T04.7 · GeminiProvider
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04 |
+| **预期 diff** | < 350 行 |
+
+**预期产物**：
+- `src/gemini/`：request / streaming / error / tool-call 适配
+- `GeminiProvider`
+- `tests/provider_gemini.rs`
+
+**关键不变量**：
+- `prompt_cache_style()` 必须反映 Gemini context caching 能力；不支持时返回 `PromptCacheStyle::None`
+- Gemini 原生 chunk 必须归一到 `ModelStreamEvent`
+- contract test 接入 Gemini mock HTTP / cassette
+
+---
+
+### M2-T04.8 · BedrockProvider
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04 |
+| **预期 diff** | < 350 行 |
+
+**预期产物**：
+- `src/bedrock/`：AWS credential chain / invoke model / streaming 适配
+- `BedrockProvider`
+- `tests/provider_bedrock.rs`
+
+**关键不变量**：
+- 不在 SDK 内保存 AWS 明文凭证；只接 credential source / AWS provider chain
+- Bedrock 模型能力必须通过 `ModelDescriptor.capabilities` 暴露
+- contract test 接入 Bedrock cassette
+
+---
+
+### M2-T04.9 · CodexProvider
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04.5 |
+| **预期 diff** | < 300 行 |
+
+**预期产物**：
+- `src/codex.rs`：`CodexResponsesProvider`
+- `tests/provider_codex.rs`
+
+**关键不变量**：
+- 复用 OpenAI-compatible 底座时，必须保留 Codex 独立 provider_id 与 model defaults
+- reasoning / thinking payload 必须按 `ThinkingBlock` 归一
+- contract test 接入 Codex cassette
+
+---
+
+### M2-T04.10 · LocalLlamaProvider
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04.5 |
+| **预期 diff** | < 300 行 |
+
+**预期产物**：
+- `src/local_llama.rs`：`LocalLlamaProvider`
+- `tests/provider_local_llama.rs`
+
+**关键不变量**：
+- 默认只接 OpenAI-compatible local endpoint，不在本卡嵌入模型运行时
+- endpoint / timeout / max concurrency 必须可配置
+- contract test 使用本地 mock server，不依赖真实 llama 进程
+
+**总体验收命令**：
+
+```bash
+cargo check -p octopus-harness-model --features all-providers
 cargo check -p octopus-harness-model --features bedrock
 cargo check -p octopus-harness-model --features codex
 cargo check -p octopus-harness-model --features local-llama
@@ -200,7 +319,7 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
   - `infer` 流式产出 ≥ 1 个 event
   - `health` 默认 Healthy
   - 超时被 `cancel` 触发后立刻返回 Err
-- 接入：`MockProvider / AnthropicProvider`（用 mock HTTP）
+- 接入：`MockProvider` + 所有内置 Provider（真实 Provider 用 mock HTTP / cassette，不打真实 API）
 
 **预期 diff**：< 200 行
 
@@ -272,11 +391,11 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 
 ---
 
-### M2-T08 · SqliteEventStore + BlobStore（拆 2 子卡）
+### M2-T08a · SqliteEventStore + Migration
 
 > **拆分理由**（实施前评估 P1-5）：sqlite store + 2 类 blob store 含测试 ≤ 500 行紧；按 EventStore vs BlobStore 拆 2 卡。
 
-#### M2-T08a · SqliteEventStore + Migration
+**范围**：SQLite event store、migration、索引。
 
 **SPEC 锚点**：
 - `harness-journal.md` §3.3
@@ -294,7 +413,7 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 
 **预期 diff**：< 350 行
 
-#### M2-T08b · FileBlobStore + SqliteBlobStore
+### M2-T08b · FileBlobStore + SqliteBlobStore
 
 **SPEC 锚点**：
 - `harness-journal.md` §3.4
@@ -596,9 +715,9 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 评审报告 §4.4 第 1 项指出 Prompt Cache 假设是高风险设计，POC 失败会触发 ADR-003 重设计（2-4 周返工）。M2 完成 Anthropic provider 后即可做最小 spike：在 contracts + model 两层验证 `system_and_3` cache breakpoint 注入正确性 + 真实 API 命中率。**不**等到 M9 才发现假设不成立。
 
 **SPEC 锚点**：
-- `crates/harness-model.md` §3.1（Anthropic 实现）
-- ADR-003（Prompt Cache `system_and_3`）
-- `audit/2026-04-25-architecture-review.md` §4.4 第 1 项
+- `docs/architecture/harness/crates/harness-model.md` §2.3（Prompt Cache Style，L379-L408）+ §3（Provider 类型清单，L559-L600）+ §7（Anthropic 认证，L809-L823）
+- `docs/architecture/harness/adr/0003-prompt-cache-locked.md` §1-§2（Prompt Cache 硬约束，L8-L93）
+- `docs/architecture/harness/audit/2026-04-25-architecture-review.md` §4.4 第 1 项（L295-L298）
 
 **预期产物**：
 - `crates/octopus-harness-model/tests/spike_prompt_cache.rs`：
@@ -613,7 +732,7 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 
 **失败处理**：
 - Mock 失败 → AnthropicProvider 实现 bug，M2-T02 reset
-- Live 全失败 → ADR-003 假设受质疑，召开架构 review；spike 报告归档供 M9 完整 POC 比对
+- Live 全失败 → ADR-003 假设受质疑，召开架构 review；spike 报告归档供 M9 post-spike 集成验证比对
 
 ---
 
