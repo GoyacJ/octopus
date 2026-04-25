@@ -69,8 +69,20 @@ jobs:
       - name: Check Rust linting
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Check harness SPEC consistency
+        run: bash scripts/spec-consistency.sh
+
+      - name: Check harness dependency boundaries
+        run: bash scripts/dep-boundary-check.sh
+
+      - name: Check harness depgraph snapshot
+        run: bash scripts/depgraph-snapshot.sh
+
       - name: Check Rust tests
         run: cargo test --workspace --locked
+
+      - name: Check Rust docs
+        run: cargo doc --no-deps --workspace
 
       - name: Check schema freshness
         run: pnpm schema:check
