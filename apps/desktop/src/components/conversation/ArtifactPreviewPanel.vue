@@ -106,20 +106,23 @@ function formatByteSize(byteSize?: number) {
 </script>
 
 <template>
-  <UiPanelFrame
+  <UiSurface
     data-testid="deliverable-preview-panel"
-    variant="raised"
+    variant="glass"
     padding="md"
-    class="space-y-4"
+    class="space-y-5 border-primary/20 highlight-border shadow-2xl"
   >
-    <div class="flex items-center justify-between gap-3">
-      <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-        {{ t('conversation.detail.deliverables.previewTitle') }}
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5">
+         <div class="size-2 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)] animate-pulse" />
+         <div class="text-[11px] font-extrabold uppercase tracking-[0.2em] text-text-primary">
+           {{ t('conversation.detail.deliverables.previewTitle') }}
+         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <UiBadge :label="previewLabel" subtle />
-        <span v-if="props.content?.fileName" class="text-xs text-text-tertiary">
+        <UiBadge :label="previewLabel" class="bg-primary/10 text-primary border-primary/20 text-[9px] font-bold" />
+        <span v-if="props.content?.fileName" class="text-[11px] font-mono text-text-tertiary bg-black/20 px-1.5 py-0.5 rounded">
           {{ props.content.fileName }}
         </span>
       </div>
@@ -128,64 +131,69 @@ function formatByteSize(byteSize?: number) {
     <UiStatusCallout
       v-if="props.error"
       tone="error"
+      class="bg-status-error/5 border-status-error/20"
       :description="props.error"
     />
 
-    <UiTextarea
-      v-if="props.editing && canInlineEdit"
-      data-testid="deliverable-editor"
-      :model-value="props.draft"
-      :rows="18"
-      class="min-h-[20rem] border-border bg-background font-mono text-[13px] leading-6"
-      @update:model-value="emit('updateDraft', $event)"
-    />
+    <div class="relative group/preview">
+      <UiTextarea
+        v-if="props.editing && canInlineEdit"
+        data-testid="deliverable-editor"
+        :model-value="props.draft"
+        :rows="18"
+        class="min-h-[20rem] border-primary/30 bg-black/40 font-mono text-[13px] leading-relaxed text-primary shadow-inner rounded-xl focus:ring-1 focus:ring-primary/50"
+        @update:model-value="emit('updateDraft', $event)"
+      />
 
-    <div
-      v-else-if="previewMode === 'markdown'"
-      class="min-h-[20rem] whitespace-pre-wrap rounded-[var(--radius-l)] border border-border bg-background px-4 py-4 text-[14px] leading-7 text-text-primary"
-    >
-      {{ props.content?.textContent || '' }}
-    </div>
-
-    <div
-      v-else-if="previewMode === 'text'"
-      class="min-h-[20rem] whitespace-pre-wrap rounded-[var(--radius-l)] border border-border bg-background px-4 py-4 font-mono text-[13px] leading-6 text-text-primary"
-    >
-      {{ props.content?.textContent || '' }}
-    </div>
-
-    <UiCodeEditor
-      v-else-if="previewMode === 'code'"
-      readonly
-      :language="editorLanguage"
-      :model-value="props.content?.textContent || ''"
-    />
-
-    <div
-      v-else-if="previewMode === 'image' && previewSrc"
-      class="overflow-hidden rounded-[var(--radius-l)] border border-border bg-background p-2"
-    >
-      <img
-        :src="previewSrc"
-        :alt="props.content?.fileName || t('conversation.detail.deliverables.previewTitle')"
-        class="max-h-[420px] w-full object-contain"
+      <div
+        v-else-if="previewMode === 'markdown'"
+        class="min-h-[22rem] whitespace-pre-wrap rounded-xl border border-border/30 bg-black/20 px-6 py-6 text-[14.5px] leading-relaxed text-text-primary/90 shadow-inner overflow-y-auto scroll-y"
       >
+        {{ props.content?.textContent || '' }}
+      </div>
+
+      <div
+        v-else-if="previewMode === 'text'"
+        class="min-h-[22rem] whitespace-pre-wrap rounded-xl border border-border/30 bg-black/30 px-6 py-6 font-mono text-[13px] leading-relaxed text-text-secondary shadow-inner overflow-y-auto scroll-y"
+      >
+        {{ props.content?.textContent || '' }}
+      </div>
+
+      <UiCodeEditor
+        v-else-if="previewMode === 'code'"
+        readonly
+        :language="editorLanguage"
+        :model-value="props.content?.textContent || ''"
+        class="min-h-[22rem] rounded-xl border border-border/30 overflow-hidden shadow-2xl"
+      />
+
+      <div
+        v-else-if="previewMode === 'image' && previewSrc"
+        class="overflow-hidden rounded-xl border border-border/30 bg-black/40 p-3 shadow-2xl"
+      >
+        <img
+          :src="previewSrc"
+          :alt="props.content?.fileName || t('conversation.detail.deliverables.previewTitle')"
+          class="max-h-[480px] w-full object-contain transition-transform group-hover/preview:scale-[1.01]"
+        >
+      </div>
+
+      <UiEmptyState
+        v-else
+        :title="t('conversation.detail.deliverables.previewUnavailableTitle')"
+        :description="t('conversation.detail.deliverables.previewUnavailableDescription')"
+        class="bg-black/10 py-16 rounded-xl"
+      />
     </div>
 
-    <UiEmptyState
-      v-else
-      :title="t('conversation.detail.deliverables.previewUnavailableTitle')"
-      :description="t('conversation.detail.deliverables.previewUnavailableDescription')"
-    />
-
-    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-      <div class="min-w-0 text-xs text-text-tertiary">
-        <span v-if="props.saveStatus">{{ props.saveStatus }}</span>
-        <span v-else>
-          {{ t('conversation.detail.deliverables.previewMeta', {
-            size: formatByteSize(props.content?.byteSize),
-            contentType: props.content?.contentType || t('common.na'),
-          }) }}
+    <div class="flex flex-wrap items-center justify-between gap-4 border-t border-border/30 pt-4">
+      <div class="min-w-0 text-[10px] font-bold uppercase tracking-widest text-text-tertiary/60">
+        <span v-if="props.saveStatus" class="text-primary animate-pulse">{{ props.saveStatus }}</span>
+        <span v-else class="flex items-center gap-2">
+           <span class="size-1 rounded-full bg-text-tertiary/40" />
+           {{ formatByteSize(props.content?.byteSize) }}
+           <span class="mx-1 opacity-50">|</span>
+           {{ props.content?.contentType || 'DOCUMENT' }}
         </span>
       </div>
 
@@ -195,6 +203,7 @@ function formatByteSize(byteSize?: number) {
           data-testid="deliverable-edit-button"
           variant="outline"
           size="sm"
+          class="bg-surface/50 border-border/50 text-[11px] font-bold uppercase tracking-wider"
           @click="emit('edit')"
         >
           {{ t('common.edit') }}
@@ -204,6 +213,7 @@ function formatByteSize(byteSize?: number) {
           <UiButton
             data-testid="deliverable-save-version"
             size="sm"
+            class="shadow-lg shadow-primary/20 text-[11px] font-bold uppercase tracking-wider px-4"
             :disabled="props.saving"
             @click="emit('save')"
           >
@@ -213,6 +223,7 @@ function formatByteSize(byteSize?: number) {
             data-testid="deliverable-cancel-edit"
             variant="ghost"
             size="sm"
+            class="text-[11px] font-bold uppercase tracking-wider hover:bg-black/20"
             :disabled="props.saving"
             @click="emit('cancel')"
           >
@@ -221,5 +232,5 @@ function formatByteSize(byteSize?: number) {
         </template>
       </div>
     </div>
-  </UiPanelFrame>
+  </UiSurface>
 </template>

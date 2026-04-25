@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 
 const props = defineProps<{
   title: string
-  description: string
+  description?: string
   items: Array<{
     id: string
     content: string

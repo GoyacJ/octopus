@@ -10,6 +10,7 @@ import AgentResourceCatalogPanel from './AgentResourceCatalogPanel.vue'
 import AgentsStatsStrip from './AgentsStatsStrip.vue'
 import TeamEditorDialog from './TeamEditorDialog.vue'
 import TeamListPanel from './TeamListPanel.vue'
+import AgentInspectorPanel from './AgentInspectorPanel.vue'
 import { useAgentCenter } from './useAgentCenter'
 
 const props = defineProps<{
@@ -125,142 +126,142 @@ const {
     :width="props.embedded ? undefined : 'wide'"
     :test-id="props.embedded ? undefined : 'agent-center-view'"
     :data-testid="props.embedded ? 'agent-center-embedded' : undefined"
-    class="space-y-6"
+    class="h-full flex flex-col bg-transparent"
   >
-    <UiPageHeader
-      v-if="!props.embedded"
-      eyebrow="Agent Center"
-      :title="pageTitle"
-      :description="pageDescription"
-    />
+    <div class="flex-1 flex min-h-0 overflow-hidden">
+      <!-- Main Content Area -->
+      <div class="flex-1 flex flex-col min-w-0 overflow-y-auto px-6 py-8 scroll-y">
+        <UiPageHeader
+          v-if="!props.embedded"
+          eyebrow="Agent Center"
+          :title="pageTitle"
+          :description="pageDescription"
+          class="mb-8"
+        />
 
-    <AgentsStatsStrip :stats="centerStats" />
+        <AgentsStatsStrip :stats="centerStats" class="mb-8" />
 
-    <div
-      data-testid="agent-center-tabs-shell"
-      class="border-b border-border pb-4"
-    >
-      <UiTabs
-        v-model="activeTab"
-        :tabs="tabs"
-        @update:model-value="setTab"
+        <div
+          data-testid="agent-center-tabs-shell"
+          class="border-b border-border/50 pb-4 mb-6"
+        >
+          <UiTabs
+            v-model="activeTab"
+            :tabs="tabs"
+            @update:model-value="setTab"
+          />
+        </div>
+
+        <div class="flex-1">
+          <AgentListPanel
+            v-show="activeTab === 'agent'"
+            :query="agentQuery"
+            :view-mode="agentViewMode"
+            :total="agentTotal"
+            :page="agentPage"
+            :page-count="agentPageCount"
+            :paged-agents="pagedAgents"
+            :is-project-scope="isProjectScope"
+            :import-loading="agentImportLoading && !agentImportDialogOpen"
+            :export-loading="agentExportLoading"
+            :selected-agent-ids="selectedAgentIds"
+            :all-paged-selected="allPagedAgentsSelected"
+            @update:query="agentQuery = $event"
+            @update:view-mode="agentViewMode = $event"
+            @update:page="agentPagination.setPage"
+            @update:selected-agent-ids="selectedAgentIds = $event"
+            @create-agent="openCreateAgent"
+            @open-import-dialog="openAgentImportDialog"
+            @toggle-all-paged="toggleAllPagedAgents"
+            @export-selected="exportSelectedAgents"
+            @export-agent="exportAgentRecord"
+            @open-agent="openEditAgent"
+            @remove-agent="removeAgent"
+          />
+
+          <TeamListPanel
+            v-show="activeTab === 'team'"
+            :query="teamQuery"
+            :view-mode="teamViewMode"
+            :total="teamTotal"
+            :page="teamPage"
+            :page-count="teamPageCount"
+            :paged-teams="pagedTeams"
+            :resolved-agents="resolvedAgents"
+            :is-project-scope="isProjectScope"
+            :import-loading="agentImportLoading && !agentImportDialogOpen"
+            :export-loading="teamExportLoading"
+            :selected-team-ids="selectedTeamIds"
+            :all-paged-selected="allPagedTeamsSelected"
+            @update:query="teamQuery = $event"
+            @update:view-mode="teamViewMode = $event"
+            @update:page="teamPagination.setPage"
+            @update:selected-team-ids="selectedTeamIds = $event"
+            @create-team="openCreateTeam"
+            @open-import-dialog="openAgentImportDialog"
+            @toggle-all-paged="toggleAllPagedTeams"
+            @export-selected="exportSelectedTeams"
+            @export-team="exportTeamRecord"
+            @open-team="openEditTeam"
+            @remove-team="removeTeam"
+          />
+
+          <AgentResourceCatalogPanel
+            v-show="activeTab === 'builtin' || activeTab === 'skill' || activeTab === 'mcp'"
+            :query="resourceQuery"
+            :total="resourceTotal"
+            :page="resourcePage"
+            :page-count="resourcePageCount"
+            :paged-entries="pagedResources"
+            @update:query="resourceQuery = $event"
+            @update:page="resourcePagination.setPage"
+          />
+        </div>
+      </div>
+
+      <!-- Agent Split-View Inspector -->
+      <AgentInspectorPanel
+        v-if="agentDialogOpen"
+        :form="agentForm"
+        :status-options="statusOptions"
+        :builtin-options="builtinOptions"
+        :skill-options="skillOptions"
+        :mcp-options="mcpOptions"
+        :avatar-preview="agentAvatarPreview(currentEditingAgent())"
+        :readonly="agentDialogContentReadonly"
+        :loading="agentImportLoading"
+        @close="agentDialogOpen = false"
+        @save="saveAgent"
       />
     </div>
 
-    <AgentListPanel
-      v-show="activeTab === 'agent'"
-      :query="agentQuery"
-      :view-mode="agentViewMode"
-      :total="agentTotal"
-      :page="agentPage"
-      :page-count="agentPageCount"
-      :paged-agents="pagedAgents"
-      :is-project-scope="isProjectScope"
-      :import-loading="agentImportLoading && !agentImportDialogOpen"
-      :export-loading="agentExportLoading"
-      :selected-agent-ids="selectedAgentIds"
-      :all-paged-selected="allPagedAgentsSelected"
-      @update:query="agentQuery = $event"
-      @update:view-mode="agentViewMode = $event"
-      @update:page="agentPagination.setPage"
-      @update:selected-agent-ids="selectedAgentIds = $event"
-      @create-agent="openCreateAgent"
-      @open-import-dialog="openAgentImportDialog"
-      @toggle-all-paged="toggleAllPagedAgents"
-      @export-selected="exportSelectedAgents"
-      @export-agent="exportAgentRecord"
-      @open-agent="openEditAgent"
-      @remove-agent="removeAgent"
-    />
-
-    <TeamListPanel
-      v-show="activeTab === 'team'"
-      :query="teamQuery"
-      :view-mode="teamViewMode"
-      :total="teamTotal"
-      :page="teamPage"
-      :page-count="teamPageCount"
-      :paged-teams="pagedTeams"
-      :resolved-agents="resolvedAgents"
-      :is-project-scope="isProjectScope"
-      :import-loading="agentImportLoading && !agentImportDialogOpen"
-      :export-loading="teamExportLoading"
-      :selected-team-ids="selectedTeamIds"
-      :all-paged-selected="allPagedTeamsSelected"
-      @update:query="teamQuery = $event"
-      @update:view-mode="teamViewMode = $event"
-      @update:page="teamPagination.setPage"
-      @update:selected-team-ids="selectedTeamIds = $event"
-      @create-team="openCreateTeam"
-      @open-import-dialog="openAgentImportDialog"
-      @toggle-all-paged="toggleAllPagedTeams"
-      @export-selected="exportSelectedTeams"
-      @export-team="exportTeamRecord"
-      @open-team="openEditTeam"
-      @remove-team="removeTeam"
-    />
-
-    <AgentResourceCatalogPanel
-      v-show="activeTab === 'builtin' || activeTab === 'skill' || activeTab === 'mcp'"
-      :query="resourceQuery"
-      :total="resourceTotal"
-      :page="resourcePage"
-      :page-count="resourcePageCount"
-      :paged-entries="pagedResources"
-      @update:query="resourceQuery = $event"
-      @update:page="resourcePagination.setPage"
-    />
-
-    <AgentEditorDialog
-      :open="agentDialogOpen"
-      :form="agentForm"
-      :status-options="statusOptions"
-      :builtin-options="builtinOptions"
-      :skill-options="skillOptions"
-      :mcp-options="mcpOptions"
-      :avatar-preview="agentAvatarPreview(currentEditingAgent())"
-      :scope="props.scope"
-      :content-readonly="agentDialogContentReadonly"
-      :status-readonly="agentDialogStatusReadonly"
-      :can-save="canSaveAgentDialog"
-      :can-copy="canCopyCurrentEditingAgent"
-      :copy-label="currentEditingAgentCopyLabel"
-      :can-promote="Boolean(isProjectScope && currentEditingAgent()?.projectId)"
-      :promoting="promoteAgentLoading"
-      @update:open="agentDialogOpen = $event"
-      @pick-avatar="pickAgentAvatar"
-      @remove-avatar="clearAgentAvatar"
-      @save="saveAgent"
-      @copy="copyCurrentEditingAgent"
-      @promote="promoteAgentToWorkspace"
-    />
-
-    <TeamEditorDialog
-      :open="teamDialogOpen"
-      :form="teamForm"
-      :status-options="statusOptions"
-      :builtin-options="builtinOptions"
-      :skill-options="skillOptions"
-      :mcp-options="mcpOptions"
-      :leader-options="leaderOptions"
-      :team-agent-options="teamAgentOptions"
-      :avatar-preview="teamAvatarPreview(currentEditingTeam())"
-      :dialog-team-leader="dialogTeamLeader"
-      :dialog-team-members="dialogTeamMembers"
-      :content-readonly="teamDialogContentReadonly"
-      :status-readonly="teamDialogStatusReadonly"
-      :can-save="canSaveTeamDialog"
-      :can-copy="canCopyCurrentEditingTeam"
-      :copy-label="currentEditingTeamCopyLabel"
-      :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
-      :promoting="promoteTeamLoading"
-      @update:open="teamDialogOpen = $event"
-      @pick-avatar="pickTeamAvatar"
-      @remove-avatar="clearTeamAvatar"
-      @save="saveTeam"
-      @copy="copyCurrentEditingTeam"
-      @promote="promoteTeamToWorkspace"
-    />
+    <!-- Teams still use Dialog for now as they are more complex layouts -->
+    <!-- Teams still use Dialog for now as they are more complex layouts -->
+  :open="teamDialogOpen"
+  :form="teamForm"
+  :status-options="statusOptions"
+  :builtin-options="builtinOptions"
+  :skill-options="skillOptions"
+  :mcp-options="mcpOptions"
+  :leader-options="leaderOptions"
+  :team-agent-options="teamAgentOptions"
+  :avatar-preview="teamAvatarPreview(currentEditingTeam())"
+  :dialog-team-leader="dialogTeamLeader"
+  :dialog-team-members="dialogTeamMembers"
+  :content-readonly="teamDialogContentReadonly"
+  :status-readonly="teamDialogStatusReadonly"
+  :can-save="canSaveTeamDialog"
+  :can-copy="canCopyCurrentEditingTeam"
+  :copy-label="currentEditingTeamCopyLabel"
+  :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
+  :promoting="promoteTeamLoading"
+  @update:open="teamDialogOpen = $event"
+  @pick-avatar="pickTeamAvatar"
+  @remove-avatar="clearTeamAvatar"
+  @save="saveTeam"
+  @copy="copyCurrentEditingTeam"
+  @promote="promoteTeamToWorkspace"
+/>
 
     <UiDialog
       :open="deleteConfirmOpen"

@@ -5,7 +5,7 @@ import { cn } from '../lib/utils'
 
 const props = withDefaults(defineProps<{
   keys?: string[]
-  size?: 'sm' | 'md'
+  size?: 'xs' | 'sm' | 'md'
   class?: HTMLAttributes['class']
 }>(), {
   keys: () => [],
@@ -15,9 +15,15 @@ const props = withDefaults(defineProps<{
 
 const normalizedKeys = computed(() => props.keys.filter((key) => key.trim().length > 0))
 
-const sizeClass = computed(() => (props.size === 'sm'
-  ? 'gap-0.5 px-1.5 py-0.5'
-  : 'gap-1 px-2 py-1'))
+const sizeClass = computed(() => {
+  if (props.size === 'xs') {
+    return 'gap-0.5 px-1 py-0.5 text-[10px]'
+  }
+
+  return props.size === 'sm'
+    ? 'gap-0.5 px-1.5 py-0.5'
+    : 'gap-1 px-2 py-1'
+})
 </script>
 
 <template>

@@ -3,7 +3,7 @@ import { cn } from '../lib/utils'
 
 const props = defineProps<{
   title: string
-  description: string
+  description?: string
   class?: string
 }>()
 </script>

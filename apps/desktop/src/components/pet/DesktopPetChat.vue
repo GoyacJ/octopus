@@ -40,52 +40,72 @@ async function submit() {
 
 <template>
   <UiSurface
-    variant="overlay"
-    padding="sm"
-    class="pet-chat-panel"
+    variant="glass"
+    padding="md"
+    class="pet-chat-panel border-primary/20 shadow-2xl highlight-border backdrop-blur-2xl"
     data-testid="desktop-pet-chat"
     :title="pet.displayName"
     :subtitle="pet.summary"
   >
-    <div class="pet-chat-meta">
-      <UiBadge :label="pet.species" tone="info" />
-      <UiBadge :label="pet.favoriteSnack" subtle />
-    </div>
+    <template #actions>
+       <div class="flex gap-2">
+         <UiBadge :label="pet.species" class="bg-primary/10 text-primary border-primary/20 text-[9px]" />
+         <UiBadge v-if="pet.favoriteSnack" :label="pet.favoriteSnack" class="bg-black/20 text-text-tertiary border-border/30 text-[9px]" />
+       </div>
+    </template>
 
-    <div class="pet-chat-messages" data-testid="desktop-pet-messages">
+    <div class="pet-chat-messages scroll-y pr-1" data-testid="desktop-pet-messages">
       <div
         v-for="message in messages"
         :key="message.id"
-        class="pet-chat-bubble"
-        :class="message.sender === 'user' ? 'is-user' : 'is-pet'"
+        class="flex flex-col gap-1"
+        :class="message.sender === 'user' ? 'items-end' : 'items-start'"
       >
-        <span class="pet-chat-sender">{{ message.sender === 'user' ? '你' : pet.displayName }}</span>
-        <p>{{ message.content }}</p>
+        <div 
+          class="px-3 py-2 rounded-2xl text-[13px] leading-relaxed max-w-[90%] transition-all"
+          :class="[
+            message.sender === 'user' 
+              ? 'bg-primary text-primary-foreground shadow-sm' 
+              : 'bg-black/30 border border-primary/10 text-text-primary shadow-inner highlight-border'
+          ]"
+        >
+          <span class="block text-[9px] font-bold uppercase tracking-tighter opacity-50 mb-0.5">
+            {{ message.sender === 'user' ? 'You' : pet.displayName }}
+          </span>
+          {{ message.content }}
+        </div>
       </div>
     </div>
 
-    <div class="pet-chat-hints">
+    <div v-if="pet.promptHints?.length" class="pet-chat-hints flex flex-wrap gap-2 mt-4 pt-4 border-t border-border/20">
       <button
         v-for="hint in pet.promptHints"
         :key="hint"
         type="button"
-        class="pet-chat-hint"
+        class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/5 border border-primary/10 text-[11px] font-bold text-primary/80 transition-all hover:bg-primary/10 hover:border-primary/30"
         @click="draft = hint"
       >
-        <Sparkles :size="12" />
+        <Sparkles :size="10" />
         <span>{{ hint }}</span>
       </button>
     </div>
 
-    <div class="pet-chat-composer">
+    <div class="pet-chat-composer mt-4 flex items-center gap-3">
       <UiInput
         v-model="draft"
         data-testid="desktop-pet-input"
-        :placeholder="`和 ${pet.displayName} 说点什么`"
+        class="flex-1 h-10 bg-black/20 border-border/30 rounded-xl text-sm"
+        :placeholder="`和 ${pet.displayName} 交流...`"
         @keydown.enter="submit"
       />
-      <UiButton size="icon" data-testid="desktop-pet-send" :disabled="!trimmedDraft" @click="submit">
-        <SendHorizontal :size="16" />
+      <UiButton 
+        size="icon" 
+        data-testid="desktop-pet-send" 
+        :disabled="!trimmedDraft" 
+        class="h-10 w-10 shrink-0 rounded-xl shadow-lg shadow-primary/20"
+        @click="submit"
+      >
+        <SendHorizontal :size="18" stroke-width="2.5" />
       </UiButton>
     </div>
   </UiSurface>
@@ -93,78 +113,14 @@ async function submit() {
 
 <style scoped>
 .pet-chat-panel {
-  width: min(22rem, calc(100vw - 2rem));
-}
-
-.pet-chat-meta,
-.pet-chat-hints,
-.pet-chat-composer {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.pet-chat-meta {
-  flex-wrap: wrap;
-  margin-bottom: 0.7rem;
+  width: min(24rem, calc(100vw - 2rem));
 }
 
 .pet-chat-messages {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  max-height: 16rem;
-  margin-bottom: 0.8rem;
+  gap: 0.8rem;
+  max-height: 18rem;
   overflow-y: auto;
-}
-
-.pet-chat-bubble {
-  max-width: 88%;
-  padding: 0.7rem 0.8rem;
-  border-radius: 1rem;
-  box-shadow: var(--shadow-xs);
-}
-
-.pet-chat-bubble.is-pet {
-  align-self: flex-start;
-  background: color-mix(in srgb, var(--bg-surface) 94%, white 6%);
-}
-
-.pet-chat-bubble.is-user {
-  align-self: flex-end;
-  background: color-mix(in srgb, var(--brand-primary) 14%, var(--bg-surface));
-}
-
-.pet-chat-sender {
-  display: block;
-  margin-bottom: 0.2rem;
-  color: var(--text-tertiary);
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
-.pet-chat-bubble p {
-  margin: 0;
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
-.pet-chat-hints {
-  flex-wrap: wrap;
-  margin-bottom: 0.8rem;
-}
-
-.pet-chat-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-subtle) 86%, transparent);
-  color: var(--text-secondary);
-  font-size: 0.74rem;
-}
-
-.pet-chat-composer {
-  align-items: center;
 }
 </style>

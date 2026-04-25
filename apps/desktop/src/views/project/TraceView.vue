@@ -149,124 +149,140 @@ async function rejectMemoryProposal() {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="trace-view">
+  <UiPageShell width="wide" test-id="trace-view" class="bg-transparent">
     <UiPageHeader
       :eyebrow="t('trace.header.eyebrow')"
       :title="runtime.activeSession?.summary.title ?? t('trace.header.titleFallback')"
       :description="runtime.activeRun ? runtime.activeRunCurrentStepLabel : t('trace.header.subtitleFallback')"
+      class="px-6 py-8"
     />
 
-    <section class="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
-      <template v-if="runtime.activeRun">
-        <div data-testid="trace-runtime-status">
-          <UiStatTile :label="t('trace.stats.status')" :value="traceStatusLabel" tone="warning" />
-        </div>
-        <UiStatTile :label="t('trace.stats.owner')" :value="resolvedActorLabel" />
-        <UiStatTile :label="t('trace.stats.nextAction')" :value="runtime.activeRunNextActionLabel || t('common.na')" />
-      </template>
-    </section>
-
-    <section class="grid gap-4 lg:grid-cols-2">
-      <UiInspectorPanel
-        data-testid="trace-run-state"
-        :title="t('trace.runState.title')"
-        :subtitle="t('trace.runState.subtitle')"
-        role="region"
-        :aria-label="t('trace.runState.title')"
-      >
-        <div v-if="runtime.activeRun" class="space-y-4">
-          <div class="flex flex-wrap gap-2.5">
-            <UiBadge :label="runtime.activeRun.configuredModelName ?? runtime.activeRun.modelId ?? t('common.na')" subtle />
-            <UiBadge :label="formatDateTime(runtime.activeRun.startedAt)" subtle />
-            <UiBadge :label="formatDateTime(runtime.activeRun.updatedAt)" subtle />
-          </div>
-          <p class="text-sm leading-relaxed text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</p>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('trace.runState.emptyTitle')"
-          :description="t('trace.runState.emptyDescription')"
-        />
-      </UiInspectorPanel>
-
-      <UiInspectorPanel
-        data-testid="trace-recovery"
-        :title="t('trace.recovery.title')"
-        :subtitle="t('trace.recovery.subtitle')"
-        role="region"
-        :aria-label="t('trace.recovery.title')"
-      >
-        <div v-if="activeMediationKind" data-testid="trace-runtime-approval">
-          <UiStatusCallout
-            tone="warning"
-            :title="activeMediationTitle"
-            :description="activeMediationDetail"
-          >
-            <div class="flex flex-wrap gap-2.5">
-              <UiBadge v-if="runtime.pendingApproval?.toolName" :label="runtime.pendingApproval.toolName" subtle />
-              <UiBadge v-if="runtime.pendingApproval?.riskLevel" :label="runtime.pendingApproval.riskLevel" tone="warning" />
-              <UiBadge v-if="runtime.authTarget?.providerKey" :label="runtime.authTarget.providerKey" subtle />
-              <UiBadge v-if="runtime.pendingMediation?.targetKind" :label="runtime.pendingMediation.targetKind" subtle />
-            </div>
-            <div class="flex flex-wrap gap-2 pt-1">
-              <template v-if="activeMediationKind === 'approval' && runtime.pendingApproval && canResolveApprovalTrace">
-                <UiButton data-testid="trace-runtime-approve" size="sm" @click="approveRuntime">{{ t('common.approve') }}</UiButton>
-                <UiButton data-testid="trace-runtime-reject" variant="ghost" size="sm" @click="rejectRuntime">{{ t('common.reject') }}</UiButton>
-              </template>
-              <template v-else-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuthTrace">
-                <UiButton data-testid="trace-runtime-auth-resolve" size="sm" @click="resolveRuntimeAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
-                <UiButton data-testid="trace-runtime-auth-cancel" variant="ghost" size="sm" @click="cancelRuntimeAuthChallenge">{{ t('common.cancel') }}</UiButton>
-              </template>
-              <template v-else-if="activeMediationKind === 'memory' && pendingMemoryProposal">
-                <UiButton data-testid="trace-runtime-memory-approve" size="sm" @click="approveMemoryProposal">{{ t('common.approve') }}</UiButton>
-                <UiButton data-testid="trace-runtime-memory-reject" variant="ghost" size="sm" @click="rejectMemoryProposal">{{ t('common.reject') }}</UiButton>
-              </template>
-            </div>
-          </UiStatusCallout>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('trace.recovery.emptyTitle')"
-          :description="t('trace.recovery.emptyDescription')"
-        />
-      </UiInspectorPanel>
-    </section>
-
-    <UiInspectorPanel
-      data-testid="trace-timeline"
-      :title="t('trace.timeline.title')"
-      :subtitle="t('trace.timeline.subtitle')"
-      role="region"
-      :aria-label="t('trace.timeline.title')"
-    >
-      <div class="space-y-4">
-        <div
-          v-for="trace in runtime.activeTrace"
-          :key="trace.id"
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 px-6 pb-8">
+      <!-- Left Column: Trace Timeline (Main Content) -->
+      <div class="lg:col-span-8 space-y-6">
+        <UiPanelFrame
+          variant="glass"
+          padding="lg"
+          :title="t('trace.timeline.title')"
+          :subtitle="t('trace.timeline.subtitle')"
+          class="min-h-[600px]"
         >
-          <UiContextMenu
-            :items="buildTraceContextMenuItems(trace)"
-            @select="handleTraceContextSelect(trace, $event)"
-          >
-            <div data-testid="trace-runtime-item" :data-trace-id="trace.id">
-              <UiTraceBlock
-                :title="trace.title"
-                :detail="trace.detail"
-                :actor="trace.actor"
-                :timestamp-label="formatDateTime(trace.timestamp)"
-                :tone="resolveTraceTone(trace.tone)"
-                :meta-items="buildTraceMetaItems(trace)"
-                class="max-w-5xl"
-              />
+          <div class="space-y-6 relative">
+            <!-- Vertical Timeline Line -->
+            <div class="absolute left-0 top-2 bottom-2 w-px bg-gradient-to-b from-primary/30 via-primary/5 to-transparent ml-[19px] hidden sm:block" />
+
+            <div
+              v-for="trace in runtime.activeTrace"
+              :key="trace.id"
+              class="relative pl-0 sm:pl-10"
+            >
+              <!-- Timeline Bullet -->
+              <div class="absolute left-0 top-3 size-2.5 rounded-full bg-primary border-2 border-surface shadow-[0_0_8px_var(--color-primary)] ml-[14.5px] hidden sm:block z-10" />
+
+              <UiContextMenu
+                :items="buildTraceContextMenuItems(trace)"
+                @select="handleTraceContextSelect(trace, $event)"
+              >
+                <div data-testid="trace-runtime-item" :data-trace-id="trace.id">
+                  <UiTraceBlock
+                    :title="trace.title"
+                    :detail="trace.detail"
+                    :actor="trace.actor"
+                    :timestamp-label="formatDateTime(trace.timestamp)"
+                    :tone="resolveTraceTone(trace.tone)"
+                    :meta-items="buildTraceMetaItems(trace)"
+                    class="w-full"
+                  />
+                </div>
+              </UiContextMenu>
             </div>
-          </UiContextMenu>
-        </div>
-        <UiEmptyState
-          v-if="!runtime.activeTrace.length"
-          :title="t('trace.timeline.emptyTitle')"
-          :description="t('trace.timeline.emptyDescription')"
-        />
+
+            <UiEmptyState
+              v-if="!runtime.activeTrace.length"
+              :title="t('trace.timeline.emptyTitle')"
+              :description="t('trace.timeline.emptyDescription')"
+              class="bg-black/5"
+            />
+          </div>
+        </UiPanelFrame>
       </div>
-    </UiInspectorPanel>
+
+      <!-- Right Column: Info & Actions (Sidebar) -->
+      <div class="lg:col-span-4 space-y-6">
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 gap-4">
+          <UiStatTile 
+            v-if="runtime.activeRun"
+            :label="t('trace.stats.status')" 
+            :value="traceStatusLabel" 
+            tone="warning" 
+          />
+          <UiStatTile 
+            v-if="runtime.activeRun"
+            :label="t('trace.stats.owner')" 
+            :value="resolvedActorLabel" 
+            tone="info"
+          />
+        </div>
+
+        <!-- Run State -->
+        <UiPanelFrame
+          variant="glass-strong"
+          padding="md"
+          :title="t('trace.runState.title')"
+        >
+          <div v-if="runtime.activeRun" class="space-y-4">
+            <div class="flex flex-wrap gap-2">
+              <UiBadge :label="runtime.activeRun.configuredModelName ?? runtime.activeRun.modelId ?? t('common.na')" class="bg-black/20" />
+              <UiBadge :label="formatDateTime(runtime.activeRun.startedAt)" class="bg-black/20 text-[10px]" />
+            </div>
+            <p class="text-[13px] leading-relaxed text-text-secondary border-l-2 border-primary/30 pl-3 py-1">
+              {{ runtime.activeRunCurrentStepLabel }}
+            </p>
+          </div>
+          <UiEmptyState
+            v-else
+            :title="t('trace.runState.emptyTitle')"
+            compact
+          />
+        </UiPanelFrame>
+
+        <!-- Recovery / Actions -->
+        <UiPanelFrame
+          variant="glass"
+          padding="md"
+          :title="t('trace.recovery.title')"
+          highlight
+        >
+          <div v-if="activeMediationKind" data-testid="trace-runtime-approval" class="space-y-4">
+            <UiStatusCallout
+              tone="warning"
+              :title="activeMediationTitle"
+              :description="activeMediationDetail"
+              class="border-status-warning/30 bg-status-warning/5"
+            >
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <UiBadge v-if="runtime.pendingApproval?.toolName" :label="runtime.pendingApproval.toolName" class="bg-status-warning/10" />
+                <UiBadge v-if="runtime.pendingApproval?.riskLevel" :label="runtime.pendingApproval.riskLevel" tone="warning" />
+              </div>
+              <div class="flex flex-wrap gap-2 pt-3">
+                <template v-if="activeMediationKind === 'approval' && runtime.pendingApproval && canResolveApprovalTrace">
+                  <UiButton data-testid="trace-runtime-approve" size="sm" class="flex-1">{{ t('common.approve') }}</UiButton>
+                  <UiButton data-testid="trace-runtime-reject" variant="ghost" size="sm" class="flex-1">{{ t('common.reject') }}</UiButton>
+                </template>
+                <template v-else-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuthTrace">
+                  <UiButton data-testid="trace-runtime-auth-resolve" size="sm" class="w-full">{{ t('common.resolveAuth') }}</UiButton>
+                </template>
+              </div>
+            </UiStatusCallout>
+          </div>
+          <UiEmptyState
+            v-else
+            :title="t('trace.recovery.emptyTitle')"
+            compact
+          />
+        </UiPanelFrame>
+      </div>
+    </div>
   </UiPageShell>
 </template>

@@ -21,16 +21,18 @@ const props = withDefaults(
   <div
     :data-ui-tone="props.tone"
     :class="cn(
-      'flex flex-col gap-1.5 rounded-[var(--radius-l)] border border-border bg-surface p-4 shadow-xs transition-colors',
-      props.tone === 'success' && 'border-transparent bg-[var(--color-status-success-soft)]',
-      props.tone === 'warning' && 'border-transparent bg-[var(--color-status-warning-soft)]',
-      props.tone === 'error' && 'border-transparent bg-[var(--color-status-error-soft)]',
-      props.tone === 'info' && 'border-transparent bg-accent',
+      'flex flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface/50 p-4 backdrop-blur-sm transition-all duration-normal hover:border-border-strong hover:bg-surface',
+      props.tone === 'success' && 'border-status-success/20 bg-status-success/5',
+      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/5',
+      props.tone === 'error' && 'border-status-error/20 bg-status-error/5',
+      props.tone === 'info' && 'border-primary/20 bg-primary/5',
       props.class
     )"
   >
-    <span class="text-micro font-bold uppercase tracking-wider text-text-tertiary opacity-70">{{ props.label }}</span>
-    <strong class="text-2xl font-bold tracking-tight text-text-primary tabular-nums">{{ props.value }}</strong>
-    <span v-if="props.helper" class="text-micro text-text-secondary line-clamp-1">{{ props.helper }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary">{{ props.label }}</span>
+    <div class="flex items-baseline gap-2">
+      <strong class="text-2xl font-bold tracking-tight text-text-primary tabular-nums">{{ props.value }}</strong>
+    </div>
+    <span v-if="props.helper" class="text-caption text-text-secondary line-clamp-1 opacity-80">{{ props.helper }}</span>
   </div>
 </template>

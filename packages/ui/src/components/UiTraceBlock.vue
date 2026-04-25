@@ -63,45 +63,47 @@ const normalizedMetaItems = computed(() =>
   <article
     :data-ui-tone="props.tone"
     :class="cn(
-      'flex flex-col overflow-hidden rounded-[var(--radius-m)] border border-[color-mix(in_srgb,var(--border)_76%,transparent)] bg-[color-mix(in_srgb,var(--surface)_86%,var(--subtle)_14%)] transition-colors',
+      'group relative flex flex-col overflow-hidden rounded-[var(--radius-l)] border border-border bg-surface/40 backdrop-blur-sm transition-all duration-normal hover:border-border-strong',
+      props.tone === 'info' && 'border-primary/20 highlight-border',
       props.class
     )"
   >
     <div
       data-testid="ui-trace-block-header"
-      :class="cn('flex items-center justify-between gap-4 border-b border-border px-4 py-3 text-micro font-medium text-text-tertiary', headerClass)"
+      :class="cn('flex items-center justify-between gap-4 border-b border-border/50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary', headerClass)"
     >
       <div class="flex min-w-0 items-center gap-2">
-        <span :class="cn('h-2 w-2 shrink-0 rounded-full', markerClass)" />
+        <span :class="cn('h-1.5 w-1.5 shrink-0 rounded-full shadow-[0_0_8px_currentColor]', markerClass)" />
         <span class="truncate">{{ props.actor }}</span>
       </div>
-      <span class="shrink-0 tabular-nums">{{ props.timestampLabel }}</span>
+      <span class="shrink-0 tabular-nums opacity-60">{{ props.timestampLabel }}</span>
     </div>
 
-    <div class="space-y-2 px-4 py-4">
-      <strong class="text-label font-bold text-text-primary">{{ props.title }}</strong>
-
-      <div
-        v-if="normalizedMetaItems.length"
-        data-testid="ui-trace-block-meta"
-        class="flex flex-wrap gap-2"
-      >
-        <span
-          v-for="item in normalizedMetaItems"
-          :key="item"
-          data-testid="ui-trace-block-meta-item"
-          class="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--border)_82%,transparent)] bg-[color-mix(in_srgb,var(--surface)_82%,var(--subtle)_18%)] px-2.5 py-1 text-micro font-medium uppercase tracking-[0.08em] text-text-tertiary"
+    <div class="space-y-3 px-4 py-4">
+      <div class="flex items-start justify-between gap-4">
+        <strong class="text-sm font-bold text-text-primary leading-tight">{{ props.title }}</strong>
+        <div
+          v-if="normalizedMetaItems.length"
+          data-testid="ui-trace-block-meta"
+          class="flex flex-wrap gap-1.5"
         >
-          {{ item }}
-        </span>
+          <span
+            v-for="item in normalizedMetaItems"
+            :key="item"
+            data-testid="ui-trace-block-meta-item"
+            class="inline-flex items-center rounded-md border border-border/50 bg-subtle/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-tertiary"
+          >
+            {{ item }}
+          </span>
+        </div>
       </div>
 
-      <p class="text-caption text-text-secondary break-words">
+      <p class="text-[13px] leading-relaxed text-text-secondary/90 break-words font-mono bg-black/5 p-2 rounded-md">
         {{ props.detail }}
       </p>
     </div>
 
-    <div v-if="$slots.actions" class="flex items-center gap-2 border-t border-border bg-[color-mix(in_srgb,var(--surface)_76%,var(--subtle)_24%)] px-4 py-3">
+    <div v-if="$slots.actions" class="flex items-center gap-2 border-t border-border/40 bg-subtle/30 px-4 py-2.5">
       <slot name="actions" />
     </div>
   </article>

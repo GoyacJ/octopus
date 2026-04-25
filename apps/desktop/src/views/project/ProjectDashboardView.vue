@@ -290,27 +290,31 @@ const activityItems = computed(() =>
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="project-dashboard-view">
+  <UiPageShell width="wide" test-id="project-dashboard-view" class="bg-transparent">
     <UiPageHeader
       :eyebrow="t('projectDashboard.header.eyebrow')"
       :title="project?.name ?? t('projectDashboard.header.titleFallback')"
       :description="project?.description ?? t('projectDashboard.header.subtitleFallback')"
+      class="px-6 py-8"
     >
       <template #meta>
         <UiBadge
           :label="t('projectDashboard.header.meta.members', { count: formatNumber(overview.memberCount) })"
+          class="bg-primary/10 text-primary border-primary/20"
         />
         <UiBadge
           tone="warning"
           :label="t('projectDashboard.header.meta.health', { approvals: formatNumber(overview.approvalCount) })"
+          class="bg-status-warning/10 text-status-warning border-status-warning/20"
         />
       </template>
     </UiPageHeader>
 
     <template v-if="snapshot">
-      <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-6 pb-8">
+        <!-- Headline Metrics (4 Small Cards) -->
         <UiMetricCard
-          v-for="metric in headlineMetrics"
+          v-for="metric in headlineMetrics.slice(0, 4)"
           :key="metric.id"
           :label="metric.label"
           :value="metric.value"
@@ -318,278 +322,118 @@ const activityItems = computed(() =>
           :tone="metric.tone"
           :trend="metric.trend"
         />
-      </section>
 
-      <section class="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+        <!-- Usage Trend (Large 2x2 Area) -->
         <UiPanelFrame
-          variant="panel"
-          padding="md"
+          variant="glass"
+          padding="lg"
           :title="t('projectDashboard.sections.usageTrend.title')"
           :subtitle="t('projectDashboard.sections.usageTrend.subtitle')"
+          class="md:col-span-2 lg:col-span-2 lg:row-span-2"
         >
-          <div class="grid gap-4">
-            <div class="rounded-[var(--radius-l)] border border-border bg-subtle px-4 py-4">
+          <div class="h-full flex flex-col gap-6">
+            <div class="flex-1 min-h-[240px] rounded-[var(--radius-xl)] border border-primary/10 bg-black/20 p-4 shadow-inner">
               <UiAreaChart :data="trendTokens" :labels="trendLabels" stroke-color="var(--color-primary)" />
             </div>
-            <div class="grid gap-3 sm:grid-cols-3">
-              <UiMetricCard
-                :label="t('projectDashboard.sections.usageTrend.cards.tokens')"
-                :value="formatNumber(overview.totalTokens)"
-                :helper="t('projectDashboard.sections.usageTrend.cards.tokensHint')"
-                tone="accent"
-                :trend="trendTokens"
-              />
-              <UiMetricCard
-                :label="t('projectDashboard.sections.usageTrend.cards.messages')"
-                :value="formatNumber(overview.messageCount)"
-                :helper="t('projectDashboard.sections.usageTrend.cards.messagesHint')"
-                :trend="trendMessages"
-              />
-              <UiMetricCard
-                :label="t('projectDashboard.sections.usageTrend.cards.tools')"
-                :value="formatNumber(overview.toolCallCount)"
-                :helper="t('projectDashboard.sections.usageTrend.cards.toolsHint')"
-                tone="success"
-                :trend="trend.map(item => item.toolCallCount)"
-              />
+            <div class="grid grid-cols-2 gap-4">
+               <div class="space-y-1">
+                 <div class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.tokens') }}</div>
+                 <div class="text-2xl font-bold text-text-primary">{{ formatNumber(overview.totalTokens) }}</div>
+               </div>
+               <div class="space-y-1">
+                 <div class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.messages') }}</div>
+                 <div class="text-2xl font-bold text-text-primary">{{ formatNumber(overview.messageCount) }}</div>
+               </div>
             </div>
           </div>
         </UiPanelFrame>
 
+        <!-- Resource Mix (Tall Card) -->
         <UiPanelFrame
-          variant="subtle"
+          variant="glass-strong"
           padding="md"
           :title="t('projectDashboard.sections.resourceMix.title')"
-          :subtitle="t('projectDashboard.sections.resourceMix.subtitle')"
+          class="lg:row-span-2"
         >
-          <div class="grid gap-4">
-            <div class="flex justify-center">
+          <div class="h-full flex flex-col">
+            <div class="flex-1 flex items-center justify-center py-4">
               <UiDonutChart
                 :items="resourceChartItems"
-                :size="168"
-                :stroke-width="16"
+                :size="140"
+                :stroke-width="12"
                 :total-label="t('projectDashboard.sections.resourceMix.total')"
               />
             </div>
-            <div class="grid gap-2">
+            <div class="space-y-2 mt-4">
               <div
                 v-for="item in resourceChartItems"
                 :key="item.id"
-                class="flex items-center justify-between rounded-[var(--radius-m)] border border-border bg-surface px-3 py-2"
+                class="flex items-center justify-between text-xs"
               >
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: item.color }" />
-                  <span class="truncate text-sm text-text-secondary">{{ item.label }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />
+                  <span class="text-text-secondary">{{ item.label }}</span>
                 </div>
-                <span class="text-sm font-semibold text-text-primary">{{ formatNumber(item.value) }}</span>
+                <span class="font-semibold text-text-primary">{{ formatNumber(item.value) }}</span>
               </div>
             </div>
           </div>
         </UiPanelFrame>
-      </section>
 
-      <section class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+        <!-- Tool Calls & Approvals (Stacking) -->
+        <UiMetricCard
+           :label="t('projectDashboard.metrics.toolCalls')"
+           :value="formatNumber(overview.toolCallCount)"
+           :helper="t('projectDashboard.metrics.toolCallsHint', { tools: formatNumber(overview.toolCount) })"
+           tone="default"
+           :trend="trend.map(item => item.toolCallCount)"
+        />
+        <UiMetricCard
+           :label="t('projectDashboard.metrics.approvals')"
+           :value="formatNumber(overview.approvalCount)"
+           :helper="t('projectDashboard.metrics.approvalsHint', { activity: formatNumber(overview.activityCount) })"
+           tone="warning"
+           :trend="trend.map(item => item.approvalCount)"
+        />
+
+        <!-- Top Contributors (2x1) -->
         <UiPanelFrame
-          variant="panel"
+          variant="glass"
           padding="md"
           :title="t('projectDashboard.sections.topContributors.title')"
-          :subtitle="t('projectDashboard.sections.topContributors.subtitle')"
+          class="md:col-span-2"
         >
-          <UiRankingList v-if="contributorRanking.length" :items="contributorRanking" />
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.usersTitle')"
-            :description="t('projectDashboard.empty.usersDescription')"
-          />
+           <UiRankingList v-if="contributorRanking.length" :items="contributorRanking.slice(0, 5)" />
         </UiPanelFrame>
 
+        <!-- Recent Activity (Vertical List) -->
         <UiPanelFrame
           variant="subtle"
           padding="md"
-          :title="t('projectDashboard.sections.approvalQueue.title')"
-          :subtitle="t('projectDashboard.sections.approvalQueue.subtitle')"
+          :title="t('projectDashboard.sections.activity.title')"
+          class="md:col-span-2 lg:col-span-2 lg:row-span-2"
         >
-          <div class="grid gap-3">
-            <UiMetricCard
-              :label="t('projectDashboard.sections.approvalQueue.cards.approvals')"
-              :value="formatNumber(overview.approvalCount)"
-              :helper="t('projectDashboard.sections.approvalQueue.cards.approvalsHint')"
-              tone="warning"
-              :trend="trend.map(item => item.approvalCount)"
-            />
-            <UiMetricCard
-              :label="t('projectDashboard.sections.approvalQueue.cards.activity')"
-              :value="formatNumber(overview.activityCount)"
-              :helper="t('projectDashboard.sections.approvalQueue.cards.activityHint')"
-              :trend="trend.map(item => item.messageCount)"
-            />
-          </div>
+          <UiTimelineList v-if="activityItems.length" :items="activityItems" density="compact" />
         </UiPanelFrame>
-      </section>
 
-      <section class="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-        <UiMetricCard
-          v-for="user in topUserCards"
-          :key="user.userId"
-          :label="user.displayName"
-          :value="formatNumber(user.tokenCount)"
-          :helper="user.helper"
-          tone="accent"
-          :trend="user.tokenTrend"
-        />
-      </section>
-
-      <section class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <!-- Tool Usage & Session Ranking -->
         <UiPanelFrame
-          variant="panel"
+          variant="glass"
           padding="md"
           :title="t('projectDashboard.sections.toolUsage.title')"
-          :subtitle="t('projectDashboard.sections.toolUsage.subtitle')"
         >
-          <UiRankingList v-if="toolRankingItems.length" :items="toolRankingItems" />
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.toolsTitle')"
-            :description="t('projectDashboard.empty.toolsDescription')"
-          />
+          <UiRankingList v-if="toolRankingItems.length" :items="toolRankingItems.slice(0, 4)" />
         </UiPanelFrame>
-
+        
         <UiPanelFrame
-          variant="panel"
+          variant="glass"
           padding="md"
           :title="t('projectDashboard.sections.sessionRanking.title')"
-          :subtitle="t('projectDashboard.sections.sessionRanking.subtitle')"
         >
-          <UiRankingList v-if="conversationRankingItems.length" :items="conversationRankingItems" />
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.sessionsTitle')"
-            :description="t('projectDashboard.empty.sessionsDescription')"
-          />
-        </UiPanelFrame>
-      </section>
-
-      <section class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
-        <UiPanelFrame
-          variant="panel"
-          padding="md"
-          :title="t('projectDashboard.sections.recentSessions.title')"
-          :subtitle="t('projectDashboard.sections.recentSessions.subtitle')"
-        >
-          <div v-if="conversations.length" class="grid gap-3">
-            <UiRecordCard
-              v-for="conversation in conversations"
-              :key="conversation.id"
-              :title="conversation.title"
-              :description="conversation.lastMessagePreview ?? conversation.status"
-              layout="tile"
-            >
-              <template #meta>
-                <RouterLink
-                  class="text-sm font-medium text-primary hover:underline"
-                  :to="createProjectConversationTarget(conversation.workspaceId, conversation.projectId, conversation.id)"
-                >
-                  {{ formatDateTime(conversation.updatedAt) }}
-                </RouterLink>
-                <span class="text-xs text-text-tertiary">
-                  {{
-                    t('projectDashboard.sections.recentSessions.meta', {
-                      status: conversation.status,
-                    })
-                  }}
-                </span>
-              </template>
-            </UiRecordCard>
-          </div>
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.conversationsTitle')"
-            :description="t('projectDashboard.empty.conversationsDescription')"
-          />
+          <UiRankingList v-if="conversationRankingItems.length" :items="conversationRankingItems.slice(0, 4)" />
         </UiPanelFrame>
 
-        <div class="grid gap-4">
-          <UiPanelFrame
-            variant="subtle"
-            padding="md"
-            :title="t('projectDashboard.sections.deliverables.title')"
-            :subtitle="t('projectDashboard.sections.deliverables.subtitle')"
-          >
-            <div v-if="recentDeliverables.length" class="grid gap-3">
-              <UiRecordCard
-                v-for="deliverable in recentDeliverables"
-                :key="deliverable.id"
-                :title="deliverable.title"
-                :description="t('projectDashboard.sections.deliverables.meta', {
-                  version: deliverable.latestVersion,
-                  state: deliverable.promotionState,
-                })"
-              >
-                <template #meta>
-                  <a
-                    data-testid="project-dashboard-open-deliverables"
-                    class="text-sm font-medium text-primary hover:underline"
-                    :href="deliverablesHref(deliverable.id)"
-                  >
-                    {{ t('projectDashboard.sections.deliverables.open') }}
-                  </a>
-                  <span class="text-xs text-text-tertiary">{{ formatDateTime(deliverable.updatedAt) }}</span>
-                </template>
-              </UiRecordCard>
-            </div>
-            <UiEmptyState
-              v-else
-              :title="t('projectDashboard.empty.deliverablesTitle')"
-              :description="t('projectDashboard.empty.deliverablesDescription')"
-            />
-          </UiPanelFrame>
-
-          <UiPanelFrame
-            variant="subtle"
-            padding="md"
-            :title="t('projectDashboard.sections.modelMix.title')"
-            :subtitle="t('projectDashboard.sections.modelMix.subtitle')"
-          >
-            <div class="grid gap-4">
-              <div class="flex justify-center">
-                <UiDonutChart
-                  :items="modelChartItems"
-                  :size="152"
-                  :stroke-width="16"
-                  :total-label="t('projectDashboard.sections.modelMix.total')"
-                />
-              </div>
-              <div class="grid gap-2">
-                <div
-                  v-for="item in modelChartItems"
-                  :key="item.id"
-                  class="flex items-center justify-between rounded-[var(--radius-m)] border border-border bg-surface px-3 py-2"
-                >
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: item.color }" />
-                    <span class="truncate text-sm text-text-secondary">{{ item.label }}</span>
-                  </div>
-                  <span class="text-sm font-semibold text-text-primary">{{ formatNumber(item.value) }}</span>
-                </div>
-              </div>
-            </div>
-          </UiPanelFrame>
-
-          <UiPanelFrame
-            variant="subtle"
-            padding="md"
-            :title="t('projectDashboard.sections.activity.title')"
-            :subtitle="t('projectDashboard.sections.activity.subtitle')"
-          >
-            <UiTimelineList v-if="activityItems.length" :items="activityItems" density="compact" />
-            <UiEmptyState
-              v-else
-              :title="t('projectDashboard.empty.activityTitle')"
-              :description="t('projectDashboard.empty.activityDescription')"
-            />
-          </UiPanelFrame>
-        </div>
-      </section>
+      </div>
     </template>
 
     <UiEmptyState

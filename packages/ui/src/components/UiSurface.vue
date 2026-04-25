@@ -14,6 +14,8 @@ const surfaceVariants = cva(
         panel: 'bg-subtle border border-[color-mix(in_srgb,var(--border)_68%,transparent)] shadow-none rounded-[var(--radius-l)]',
         interactive: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)] hover:bg-subtle hover:border-border-strong',
         subtle: 'bg-subtle border border-transparent shadow-none rounded-[var(--radius-l)]',
+        glass: 'glass border border-[color-mix(in_srgb,var(--border)_40%,transparent)] shadow-md rounded-[var(--radius-xl)] highlight-border',
+        'glass-strong': 'glass-strong border border-[color-mix(in_srgb,var(--border)_60%,transparent)] shadow-lg rounded-[var(--radius-xl)] highlight-border',
       },
       padding: {
         none: 'p-0',

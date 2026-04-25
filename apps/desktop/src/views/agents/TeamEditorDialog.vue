@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { Network } from 'lucide-vue-next'
 
 import type { AgentRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiCombobox, UiDialog, UiField, UiInput, UiSearchableMultiSelect, UiSelect, UiSurface, UiTextarea } from '@octopus/ui'
+import { UiBadge, UiButton, UiCombobox, UiDialog, UiField, UiInput, UiSearchableMultiSelect, UiSelect, UiSurface, UiTextarea, UiWorkflowCanvas } from '@octopus/ui'
 
 import type { SelectOption, TeamFormState } from './useAgentCenter'
 import { agentIdFromRef } from './agent-refs'
@@ -41,6 +41,63 @@ const emit = defineEmits<{
 const openModel = computed({
   get: () => props.open,
   set: value => emit('update:open', value),
+})
+
+interface WorkflowNode {
+  id: string
+  label: string
+  type?: string
+  position: { x: number, y: number }
+  data: { role: string }
+}
+
+interface WorkflowEdge {
+  id: string
+  source: string
+  target: string
+  animated?: boolean
+}
+
+const flowData = computed(() => {
+  const nodes: WorkflowNode[] = []
+  const edges: WorkflowEdge[] = []
+
+  if (props.dialogTeamLeader) {
+    nodes.push({
+      id: props.dialogTeamLeader.id,
+      label: props.dialogTeamLeader.name,
+      type: 'input',
+      position: { x: 250, y: 0 },
+      data: { role: 'Leader' }
+    })
+
+    props.dialogTeamMembers.forEach((member, index) => {
+      nodes.push({
+        id: member.id,
+        label: member.name,
+        position: { x: 100 + (index % 3) * 150, y: 120 + Math.floor(index / 3) * 100 },
+        data: { role: 'Member' }
+      })
+
+      edges.push({
+        id: `e-${props.dialogTeamLeader!.id}-${member.id}`,
+        source: props.dialogTeamLeader!.id,
+        target: member.id,
+        animated: true
+      })
+    })
+  } else if (props.dialogTeamMembers.length > 0) {
+    props.dialogTeamMembers.forEach((member, index) => {
+      nodes.push({
+        id: member.id,
+        label: member.name,
+        position: { x: 100 + (index % 3) * 150, y: 50 + Math.floor(index / 3) * 100 },
+        data: { role: 'Member' }
+      })
+    })
+  }
+
+  return { nodes, edges }
 })
 
 function initials(name: string) {
@@ -143,36 +200,12 @@ const readonlyMemberLabel = computed(() =>
                 <UiBadge :label="`${dialogTeamMembers.length + (dialogTeamLeader ? 1 : 0)} 节点`" subtle />
               </div>
 
-              <div class="flex flex-col items-center">
-                <div v-if="dialogTeamLeader" class="relative">
-                  <div class="min-w-[12rem] rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 text-center">
-                    <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Leader</div>
-                    <div class="mt-1 text-sm font-bold text-text-primary">{{ dialogTeamLeader.name }}</div>
-                    <div class="mt-1 line-clamp-1 text-[11px] text-text-tertiary">{{ dialogTeamLeader.personality }}</div>
-                  </div>
-                  <div class="mx-auto h-8 w-px bg-border" />
-                </div>
-                <div v-else class="py-6 text-sm text-text-tertiary italic">
-                  尚未指定团队负责人
-                </div>
-
-                <div v-if="dialogTeamMembers.length > 0" class="grid w-full gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-3">
-                  <div
-                    v-for="member in dialogTeamMembers"
-                    :key="member.id"
-                    class="group relative rounded-[var(--radius-m)] border border-border bg-surface p-3 transition-colors hover:border-border-strong"
-                  >
-                    <div class="flex items-center justify-between gap-2">
-                      <strong class="truncate text-sm font-semibold text-text-primary group-hover:text-primary">{{ member.name }}</strong>
-                      <UiBadge v-if="member.integrationSource" label="Linked" subtle />
-                    </div>
-                    <div class="mt-1 line-clamp-1 text-[11px] text-text-tertiary">{{ member.personality }}</div>
-                  </div>
-                </div>
-                <div v-else-if="dialogTeamLeader" class="py-4 text-xs text-text-tertiary italic">
-                  暂未添加其他成员
-                </div>
-              </div>
+              <UiWorkflowCanvas 
+                :nodes="flowData.nodes" 
+                :edges="flowData.edges" 
+                readonly 
+                class="h-[300px]"
+              />
             </UiSurface>
           </div>
         </div>

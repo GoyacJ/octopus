@@ -16,6 +16,7 @@ import {
   UiStatTile,
   UiStatusCallout,
   UiTimelineList,
+  cn,
 } from '@octopus/ui'
 
 import type { ConversationWorkbenchMode } from '@octopus/schema'
@@ -495,160 +496,131 @@ async function forkSelectedDeliverable() {
 <template>
   <aside
     data-testid="conversation-context-pane"
-    class="h-full border-l border-border bg-surface"
-    :class="shell.rightSidebarCollapsed ? 'w-[48px]' : 'w-[360px]'"
+    class="h-full border-l border-border/30 bg-sidebar/30 backdrop-blur-xl transition-all duration-500"
+    :class="shell.rightSidebarCollapsed ? 'w-[64px]' : 'w-[400px]'"
   >
-    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-2 py-3">
+    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-4 py-4 bg-black/10">
       <UiButton
         data-testid="conversation-context-expand"
         variant="ghost"
         size="icon"
-        class="h-9 w-9 rounded-[var(--radius-s)] border border-border bg-subtle text-text-tertiary hover:bg-surface hover:text-text-primary"
-        :title="t('common.expand')"
+        class="h-10 w-10 rounded-xl border border-border/40 bg-subtle/50 text-text-tertiary hover:bg-primary/10 hover:text-primary transition-all"
         @click="shell.toggleRightSidebar()"
       >
-        <PanelRight :size="18" />
+        <PanelRight :size="20" />
       </UiButton>
 
-      <div class="h-px w-6 bg-border-subtle" />
+      <div class="h-px w-8 bg-border/30" />
 
-      <UiButton
-        v-for="item in sectionItems"
-        :key="item.id"
-        :data-testid="`conversation-context-section-${item.id}`"
-        variant="ghost"
-        size="icon"
-        :class="sectionIconButtonClass(item.id)"
-        :title="item.label"
-        :disabled="!hasActiveConversation"
-        @click="setWorkbenchMode(item.id)"
-      >
-        <component :is="item.icon" :size="18" />
-      </UiButton>
+      <div class="flex flex-col gap-3">
+        <button
+          v-for="item in sectionItems"
+          :key="item.id"
+          :class="cn(
+            'flex size-10 items-center justify-center rounded-xl transition-all',
+            shell.workbenchMode === item.id ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'bg-black/10 text-text-tertiary hover:bg-black/20 hover:text-text-secondary'
+          )"
+          @click="setWorkbenchMode(item.id)"
+        >
+          <component :is="item.icon" :size="18" />
+        </button>
+      </div>
     </div>
 
     <div v-else class="flex h-full flex-col overflow-hidden">
+      <!-- Header -->
       <div
         data-testid="conversation-context-header"
-        class="flex items-center justify-between border-b border-border bg-subtle px-4 py-3"
+        class="flex items-center justify-between border-b border-border/50 bg-black/20 px-5 py-4"
       >
-        <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</div>
+        <div class="flex items-center gap-3">
+           <div class="size-2 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)] animate-pulse" />
+           <div class="text-[11px] font-extrabold uppercase tracking-[0.2em] text-text-primary">{{ t('conversation.detail.title') }}</div>
+        </div>
         <UiButton
           data-testid="conversation-context-collapse"
           variant="ghost"
           size="icon"
-          class="h-7 w-7 rounded-[var(--radius-s)] border border-transparent text-text-tertiary hover:border-border hover:bg-surface hover:text-text-primary"
-          :title="t('common.collapse')"
+          class="h-8 w-8 rounded-lg text-text-tertiary hover:bg-black/20"
           @click="shell.toggleRightSidebar()"
         >
-          <PanelRight :size="14" />
+          <PanelRight :size="16" />
         </UiButton>
       </div>
 
-      <nav class="flex flex-wrap gap-1 border-b border-border p-2">
-        <UiButton
-          v-for="item in sectionItems"
-          :key="item.id"
-          :data-testid="`conversation-context-section-${item.id}`"
-          variant="ghost"
-          size="sm"
-          :class="sectionButtonClass(item.id)"
-          :disabled="!hasActiveConversation"
-          @click="setWorkbenchMode(item.id)"
-        >
-          {{ item.label }}
-        </UiButton>
+      <!-- Navigation -->
+      <nav class="flex p-3 bg-black/5">
+        <div class="flex w-full rounded-xl bg-black/20 p-1 border border-border/30">
+          <button
+            v-for="item in sectionItems"
+            :key="item.id"
+            :class="cn(
+              'flex-1 flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-tight transition-all rounded-lg',
+              shell.workbenchMode === item.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-text-tertiary hover:text-text-secondary'
+            )"
+            @click="setWorkbenchMode(item.id)"
+          >
+            <component :is="item.icon" :size="14" />
+            <span class="hidden sm:inline">{{ item.label }}</span>
+          </button>
+        </div>
       </nav>
 
-      <div class="flex-1 overflow-y-auto p-4">
+      <!-- Content Area -->
+      <div class="flex-1 overflow-y-auto p-5 scroll-y space-y-6">
         <UiEmptyState
           v-if="!hasActiveConversation"
           data-testid="conversation-context-empty-state"
           :title="t('conversation.detail.empty.title')"
           :description="t('conversation.detail.empty.description')"
-          class="min-h-full"
+          class="bg-black/5 rounded-2xl"
         />
 
-        <div v-else-if="shell.workbenchMode === 'deliverable'" class="flex min-h-full flex-col gap-4">
+        <div v-else-if="shell.workbenchMode === 'deliverable'" class="space-y-6" v-auto-animate>
           <UiEmptyState
             v-if="!selectedConversationDeliverable"
             :title="t('conversation.detail.deliverables.emptyTitle')"
-            :description="t('conversation.detail.deliverables.emptyDescription')"
+            class="bg-black/5 rounded-2xl"
           />
 
           <template v-else>
-            <UiInspectorPanel
-              data-testid="conversation-deliverable-overview"
+            <UiSurface
+              variant="glass"
+              padding="md"
               :title="selectedDeliverableDetail?.title ?? selectedConversationDeliverable.title"
-              :subtitle="selectedConversationDeliverable.id"
-              class="overflow-hidden"
+              highlight-border
             >
               <template #actions>
-                <div class="flex flex-wrap justify-end gap-2">
-                  <UiBadge
-                    :label="enumLabel('resourcePreviewKind', selectedDeliverableContent?.previewKind ?? selectedDeliverableDetail?.previewKind ?? selectedConversationDeliverable.previewKind)"
-                    subtle
-                  />
-                  <UiBadge
-                    :label="localizedArtifactStatus.get(selectedConversationDeliverable.id) ?? selectedConversationDeliverable.status"
-                    subtle
-                  />
-                  <UiBadge
-                    :label="`v${artifactStore.resolvedSelectedVersion ?? selectedConversationDeliverable.latestVersion}`"
-                    subtle
-                  />
-                  <UiBadge
-                    v-if="localizedPromotionState"
-                    :label="localizedPromotionState"
-                    subtle
-                  />
-                </div>
+                <UiBadge
+                  :label="`v${artifactStore.resolvedSelectedVersion ?? selectedConversationDeliverable.latestVersion}`"
+                  class="bg-primary/10 text-primary border-primary/20 font-mono"
+                />
               </template>
 
-              <div class="space-y-4">
+              <div class="space-y-5">
                 <div v-if="deliverableOptions.length > 1" class="space-y-2">
-                  <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+                  <div class="text-[10px] font-bold uppercase tracking-widest text-text-tertiary opacity-60">
                     {{ t('conversation.detail.deliverables.switchTitle') }}
                   </div>
                   <UiSelect
-                    data-testid="deliverable-selector"
+                    class="bg-black/20 border-border/40"
                     :model-value="selectedConversationDeliverable.id"
                     :options="deliverableOptions"
                     @update:model-value="selectConversationDeliverable"
                   />
                 </div>
 
-                <div class="grid gap-3 text-xs text-text-secondary sm:grid-cols-2">
-                  <div>
-                    <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.updatedAt') }}</div>
-                    <div class="mt-1 text-text-primary">
-                      {{ formatDateTime(selectedDeliverableDetail?.updatedAt ?? selectedConversationDeliverable.updatedAt) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="font-medium text-text-tertiary">{{ t('conversation.detail.deliverables.contentType') }}</div>
-                    <div class="mt-1 text-text-primary">
-                      {{ selectedDeliverableContent?.contentType ?? selectedDeliverableDetail?.contentType ?? selectedConversationDeliverable.contentType ?? t('common.na') }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                data-testid="conversation-deliverable-actions"
-                class="space-y-3 border-t border-border pt-4"
-              >
-                <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
-                  {{ t('deliverables.detail.actionsTitle') }}
+                <div class="grid grid-cols-2 gap-4">
+                   <UiStatTile :label="t('conversation.detail.deliverables.updatedAt')" :value="formatDateTime(selectedDeliverableDetail?.updatedAt ?? selectedConversationDeliverable.updatedAt)" tone="default" class="p-3" />
+                   <UiStatTile :label="t('conversation.detail.deliverables.contentType')" :value="selectedDeliverableContent?.contentType ?? 'Markdown'" tone="default" class="p-3" />
                 </div>
 
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-wrap gap-2 pt-2 border-t border-border/30">
                   <UiButton
                     v-if="canPromoteSelectedDeliverable"
                     size="sm"
-                    variant="outline"
+                    class="flex-1"
                     :disabled="promotingDeliverable"
-                    data-testid="conversation-deliverable-promote"
                     @click="promoteSelectedDeliverable"
                   >
                     {{ t('deliverables.actions.promote') }}
@@ -657,46 +629,29 @@ async function forkSelectedDeliverable() {
                   <UiButton
                     size="sm"
                     variant="outline"
+                    class="flex-1 bg-surface/50"
                     :disabled="forkingDeliverable"
-                    data-testid="conversation-deliverable-fork"
                     @click="forkSelectedDeliverable"
                   >
                     {{ t('deliverables.actions.fork') }}
                   </UiButton>
                 </div>
-
-                <UiStatusCallout
-                  v-if="deliverableActionStatus"
-                  :description="deliverableActionStatus"
-                />
               </div>
-            </UiInspectorPanel>
+            </UiSurface>
 
             <ArtifactVersionList
               :versions="selectedDeliverableVersions"
               :selected-version="artifactStore.resolvedSelectedVersion"
-              :loading="artifactStore.loading && !selectedDeliverableVersions.length"
+              class="rounded-2xl border-border/30 bg-black/10"
               @select="selectDeliverableVersion"
             />
 
-            <div
-              v-if="artifactStore.loading && !selectedDeliverableContent"
-              data-testid="deliverable-preview-skeleton"
-              class="space-y-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-4"
-            >
-              <UiSkeleton variant="line" :count="3" />
-              <UiSkeleton variant="card" :count="1" />
-            </div>
-
             <ArtifactPreviewPanel
-              v-else
               :key="`${selectedConversationDeliverable.id}:${artifactStore.resolvedSelectedVersion ?? 'none'}:${isEditingDeliverable ? 'edit' : 'view'}`"
               :content="selectedDeliverableContent"
               :draft="selectedDeliverableDraft"
               :editing="isEditingDeliverable"
-              :saving="artifactStore.saving"
-              :error="artifactStore.error"
-              :save-status="saveStatus"
+              class="rounded-2xl border border-border/30 bg-black/5"
               @edit="beginEditingDeliverable"
               @cancel="cancelDeliverableEditing"
               @save="saveDeliverableVersion"
@@ -705,234 +660,62 @@ async function forkSelectedDeliverable() {
           </template>
         </div>
 
-        <div v-else-if="shell.workbenchMode === 'context'" class="space-y-4">
-          <UiInspectorPanel
-            data-testid="conversation-context-summary"
-            :title="t('conversation.detail.summary.title')"
-            :subtitle="t('conversation.detail.summary.subtitle')"
+        <div v-else-if="shell.workbenchMode === 'context'" class="space-y-6" v-auto-animate>
+          <UiSurface
+            variant="glass-strong"
+            padding="md"
+            title="Session Overview"
           >
-            <div
-              data-testid="conversation-context-summary-body"
-              class="space-y-2"
-            >
-              <div class="text-sm text-text-primary">{{ runtime.activeSession?.summary.title ?? t('common.na') }}</div>
-              <div class="text-xs text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</div>
-              <div class="text-xs text-text-secondary">
-                {{ t('conversation.detail.summary.tokenUsage') }}: {{ usageSummary }}
+            <div class="space-y-3">
+              <div class="text-sm font-bold text-text-primary tracking-tight">{{ runtime.activeSession?.summary.title }}</div>
+              <div class="flex flex-wrap gap-2">
+                 <UiBadge :label="`${usageSummary} Tokens`" class="bg-primary/10 text-primary border-primary/20" />
+                 <UiBadge :label="runtime.activeRunStatusLabel" tone="warning" />
               </div>
             </div>
-          </UiInspectorPanel>
+          </UiSurface>
 
           <div class="grid grid-cols-2 gap-3">
             <UiStatTile
-              v-for="card in summaryCards"
+              v-for="card in summaryCards.slice(1)"
               :key="card.label"
               :label="card.label"
               :value="card.value"
+              class="p-4"
             />
           </div>
 
-          <UiInspectorPanel
-            v-if="selectedConversationDeliverable"
-            :title="t('conversation.detail.context.promotionTitle')"
-          >
-            <template #actions>
-              <UiBadge
-                v-if="localizedPromotionState"
-                :label="localizedPromotionState"
-                subtle
-              />
-            </template>
-
-            <div class="space-y-2 text-sm text-text-primary">
-              <div>{{ t('conversation.detail.context.lineageSession') }}: {{ selectedDeliverableDetail?.sessionId ?? t('common.na') }}</div>
-              <div>{{ t('conversation.detail.context.lineageRun') }}: {{ selectedDeliverableDetail?.runId ?? t('common.na') }}</div>
-              <div>{{ t('conversation.detail.context.lineageMessage') }}: {{ selectedDeliverableDetail?.sourceMessageId ?? t('common.na') }}</div>
-              <div>{{ t('conversation.detail.context.knowledgeLink') }}: {{ selectedDeliverableDetail?.promotionKnowledgeId ?? t('common.na') }}</div>
-            </div>
-          </UiInspectorPanel>
-
-          <UiInspectorPanel
-            v-if="freshnessSummary"
-            data-testid="conversation-context-freshness"
-            title="Freshness"
-          >
-            <template #actions>
-              <UiBadge :label="freshnessSummary.freshnessRequired ? 'Required' : 'Optional'" subtle />
-            </template>
-            <div class="space-y-4">
-              <div class="grid grid-cols-2 gap-3">
-                <UiStatTile label="Fresh" :value="String(freshnessSummary.freshCount)" />
-                <UiStatTile label="Stale" :value="String(freshnessSummary.staleCount)" />
-              </div>
-            </div>
-          </UiInspectorPanel>
-
-          <UiInspectorPanel
-            v-if="pendingMemoryProposal"
-            data-testid="conversation-memory-proposal"
-            title="Memory Proposal"
-            :subtitle="pendingMemoryProposal.summary"
-          >
-            <template #actions>
-              <UiBadge :label="pendingMemoryProposal.proposalState" subtle />
-            </template>
-            <div class="space-y-3">
-              <div class="text-sm font-semibold text-text-primary">{{ pendingMemoryProposal.title }}</div>
-              <div class="flex flex-wrap gap-2">
-                <UiBadge :label="pendingMemoryProposal.kind" subtle />
-                <UiBadge :label="pendingMemoryProposal.scope" subtle />
-              </div>
-            </div>
-          </UiInspectorPanel>
-
-          <UiInspectorPanel
-            :title="t('conversation.detail.memories.title')"
-          >
-            <div v-if="memorySelectionSummary" class="grid grid-cols-2 gap-3">
-              <UiStatTile label="Selected" :value="String(memorySelectionSummary.selectedCount)" />
-              <UiStatTile label="Ignored" :value="String(memorySelectionSummary.ignoredCount)" />
-            </div>
-
-            <div v-if="selectedMemory.length" class="space-y-2">
-              <UiListRow
-                v-for="entry in selectedMemory"
-                :key="entry.memoryId"
-                :title="entry.title"
-                :subtitle="entry.summary"
-              >
-                <template #meta>
-                  <UiBadge :label="entry.kind" subtle />
-                  <UiBadge :label="entry.freshnessState" subtle />
-                </template>
-              </UiListRow>
-            </div>
-
-            <UiEmptyState
-              v-else
-              :title="t('conversation.detail.memories.emptyTitle')"
-              :description="t('conversation.detail.memories.emptyDescription')"
-            />
-          </UiInspectorPanel>
-
-          <UiInspectorPanel
-            :title="t('conversation.detail.resources.title')"
-            :subtitle="t('conversation.detail.resources.emptyDescription')"
-          >
-            <template #actions>
-              <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
-            </template>
-
-            <UiInput v-model="resourceFilter" :placeholder="t('conversation.detail.resources.filterPlaceholder')" />
-
-            <div v-if="visibleConversationResources.length" class="space-y-2">
-              <UiListRow
-                v-for="resource in visibleConversationResources"
-                :key="resource.id"
-                :title="resource.name"
-                :subtitle="resource.location || resource.origin"
-              >
-                <template #meta>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <UiBadge :label="localizedResourceKind.get(resource.id) ?? resource.kind" subtle />
-                    <UiBadge :label="localizedResourceOrigin.get(resource.id) ?? resource.origin" subtle />
-                    <span v-if="resource.sourceArtifactId" class="inline-flex items-center gap-1 text-xs text-text-tertiary">
-                      <Link2 :size="12" />
-                      {{ resource.sourceArtifactId }}
-                    </span>
-                  </div>
-                </template>
-              </UiListRow>
-            </div>
-
-            <UiEmptyState
-              v-else
-              :title="t('conversation.detail.deliverables.noLinkedResourcesTitle')"
-              :description="t('conversation.detail.deliverables.noLinkedResourcesDescription')"
-            />
-          </UiInspectorPanel>
+          <UiSurface variant="glass" padding="md" title="Memories & Knowledge">
+             <div v-if="selectedMemory.length" class="space-y-2">
+                <div v-for="entry in selectedMemory" :key="entry.memoryId" class="p-3 rounded-xl bg-black/20 border border-border/30">
+                   <div class="text-[12px] font-bold text-text-primary">{{ entry.title }}</div>
+                   <div class="text-[10px] text-text-tertiary mt-1 uppercase font-bold tracking-tight">{{ entry.kind }} · {{ entry.freshnessState }}</div>
+                </div>
+             </div>
+             <UiEmptyState v-else compact title="No active memories" class="bg-black/5 py-8" />
+          </UiSurface>
         </div>
 
-        <div v-else-if="shell.workbenchMode === 'ops'" class="space-y-4">
-          <div v-if="opsCallouts.length" class="space-y-3">
-            <UiStatusCallout
-              v-for="(callout, index) in opsCallouts"
-              :key="`${callout.title}:${index}`"
-              :tone="callout.tone"
-              :title="callout.title"
-              :description="callout.description"
-            >
-              <div class="flex items-center gap-2 text-xs font-semibold">
-                <ShieldAlert :size="13" class="shrink-0" />
-                {{ t('conversation.detail.ops.pendingTitle') }}
-              </div>
-            </UiStatusCallout>
-          </div>
-
+        <div v-else-if="shell.workbenchMode === 'ops'" class="space-y-6" v-auto-animate>
           <div class="grid grid-cols-2 gap-3">
             <UiStatTile
               v-for="card in opsCards"
               :key="card.label"
               :label="card.label"
               :value="card.value"
+              class="p-4"
             />
           </div>
 
-          <UiInspectorPanel
-            data-testid="conversation-ops-tools"
-            :title="t('conversation.detail.tools.title')"
-            :subtitle="t('conversation.detail.tools.emptyDescription')"
-          >
-            <div class="space-y-2">
-              <div v-if="toolEntries.length" class="space-y-2">
-                <UiListRow
-                  v-for="tool in toolEntries"
-                  :key="tool.toolId"
-                  :title="tool.label"
-                  :subtitle="tool.toolId"
-                >
-                  <template #meta>
-                    <div class="flex items-center gap-2">
-                      <UiBadge :label="tool.kind" subtle />
-                      <span class="text-xs text-text-tertiary">×{{ tool.count }}</span>
-                    </div>
-                  </template>
-                </UiListRow>
-              </div>
-
-              <UiEmptyState
-                v-else
-                :title="t('conversation.detail.tools.emptyTitle')"
-                :description="t('conversation.detail.tools.emptyDescription')"
-              />
-            </div>
-          </UiInspectorPanel>
-
-          <UiInspectorPanel
-            data-testid="conversation-ops-timeline"
-            :title="t('conversation.detail.timeline.title')"
-            :subtitle="t('conversation.detail.timeline.emptyDescription')"
-          >
-            <div class="space-y-3">
-              <UiTimelineList
-                v-if="timelineItems.length"
-                :items="timelineItems"
-              />
-
-              <UiEmptyState
-                v-else
-                :title="t('conversation.detail.timeline.emptyTitle')"
-                :description="t('conversation.detail.timeline.emptyDescription')"
-              />
-            </div>
-          </UiInspectorPanel>
+          <UiSurface variant="glass" padding="md" title="Runtime Operations">
+            <UiTimelineList
+              v-if="timelineItems.length"
+              :items="timelineItems.slice(0, 5)"
+              density="compact"
+            />
+            <UiEmptyState v-else compact title="No operations logged" class="bg-black/5 py-8" />
+          </UiSurface>
         </div>
-
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.emptyTitle')"
-          :description="t('conversation.detail.emptyDescription')"
-        />
       </div>
     </div>
   </aside>

@@ -14,7 +14,7 @@ import {
   Wrench,
 } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiStatusCallout } from '@octopus/ui'
+import { UiBadge, UiButton, UiStatusCallout, cn } from '@octopus/ui'
 import type { ConversationAttachment, Message, MessageProcessEntry, WorkspaceResourceRecord } from '@octopus/schema'
 
 const props = defineProps<{
@@ -181,44 +181,53 @@ function formatToolCallMeta(count: number) {
     <article
       :data-testid="`conversation-message-bubble-${message.id}`"
       :data-message-id="message.id"
-      class="group relative flex max-w-[90%] gap-3 rounded-[var(--radius-xl)] border px-4 py-3 transition-colors"
+      class="group relative flex max-w-[85%] gap-4 rounded-[var(--radius-xl)] px-5 py-4 transition-all duration-normal"
       :class="[
         isUserMessage
-          ? 'flex-row-reverse border-border bg-surface'
-          : 'flex-row border-border bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)]'
+          ? 'flex-row-reverse bg-surface/40 backdrop-blur-md border border-border/50 shadow-sm'
+          : 'flex-row bg-sidebar/20 backdrop-blur-xl border border-primary/10 shadow-lg highlight-border'
       ]"
     >
+      <!-- Background Glow for AI Running -->
+      <div 
+        v-if="isRunning && !isUserMessage" 
+        class="absolute inset-0 rounded-[var(--radius-xl)] bg-primary/5 animate-pulse pointer-events-none"
+      />
+
       <!-- Avatar Column -->
       <div class="flex shrink-0 flex-col items-center pt-1">
         <div
-          class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-micro font-bold text-text-secondary"
-          :class="props.avatarSrc ? 'bg-transparent p-0' : (isUserMessage ? 'bg-accent text-primary' : '')"
+          class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border transition-all duration-500"
+          :class="[
+            props.avatarSrc ? 'bg-black/20 p-0 border-border/50' : (isUserMessage ? 'bg-accent/20 border-primary/30 text-primary font-bold' : 'bg-primary/5 border-primary/20 text-primary font-bold shadow-[0_0_10px_rgba(var(--color-primary-rgb),0.1)]'),
+            isRunning && !isUserMessage ? 'scale-110 shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.3)]' : ''
+          ]"
         >
           <img
             v-if="props.avatarSrc"
             :src="props.avatarSrc"
             :alt="senderLabel"
-            class="h-full w-full object-cover"
+            class="h-full w-full object-cover transition-transform group-hover:scale-110"
             data-testid="conversation-avatar-image"
           >
-          <span v-else>{{ avatarLabel }}</span>
+          <span v-else class="text-sm uppercase tracking-tighter">{{ avatarLabel }}</span>
         </div>
       </div>
 
       <!-- Content Column -->
-      <div class="flex min-w-0 flex-1 flex-col gap-2">
+      <div class="flex min-w-0 flex-1 flex-col gap-2.5">
           <!-- Sender & Meta Info -->
           <div class="flex min-h-6 items-center gap-3" :class="isUserMessage ? 'flex-row-reverse' : ''">
-            <span class="text-label font-semibold text-text-primary">{{ isUserMessage ? 'You' : senderLabel }}</span>
-            <span :data-testid="`conversation-message-timestamp-${message.id}`" class="text-micro font-medium tabular-nums text-text-tertiary opacity-60">
+            <span class="text-[13px] font-bold tracking-tight text-text-primary uppercase opacity-90">{{ isUserMessage ? 'You' : senderLabel }}</span>
+            <span :data-testid="`conversation-message-timestamp-${message.id}`" class="text-[10px] font-bold tabular-nums text-text-tertiary/60 tracking-widest uppercase">
               {{ timestampLabel }}
             </span>
 
-            <div v-if="!isUserMessage && actorLabel" class="flex min-w-0 items-center gap-2 text-micro font-semibold text-text-secondary">
-              <UiBadge v-if="actorKindLabel" :label="actorKindLabel" tone="info" />
-              <span class="flex min-w-0 items-center gap-1">
-                <component :is="actorKindIcon" :size="11" class="shrink-0 text-text-tertiary" />
-                <span class="max-w-[180px] truncate">{{ actorLabel }}</span>
+            <div v-if="!isUserMessage && actorLabel" class="flex min-w-0 items-center gap-2">
+              <UiBadge v-if="actorKindLabel" :label="actorKindLabel" class="bg-primary/10 text-primary border-primary/20 text-[9px] px-1.5 py-0" />
+              <span class="flex min-w-0 items-center gap-1.5 opacity-60">
+                <component :is="actorKindIcon" :size="12" class="shrink-0 text-text-tertiary" />
+                <span class="max-w-[150px] truncate text-[11px] font-bold text-text-tertiary uppercase tracking-tighter">{{ actorLabel }}</span>
               </span>
             </div>
 
@@ -226,8 +235,8 @@ function formatToolCallMeta(count: number) {
 
             <!-- Actions (Only visible on hover) -->
             <div class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-              <UiButton v-if="isUserMessage" variant="ghost" size="icon" class="h-6 w-6 rounded-md" @click="emit('rollback', message.id)">
-                <RotateCcw :size="12" />
+              <UiButton v-if="isUserMessage" variant="ghost" size="icon" class="h-7 w-7 rounded-lg bg-black/10 hover:bg-black/20" @click="emit('rollback', message.id)">
+                <RotateCcw :size="14" class="text-text-tertiary" />
               </UiButton>
             </div>
           </div>
@@ -236,44 +245,50 @@ function formatToolCallMeta(count: number) {
           <div v-if="showProcessPanel" class="mt-1">
             <button
               type="button"
-              class="flex items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-text-tertiary transition-colors hover:bg-subtle hover:text-text-secondary"
+              class="flex items-center gap-3 rounded-xl border border-border/30 bg-black/20 px-3 py-2 text-text-tertiary transition-all hover:bg-black/30 hover:border-primary/30"
               data-testid="conversation-process-toggle"
               @click="emit('toggle-detail', message.id)"
             >
-              <component :is="isExpanded ? ChevronDown : ChevronRight" :size="14" class="mt-0.5 shrink-0" />
-              <div class="flex min-w-0 flex-col items-start gap-0.5 text-left">
-                <div class="flex min-w-0 items-center gap-2 text-caption font-semibold text-text-secondary">
-                  <component :is="processSummary.icon" :size="12" class="shrink-0" />
+              <div :class="cn(
+                'flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors',
+                isRunning ? 'bg-primary/20 text-primary shadow-[0_0_10px_rgba(var(--color-primary-rgb),0.2)]' : 'bg-black/40 text-text-tertiary'
+              )">
+                 <component :is="isExpanded ? ChevronDown : ChevronRight" :size="14" />
+              </div>
+              
+              <div class="flex min-w-0 flex-col items-start gap-0 text-left">
+                <div class="flex min-w-0 items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-tight">
+                  <component :is="processSummary.icon" :size="12" class="shrink-0" :class="isRunning ? 'text-primary animate-pulse' : ''" />
                   <span class="truncate">
                     {{ processSummary.label }}<span v-if="isRunning">...</span>
                   </span>
                 </div>
-                <span class="truncate text-micro font-medium text-text-tertiary">
+                <span class="truncate text-[10px] font-medium text-text-tertiary opacity-70">
                   {{ processSummary.detail }}
                 </span>
               </div>
             </button>
 
-            <div v-if="isExpanded" class="ml-2 mt-2 space-y-3 border-l border-border pl-4 py-1 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div v-if="isExpanded" class="ml-3 mt-3 space-y-3 border-l border-primary/20 pl-5 py-1 animate-in fade-in slide-in-from-top-2 duration-300">
               <div
                 v-for="entry in detailEntries"
                 :key="entry.id"
-                class="space-y-1.5 rounded-[var(--radius-m)] border border-transparent px-3 py-2 transition-colors"
-                :class="entry.toolId && entry.toolId === focusedToolId ? 'border-border bg-accent' : 'bg-subtle/60'"
+                class="group/entry space-y-1.5 rounded-xl border border-transparent px-4 py-2.5 transition-all"
+                :class="entry.toolId && entry.toolId === focusedToolId ? 'border-primary/30 bg-primary/10 shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.05)]' : 'bg-black/10 hover:bg-black/20'"
                 :data-testid="entry.toolId && entry.toolId === focusedToolId ? 'conversation-focused-tool-entry' : undefined"
               >
-                <div class="flex items-center gap-2 text-caption font-semibold text-text-secondary">
-                  <div class="h-1.5 w-1.5 rounded-full bg-border-strong"></div>
+                <div class="flex items-center gap-2 text-[12px] font-bold text-text-secondary">
+                  <div class="h-1 w-1 rounded-full bg-primary/60 shadow-[0_0_4px_var(--color-primary)]"></div>
                   {{ entry.title }}
                 </div>
-                <p class="pl-3.5 text-caption text-text-tertiary">{{ entry.detail }}</p>
+                <p class="pl-3 text-[12px] leading-relaxed text-text-tertiary font-mono break-all opacity-80">{{ entry.detail }}</p>
               </div>
             </div>
           </div>
 
           <!-- Message Body -->
           <div
-            class="whitespace-pre-wrap break-words text-[15px] leading-[1.6] text-text-primary"
+            class="whitespace-pre-wrap break-words text-[14.5px] leading-[1.7] text-text-primary tracking-normal selection:bg-primary/30"
             :class="isUserMessage ? 'text-right' : 'text-left'"
           >
             {{ message.content }}
@@ -281,77 +296,66 @@ function formatToolCallMeta(count: number) {
 
         <div
           v-if="!isUserMessage && toolCalls.length"
-          class="flex flex-col gap-2"
+          class="flex flex-col gap-2 mt-2"
           data-testid="conversation-inline-tool-calls"
         >
           <button
             v-for="toolCall in toolCalls"
             :key="toolCall.toolId"
             type="button"
-            class="flex items-center gap-2 rounded-[var(--radius-l)] border border-border bg-surface px-3 py-2 text-left text-caption text-text-secondary transition-colors hover:bg-subtle"
+            class="group/tool flex items-center gap-3 rounded-xl border border-border/40 bg-black/10 px-4 py-2.5 text-left transition-all hover:bg-black/20 hover:border-primary/40 hover:shadow-md"
             :data-testid="`conversation-inline-tool-${toolCall.toolId}`"
             @click="emit('focus-tool', { messageId: message.id, toolId: toolCall.toolId })"
           >
-            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-text-secondary">
-              <Wrench :size="12" class="shrink-0" />
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-black/20 text-text-tertiary group-hover/tool:bg-primary/20 group-hover/tool:text-primary transition-colors">
+              <Wrench :size="16" class="shrink-0" />
             </div>
             <div class="min-w-0 flex-1">
-              <div class="truncate font-semibold text-text-primary">
+              <div class="truncate text-[13px] font-bold text-text-primary group-hover/tool:text-primary transition-colors">
                 {{ formatToolCallTitle(toolCall.label) }}
               </div>
-              <div class="text-micro tabular-nums text-text-tertiary">
+              <div class="text-[10px] font-bold tabular-nums text-text-tertiary uppercase tracking-wider opacity-60">
                 {{ formatToolCallMeta(toolCall.count) }}
               </div>
             </div>
           </button>
         </div>
 
-        <UiStatusCallout
-          v-if="!isUserMessage && isWaitingInput"
-          class="gap-3"
-          tone="info"
-          :title="waitingInputTitle"
-          :description="waitingInputDescription"
-          data-testid="conversation-inline-input-wait"
-        >
-          <div class="flex flex-wrap items-center gap-2 text-micro font-semibold text-status-info">
-            <AlertTriangle :size="13" class="shrink-0" />
-            <span>Assistant needs more input before this run can continue.</span>
-          </div>
-        </UiStatusCallout>
-
+        <!-- Approval / Decision needed (More prominent) -->
         <UiStatusCallout
           v-if="!isUserMessage && message.approval"
-          class="gap-3"
+          class="mt-4 border-status-warning/40 bg-status-warning/5 rounded-2xl shadow-lg animate-in zoom-in-95 duration-500"
           tone="warning"
           :title="message.approval.summary"
           :description="message.approval.detail"
           data-testid="conversation-inline-approval"
         >
-          <div class="flex flex-wrap items-center gap-2 text-micro font-semibold">
-            <span class="inline-flex items-center gap-1.5 text-status-warning">
-              <AlertTriangle :size="13" class="shrink-0" />
-              <span>{{ message.approval.toolName }}</span>
+          <div class="flex flex-wrap items-center gap-3 mb-2">
+            <span class="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-status-warning">
+              <Shield :size="14" class="shrink-0" />
+              <span>Security Validation Required: {{ message.approval.toolName }}</span>
             </span>
-            <UiBadge v-if="approvalRiskLabel" :label="approvalRiskLabel" subtle />
+            <UiBadge v-if="approvalRiskLabel" :label="approvalRiskLabel" tone="warning" class="text-[9px]" />
           </div>
-          <div v-if="hasPendingApproval" class="flex flex-wrap gap-2">
+          <div v-if="hasPendingApproval" class="flex flex-wrap gap-3 mt-4 pt-3 border-t border-status-warning/20">
             <UiButton
               size="sm"
+              class="flex-1 shadow-md shadow-primary/20"
               data-testid="conversation-inline-approve"
               :disabled="approvalResolving"
               @click="message.approval && emit('approve', message.approval.id)"
             >
-              Approve
+              Authorize Execution
             </UiButton>
             <UiButton
               size="sm"
               variant="ghost"
+              class="flex-1 hover:bg-status-error/10 hover:text-status-error"
               data-testid="conversation-inline-reject"
               :disabled="approvalResolving"
               @click="message.approval && emit('reject', message.approval.id)"
             >
-              Reject
+              Decline
             </UiButton>
           </div>
         </UiStatusCallout>
@@ -359,36 +363,46 @@ function formatToolCallMeta(count: number) {
         <!-- Assets / Resources -->
         <div
           v-if="resources.length || attachments.length || artifacts.length"
-          class="flex flex-wrap gap-2 pt-2"
+          class="flex flex-wrap gap-2.5 pt-3 mt-1"
           :class="isUserMessage ? 'justify-end' : 'justify-start'"
         >
           <button
             v-for="resource in resources"
             :key="resource.id"
-            class="flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-subtle"
+            class="flex items-center gap-2.5 rounded-xl border border-border/50 bg-black/10 px-3 py-2 text-[12px] font-bold text-text-secondary transition-all hover:bg-black/30 hover:border-primary/30 hover:shadow-sm"
             @click="emit('open-resource', resource.id)"
           >
-            <FolderOpen v-if="resource.kind === 'folder'" :size="13" class="text-text-tertiary" />
-            <FileText v-else-if="resource.kind === 'artifact'" :size="13" class="text-text-tertiary" />
-            <Paperclip v-else :size="13" class="text-text-tertiary" />
+            <div class="size-6 flex items-center justify-center rounded-lg bg-black/20 text-text-tertiary">
+               <FolderOpen v-if="resource.kind === 'folder'" :size="13" />
+               <FileText v-else-if="resource.kind === 'artifact'" :size="13" />
+               <Paperclip v-else :size="13" />
+            </div>
             <span>{{ resource.name }}</span>
           </button>
 
           <button
             v-for="artifact in artifacts"
             :key="artifact.id"
-            class="flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-accent px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-accent/80"
+            class="group/artifact flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2 text-[12px] font-bold text-primary transition-all hover:bg-primary/10 hover:shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.1)]"
             @click="emit('open-artifact', { id: artifact.id, version: artifact.version })"
           >
-            <FileText :size="13" />
-            <span>{{ artifact.label }}</span>
-            <UiBadge v-if="artifact.kindLabel" :label="artifact.kindLabel" subtle />
+            <div class="size-7 flex items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover/artifact:rotate-6">
+              <FileText :size="14" />
+            </div>
+            <div class="flex flex-col items-start leading-none">
+              <span class="truncate">{{ artifact.label }}</span>
+              <span v-if="artifact.kindLabel" class="text-[9px] uppercase opacity-60 mt-0.5">{{ artifact.kindLabel }}</span>
+            </div>
+            <div v-if="artifact.version" class="text-[9px] font-mono bg-primary/20 px-1 rounded ml-1">V{{ artifact.version }}</div>
           </button>
         </div>
 
         <!-- Usage info -->
-        <div v-if="!isUserMessage && message.usage" class="pt-2 text-micro font-medium tabular-nums text-text-tertiary opacity-40">
-          {{ message.usage.totalTokens }} tokens · {{ permissionLabel }}
+        <div v-if="!isUserMessage && message.usage" class="pt-3 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.1em] text-text-tertiary/40">
+           <Sparkles :size="10" />
+           <span>{{ message.usage.totalTokens }} tokens consumed</span>
+           <span class="mx-1 opacity-50">·</span>
+           <span>Mode: {{ permissionLabel }}</span>
         </div>
       </div>
     </article>

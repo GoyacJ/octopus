@@ -89,6 +89,41 @@
 }
 
 @layer components {
+  .glass {
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .glass-strong {
+    background: var(--bg-glass-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .highlight-border {
+    position: relative;
+  }
+
+  .highlight-border::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--brand-primary) 24%, transparent),
+      transparent 40%,
+      transparent 60%,
+      color-mix(in srgb, var(--brand-primary) 12%, transparent)
+    );
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: destination-out;
+    pointer-events: none;
+  }
+
   .ui-focus-ring {
     outline: none;
   }

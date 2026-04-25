@@ -3,9 +3,10 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
 
 import { resolveRuntimePermissionMode, resolveUiPermissionMode, type AgentRecord, type ConversationActorKind, type Message, type PermissionMode, type RuntimeSessionDetail, type TeamRecord, type WorkspaceResourceRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiContextMenu, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
+import { UiBadge, UiButton, UiContextMenu, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea, UiKbd } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
@@ -1017,9 +1018,15 @@ async function rejectMemoryProposal() {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 w-full">
-    <div class="flex min-w-0 flex-1 flex-col px-2 pb-6">
-      <ConversationTabsBar />
+  <div
+    class="flex h-full min-w-0 flex-1 divide-x divide-border/30 bg-transparent"
+    data-testid="conversation-view"
+  >
+    <div class="relative flex min-w-0 flex-1 flex-col overflow-hidden px-2 pb-6">
+      <!-- Background Texture Layer -->
+      <div class="absolute inset-0 bg-gradient-to-b from-sidebar/20 to-transparent pointer-events-none" />
+      
+      <ConversationTabsBar class="relative z-10" />
 
       <div v-if="!conversationId && resolvingConversationEntry" class="flex flex-1" />
 
@@ -1039,7 +1046,7 @@ async function rejectMemoryProposal() {
           ref="scrollContainer"
           data-testid="conversation-scroll-container"
           :aria-label="t('sidebar.navigation.conversation')"
-          class="flex-1 overflow-y-auto py-4"
+          class="flex-1 overflow-y-auto py-4 scroll-y relative z-10"
           @scroll="handleConversationScroll"
         >
           <UiContextMenu
@@ -1052,7 +1059,8 @@ async function rejectMemoryProposal() {
               role="log"
               aria-live="polite"
               aria-relevant="additions text"
-              class="mx-auto flex w-full max-w-[800px] flex-col"
+              class="mx-auto flex w-full max-w-[840px] flex-col px-4"
+              v-auto-animate
               @contextmenu.capture="handleMessageContextMenu"
             >
               <ConversationMessageBubble
@@ -1077,6 +1085,18 @@ async function rejectMemoryProposal() {
                 @focus-tool="focusMessageTool"
               />
 
+              <div v-if="runtime.isBusy" class="mb-8 flex w-full justify-start animate-in fade-in duration-500">
+                 <div class="flex max-w-[85%] gap-4 rounded-[var(--radius-xl)] px-5 py-4 bg-sidebar/10 backdrop-blur-md border border-primary/10 shadow-sm highlight-border">
+                    <div class="size-10 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-center text-primary shadow-[0_0_10px_rgba(var(--color-primary-rgb),0.1)]">
+                      <Bot :size="20" class="animate-pulse" />
+                    </div>
+                    <div class="flex-1 space-y-2 py-1">
+                      <div class="h-1.5 w-24 bg-primary/20 rounded-full animate-pulse" />
+                      <div class="h-1.5 w-48 bg-primary/10 rounded-full animate-pulse" />
+                    </div>
+                 </div>
+              </div>
+
               <UiEmptyState
                 v-if="!renderedMessages.length"
                 :title="conversationSetupState?.title ?? t('conversation.messages.emptyTitle')"
@@ -1097,214 +1117,145 @@ async function rejectMemoryProposal() {
           </UiContextMenu>
         </div>
 
-        <div v-if="showJumpToLatest" class="mx-auto mt-4 flex w-full max-w-[840px] justify-end px-1">
+        <div v-if="showJumpToLatest" class="absolute bottom-[200px] right-8 z-20">
           <UiButton
             data-testid="conversation-jump-to-latest"
-            variant="secondary"
+            variant="glass"
             size="sm"
+            class="rounded-full shadow-lg shadow-primary/20 border-primary/30 text-primary font-bold animate-in fade-in zoom-in duration-300"
             @click="jumpToLatest"
           >
             {{ t('conversation.stream.jumpToLatest') }}
           </UiButton>
         </div>
 
-        <div
-          v-if="showProjectTasksWorkbenchEntry"
-          class="mx-auto mt-4 flex w-full max-w-[840px] flex-col gap-3 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          data-testid="conversation-project-tasks-entry"
-        >
-          <div class="min-w-0">
-            <div class="text-[12px] font-semibold text-text-primary">{{ t('conversation.queue.title') }}</div>
-            <p class="mt-1 text-[12px] leading-5 text-text-secondary">{{ t('conversation.queue.tasksHint') }}</p>
-          </div>
-          <UiButton
-            data-testid="conversation-open-project-tasks"
-            variant="secondary"
-            size="sm"
-            @click="openProjectTasksWorkbench"
-          >
-            {{ t('conversation.queue.openTasks') }}
-          </UiButton>
-        </div>
-
-        <div v-if="queueItems.length" class="mx-auto mt-4 w-full max-w-[840px]">
-          <ConversationQueueList
-            :title="t('conversation.queue.title')"
-            :description="t('conversation.queue.description')"
-            :items="queueItems"
-            @remove="runtime.removeQueuedTurn"
-          />
-        </div>
-
-        <div
-          v-if="runtimeOrchestrationBadges.length"
-          class="mx-auto mt-4 flex w-full max-w-[840px] flex-wrap gap-2 px-1"
-        >
-          <UiBadge
-            v-for="badge in runtimeOrchestrationBadges"
-            :key="badge.label"
-            :label="badge.label"
-            :tone="badge.tone"
-            subtle
-          />
-        </div>
-
-        <UiStatusCallout
-          v-if="activeMediationKind"
-          data-testid="conversation-runtime-mediation"
-          class="mx-auto mt-4 w-full max-w-[840px]"
-          tone="warning"
-          :title="activeMediationTitle"
-          :description="activeMediationDetail"
-        >
-          <div class="flex flex-wrap gap-2.5">
-            <UiBadge
-              v-if="runtime.pendingApproval?.toolName"
-              :label="runtime.pendingApproval.toolName"
-              subtle
-            />
-            <UiBadge
-              v-if="runtime.authTarget?.providerKey"
-              :label="runtime.authTarget.providerKey"
-              subtle
-            />
-            <UiBadge
-              v-if="runtime.pendingMediation?.targetKind"
-              :label="runtime.pendingMediation.targetKind"
-              subtle
-            />
-          </div>
-          <div class="flex flex-wrap gap-2 pt-1">
-            <template v-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuth">
-              <UiButton size="sm" @click="resolveMessageAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
-              <UiButton variant="ghost" size="sm" @click="cancelMessageAuthChallenge">{{ t('common.cancel') }}</UiButton>
-            </template>
-            <template v-else-if="activeMediationKind === 'memory' && pendingMemoryProposal">
-              <UiButton size="sm" @click="approveMemoryProposal">{{ t('common.approve') }}</UiButton>
-              <UiButton variant="ghost" size="sm" @click="rejectMemoryProposal">{{ t('common.reject') }}</UiButton>
-            </template>
-          </div>
-        </UiStatusCallout>
-
-        <UiConversationComposerShell
-          data-testid="conversation-composer"
-          class="mx-auto mt-4 w-full max-w-[840px]"
-        >
-          <UiStatusCallout
-            v-if="conversationSetupState"
-            data-testid="conversation-setup-callout"
-            class="mx-1 mb-1"
-            :title="conversationSetupState.title"
-            :description="conversationSetupState.description"
-          >
-            <div class="flex flex-wrap gap-2">
-              <UiButton
-                v-for="action in conversationSetupState.actions"
-                :key="action.id"
-                size="sm"
-                :data-testid="`conversation-setup-${action.id}`"
-                @click="openConversationSetupDestination(action.id)"
-              >
-                {{ action.label }}
-              </UiButton>
-            </div>
-          </UiStatusCallout>
-
-          <UiStatusCallout
-            v-else-if="visibleRuntimeError"
-            class="mx-1 mb-1"
-            tone="error"
-            :description="visibleRuntimeError"
-            role="alert"
-          />
-
-          <div class="px-5 pb-3 pt-3">
-            <UiTextarea
-              v-model="messageDraft"
-              data-testid="conversation-composer-input"
-              :disabled="!!conversationSetupState"
-              :aria-label="composerPlaceholder"
-              class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus:border-transparent focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              :rows="3"
-              :placeholder="composerPlaceholder"
-              @keydown="handleComposerKeydown"
-            />
-
-            <div class="mt-3 flex items-end gap-3 pt-2">
-              <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <div class="relative px-6 pb-8 z-20">
+           <div class="mx-auto w-full max-w-[840px] space-y-4">
+              <!-- Queue & Setup Warnings -->
+              <div v-auto-animate>
                 <div
-                  data-testid="conversation-add-trigger"
-                  aria-hidden="true"
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-m)] border border-border bg-subtle text-text-secondary"
+                  v-if="showProjectTasksWorkbenchEntry"
+                  class="mb-4 flex w-full flex-col gap-3 rounded-[var(--radius-xl)] border border-primary/10 bg-sidebar/40 backdrop-blur-lg px-5 py-4 sm:flex-row sm:items-center sm:justify-between shadow-lg"
+                  data-testid="conversation-project-tasks-entry"
                 >
-                  <Plus :size="14" />
+                  <div class="min-w-0">
+                    <div class="text-[13px] font-bold text-text-primary uppercase tracking-tight">{{ t('conversation.queue.title') }}</div>
+                    <p class="mt-1 text-[12px] leading-relaxed text-text-tertiary">{{ t('conversation.queue.tasksHint') }}</p>
+                  </div>
+                  <UiButton
+                    data-testid="conversation-open-project-tasks"
+                    variant="outline"
+                    size="sm"
+                    class="bg-surface/50 border-border/50"
+                    @click="openProjectTasksWorkbench"
+                  >
+                    {{ t('conversation.queue.openTasks') }}
+                  </UiButton>
                 </div>
 
-                <div class="w-full sm:w-[10.5rem]">
-                  <div
-                    data-testid="conversation-model-shell"
-                    class="flex min-w-0 items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
-                  >
-                    <Sparkles :size="14" class="ml-2 shrink-0 text-text-secondary" />
-                    <UiSelect
-                      v-model="selectedModelId"
-                      data-testid="conversation-model-select"
-                      :aria-label="t('conversation.composer.modelLabel')"
-                      :options="modelOptions"
-                      :disabled="!hasModelOptions"
-                      class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
-                    />
-                  </div>
+                <div v-if="queueItems.length" class="mb-4">
+                  <ConversationQueueList
+                    :title="t('conversation.queue.title')"
+                    :items="queueItems"
+                    @remove="runtime.removeQueuedTurn"
+                    class="bg-sidebar/40 backdrop-blur-lg border-border/40 rounded-xl shadow-lg"
+                  />
                 </div>
 
-                <div class="w-full sm:w-[10rem]">
-                  <div
-                    data-testid="conversation-permission-shell"
-                    class="flex min-w-[100px] items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
-                  >
-                    <Shield :size="14" class="ml-2 shrink-0 text-text-secondary" />
-                    <UiSelect
-                      v-model="selectedPermissionMode"
-                      data-testid="conversation-permission-select"
-                      :aria-label="t('conversation.composer.permissionLabel')"
-                      :options="permissionOptions"
-                      :disabled="!!conversationSetupState"
-                      class="h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
-                    />
-                  </div>
+                <div
+                  v-if="runtimeOrchestrationBadges.length"
+                  class="mb-4 flex flex-wrap gap-2 px-1"
+                >
+                  <UiBadge
+                    v-for="badge in runtimeOrchestrationBadges"
+                    :key="badge.label"
+                    :label="badge.label"
+                    :tone="badge.tone"
+                    class="bg-primary/5 text-primary border-primary/10 text-[10px] font-bold uppercase tracking-wider"
+                  />
                 </div>
 
-                <div class="w-full sm:w-[9.5rem]">
-                  <div
-                    data-testid="conversation-actor-shell"
-                    class="flex min-w-0 items-center gap-1 rounded-[var(--radius-m)] border border-border bg-subtle px-1.5"
-                  >
-                    <Bot :size="14" class="ml-2 shrink-0 text-text-secondary" />
-                    <UiSelect
-                      v-model="selectedActorValue"
-                      data-testid="conversation-actor-select"
-                      :aria-label="t('conversation.composer.actorLabel')"
-                      :options="actorOptions"
-                      :disabled="!hasActorOptions"
-                      class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
-                    />
+                <UiStatusCallout
+                  v-if="activeMediationKind"
+                  data-testid="conversation-runtime-mediation"
+                  tone="warning"
+                  :title="activeMediationTitle"
+                  :description="activeMediationDetail"
+                  class="bg-status-warning/5 border-status-warning/30 rounded-xl shadow-lg"
+                >
+                  <div class="flex flex-wrap gap-2.5 mt-2">
+                    <UiBadge v-if="runtime.pendingApproval?.toolName" :label="runtime.pendingApproval.toolName" class="bg-status-warning/10" />
+                    <UiBadge v-if="runtime.authTarget?.providerKey" :label="runtime.authTarget.providerKey" class="bg-status-warning/10" />
                   </div>
-                </div>
+                  <div class="flex flex-wrap gap-2 pt-3">
+                    <template v-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuth">
+                      <UiButton size="sm" class="bg-status-warning text-black font-bold" @click="resolveMessageAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
+                      <UiButton variant="ghost" size="sm" @click="cancelMessageAuthChallenge">{{ t('common.cancel') }}</UiButton>
+                    </template>
+                  </div>
+                </UiStatusCallout>
               </div>
 
-              <UiButton
-                data-testid="conversation-send-button"
-                size="icon"
-                :aria-label="t('conversation.composer.send')"
-                :disabled="!canSubmit"
-                class="h-10 w-10 shrink-0 self-end rounded-[var(--radius-m)] bg-primary text-primary-foreground transition-all duration-normal ease-apple hover:bg-primary/90 disabled:bg-muted disabled:text-text-tertiary"
-                @click="submitRuntimeTurn"
+              <!-- Main Composer -->
+              <UiConversationComposerShell
+                data-testid="conversation-composer"
+                class="group focus-within:shadow-[0_0_30px_rgba(var(--color-primary-rgb),0.15)] transition-all duration-500"
               >
-                <ArrowUp :size="18" />
-              </UiButton>
-            </div>
-          </div>
-        </UiConversationComposerShell>
+                <div class="px-5 pb-4 pt-4">
+                  <UiTextarea
+                    v-model="messageDraft"
+                    data-testid="conversation-composer-input"
+                    :disabled="!!conversationSetupState"
+                    class="min-h-[60px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15.5px] leading-relaxed shadow-none placeholder:text-text-tertiary/50 focus:ring-0 focus-visible:ring-0"
+                    :rows="2"
+                    :placeholder="composerPlaceholder"
+                    @keydown="handleComposerKeydown"
+                  />
+
+                  <div class="mt-4 flex items-center gap-4">
+                    <div class="flex min-w-0 flex-1 items-center gap-3">
+                      <button
+                        data-testid="conversation-add-trigger"
+                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-black/20 text-text-tertiary transition-all hover:bg-black/40 hover:text-primary hover:border-primary/40 shadow-sm"
+                      >
+                        <Plus :size="18" />
+                      </button>
+
+                      <div class="flex flex-1 items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                        <div class="flex items-center gap-2 rounded-xl border border-border/30 bg-black/10 px-3 py-1.5 transition-all hover:border-primary/20 shadow-inner">
+                          <Sparkles :size="14" class="text-primary/60" />
+                          <UiSelect
+                            v-model="selectedModelId"
+                            :options="modelOptions"
+                            class="h-6 border-0 bg-transparent p-0 text-[11px] font-bold text-text-secondary uppercase tracking-tight focus-visible:ring-0 shadow-none min-w-[120px]"
+                          />
+                        </div>
+
+                        <div class="flex items-center gap-2 rounded-xl border border-border/30 bg-black/10 px-3 py-1.5 transition-all hover:border-primary/20 shadow-inner">
+                          <Bot :size="14" class="text-primary/60" />
+                          <UiSelect
+                            v-model="selectedActorValue"
+                            :options="actorOptions"
+                            class="h-6 border-0 bg-transparent p-0 text-[11px] font-bold text-text-secondary uppercase tracking-tight focus-visible:ring-0 shadow-none min-w-[120px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <UiButton
+                      data-testid="conversation-send-button"
+                      size="icon"
+                      :disabled="!canSubmit"
+                      class="h-11 w-11 shrink-0 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-all duration-normal hover:scale-105 active:scale-95 disabled:bg-muted/50 disabled:text-text-tertiary disabled:shadow-none"
+                      @click="submitRuntimeTurn"
+                    >
+                      <ArrowUp :size="20" stroke-width="3" />
+                    </UiButton>
+                  </div>
+                </div>
+              </UiConversationComposerShell>
+           </div>
+        </div>
       </template>
     </div>
 

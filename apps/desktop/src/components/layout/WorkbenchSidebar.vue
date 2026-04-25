@@ -593,13 +593,12 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
 
 <template>
   <aside
-    class="flex h-full w-[280px] shrink-0 flex-col border-r border-border bg-sidebar px-3 py-3"
+    class="flex h-full w-[260px] shrink-0 flex-col border-r border-border bg-sidebar/50 backdrop-blur-md px-3 py-3"
     :class="shell.leftSidebarCollapsed ? 'hidden' : 'flex'"
   >
-    <div class="flex items-center justify-between gap-3 border-b border-border pb-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <img src="/logo.png" class="h-8 w-8 rounded-[var(--radius-m)] object-cover" alt="Octopus logo" />
-        <div class="truncate text-[14px] font-semibold text-text-primary">Octopus</div>
+    <div class="flex items-center justify-between gap-3 pb-3">
+      <div class="px-2 text-[13px] font-bold text-text-primary tracking-tight">
+        {{ t('sidebar.workspace.label') }}
       </div>
       <UiButton
         variant="ghost"
@@ -613,9 +612,9 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
       </UiButton>
     </div>
 
-    <div class="mt-4 min-h-0 flex-1 overflow-y-auto">
+    <div class="mt-2 min-h-0 flex-1 overflow-y-auto">
       <div class="flex items-center justify-between gap-2 px-2 pb-2">
-        <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+        <div class="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
           {{ t('sidebar.projectTree.title') }}
         </div>
         <UiPopover
@@ -839,23 +838,6 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
             </div>
           </div>
           <div class="flex flex-col gap-3 px-2 py-2">
-            <div>
-              <div data-testid="sidebar-workspace-navigation-menu" class="flex flex-col gap-1">
-                <RouterLink
-                  v-for="item in workspaceNavigation"
-                  :key="item.id"
-                  :data-testid="`sidebar-workspace-nav-${item.id}`"
-                  :to="item.to"
-                  class="flex items-center gap-3 rounded-[var(--radius-m)] border border-transparent px-3 py-2 text-[13px] transition-colors"
-                  :class="isRouteActive(item.routeNames) ? 'border-border-strong bg-accent text-text-primary font-medium' : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary'"
-                  @click="closeWorkspaceMenu"
-                >
-                  <component :is="item.icon" :size="16" />
-                  <span class="truncate">{{ item.label }}</span>
-                </RouterLink>
-              </div>
-            </div>
-
             <div class="border-t border-border pt-3">
               <div class="mb-1 px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 {{ t('topbar.workspaceSectionTitle') }}

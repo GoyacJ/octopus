@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { cn } from '../lib/utils'
 import UiSurface from './UiSurface.vue'
 
-type PanelFrameVariant = 'hero' | 'panel' | 'raised' | 'subtle' | 'interactive'
+type PanelFrameVariant = 'hero' | 'panel' | 'raised' | 'subtle' | 'interactive' | 'glass' | 'glass-strong'
 type PanelFramePadding = 'none' | 'sm' | 'md' | 'lg'
 
 const props = withDefaults(defineProps<{

@@ -12,7 +12,7 @@ const props = withDefaults(defineProps<{
   <div
     data-testid="ui-conversation-composer-shell"
     :class="cn(
-      'overflow-hidden rounded-[var(--radius-xl)] border border-[color-mix(in_srgb,var(--border)_76%,transparent)] bg-[color-mix(in_srgb,var(--surface)_82%,var(--subtle)_18%)] p-3 shadow-none',
+      'overflow-hidden rounded-[var(--radius-xl)] border border-primary/20 bg-sidebar/40 backdrop-blur-xl shadow-xl highlight-border',
       props.class,
     )"
   >

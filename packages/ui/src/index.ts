@@ -67,6 +67,8 @@ export { default as UiTimelineList } from './components/UiTimelineList.vue'
 export { default as UiTraceBlock } from './components/UiTraceBlock.vue'
 export { default as UiToolbarRow } from './components/UiToolbarRow.vue'
 export { default as UiVirtualList } from './components/UiVirtualList.vue'
+export { default as UiWorkflowCanvas } from './components/UiWorkflowCanvas.vue'
+export { cn } from './lib/utils'
 export {
   MOTION_DURATIONS,
   MOTION_EASINGS,
