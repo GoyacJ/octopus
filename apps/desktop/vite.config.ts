@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 const hostRuntime = process.env.VITE_HOST_RUNTIME
@@ -7,7 +8,7 @@ const defaultPort = hostRuntime === 'browser' ? 15421 : 15420
 const resolvedPort = Number(process.env.VITE_UI_PORT ?? defaultPort)
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   server: {
     host: '127.0.0.1',
     port: resolvedPort,

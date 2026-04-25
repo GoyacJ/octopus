@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@import "@octopus/ui/tailwind-theme.css";
+
+@source "../../app.vue";
+@source "../../components";
+@source "../../pages";
+@source "../../../../packages/ui/src";
 
 :root {
   color-scheme: light;
@@ -34,6 +38,101 @@
   --website-accent: #fb923c;
   --website-accent-hover: #f97316;
   --website-glass: rgba(28, 25, 23, 0.7);
+}
+
+:root,
+:root.dark,
+[data-theme='dark'] {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-size-base: 16px;
+  --font-size-page-title: clamp(2.5rem, 8vw, 5.5rem);
+  --line-height-page-title: 0.95;
+  --letter-spacing-page-title: 0;
+  --font-size-section-title: clamp(2rem, 5vw, 4rem);
+  --line-height-section-title: 1;
+  --letter-spacing-section-title: 0;
+  --font-size-card-title: 1.125rem;
+  --line-height-card-title: 1.35;
+  --letter-spacing-card-title: 0;
+  --font-size-body: 1rem;
+  --line-height-body: 1.6;
+  --letter-spacing-body: 0;
+  --font-size-label: 0.875rem;
+  --line-height-label: 1.4;
+  --letter-spacing-label: 0;
+  --font-size-caption: 0.75rem;
+  --line-height-caption: 1.35;
+  --letter-spacing-caption: 0;
+  --font-size-badge: 0.75rem;
+  --line-height-badge: 1.2;
+  --letter-spacing-badge: 0;
+  --font-size-micro: 0.6875rem;
+  --line-height-micro: 1.2;
+  --letter-spacing-micro: 0;
+
+  --radius-xs: 4px;
+  --radius-s: 6px;
+  --radius-sm: 6px;
+  --radius-md: var(--radius-m);
+  --radius-lg: var(--radius-l);
+  --radius-2xl: var(--radius-xl);
+  --radius-full: 9999px;
+
+  --bg-main: var(--website-bg);
+  --bg-surface: var(--website-surface);
+  --bg-surface-muted: var(--website-surface-soft);
+  --bg-sidebar: var(--website-surface);
+  --bg-subtle: var(--website-surface-soft);
+  --bg-muted: var(--website-surface-soft);
+  --bg-accent: color-mix(in srgb, var(--website-accent) 12%, transparent);
+  --bg-secondary: var(--website-surface-soft);
+  --bg-card: var(--website-surface);
+  --bg-popover: var(--website-surface);
+  --surface: var(--bg-surface);
+  --subtle: var(--bg-subtle);
+
+  --foreground: var(--website-text);
+  --text-primary: var(--website-text);
+  --text-secondary: var(--website-text-muted);
+  --text-tertiary: color-mix(in srgb, var(--website-text-muted) 72%, transparent);
+  --text-on-brand: #ffffff;
+  --muted-foreground: var(--website-text-muted);
+  --popover-foreground: var(--website-text);
+  --accent-foreground: var(--website-text);
+  --secondary-foreground: var(--website-text);
+
+  --border: var(--website-border);
+  --border-subtle: var(--website-border);
+  --border-strong: var(--website-border-strong);
+  --border-input: var(--website-border-strong);
+
+  --brand-primary: var(--website-accent);
+  --brand-primary-hover: var(--website-accent-hover);
+  --brand-ring: color-mix(in srgb, var(--website-accent) 28%, transparent);
+  --ring: var(--brand-ring);
+  --primary: var(--website-accent);
+  --background: var(--website-bg);
+
+  --status-success: #16a34a;
+  --status-warning: #d97706;
+  --status-error: #dc2626;
+  --status-info: var(--website-accent);
+  --error: var(--status-error);
+  --destructive: var(--status-error);
+  --destructive-foreground: #ffffff;
+
+  --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.05);
+  --shadow-sm: 0 6px 18px rgba(28, 25, 23, 0.06);
+  --shadow-md: 0 14px 36px rgba(28, 25, 23, 0.08);
+  --shadow-lg: 0 24px 60px rgba(28, 25, 23, 0.1);
+  --shadow-xl: 0 32px 80px rgba(28, 25, 23, 0.12);
+
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 260ms;
+  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 html,

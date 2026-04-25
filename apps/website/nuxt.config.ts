@@ -1,9 +1,14 @@
+import tailwindcss from '@tailwindcss/vite'
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-04-10',
   devtools: { enabled: false },
   ssr: true,
-  modules: ['@nuxtjs/tailwindcss', '@nuxtjs/i18n', '@nuxtjs/color-mode'],
+  modules: ['@nuxtjs/i18n', '@nuxtjs/color-mode'],
   css: ['~/assets/css/website.css'],
+  vite: {
+    plugins: [tailwindcss()] as never,
+  },
   build: {
     transpile: ['@octopus/ui', 'lucide-vue-next'],
   },
@@ -133,9 +138,5 @@ export default defineNuxtConfig({
         en: '/docs',
       },
     },
-  },
-  tailwindcss: {
-    configPath: 'tailwind.config.ts',
-    viewer: false,
   },
 })

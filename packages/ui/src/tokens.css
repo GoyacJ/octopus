@@ -172,6 +172,7 @@
 [data-theme="dark"] {
   --bg-main: var(--color-canvas);
   --bg-surface: var(--color-surface);
+  --bg-surface-muted: var(--color-surface-muted);
   --bg-sidebar: var(--color-sidebar);
   --bg-subtle: var(--color-surface-muted);
   --bg-muted: var(--color-surface-muted);
@@ -204,11 +205,14 @@
   --ring: var(--color-ring);
   --primary: var(--color-accent);
   --background: var(--color-canvas);
+  --surface: var(--bg-surface);
+  --subtle: var(--bg-subtle);
 
   --status-success: var(--color-status-success);
   --status-warning: var(--color-status-warning);
   --status-error: var(--color-status-error);
   --status-info: var(--color-status-info);
+  --error: var(--status-error);
 
   --color-primary: var(--color-accent);
   --color-success: var(--color-status-success);
