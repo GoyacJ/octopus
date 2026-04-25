@@ -1,0 +1,27 @@
+[package]
+name = "octopus-harness-journal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_journal"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+sqlite = ["dep:rusqlite"]
+jsonl = []
+in-memory = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+async-trait = { workspace = true }
+rusqlite = { workspace = true, optional = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
