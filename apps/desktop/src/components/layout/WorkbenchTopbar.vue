@@ -300,10 +300,10 @@ function settingsButtonClasses() {
 
 function searchTriggerClasses() {
   return [
-    'ui-focus-ring flex items-center gap-2 rounded-[var(--radius-m)] border px-3 py-1.5 text-[13px] transition-[border-color,background-color,color,box-shadow] duration-normal ease-apple motion-reduce:transition-none',
+    'ui-focus-ring flex items-center justify-between min-w-[240px] rounded-[var(--radius-lg)] border px-3 py-2 text-[13px] transition-all duration-normal ease-apple',
     shell.searchOpen
-      ? 'border-border-strong bg-accent text-text-primary ring-1 ring-inset ring-border-strong'
-      : 'border-border bg-surface text-text-secondary hover:border-border-strong hover:bg-subtle hover:text-text-primary',
+      ? 'border-primary bg-surface text-text-primary shadow-[var(--layer-glow-primary)] ring-1 ring-primary/20'
+      : 'border-border/60 bg-subtle/50 text-text-secondary hover:border-border-strong hover:bg-subtle hover:text-text-primary hover:shadow-sm',
   ].join(' ')
 }
 
@@ -356,36 +356,39 @@ async function retryConnection() {
 <template>
   <div class="sticky top-0 z-30 bg-background">
     <header
-      class="flex h-12 items-center justify-between border-b border-border bg-background px-4"
+      class="flex h-14 items-center justify-between border-b border-border/40 bg-background/80 backdrop-blur-md px-6"
       data-testid="workbench-topbar"
     >
-      <div class="flex min-w-0 items-center gap-3">
+      <div class="flex min-w-0 items-center gap-4">
       <UiButton
         v-if="shell.leftSidebarCollapsed"
         variant="ghost"
         size="icon"
         data-testid="topbar-left-sidebar-toggle"
-        class="h-7 w-7"
+        class="h-8 w-8 rounded-[var(--radius-m)] hover:bg-subtle"
         @click="shell.toggleLeftSidebar()"
       >
-        <Menu :size="16" />
+        <Menu :size="18" />
       </UiButton>
 
       <div class="flex items-center gap-2 text-sm">
-        <div class="hidden items-center gap-2 md:flex" data-testid="topbar-breadcrumbs">
+        <nav class="hidden items-center gap-1.5 md:flex" data-testid="topbar-breadcrumbs" aria-label="Breadcrumb">
           <template v-for="(item, index) in breadcrumbItems" :key="`${index}:${item}`">
-            <span
-              :class="index === breadcrumbItems.length - 1 ? 'truncate font-medium text-text-primary' : index === 0 ? 'font-semibold text-text-primary' : 'truncate text-text-secondary'"
+            <div 
+              class="flex items-center px-2.5 py-1 rounded-[var(--radius-full)] transition-all duration-fast"
+              :class="index === breadcrumbItems.length - 1 ? 'bg-accent/50 text-primary font-bold shadow-sm ring-1 ring-border-strong/20' : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary cursor-default'"
             >
-              {{ item }}
-            </span>
-            <span v-if="index < breadcrumbItems.length - 1" class="text-text-tertiary">></span>
+              <span class="max-w-[120px] truncate text-[12px] tracking-tight">
+                {{ item }}
+              </span>
+            </div>
+            <span v-if="index < breadcrumbItems.length - 1" class="text-text-tertiary/40 font-light mx-0.5">/</span>
           </template>
-        </div>
+        </nav>
       </div>
     </div>
 
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-4">
       <button
         type="button"
         data-testid="global-search-trigger"
@@ -393,18 +396,20 @@ async function retryConnection() {
         :aria-pressed="shell.searchOpen ? 'true' : 'false'"
         @click="shell.openSearch"
       >
-        <Search :size="14" />
-        <span :class="searchLabelClasses()">{{ t('topbar.searchPlaceholder') }}</span>
-        <UiKbd
-          :keys="shell.searchShortcutKeys"
-          size="sm"
-          :class="[
-            'hidden md:inline-flex',
-            shell.searchOpen
-              ? 'border-border bg-surface text-text-primary'
-              : 'border-border bg-subtle text-text-tertiary',
-          ]"
-        />
+        <div class="flex items-center gap-2.5">
+          <Search :size="15" class="text-text-tertiary" />
+          <span :class="searchLabelClasses()" class="font-medium opacity-80">{{ t('topbar.searchPlaceholder') }}</span>
+        </div>
+        <div class="flex items-center gap-1 ml-4">
+          <UiKbd
+            v-for="key in shell.searchShortcutKeys"
+            :key="key"
+            size="sm"
+            class="bg-surface/50 border-border/40 text-[10px] font-bold min-w-[20px] h-[18px] flex items-center justify-center rounded-[4px]"
+          >
+            {{ key }}
+          </UiKbd>
+        </div>
       </button>
 
       <UiSelectionMenu

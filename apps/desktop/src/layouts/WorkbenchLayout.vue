@@ -36,19 +36,25 @@ onBeforeUnmount(() => {
     class="flex h-screen w-screen overflow-hidden bg-sidebar font-sans text-text-primary antialiased"
   >
     <WorkbenchRail />
-    <WorkbenchSidebar />
+    <WorkbenchSidebar class="z-10" />
 
     <div v-if="shell.leftSidebarCollapsed" data-testid="sidebar-rail" class="hidden" />
 
-    <div class="relative flex min-w-0 flex-1 flex-col border-l border-border/70 bg-background shadow-xl">
+    <!-- Main Content Container with Ambient Occlusion -->
+    <div class="relative flex min-w-0 flex-1 flex-col bg-background transition-all duration-slow ease-apple shadow-[var(--shadow-xl)] lg:shadow-[var(--shadow-lg)]">
       <WorkbenchTopbar />
 
       <main
-        class="min-w-0 flex-1 overflow-y-auto bg-[color-mix(in_srgb,var(--background)_94%,var(--sidebar)_6%)]"
+        class="min-w-0 flex-1 overflow-y-auto bg-[color-mix(in_srgb,var(--background)_97%,var(--sidebar)_3%)]"
         data-testid="workbench-main"
       >
-        <div data-testid="workbench-main-canvas" class="flex h-full min-w-0 flex-col">
-          <slot />
+        <div 
+          data-testid="workbench-main-canvas" 
+          class="flex h-full min-w-0 flex-col p-4 lg:p-6"
+        >
+          <div class="flex-1 rounded-[var(--radius-xl)] bg-surface shadow-[var(--layer-depth-1)] overflow-hidden">
+            <slot />
+          </div>
         </div>
       </main>
     </div>

@@ -391,19 +391,19 @@ function isProjectExpanded(projectId: string) {
 
 function projectGroupClasses(projectId: string) {
   return [
-    'group rounded-[var(--radius-l)] border p-2 transition-colors',
+    'group relative overflow-hidden rounded-[var(--radius-l)] border transition-all duration-normal ease-apple',
     isProjectExpanded(projectId)
-      ? 'border-border bg-surface/80'
-      : 'border-transparent bg-transparent',
+      ? 'border-border-strong bg-surface shadow-[var(--shadow-sm)]'
+      : 'border-transparent bg-transparent hover:bg-subtle/50',
   ].join(' ')
 }
 
 function projectSummaryClasses(projectId: string) {
   return [
-    'ui-focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-m)] px-2 py-2 text-left transition-colors',
+    'ui-focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-m)] px-3 py-2.5 text-left transition-colors',
     isProjectExpanded(projectId)
       ? 'cursor-default'
-      : 'cursor-pointer text-text-secondary hover:bg-subtle hover:text-text-primary',
+      : 'cursor-pointer text-text-secondary hover:text-text-primary',
   ].join(' ')
 }
 
@@ -740,46 +740,60 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           :data-testid="`sidebar-project-${project.id}`"
           :class="projectGroupClasses(project.id)"
         >
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              :data-testid="`sidebar-project-summary-${project.id}`"
-              :class="projectSummaryClasses(project.id)"
-              @click="handleProjectSummaryClick(project.id)"
-            >
-              <FolderKanban :size="16" class="shrink-0 text-text-tertiary" />
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-sm font-semibold text-text-primary">{{ project.name }}</div>
-                <div class="truncate text-xs text-text-secondary">{{ project.description }}</div>
-              </div>
-            </button>
+          <div class="relative flex flex-col">
+            <!-- Active Project Glow Indicator -->
+            <div 
+              v-if="isProjectExpanded(project.id)"
+              class="absolute -left-1 top-3 h-8 w-1 rounded-full bg-primary blur-[2px] opacity-70"
+            />
+            
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                :data-testid="`sidebar-project-summary-${project.id}`"
+                :class="projectSummaryClasses(project.id)"
+                @click="handleProjectSummaryClick(project.id)"
+              >
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-m)] bg-subtle text-text-tertiary group-hover:bg-accent group-hover:text-primary transition-colors">
+                  <FolderKanban :size="18" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-[13px] font-bold text-text-primary">{{ project.name }}</div>
+                  <div v-if="!isProjectExpanded(project.id)" class="truncate text-[11px] text-text-tertiary">{{ project.description }}</div>
+                </div>
+              </button>
 
-            <UiButton
-              v-if="!isProjectExpanded(project.id) && canDeleteProjectFromSidebar(project)"
-              :data-testid="`sidebar-project-delete-trigger-${project.id}`"
-              type="button"
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7 shrink-0 opacity-0 transition-all duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-              :aria-label="t('sidebar.projectTree.remove')"
-              @click.stop="openDeleteDialog(project)"
-            >
-              <Trash2 :size="14" />
-            </UiButton>
-          </div>
+              <UiButton
+                v-if="!isProjectExpanded(project.id) && canDeleteProjectFromSidebar(project)"
+                :data-testid="`sidebar-project-delete-trigger-${project.id}`"
+                type="button"
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7 shrink-0 opacity-0 transition-all duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto mr-2"
+                :aria-label="t('sidebar.projectTree.remove')"
+                @click.stop="openDeleteDialog(project)"
+              >
+                <Trash2 :size="14" />
+              </UiButton>
+            </div>
 
-          <div v-if="isProjectExpanded(project.id)" class="mt-3 space-y-1">
-            <RouterLink
-              v-for="item in projectModules(project.id)"
-              :key="item.id"
-              :to="item.to"
-              :data-testid="item.testId"
-              class="flex items-center gap-2 rounded-[var(--radius-xs)] border border-transparent px-2 py-1.5 text-[12px] transition-colors"
-              :class="isProjectModuleActive(project.id, item.routeNames) ? 'border-border-strong bg-accent text-text-primary' : 'text-text-secondary hover:border-border hover:bg-subtle hover:text-text-primary'"
-            >
-              <component :is="item.icon" :size="14" />
-              <span class="truncate">{{ item.label }}</span>
-            </RouterLink>
+            <div v-if="isProjectExpanded(project.id)" class="mt-1 flex flex-col border-t border-border/50 bg-subtle/30 px-2 py-2">
+              <RouterLink
+                v-for="item in projectModules(project.id)"
+                :key="item.id"
+                :to="item.to"
+                :data-testid="item.testId"
+                class="group/item flex items-center gap-3 rounded-[var(--radius-s)] px-3 py-2 text-[12px] font-medium transition-all duration-fast"
+                :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-surface text-primary shadow-sm ring-1 ring-border' : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'"
+              >
+                <component 
+                  :is="item.icon" 
+                  :size="14" 
+                  :class="isProjectModuleActive(project.id, item.routeNames) ? 'text-primary' : 'text-text-tertiary group-hover/item:text-text-secondary'"
+                />
+                <span class="truncate">{{ item.label }}</span>
+              </RouterLink>
+            </div>
           </div>
         </div>
       </div>
