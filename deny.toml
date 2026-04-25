@@ -1,0 +1,56 @@
+[graph]
+all-features = true
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+[advisories]
+db-path = "target/advisory-dbs"
+git-fetch-with-cli = true
+ignore = [
+  { id = "RUSTSEC-2024-0411", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0412", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0413", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0414", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0415", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0416", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0417", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0418", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0419", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0420", reason = "existing GTK3/Tauri transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0320", reason = "existing yaml-rust transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2024-0370", reason = "existing proc-macro-error transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0057", reason = "existing fxhash transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0075", reason = "existing unic-* transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0080", reason = "existing unic-* transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0081", reason = "existing unic-* transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0098", reason = "existing unic-* transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0100", reason = "existing unic-* transitive dependency debt; not introduced by harness M0" },
+  { id = "RUSTSEC-2025-0141", reason = "existing bincode transitive dependency debt; not introduced by harness M0" },
+]
+
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "BSD-2-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MPL-2.0",
+  "MIT-0",
+  "Unicode-3.0",
+  "Zlib",
+  "Apache-2.0 WITH LLVM-exception",
+  "bzip2-1.0.6",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
