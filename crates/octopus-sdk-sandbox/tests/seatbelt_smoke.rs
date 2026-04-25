@@ -21,7 +21,7 @@ fn temp_workspace(name: &str) -> PathBuf {
 
 #[cfg(target_os = "macos")]
 #[tokio::test]
-#[cfg_attr(not(feature = "sandbox-smoke"), ignore)]
+#[cfg_attr(not(feature = "sandbox-smoke"), ignore = "requires sandbox-smoke feature")]
 async fn seatbelt_backend_runs_simple_command() {
     let root = temp_workspace("seatbelt-smoke");
     let backend = SeatbeltBackend;

@@ -177,6 +177,34 @@
 
 > 以下推荐均面向 Octopus 目前已声明的方向（Rust core + schema-first contracts + M0/M1/M2 发布边界 + event-store/projection/replay + memory trust + secret boundary）。每条推荐都明确标出来源证据与推荐原因；**推荐本身不是 observed 事实**。
 
+### 3.0 Octopus 采纳进度总览（v1.0 → v1.8）
+
+> 本表只标"是否落地于 Octopus 架构基线"，不重复推荐正文。最新一次回填发生在 v1.8（2026-04-25）。
+
+| ID | 主题 | Octopus 状态 | 关键依据 |
+|---|---|---|---|
+| R-01 | 单内核 + 薄多表面 | ✅ v1.0 起 | `harness-sdk.md` Builder + `apps/desktop` / `apps/cli` 表面分离 |
+| R-02 | Schema-first 契约 | ✅ v1.0 起 | `harness-contracts` L0 + `contracts/openapi/` |
+| R-03 | Tool 契约与 UI 解耦 | ✅ v1.0 / v1.8 强化 | ADR-0002（v1.8 升级为正向白名单 §6.1 + 反向黑名单 §6.2 + 强制守卫 §6.3） |
+| R-04 | Prompt-cache-stable Tool 池 | ✅ v1.2 / v1.3 | ADR-0009 Deferred Tool Loading + ADR-0003 PromptCache Locked |
+| R-05 | 审批决策可序列化事件 | ✅ v1.1 | ADR-0007 Permission Events |
+| R-06 | 沙箱与审批正交 | ✅ v1.0 起 | ADR-0007 + `harness-sandbox.md` §3 |
+| R-07 | 子 Agent 硬边界 + announce | ✅ v1.0 / v1.5 / v1.8 | ADR-0004 + `harness-subagent.md` §2.5（v1.8 加 `execute_code` 双层闸门） |
+| R-08 | 事件源 + 压缩作为新版本 | ✅ v1.0 起 | ADR-0001 Event Sourcing + `harness-journal.md` Compaction |
+| R-09 | 外部 memory 隔栏 + 扫描 | ✅ v1.4 | `harness-memory.md` §5/§6（三道栅栏 + 三档威胁动作） |
+| R-10 | Session 中段禁改系统面 | ✅ v1.0 起 | ADR-0003 Prompt Cache Locked |
+| R-11 | Plugin Trust 二分 | ✅ v1.0 / v1.7 | ADR-0006 + ADR-0014 + ADR-0015 |
+| R-12 | Hook 能改写 input + 决策 | ✅ v1.6 | `harness-hook.md` §2.3 PreToolUseOutcome 三件套 + `extensibility.md` §5 |
+| R-13 | 严格校验 + LKG 回退 | ✅ v1.1 P2 | `security-trust.md` §9.X + `harness-sdk.md` |
+| R-14 | Skills 走 user-message | ✅ v1.0 起 | `harness-skill.md` + ADR-0003 边界 |
+| R-15 | 事件不回放语义诚实声明 | ✅ v1.1 | `event-schema.md` §1 Replay 语义 |
+| R-16 | Session ≠ auth token | ✅ v1.1 P2 | `security-trust.md` §7.2.1 |
+| R-17 | ToolResultPart 正向白名单 | ✅ v1.8 新增 | ADR-0002 §6 升级 + `harness-contracts.md` §3.5 |
+| R-18 | Programmatic Tool Calling | ✅ v1.8 新增（feature off 默认） | ADR-0016 + `harness-tool.md` §4.7 + `harness-sandbox.md` §3.5 |
+| R-19 | Steering Queue 软引导 | ✅ v1.8 新增（feature on 默认） | ADR-0017 + `harness-engine.md` §3 + `harness-session.md` §2.7 |
+| R-20 | 不引入 Loop-Intercepted Tools | 🛑 v1.8 反向决议 | ADR-0018 |
+
+
 ### R-01 [Agent Runtime] 单内核 + 薄多表面
 
 - **建议**：Octopus 应只实现一个 agent 运行内核（Rust），所有表面（CLI / TUI / Gateway / MCP-serve / IDE/ACP）通过「协议适配 + Toolset 差异」接入同一内核，不维护并行内核。
@@ -274,6 +302,61 @@
 - **建议**：在 API 设计阶段显式声明 `session_id` 不是 auth token；鉴权由独立机制承担。
 - **支撑证据**：OC-09（OpenClaw 文档显式「Trust boundary matrix」）、HER-020（Hermes session 是容器）、CC-14（Claude Code 把 `session` 放在权限规则源之一而非鉴权）。
 - **理由**：在 schema-first SDK 中若把 session id 当 token，客户端泄漏风险会放大。
+
+### R-17 [Tool Result] ToolResultPart 正向白名单 + 反向黑名单双向定义
+
+- **建议**：`ToolResult` 的承载片段（`ToolResultPart`）必须以**正向白名单**列举允许的变体（如
+  `Text / Structured / Blob / Code / Reference / Table / Progress / Error`）；同时保留
+  反向黑名单禁止 UI 渲染对象 / 字节级 IPC handle / 含闭包或 Future 的字段；编译期或
+  CI 守卫拒绝违规变体。
+- **支撑证据**：CC-37（Claude Code 用 `React.ReactNode` 直入 Tool 返回值的反例）、
+  HER-005（Hermes 只允许 JSON 字符串 + 元数据）、OC-21（OpenClaw `MessagePresentation`
+  抽象合约）。
+- **采纳状态**：✅ v1.8 — ADR-0002 §6 升级为"正向白名单（§6.1）+ 反向黑名单（§6.2）+
+  强制守卫（§6.3）" 三段式；`harness-contracts.md` §3.5 给出 8 个权威变体。
+
+### R-18 [Programmatic Tool Calling] 受限脚本式工具编排
+
+- **建议**：在主 Agent 表面引入 `execute_code` 元工具，让模型能在**单次推理**中通过
+  受限脚本（无 OS syscall、无 IO、有 instructions / wall clock 配额）编排多次嵌入式工具
+  调用，把 N 工具调用 = N 次推理压成 1 次；嵌入式工具默认仅含 read-only built-ins，
+  写工具需 `team_config.toml` 显式扩展 + `AdminTrusted` + 写 `ExecuteCodeWhitelistExtended`
+  审计；Subagent 永远不允许使用该工具（双层闸门：blocklist 静态拦截 + 调用链动态检查）。
+- **支撑证据**：HER-015（Hermes `execute_code` 子集工具白名单 + 中间结果不入模型
+  上下文）、HER-009（execute_code 动态 schema 后处理）、HER-014（子 agent 必禁
+  `execute_code` 等 5 个工具，与 R-20 同源）。
+- **采纳状态**：✅ v1.8 — ADR-0016 + `harness-tool.md §4.7` + `harness-sandbox.md §3.5`
+  CodeSandbox + `harness-subagent.md §2.5` 双层闸门；feature flag
+  `programmatic-tool-calling` 默认 **off**（M1 期开放）。
+
+### R-19 [User Steering] In-flight 用户软引导队列
+
+- **建议**：会话级保留一条**软引导队列**，用户在主循环运行中可随时注入"补充想法 /
+  矫正 / 中止意图"，主循环只在每轮 `model.infer` 之前的安全检查点
+  `drain_and_merge()` 一次，把队列内容合并进下一轮 user prompt。三种合并语义
+  （Append / Replace / NudgeOnly）+ 默认策略（capacity 8 / TTL 60s / DropOldest /
+  dedup_window 1500ms）。**禁止**让 SteeringMessage 改 system prompt（守 ADR-0003）。
+- **支撑证据**：OC-11（OpenClaw queue mode `collect / steer / followup /
+  steer-backlog / interrupt` 五档语义，是本推荐的最直接来源）、HER-028（Hermes
+  Gateway 内每会话 LRU `AIAgent` + 多并发消息合并）、HER-014（消息进入主循环
+  前的安全检查点 + grace call 机制）。
+- **采纳状态**：✅ v1.8 — ADR-0017 + `harness-engine.md §3` + `harness-session.md §2.7`
+  + `harness-contracts.md §3.4.3`；feature flag `steering-queue` 默认 **on**。
+
+### R-20 [Loop Control] 不引入 Loop-Intercepted Tools（反向决议）
+
+- **建议**：**不**引入"循环拦截工具"模式（即由某些工具直接拦截主循环、改写下一轮
+  prompt 或绕过 ToolOrchestrator 的"双轨"控制权设计）。该能力面已被 ToolCapability
+  Handle（ADR-0011）+ 统一 ToolOrchestrator 流水线 + 五槽 Hook（ADR-0006 / v1.6）+
+  Steering Queue（R-19 / ADR-0017）联合覆盖，再叠加会让循环控制权双轨化、审计语义
+  混乱。
+- **支撑证据**：HER-008（Hermes `_AGENT_LOOP_TOOLS = {todo, memory,
+  session_search, delegate_task}` 在主循环中拦截执行）、CC-12（Claude Code
+  AgentTool / TaskStop / SendMessage 仅限 coordinator）、OC-27（OpenClaw
+  `sessions_*` 由 core 持有）。三家都把 sentinel 限定为极小子集，从未泛化为
+  "任意工具可拦截循环"——本推荐据此做出反向决议。
+- **采纳状态**：🛑 v1.8 反向决议 — ADR-0018；任何想新增"绕过 Orchestrator 改循环"的
+  工具必须先反 ADR-0018 才能进入设计。
 
 ---
 

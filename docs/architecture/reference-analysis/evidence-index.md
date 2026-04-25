@@ -151,3 +151,13 @@
 | CC-36 | Feature gating | Two layers: build-time `feature('FLAG')` from `bun:bundle` (DCE), runtime GrowthBook/Statsig; `USER_TYPE === 'ant'` branches exist throughout | `docs/references/claude-code-sourcemap-main/restored-src/src/tools.ts:104-135, 214-216`; `src/services/analytics/growthbook.ts` | Med (flag state in shipped external build Unverified) |
 | CC-37 | UI-tool coupling | `Tool` interface directly returns `React.ReactNode` for use/result/queued/rejected/error/grouped renderers; non-Ink consumers must re-implement rendering | `docs/references/claude-code-sourcemap-main/restored-src/src/Tool.ts:580-695` | High |
 | CC-38 | Extensibility channels | Independent loaders for: built-in agents, custom agents, plugin agents, plugin commands, plugin hooks, plugin output styles, plugin MCP, skills (6 source kinds), settings hooks, frontmatter hooks, session-scoped hooks; admin-trusted vs user-controlled distinction for policy | `docs/references/claude-code-sourcemap-main/restored-src/src/utils/plugins/*.ts`; `src/utils/hooks/*.ts`; `src/skills/*.ts`; `src/tools/AgentTool/runAgent.ts:117-127` | High |
+
+## v1.3.x ADR Traceability
+
+> 用于把 `harness` 文档修订（ADR-010/011/012）与本索引中的稳定证据编号建立一跳映射。
+
+| ADR | Topic | Evidence IDs | Notes |
+|---|---|---|---|
+| ADR-010 | Tool Result Budget / Offload | `CC-33`, `CC-32`, `OC-21`, `HER-005` | 对应 `harness-tool` 的 `ResultBudget`、`ToolResultEnvelope`、`read_blob`、`ToolResultOffloaded` 事件 |
+| ADR-011 | Tool Capability Handle | `CC-08`, `OC-16`, `HER-008`, `ADR-006` | 对应 `ToolCapability`、`CapabilityRegistry`、`SubagentRunnerCap`、trust × capability 校验 |
+| ADR-012 | Testing Capability Mock Boundary | `CC-08`, `OC-16`, `HER-008`, `ADR-006` | 明确 `MockCapabilityRegistry` 只在 testing feature 使用，不进入生产能力面 |

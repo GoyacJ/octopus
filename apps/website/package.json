@@ -14,16 +14,16 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@nuxtjs/color-mode": "^4.0.0",
+    "@nuxtjs/i18n": "^10.2.4",
     "@octopus/schema": "workspace:*",
     "@octopus/ui": "workspace:*",
-    "@nuxtjs/i18n": "^10.2.4",
-    "@nuxtjs/color-mode": "^3.4.1",
-    "lucide-vue-next": "^0.400.0",
-    "nuxt": "^3.21.2"
+    "lucide-vue-next": "^1.0.0",
+    "nuxt": "^4.4.2"
   },
   "devDependencies": {
-    "@types/node": "^20.19.24",
-    "vitest": "^4.1.3",
-    "vue-tsc": "^2.2.12"
+    "@types/node": "^25.6.0",
+    "vitest": "^4.1.5",
+    "vue-tsc": "^3.2.7"
   }
 }

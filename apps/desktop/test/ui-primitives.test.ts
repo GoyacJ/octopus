@@ -2023,15 +2023,18 @@ describe('Shared UI primitives', () => {
     let observerCallback: ((entries: Array<{ isIntersecting: boolean, intersectionRatio: number }>) => void) | null = null
     const observe = vi.fn()
     const disconnect = vi.fn()
-    vi.stubGlobal('IntersectionObserver', vi.fn((callback: typeof observerCallback) => {
-      observerCallback = callback
-      return {
-        observe,
-        disconnect,
-        unobserve: vi.fn(),
-        takeRecords: vi.fn(() => []),
+    class MockIntersectionObserver {
+      constructor(callback: typeof observerCallback) {
+        observerCallback = callback
       }
-    }))
+
+      observe = observe
+      disconnect = disconnect
+      unobserve = vi.fn()
+      takeRecords = vi.fn(() => [])
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
 
     const dotLottie = mount(UiDotLottie, {
       props: {

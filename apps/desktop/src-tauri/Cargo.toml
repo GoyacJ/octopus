@@ -14,28 +14,28 @@ name = "octopus_desktop_shell"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.22.1"
 log.workspace = true
 octopus-core = { path = "../../../crates/octopus-core" }
-parking_lot = "0.12"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rfd = "0.15"
+parking_lot = "0.12.5"
+reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
+rfd = "0.17.2"
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log.workspace = true
-tauri-plugin-shell = "2"
+tauri-plugin-shell = "2.3.5"
 thiserror.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
-uuid = { version = "1", features = ["v4"] }
-zip = "2.2"
+tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread", "time"] }
+uuid = { version = "1.23.1", features = ["v4"] }
+zip = "8.5.1"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-updater = "2"
+tauri-plugin-updater = "2.10.1"
 
 [[test]]
 name = "shell_contract"

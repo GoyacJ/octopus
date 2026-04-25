@@ -31,7 +31,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_host_workspace_connections_route).post(create_host_workspace_connection_route),
         )
         .route(
-            "/api/v1/host/workspace-connections/:connection_id",
+            "/api/v1/host/workspace-connections/{connection_id}",
             delete(delete_host_workspace_connection_route),
         )
         .route(
@@ -39,7 +39,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_host_notifications_route).post(create_host_notification_route),
         )
         .route(
-            "/api/v1/host/notifications/:notification_id/read",
+            "/api/v1/host/notifications/{notification_id}/read",
             post(mark_host_notification_read_route),
         )
         .route(
@@ -47,7 +47,7 @@ pub fn build_router(state: ServerState) -> Router {
             post(mark_all_host_notifications_read_route),
         )
         .route(
-            "/api/v1/host/notifications/:notification_id/dismiss-toast",
+            "/api/v1/host/notifications/{notification_id}/dismiss-toast",
             post(dismiss_host_notification_toast_route),
         )
         .route(
@@ -76,11 +76,11 @@ pub fn build_router(state: ServerState) -> Router {
             post(revoke_current_access_session),
         )
         .route(
-            "/api/v1/access/sessions/:session_id/revoke",
+            "/api/v1/access/sessions/{session_id}/revoke",
             post(revoke_access_session),
         )
         .route(
-            "/api/v1/access/users/:user_id/sessions/revoke",
+            "/api/v1/access/users/{user_id}/sessions/revoke",
             post(revoke_access_user_sessions),
         )
         .route(
@@ -88,11 +88,11 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_users).post(create_access_user),
         )
         .route(
-            "/api/v1/access/users/:user_id",
+            "/api/v1/access/users/{user_id}",
             put(update_access_user).delete(delete_access_user),
         )
         .route(
-            "/api/v1/access/users/:user_id/preset",
+            "/api/v1/access/users/{user_id}/preset",
             put(update_access_user_preset),
         )
         .route(
@@ -100,7 +100,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_org_units).post(create_access_org_unit),
         )
         .route(
-            "/api/v1/access/org/units/:org_unit_id",
+            "/api/v1/access/org/units/{org_unit_id}",
             put(update_access_org_unit).delete(delete_access_org_unit),
         )
         .route(
@@ -108,7 +108,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_positions).post(create_access_position),
         )
         .route(
-            "/api/v1/access/org/positions/:position_id",
+            "/api/v1/access/org/positions/{position_id}",
             put(update_access_position).delete(delete_access_position),
         )
         .route(
@@ -116,7 +116,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_user_groups).post(create_access_user_group),
         )
         .route(
-            "/api/v1/access/org/groups/:group_id",
+            "/api/v1/access/org/groups/{group_id}",
             put(update_access_user_group).delete(delete_access_user_group),
         )
         .route(
@@ -124,7 +124,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_user_org_assignments).post(upsert_access_user_org_assignment),
         )
         .route(
-            "/api/v1/access/org/assignments/:user_id/:org_unit_id",
+            "/api/v1/access/org/assignments/{user_id}/{org_unit_id}",
             delete(delete_access_user_org_assignment),
         )
         .route(
@@ -132,7 +132,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_roles).post(create_access_role),
         )
         .route(
-            "/api/v1/access/roles/:role_id",
+            "/api/v1/access/roles/{role_id}",
             put(update_access_role).delete(delete_access_role),
         )
         .route(
@@ -144,7 +144,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_role_bindings).post(create_access_role_binding),
         )
         .route(
-            "/api/v1/access/policies/role-bindings/:binding_id",
+            "/api/v1/access/policies/role-bindings/{binding_id}",
             put(update_access_role_binding).delete(delete_access_role_binding),
         )
         .route(
@@ -152,7 +152,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_data_policies).post(create_access_data_policy),
         )
         .route(
-            "/api/v1/access/policies/data-policies/:policy_id",
+            "/api/v1/access/policies/data-policies/{policy_id}",
             put(update_access_data_policy).delete(delete_access_data_policy),
         )
         .route(
@@ -160,7 +160,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_resource_policies).post(create_access_resource_policy),
         )
         .route(
-            "/api/v1/access/policies/resource-policies/:policy_id",
+            "/api/v1/access/policies/resource-policies/{policy_id}",
             put(update_access_resource_policy).delete(delete_access_resource_policy),
         )
         .route(
@@ -180,7 +180,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_menu_policies).post(create_access_menu_policy),
         )
         .route(
-            "/api/v1/access/menus/policies/:menu_id",
+            "/api/v1/access/menus/policies/{menu_id}",
             put(update_access_menu_policy).delete(delete_access_menu_policy),
         )
         .route(
@@ -188,7 +188,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_access_protected_resources),
         )
         .route(
-            "/api/v1/access/protected-resources/:resource_type/:resource_id",
+            "/api/v1/access/protected-resources/{resource_type}/{resource_id}",
             put(upsert_access_protected_resource),
         )
         .route("/api/v1/apps", get(list_apps).post(register_app))
@@ -206,24 +206,24 @@ pub fn build_router(state: ServerState) -> Router {
             post(import_workspace_resource),
         )
         .route(
-            "/api/v1/workspace/resources/:resource_id",
+            "/api/v1/workspace/resources/{resource_id}",
             patch(update_workspace_resource).delete(delete_workspace_resource),
         )
         .route(
             "/api/v1/workspace/filesystem/directories",
             get(list_workspace_filesystem_directories),
         )
-        .route("/api/v1/resources/:resource_id", get(get_resource_detail))
+        .route("/api/v1/resources/{resource_id}", get(get_resource_detail))
         .route(
-            "/api/v1/resources/:resource_id/content",
+            "/api/v1/resources/{resource_id}/content",
             get(get_resource_content),
         )
         .route(
-            "/api/v1/resources/:resource_id/children",
+            "/api/v1/resources/{resource_id}/children",
             get(list_resource_children),
         )
         .route(
-            "/api/v1/resources/:resource_id/promote",
+            "/api/v1/resources/{resource_id}/promote",
             post(promote_resource),
         )
         .route("/api/v1/workspace/knowledge", get(workspace_knowledge))
@@ -257,20 +257,20 @@ pub fn build_router(state: ServerState) -> Router {
             post(export_agent_bundle_route),
         )
         .route(
-            "/api/v1/workspace/agents/:agent_id",
+            "/api/v1/workspace/agents/{agent_id}",
             patch(update_agent).delete(delete_agent),
         )
         .route(
-            "/api/v1/workspace/agents/:agent_id/copy-to-workspace",
+            "/api/v1/workspace/agents/{agent_id}/copy-to-workspace",
             post(copy_workspace_agent_from_builtin_route),
         )
         .route("/api/v1/workspace/teams", get(list_teams).post(create_team))
         .route(
-            "/api/v1/workspace/teams/:team_id",
+            "/api/v1/workspace/teams/{team_id}",
             patch(update_team).delete(delete_team),
         )
         .route(
-            "/api/v1/workspace/teams/:team_id/copy-to-workspace",
+            "/api/v1/workspace/teams/{team_id}/copy-to-workspace",
             post(copy_workspace_team_from_builtin_route),
         )
         .route(
@@ -294,7 +294,7 @@ pub fn build_router(state: ServerState) -> Router {
             post(create_workspace_skill_route),
         )
         .route(
-            "/api/v1/workspace/catalog/skills/:skill_id",
+            "/api/v1/workspace/catalog/skills/{skill_id}",
             get(get_workspace_skill_route)
                 .patch(update_workspace_skill_route)
                 .delete(delete_workspace_skill_route),
@@ -308,15 +308,15 @@ pub fn build_router(state: ServerState) -> Router {
             post(import_workspace_skill_folder_route),
         )
         .route(
-            "/api/v1/workspace/catalog/skills/:skill_id/tree",
+            "/api/v1/workspace/catalog/skills/{skill_id}/tree",
             get(get_workspace_skill_tree_route),
         )
         .route(
-            "/api/v1/workspace/catalog/skills/:skill_id/files/*relative_path",
+            "/api/v1/workspace/catalog/skills/{skill_id}/files/{*relative_path}",
             get(get_workspace_skill_file_route).patch(update_workspace_skill_file_route),
         )
         .route(
-            "/api/v1/workspace/catalog/skills/:skill_id/copy-to-managed",
+            "/api/v1/workspace/catalog/skills/{skill_id}/copy-to-managed",
             post(copy_workspace_skill_to_managed_route),
         )
         .route(
@@ -324,13 +324,13 @@ pub fn build_router(state: ServerState) -> Router {
             post(create_workspace_mcp_server_route),
         )
         .route(
-            "/api/v1/workspace/catalog/mcp-servers/:server_name",
+            "/api/v1/workspace/catalog/mcp-servers/{server_name}",
             get(get_workspace_mcp_server_route)
                 .patch(update_workspace_mcp_server_route)
                 .delete(delete_workspace_mcp_server_route),
         )
         .route(
-            "/api/v1/workspace/catalog/mcp-servers/:server_name/copy-to-managed",
+            "/api/v1/workspace/catalog/mcp-servers/{server_name}/copy-to-managed",
             post(copy_workspace_mcp_server_to_managed_route),
         )
         .route(
@@ -338,7 +338,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_tools).post(create_tool),
         )
         .route(
-            "/api/v1/workspace/catalog/tools/:tool_id",
+            "/api/v1/workspace/catalog/tools/{tool_id}",
             patch(update_tool).delete(delete_tool),
         )
         .route(
@@ -359,131 +359,131 @@ pub fn build_router(state: ServerState) -> Router {
         )
         .route("/api/v1/projects", get(projects).post(create_project))
         .route(
-            "/api/v1/projects/:project_id",
+            "/api/v1/projects/{project_id}",
             patch(update_project).delete(delete_project),
         )
         .route(
-            "/api/v1/projects/:project_id/promotion-requests",
+            "/api/v1/projects/{project_id}/promotion-requests",
             get(list_project_promotion_requests).post(create_project_promotion_request),
         )
         .route(
-            "/api/v1/projects/:project_id/deletion-requests",
+            "/api/v1/projects/{project_id}/deletion-requests",
             get(list_project_deletion_requests).post(create_project_deletion_request),
         )
         .route(
-            "/api/v1/projects/:project_id/deletion-requests/:request_id/approve",
+            "/api/v1/projects/{project_id}/deletion-requests/{request_id}/approve",
             post(approve_project_deletion_request),
         )
         .route(
-            "/api/v1/projects/:project_id/deletion-requests/:request_id/reject",
+            "/api/v1/projects/{project_id}/deletion-requests/{request_id}/reject",
             post(reject_project_deletion_request),
         )
         .route(
-            "/api/v1/projects/:project_id/dashboard",
+            "/api/v1/projects/{project_id}/dashboard",
             get(project_dashboard),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks",
+            "/api/v1/projects/{project_id}/tasks",
             get(list_project_tasks).post(create_project_task),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks/:task_id",
+            "/api/v1/projects/{project_id}/tasks/{task_id}",
             get(get_project_task_detail).patch(update_project_task),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks/:task_id/launch",
+            "/api/v1/projects/{project_id}/tasks/{task_id}/launch",
             post(launch_project_task),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks/:task_id/rerun",
+            "/api/v1/projects/{project_id}/tasks/{task_id}/rerun",
             post(rerun_project_task),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks/:task_id/runs",
+            "/api/v1/projects/{project_id}/tasks/{task_id}/runs",
             get(list_project_task_runs),
         )
         .route(
-            "/api/v1/projects/:project_id/tasks/:task_id/interventions",
+            "/api/v1/projects/{project_id}/tasks/{task_id}/interventions",
             post(create_project_task_intervention),
         )
         .route(
-            "/api/v1/projects/:project_id/runtime-config",
+            "/api/v1/projects/{project_id}/runtime-config",
             get(get_project_runtime_config_route).patch(save_project_runtime_config_route),
         )
         .route(
-            "/api/v1/projects/:project_id/runtime-config/validate",
+            "/api/v1/projects/{project_id}/runtime-config/validate",
             post(validate_project_runtime_config_route),
         )
         .route(
-            "/api/v1/projects/:project_id/resources",
+            "/api/v1/projects/{project_id}/resources",
             get(project_resources).post(create_project_resource),
         )
         .route(
-            "/api/v1/projects/:project_id/resources/import",
+            "/api/v1/projects/{project_id}/resources/import",
             post(import_project_resource),
         )
         .route(
-            "/api/v1/projects/:project_id/resources/folder",
+            "/api/v1/projects/{project_id}/resources/folder",
             post(create_project_resource_folder),
         )
         .route(
-            "/api/v1/projects/:project_id/resources/:resource_id",
+            "/api/v1/projects/{project_id}/resources/{resource_id}",
             patch(update_project_resource).delete(delete_project_resource),
         )
         .route(
-            "/api/v1/projects/:project_id/deliverables",
+            "/api/v1/projects/{project_id}/deliverables",
             get(project_deliverables),
         )
         .route(
-            "/api/v1/projects/:project_id/knowledge",
+            "/api/v1/projects/{project_id}/knowledge",
             get(project_knowledge),
         )
         .route(
-            "/api/v1/projects/:project_id/pet",
+            "/api/v1/projects/{project_id}/pet",
             get(project_pet_snapshot),
         )
         .route(
-            "/api/v1/projects/:project_id/pet/presence",
+            "/api/v1/projects/{project_id}/pet/presence",
             patch(save_project_pet_presence),
         )
         .route(
-            "/api/v1/projects/:project_id/pet/conversation",
+            "/api/v1/projects/{project_id}/pet/conversation",
             put(bind_project_pet_conversation),
         )
         .route(
-            "/api/v1/projects/:project_id/agent-links",
+            "/api/v1/projects/{project_id}/agent-links",
             get(list_project_agent_links).post(link_project_agent),
         )
         .route(
-            "/api/v1/projects/:project_id/agents/import-preview",
+            "/api/v1/projects/{project_id}/agents/import-preview",
             post(preview_import_project_agent_bundle_route),
         )
         .route(
-            "/api/v1/projects/:project_id/agents/import",
+            "/api/v1/projects/{project_id}/agents/import",
             post(import_project_agent_bundle_route),
         )
         .route(
-            "/api/v1/projects/:project_id/agents/export",
+            "/api/v1/projects/{project_id}/agents/export",
             post(export_project_agent_bundle_route),
         )
         .route(
-            "/api/v1/projects/:project_id/agents/:agent_id/copy-to-project",
+            "/api/v1/projects/{project_id}/agents/{agent_id}/copy-to-project",
             post(copy_project_agent_from_builtin_route),
         )
         .route(
-            "/api/v1/projects/:project_id/agent-links/:agent_id",
+            "/api/v1/projects/{project_id}/agent-links/{agent_id}",
             delete(unlink_project_agent),
         )
         .route(
-            "/api/v1/projects/:project_id/team-links",
+            "/api/v1/projects/{project_id}/team-links",
             get(list_project_team_links).post(link_project_team),
         )
         .route(
-            "/api/v1/projects/:project_id/teams/:team_id/copy-to-project",
+            "/api/v1/projects/{project_id}/teams/{team_id}/copy-to-project",
             post(copy_project_team_from_builtin_route),
         )
         .route(
-            "/api/v1/projects/:project_id/team-links/:team_id",
+            "/api/v1/projects/{project_id}/team-links/{team_id}",
             delete(unlink_project_team),
         )
         .route("/api/v1/inbox", get(inbox))
@@ -492,23 +492,23 @@ pub fn build_router(state: ServerState) -> Router {
             get(workspace_deliverables),
         )
         .route(
-            "/api/v1/deliverables/:deliverable_id",
+            "/api/v1/deliverables/{deliverable_id}",
             get(get_deliverable_detail),
         )
         .route(
-            "/api/v1/deliverables/:deliverable_id/versions",
+            "/api/v1/deliverables/{deliverable_id}/versions",
             get(list_deliverable_versions).post(create_deliverable_version),
         )
         .route(
-            "/api/v1/deliverables/:deliverable_id/versions/:version",
+            "/api/v1/deliverables/{deliverable_id}/versions/{version}",
             get(get_deliverable_version_content),
         )
         .route(
-            "/api/v1/deliverables/:deliverable_id/promote",
+            "/api/v1/deliverables/{deliverable_id}/promote",
             post(promote_deliverable),
         )
         .route(
-            "/api/v1/deliverables/:deliverable_id/fork",
+            "/api/v1/deliverables/{deliverable_id}/fork",
             post(fork_deliverable),
         )
         .route("/api/v1/knowledge", get(knowledge))
@@ -517,7 +517,7 @@ pub fn build_router(state: ServerState) -> Router {
             get(list_workspace_promotion_requests),
         )
         .route(
-            "/api/v1/workspace/promotion-requests/:request_id/review",
+            "/api/v1/workspace/promotion-requests/{request_id}/review",
             post(review_project_promotion_request),
         )
         .nest("/api/v1/runtime", runtime_routes())
@@ -535,35 +535,35 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             post(probe_runtime_configured_model_route),
         )
         .route("/generations", post(run_runtime_generation))
-        .route("/config/scopes/:scope", patch(save_runtime_config_route))
+        .route("/config/scopes/{scope}", patch(save_runtime_config_route))
         .route(
             "/sessions",
             get(list_runtime_sessions).post(create_runtime_session),
         )
         .route(
-            "/sessions/:session_id",
+            "/sessions/{session_id}",
             get(get_runtime_session).delete(delete_runtime_session),
         )
         .route(
-            "/sessions/:session_id/configured-model",
+            "/sessions/{session_id}/configured-model",
             post(rebind_runtime_session_configured_model),
         )
-        .route("/sessions/:session_id/turns", post(submit_runtime_turn))
+        .route("/sessions/{session_id}/turns", post(submit_runtime_turn))
         .route(
-            "/sessions/:session_id/approvals/:approval_id",
+            "/sessions/{session_id}/approvals/{approval_id}",
             post(resolve_runtime_approval),
         )
         .route(
-            "/sessions/:session_id/auth-challenges/:challenge_id",
+            "/sessions/{session_id}/auth-challenges/{challenge_id}",
             post(resolve_runtime_auth_challenge),
         )
         .route(
-            "/sessions/:session_id/subruns/:subrun_id/cancel",
+            "/sessions/{session_id}/subruns/{subrun_id}/cancel",
             post(cancel_runtime_subrun),
         )
         .route(
-            "/sessions/:session_id/memory-proposals/:proposal_id",
+            "/sessions/{session_id}/memory-proposals/{proposal_id}",
             post(resolve_runtime_memory_proposal),
         )
-        .route("/sessions/:session_id/events", get(runtime_events))
+        .route("/sessions/{session_id}/events", get(runtime_events))
 }

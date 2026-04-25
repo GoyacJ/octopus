@@ -90,7 +90,11 @@
 
 @layer components {
   .ui-focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+    outline: none;
+  }
+
+  .ui-focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px var(--ring), 0 0 0 4px var(--bg-main);
   }
 
   .ui-control {
