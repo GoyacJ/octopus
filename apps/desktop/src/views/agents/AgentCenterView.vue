@@ -126,7 +126,7 @@ const {
     :width="props.embedded ? undefined : 'wide'"
     :test-id="props.embedded ? undefined : 'agent-center-view'"
     :data-testid="props.embedded ? 'agent-center-embedded' : undefined"
-    class="h-full flex flex-col bg-transparent"
+    class="h-full flex flex-col overflow-hidden bg-transparent"
   >
     <div class="flex-1 flex min-h-0 overflow-hidden">
       <!-- Main Content Area -->
@@ -236,32 +236,32 @@ const {
     </div>
 
     <!-- Teams still use Dialog for now as they are more complex layouts -->
-    <!-- Teams still use Dialog for now as they are more complex layouts -->
-  :open="teamDialogOpen"
-  :form="teamForm"
-  :status-options="statusOptions"
-  :builtin-options="builtinOptions"
-  :skill-options="skillOptions"
-  :mcp-options="mcpOptions"
-  :leader-options="leaderOptions"
-  :team-agent-options="teamAgentOptions"
-  :avatar-preview="teamAvatarPreview(currentEditingTeam())"
-  :dialog-team-leader="dialogTeamLeader"
-  :dialog-team-members="dialogTeamMembers"
-  :content-readonly="teamDialogContentReadonly"
-  :status-readonly="teamDialogStatusReadonly"
-  :can-save="canSaveTeamDialog"
-  :can-copy="canCopyCurrentEditingTeam"
-  :copy-label="currentEditingTeamCopyLabel"
-  :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
-  :promoting="promoteTeamLoading"
-  @update:open="teamDialogOpen = $event"
-  @pick-avatar="pickTeamAvatar"
-  @remove-avatar="clearTeamAvatar"
-  @save="saveTeam"
-  @copy="copyCurrentEditingTeam"
-  @promote="promoteTeamToWorkspace"
-/>
+    <TeamEditorDialog
+      :open="teamDialogOpen"
+      :form="teamForm"
+      :status-options="statusOptions"
+      :builtin-options="builtinOptions"
+      :skill-options="skillOptions"
+      :mcp-options="mcpOptions"
+      :leader-options="leaderOptions"
+      :team-agent-options="teamAgentOptions"
+      :avatar-preview="teamAvatarPreview(currentEditingTeam())"
+      :dialog-team-leader="dialogTeamLeader"
+      :dialog-team-members="dialogTeamMembers"
+      :content-readonly="teamDialogContentReadonly"
+      :status-readonly="teamDialogStatusReadonly"
+      :can-save="canSaveTeamDialog"
+      :can-copy="canCopyCurrentEditingTeam"
+      :copy-label="currentEditingTeamCopyLabel"
+      :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
+      :promoting="promoteTeamLoading"
+      @update:open="teamDialogOpen = $event"
+      @pick-avatar="pickTeamAvatar"
+      @remove-avatar="clearTeamAvatar"
+      @save="saveTeam"
+      @copy="copyCurrentEditingTeam"
+      @promote="promoteTeamToWorkspace"
+    />
 
     <UiDialog
       :open="deleteConfirmOpen"

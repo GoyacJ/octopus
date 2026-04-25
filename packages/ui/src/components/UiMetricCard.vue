@@ -46,22 +46,22 @@ const toneColor = computed(() => {
   <article
     data-ui-performance-contained="true"
     :class="cn(
-      'group relative overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface p-5 shadow-sm transition-all duration-normal hover:border-border-strong hover:shadow-md',
-      props.tone === 'accent' && 'bg-accent/30 border-primary/20 highlight-border',
-      props.tone === 'muted' && 'bg-subtle',
-      props.tone === 'success' && 'border-status-success/20 bg-status-success/5',
-      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/5',
+      'group relative overflow-hidden rounded-[var(--radius-2xl)] border-none bg-surface-muted/50 p-6 shadow-[var(--layer-depth-1)] transition-all duration-normal hover:shadow-[var(--shadow-md)]',
+      props.tone === 'accent' && 'bg-primary/5 shadow-[var(--layer-glow-primary)] ring-1 ring-primary/20',
+      props.tone === 'muted' && 'bg-surface-muted/30 shadow-none',
+      props.tone === 'success' && 'bg-status-success/5 ring-1 ring-status-success/20',
+      props.tone === 'warning' && 'bg-status-warning/5 ring-1 ring-status-warning/20',
       props.class,
     )"
   >
     <!-- Background Glow for Accent -->
     <div 
       v-if="props.tone === 'accent'" 
-      class="absolute -right-8 -top-8 size-24 bg-primary/10 blur-3xl rounded-full pointer-events-none group-hover:bg-primary/20 transition-colors"
+      class="absolute -right-8 -top-8 size-32 bg-primary/10 blur-3xl rounded-full pointer-events-none group-hover:bg-primary/20 transition-all duration-slow"
     />
 
     <div class="flex items-start justify-between gap-3 relative z-10">
-      <span class="block text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary">
+      <span class="block text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary">
         {{ props.label }}
       </span>
       <span v-if="props.progressLabel" class="text-[10px] font-bold text-primary/80">
@@ -69,8 +69,8 @@ const toneColor = computed(() => {
       </span>
     </div>
 
-    <div class="mt-2 flex items-baseline gap-2 relative z-10">
-      <strong class="text-3xl font-bold tracking-tight text-text-primary tabular-nums">
+    <div class="mt-3 flex items-baseline gap-2 relative z-10">
+      <strong class="text-4xl font-bold tracking-tight text-text-primary tabular-nums">
         {{ props.value }}
       </strong>
     </div>

@@ -45,14 +45,14 @@ onBeforeUnmount(() => {
       <WorkbenchTopbar />
 
       <main
-        class="min-w-0 flex-1 overflow-y-auto bg-[color-mix(in_srgb,var(--background)_97%,var(--sidebar)_3%)]"
+        class="min-w-0 flex-1 overflow-hidden bg-[color-mix(in_srgb,var(--background)_97%,var(--sidebar)_3%)]"
         data-testid="workbench-main"
       >
         <div 
           data-testid="workbench-main-canvas" 
           class="flex h-full min-w-0 flex-col p-4 lg:p-6"
         >
-          <div class="flex-1 rounded-[var(--radius-xl)] bg-surface shadow-[var(--layer-depth-1)] overflow-hidden">
+          <div class="flex-1 flex flex-col rounded-[var(--radius-xl)] bg-surface shadow-[var(--layer-depth-1)] overflow-hidden">
             <slot />
           </div>
         </div>

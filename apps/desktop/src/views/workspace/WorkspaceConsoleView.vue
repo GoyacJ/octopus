@@ -71,23 +71,24 @@ function handleTabChange(menuId: string) {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="workspace-console-view" class="h-full">
+  <UiPageShell width="wide" test-id="workspace-console-view" class="h-full overflow-hidden">
     <UiPageHeader
       :eyebrow="t('console.header.eyebrow')"
       :title="t('console.header.title')"
       :description="t('console.header.description')"
     />
 
-    <UiPanelFrame variant="subtle" padding="sm">
+    <div class="px-6">
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
+        sticky
         data-testid="workspace-console-tabs"
         @update:model-value="handleTabChange"
       />
-    </UiPanelFrame>
+    </div>
 
-    <main class="min-h-0 flex-1 overflow-y-auto pb-8">
+    <main class="min-h-0 flex-1 overflow-y-auto px-6 pb-8 mt-4">
       <RouterView />
     </main>
   </UiPageShell>

@@ -30,7 +30,7 @@ const widthClass = computed(() => {
   <section
     :data-testid="props.testId || undefined"
     :data-density="props.density"
-    :class="cn('ui-page-shell w-full', props.padded && 'ui-page-shell--padded', props.class)"
+    :class="cn('ui-page-shell w-full flex-1 min-h-0 overflow-y-auto scroll-y', props.padded && 'ui-page-shell--padded', props.class)"
   >
     <div :class="cn('ui-page-shell__content mx-auto flex min-w-0 flex-col', widthClass, props.contentClass)">
       <slot />

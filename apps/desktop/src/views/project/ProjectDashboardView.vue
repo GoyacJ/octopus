@@ -311,7 +311,7 @@ const activityItems = computed(() =>
     </UiPageHeader>
 
     <template v-if="snapshot">
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-6 pb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-8 pb-12">
         <!-- Headline Metrics (4 Small Cards) -->
         <UiMetricCard
           v-for="metric in headlineMetrics.slice(0, 4)"
@@ -325,24 +325,25 @@ const activityItems = computed(() =>
 
         <!-- Usage Trend (Large 2x2 Area) -->
         <UiPanelFrame
-          variant="glass"
+          variant="glass-strong"
           padding="lg"
           :title="t('projectDashboard.sections.usageTrend.title')"
           :subtitle="t('projectDashboard.sections.usageTrend.subtitle')"
           class="md:col-span-2 lg:col-span-2 lg:row-span-2"
+          inner-class="h-full flex flex-col"
         >
-          <div class="h-full flex flex-col gap-6">
-            <div class="flex-1 min-h-[240px] rounded-[var(--radius-xl)] border border-primary/10 bg-black/20 p-4 shadow-inner">
+          <div class="flex-1 flex flex-col gap-6">
+            <div class="flex-1 min-h-[280px] rounded-[var(--radius-xl)] bg-black/5 p-6 shadow-inner ring-1 ring-white/5">
               <UiAreaChart :data="trendTokens" :labels="trendLabels" stroke-color="var(--color-primary)" />
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-8 px-2">
                <div class="space-y-1">
-                 <div class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.tokens') }}</div>
-                 <div class="text-2xl font-bold text-text-primary">{{ formatNumber(overview.totalTokens) }}</div>
+                 <div class="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.tokens') }}</div>
+                 <div class="text-3xl font-bold text-text-primary tracking-tight">{{ formatNumber(overview.totalTokens) }}</div>
                </div>
                <div class="space-y-1">
-                 <div class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.messages') }}</div>
-                 <div class="text-2xl font-bold text-text-primary">{{ formatNumber(overview.messageCount) }}</div>
+                 <div class="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">{{ t('projectDashboard.sections.usageTrend.cards.messages') }}</div>
+                 <div class="text-3xl font-bold text-text-primary tracking-tight">{{ formatNumber(overview.messageCount) }}</div>
                </div>
             </div>
           </div>
@@ -350,31 +351,32 @@ const activityItems = computed(() =>
 
         <!-- Resource Mix (Tall Card) -->
         <UiPanelFrame
-          variant="glass-strong"
-          padding="md"
+          variant="panel"
+          padding="lg"
           :title="t('projectDashboard.sections.resourceMix.title')"
           class="lg:row-span-2"
+          inner-class="h-full"
         >
           <div class="h-full flex flex-col">
-            <div class="flex-1 flex items-center justify-center py-4">
+            <div class="flex-1 flex items-center justify-center py-8">
               <UiDonutChart
                 :items="resourceChartItems"
-                :size="140"
-                :stroke-width="12"
+                :size="160"
+                :stroke-width="16"
                 :total-label="t('projectDashboard.sections.resourceMix.total')"
               />
             </div>
-            <div class="space-y-2 mt-4">
+            <div class="space-y-3 mt-6">
               <div
                 v-for="item in resourceChartItems"
                 :key="item.id"
-                class="flex items-center justify-between text-xs"
+                class="flex items-center justify-between text-xs font-medium"
               >
-                <div class="flex items-center gap-2">
-                  <span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />
+                <div class="flex items-center gap-3">
+                  <span class="size-2.5 rounded-full" :style="{ backgroundColor: item.color }" />
                   <span class="text-text-secondary">{{ item.label }}</span>
                 </div>
-                <span class="font-semibold text-text-primary">{{ formatNumber(item.value) }}</span>
+                <span class="text-text-primary tabular-nums">{{ formatNumber(item.value) }}</span>
               </div>
             </div>
           </div>
@@ -398,18 +400,18 @@ const activityItems = computed(() =>
 
         <!-- Top Contributors (2x1) -->
         <UiPanelFrame
-          variant="glass"
-          padding="md"
+          variant="panel"
+          padding="lg"
           :title="t('projectDashboard.sections.topContributors.title')"
           class="md:col-span-2"
         >
-           <UiRankingList v-if="contributorRanking.length" :items="contributorRanking.slice(0, 5)" />
+           <UiRankingList v-if="contributorRanking.length" :items="contributorRanking.slice(0, 5)" class="gap-4" />
         </UiPanelFrame>
 
         <!-- Recent Activity (Vertical List) -->
         <UiPanelFrame
           variant="subtle"
-          padding="md"
+          padding="lg"
           :title="t('projectDashboard.sections.activity.title')"
           class="md:col-span-2 lg:col-span-2 lg:row-span-2"
         >
@@ -418,21 +420,20 @@ const activityItems = computed(() =>
 
         <!-- Tool Usage & Session Ranking -->
         <UiPanelFrame
-          variant="glass"
-          padding="md"
+          variant="panel"
+          padding="lg"
           :title="t('projectDashboard.sections.toolUsage.title')"
         >
-          <UiRankingList v-if="toolRankingItems.length" :items="toolRankingItems.slice(0, 4)" />
+          <UiRankingList v-if="toolRankingItems.length" :items="toolRankingItems.slice(0, 4)" class="gap-4" />
         </UiPanelFrame>
         
         <UiPanelFrame
-          variant="glass"
-          padding="md"
+          variant="panel"
+          padding="lg"
           :title="t('projectDashboard.sections.sessionRanking.title')"
         >
-          <UiRankingList v-if="conversationRankingItems.length" :items="conversationRankingItems.slice(0, 4)" />
+          <UiRankingList v-if="conversationRankingItems.length" :items="conversationRankingItems.slice(0, 4)" class="gap-4" />
         </UiPanelFrame>
-
       </div>
     </template>
 

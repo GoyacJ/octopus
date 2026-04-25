@@ -9,13 +9,13 @@ const surfaceVariants = cva(
     variants: {
       variant: {
         flat: 'bg-transparent shadow-none border-none',
-        raised: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)]',
-        overlay: 'bg-popover border border-[color-mix(in_srgb,var(--border)_84%,transparent)] shadow-md rounded-[var(--radius-xl)]',
-        panel: 'bg-subtle border border-[color-mix(in_srgb,var(--border)_68%,transparent)] shadow-none rounded-[var(--radius-l)]',
-        interactive: 'bg-surface border border-[color-mix(in_srgb,var(--border)_78%,transparent)] shadow-xs rounded-[var(--radius-l)] hover:bg-subtle hover:border-border-strong',
-        subtle: 'bg-subtle border border-transparent shadow-none rounded-[var(--radius-l)]',
-        glass: 'glass border border-[color-mix(in_srgb,var(--border)_40%,transparent)] shadow-md rounded-[var(--radius-xl)] highlight-border',
-        'glass-strong': 'glass-strong border border-[color-mix(in_srgb,var(--border)_60%,transparent)] shadow-lg rounded-[var(--radius-xl)] highlight-border',
+        raised: 'bg-surface border border-border/40 shadow-[var(--layer-depth-1)] rounded-[var(--radius-xl)]',
+        overlay: 'bg-popover border border-border/60 shadow-[var(--shadow-lg)] rounded-[var(--radius-2xl)]',
+        panel: 'bg-surface-muted/50 border-none shadow-[var(--layer-depth-1)] rounded-[var(--radius-2xl)]',
+        interactive: 'bg-surface border border-border/40 shadow-xs rounded-[var(--radius-xl)] hover:bg-subtle hover:border-border-strong hover:shadow-md',
+        subtle: 'bg-surface-muted/40 border-none shadow-none rounded-[var(--radius-xl)]',
+        glass: 'glass border border-white/10 shadow-[var(--shadow-md)] rounded-[var(--radius-2xl)] highlight-border backdrop-blur-md',
+        'glass-strong': 'glass-strong border border-white/20 shadow-[var(--shadow-xl)] rounded-[var(--radius-2xl)] highlight-border backdrop-blur-lg',
       },
       padding: {
         none: 'p-0',
