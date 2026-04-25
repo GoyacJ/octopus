@@ -1,0 +1,31 @@
+[package]
+name = "octopus-harness-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_mcp"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+stdio = []
+http = []
+websocket = []
+sse = []
+in-process = []
+server-adapter = []
+oauth = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-tool = { path = "../octopus-harness-tool" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

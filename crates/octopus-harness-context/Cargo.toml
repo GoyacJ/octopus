@@ -1,0 +1,28 @@
+[package]
+name = "octopus-harness-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_context"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+anthropic-cache = []
+compact-aux-llm = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
+octopus-harness-model = { path = "../octopus-harness-model" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

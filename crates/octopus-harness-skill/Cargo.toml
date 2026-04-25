@@ -1,0 +1,28 @@
+[package]
+name = "octopus-harness-skill"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_skill"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+workspace-source = []
+user-source = []
+plugin-source = []
+mcp-source = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

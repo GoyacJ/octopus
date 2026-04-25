@@ -1,0 +1,34 @@
+[package]
+name = "octopus-harness-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "harness_session"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+workspace-bootstrap = []
+hot-reload-fork = []
+steering = []
+
+[dependencies]
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-context = { path = "../octopus-harness-context" }
+octopus-harness-hook = { path = "../octopus-harness-hook" }
+octopus-harness-journal = { path = "../octopus-harness-journal" }
+octopus-harness-mcp = { path = "../octopus-harness-mcp" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
+octopus-harness-permission = { path = "../octopus-harness-permission" }
+octopus-harness-skill = { path = "../octopus-harness-skill" }
+octopus-harness-tool = { path = "../octopus-harness-tool" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
