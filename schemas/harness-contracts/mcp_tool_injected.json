@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpToolInjectedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "canonical_name",
+    "server_id",
+    "tool_name"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "canonical_name": {
+      "type": "string"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    },
+    "tool_name": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "McpServerId": {
+      "type": "string"
+    }
+  }
+}

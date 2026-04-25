@@ -1,7 +1,7 @@
 # `octopus-harness-contracts` · L0 契约层 SPEC
 
 > 层级：L0（最底层） · 状态：Accepted
-> 版本：1.0 · 依赖：仅标准库 + `serde` + `ulid` + `schemars` + `thiserror` + `chrono`
+> 版本：1.0 · 依赖：仅标准库 + `serde` + `ulid` + `schemars` + `thiserror` + `chrono` + `strum`
 
 ## 1. 职责
 
@@ -22,6 +22,7 @@ thiserror = "1"
 chrono = { version = "0.4", features = ["serde"] }
 bytes = { version = "1", features = ["serde"] }
 secrecy = { version = "0.8", features = ["serde"] }
+strum = { version = "0.27", features = ["derive"] }
 ```
 
 ## 3. 对外 API

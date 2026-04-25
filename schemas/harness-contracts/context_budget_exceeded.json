@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextBudgetExceededEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "budget",
+    "current_tokens",
+    "limit_tokens",
+    "session_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "budget": {
+      "$ref": "#/definitions/BudgetKind"
+    },
+    "current_tokens": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "limit_tokens": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "BudgetKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "soft_budget",
+            "hard_budget",
+            "per_turn_tokens",
+            "per_session_tokens"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "per_tool_max_chars"
+          ],
+          "properties": {
+            "per_tool_max_chars": {
+              "type": "object",
+              "required": [
+                "tool_name"
+              ],
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,709 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RunStartedEvent",
+  "type": "object",
+  "required": [
+    "correlation_id",
+    "effective_config_hash",
+    "input",
+    "run_id",
+    "session_id",
+    "snapshot_id",
+    "started_at",
+    "tenant_id"
+  ],
+  "properties": {
+    "correlation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "effective_config_hash": {
+      "$ref": "#/definitions/ConfigHash"
+    },
+    "input": {
+      "$ref": "#/definitions/TurnInput"
+    },
+    "parent_run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "snapshot_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ConfigHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "Message": {
+      "type": "object",
+      "required": [
+        "created_at",
+        "id",
+        "parts",
+        "role"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MessagePart"
+          }
+        },
+        "role": {
+          "$ref": "#/definitions/MessageRole"
+        }
+      }
+    },
+    "MessagePart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "kind",
+            "mime_type"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "image"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "kind",
+            "mime_type"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "audio"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "kind",
+            "mime_type",
+            "name"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "result",
+            "tool_use_id"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "tool_result"
+              ]
+            },
+            "result": {
+              "$ref": "#/definitions/ToolResult"
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "thinking"
+              ]
+            },
+            "signature": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "MessageRole": {
+      "type": "string",
+      "enum": [
+        "user",
+        "assistant",
+        "tool",
+        "system"
+      ]
+    },
+    "ReferenceKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "url"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "url"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "ref_kind"
+          ],
+          "properties": {
+            "line_range": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "path": {
+              "type": "string"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob",
+            "from_offset",
+            "ref_kind",
+            "to_offset"
+          ],
+          "properties": {
+            "blob": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "from_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            },
+            "to_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "tool_use_id"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "tool_use"
+              ]
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "memory_id",
+            "ref_kind"
+          ],
+          "properties": {
+            "memory_id": {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "memory"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ToolResult": {
+      "oneOf": [
+        {
+          "type": [
+            "object",
+            "string"
+          ],
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "content_type",
+            "kind"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "blob"
+              ]
+            }
+          }
+        },
+        {
+          "type": [
+            "object",
+            "array"
+          ],
+          "items": {
+            "$ref": "#/definitions/ToolResultPart"
+          },
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "mixed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ToolResultPart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            },
+            "schema_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "content_type",
+            "kind"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "blob"
+              ]
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "language",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "code"
+              ]
+            },
+            "language": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reference_kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reference"
+              ]
+            },
+            "reference_kind": {
+              "$ref": "#/definitions/ReferenceKind"
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "headers",
+            "kind",
+            "rows"
+          ],
+          "properties": {
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": true
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "stage"
+          ],
+          "properties": {
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "progress"
+              ]
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "float"
+            },
+            "stage": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "code",
+            "kind",
+            "message",
+            "retriable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "error"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "retriable": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "TurnInput": {
+      "type": "object",
+      "required": [
+        "message",
+        "metadata"
+      ],
+      "properties": {
+        "message": {
+          "$ref": "#/definitions/Message"
+        },
+        "metadata": true
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

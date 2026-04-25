@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamTurnCompletedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "team_id",
+    "usage"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "transcript_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TranscriptRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "usage": {
+      "$ref": "#/definitions/UsageSnapshot"
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "TranscriptRef": {
+      "type": "object",
+      "required": [
+        "blob",
+        "from_offset",
+        "to_offset"
+      ],
+      "properties": {
+        "blob": {
+          "$ref": "#/definitions/BlobRef"
+        },
+        "from_offset": {
+          "$ref": "#/definitions/JournalOffset"
+        },
+        "to_offset": {
+          "$ref": "#/definitions/JournalOffset"
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    },
+    "UsageSnapshot": {
+      "type": "object",
+      "required": [
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_micros",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "properties": {
+        "cache_read_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cost_micros": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "input_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

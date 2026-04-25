@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SubagentTerminatedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "parent_session_id",
+    "reason",
+    "subagent_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "parent_session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "reason": {
+      "$ref": "#/definitions/SubagentTerminationReason"
+    },
+    "subagent_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "SubagentTerminationReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "natural_completion",
+            "parent_cancelled",
+            "bridge_broken"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "admin_interrupted"
+          ],
+          "properties": {
+            "admin_interrupted": {
+              "type": "object",
+              "required": [
+                "admin_id"
+              ],
+              "properties": {
+                "admin_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "stalled"
+          ],
+          "properties": {
+            "stalled": {
+              "type": "object",
+              "required": [
+                "silent_for_ms"
+              ],
+              "properties": {
+                "silent_for_ms": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "failed"
+          ],
+          "properties": {
+            "failed": {
+              "type": "object",
+              "required": [
+                "detail"
+              ],
+              "properties": {
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,601 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolUseCompletedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "result",
+    "tool_use_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "result": {
+      "$ref": "#/definitions/ToolResultEnvelope"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "BudgetMetric": {
+      "type": "string",
+      "enum": [
+        "chars",
+        "bytes",
+        "lines"
+      ]
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "OverflowMetadata": {
+      "type": "object",
+      "required": [
+        "blob_ref",
+        "effective_limit",
+        "head_chars",
+        "original_metric",
+        "original_size",
+        "tail_chars"
+      ],
+      "properties": {
+        "blob_ref": {
+          "$ref": "#/definitions/BlobRef"
+        },
+        "effective_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "head_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "original_metric": {
+          "$ref": "#/definitions/BudgetMetric"
+        },
+        "original_size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "tail_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ReferenceKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "url"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "url"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "ref_kind"
+          ],
+          "properties": {
+            "line_range": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "path": {
+              "type": "string"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob",
+            "from_offset",
+            "ref_kind",
+            "to_offset"
+          ],
+          "properties": {
+            "blob": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "from_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            },
+            "to_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "tool_use_id"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "tool_use"
+              ]
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "memory_id",
+            "ref_kind"
+          ],
+          "properties": {
+            "memory_id": {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "memory"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ToolResult": {
+      "oneOf": [
+        {
+          "type": [
+            "object",
+            "string"
+          ],
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "content_type",
+            "kind"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "blob"
+              ]
+            }
+          }
+        },
+        {
+          "type": [
+            "object",
+            "array"
+          ],
+          "items": {
+            "$ref": "#/definitions/ToolResultPart"
+          },
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "mixed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ToolResultEnvelope": {
+      "type": "object",
+      "required": [
+        "is_error",
+        "result"
+      ],
+      "properties": {
+        "is_error": {
+          "type": "boolean"
+        },
+        "overflow": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/OverflowMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "$ref": "#/definitions/ToolResult"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UsageSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ToolResultPart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            },
+            "schema_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "content_type",
+            "kind"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "blob"
+              ]
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "language",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "code"
+              ]
+            },
+            "language": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reference_kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reference"
+              ]
+            },
+            "reference_kind": {
+              "$ref": "#/definitions/ReferenceKind"
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "headers",
+            "kind",
+            "rows"
+          ],
+          "properties": {
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": true
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "stage"
+          ],
+          "properties": {
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "progress"
+              ]
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "float"
+            },
+            "stage": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "code",
+            "kind",
+            "message",
+            "retriable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "error"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "retriable": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    },
+    "UsageSnapshot": {
+      "type": "object",
+      "required": [
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_micros",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "properties": {
+        "cache_read_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cost_micros": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "input_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

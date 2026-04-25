@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SubagentAnnouncedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "parent_session_id",
+    "renderer_id",
+    "status",
+    "subagent_id",
+    "summary",
+    "usage"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "parent_session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "renderer_id": {
+      "type": "string"
+    },
+    "result": true,
+    "status": {
+      "$ref": "#/definitions/SubagentStatus"
+    },
+    "subagent_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "transcript_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TranscriptRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "usage": {
+      "$ref": "#/definitions/UsageSnapshot"
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "SubagentStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "cancelled",
+        "failed",
+        "stalled"
+      ]
+    },
+    "TranscriptRef": {
+      "type": "object",
+      "required": [
+        "blob",
+        "from_offset",
+        "to_offset"
+      ],
+      "properties": {
+        "blob": {
+          "$ref": "#/definitions/BlobRef"
+        },
+        "from_offset": {
+          "$ref": "#/definitions/JournalOffset"
+        },
+        "to_offset": {
+          "$ref": "#/definitions/JournalOffset"
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    },
+    "UsageSnapshot": {
+      "type": "object",
+      "required": [
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_micros",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "properties": {
+        "cache_read_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cost_micros": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "input_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

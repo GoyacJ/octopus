@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamMemberLeftEvent",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "at",
+    "reason",
+    "team_id"
+  ],
+  "properties": {
+    "agent_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookReturnedUnsupportedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "causation_id",
+    "handler_id",
+    "hook_event_kind",
+    "returned_kind"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "causation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "handler_id": {
+      "type": "string"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    },
+    "returned_kind": {
+      "$ref": "#/definitions/HookOutcomeDiscriminant"
+    }
+  },
+  "definitions": {
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "HookOutcomeDiscriminant": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "block",
+        "rewrite_input",
+        "override_permission",
+        "add_context",
+        "transform_result"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

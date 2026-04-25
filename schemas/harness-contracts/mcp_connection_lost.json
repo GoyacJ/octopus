@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpConnectionLostEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "reason",
+    "server_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "$ref": "#/definitions/McpConnectionLostReason"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    }
+  },
+  "definitions": {
+    "McpConnectionLostReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "server_exited"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "network"
+          ],
+          "properties": {
+            "network": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "auth_failure"
+          ],
+          "properties": {
+            "auth_failure": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "handshake_mismatch"
+          ],
+          "properties": {
+            "handshake_mismatch": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "other"
+          ],
+          "properties": {
+            "other": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "McpServerId": {
+      "type": "string"
+    }
+  }
+}

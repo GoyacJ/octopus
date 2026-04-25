@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SubagentPermissionResolvedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "decision",
+    "parent_session_id",
+    "request_id",
+    "subagent_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decision": {
+      "$ref": "#/definitions/Decision"
+    },
+    "parent_session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "subagent_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

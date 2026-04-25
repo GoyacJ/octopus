@@ -1,0 +1,381 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryUpsertedEvent",
+  "type": "object",
+  "required": [
+    "action",
+    "actor",
+    "at",
+    "content_hash",
+    "memory_id",
+    "source",
+    "target",
+    "tenant_id"
+  ],
+  "properties": {
+    "action": {
+      "$ref": "#/definitions/MemoryWriteAction"
+    },
+    "actor": {
+      "$ref": "#/definitions/MemoryActor"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "content_hash": {
+      "$ref": "#/definitions/ContentHash"
+    },
+    "memory_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "source": {
+      "$ref": "#/definitions/MemorySource"
+    },
+    "target": {
+      "$ref": "#/definitions/MemoryWriteTarget"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ContentHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "MemdirFileTag": {
+      "type": "string",
+      "enum": [
+        "memory",
+        "user",
+        "dreams"
+      ]
+    },
+    "MemoryActor": {
+      "type": "object",
+      "required": [
+        "tenant_id"
+      ],
+      "properties": {
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "team_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tenant_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "user_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "MemoryKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_preference",
+            "feedback",
+            "project_fact",
+            "reference",
+            "agent_self_note"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MemorySource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "agent_derived",
+            "external_retrieval",
+            "imported"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "subagent_derived"
+          ],
+          "properties": {
+            "subagent_derived": {
+              "type": "object",
+              "required": [
+                "child_session"
+              ],
+              "properties": {
+                "child_session": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "consolidated"
+          ],
+          "properties": {
+            "consolidated": {
+              "type": "object",
+              "required": [
+                "from"
+              ],
+              "properties": {
+                "from": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/TypedUlid"
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MemoryVisibility": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "tenant"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "private"
+          ],
+          "properties": {
+            "private": {
+              "type": "object",
+              "required": [
+                "session_id"
+              ],
+              "properties": {
+                "session_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "user"
+          ],
+          "properties": {
+            "user": {
+              "type": "object",
+              "required": [
+                "user_id"
+              ],
+              "properties": {
+                "user_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "team"
+          ],
+          "properties": {
+            "team": {
+              "type": "object",
+              "required": [
+                "team_id"
+              ],
+              "properties": {
+                "team_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MemoryWriteAction": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "upsert",
+            "forget"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "append_section"
+          ],
+          "properties": {
+            "append_section": {
+              "type": "object",
+              "required": [
+                "section"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "replace_section"
+          ],
+          "properties": {
+            "replace_section": {
+              "type": "object",
+              "required": [
+                "section"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "delete_section"
+          ],
+          "properties": {
+            "delete_section": {
+              "type": "object",
+              "required": [
+                "section"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MemoryWriteTarget": {
+      "type": "object",
+      "required": [
+        "destination",
+        "kind",
+        "visibility"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/WriteDestination"
+        },
+        "kind": {
+          "$ref": "#/definitions/MemoryKind"
+        },
+        "visibility": {
+          "$ref": "#/definitions/MemoryVisibility"
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    },
+    "WriteDestination": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "memdir"
+          ],
+          "properties": {
+            "memdir": {
+              "$ref": "#/definitions/MemdirFileTag"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "external"
+          ],
+          "properties": {
+            "external": {
+              "type": "object",
+              "required": [
+                "provider_id"
+              ],
+              "properties": {
+                "provider_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

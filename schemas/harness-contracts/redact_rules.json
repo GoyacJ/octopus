@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RedactRules",
+  "type": "object",
+  "required": [
+    "pattern_set",
+    "replacement",
+    "scope"
+  ],
+  "properties": {
+    "pattern_set": {
+      "$ref": "#/definitions/RedactPatternSet"
+    },
+    "replacement": {
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/definitions/RedactScope"
+    }
+  },
+  "definitions": {
+    "RedactPatternKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "bearer_token",
+            "private_key",
+            "o_auth_code",
+            "database_url",
+            "private_ip",
+            "email"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RedactPatternSet": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "default",
+            "all_builtins",
+            "none"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "only"
+          ],
+          "properties": {
+            "only": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RedactPatternKind"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RedactScope": {
+      "type": "string",
+      "enum": [
+        "all",
+        "trace_only",
+        "event_body",
+        "log_only"
+      ]
+    }
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecuteCodeStepInvokedEvent",
+  "type": "object",
+  "required": [
+    "args_hash",
+    "at",
+    "duration_ms",
+    "embedded_tool",
+    "parent_tool_use_id",
+    "run_id",
+    "session_id",
+    "step_seq"
+  ],
+  "properties": {
+    "args_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "embedded_tool": {
+      "type": "string"
+    },
+    "overflow": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/OverflowMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "parent_tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "refused_reason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/EmbeddedRefusedReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "step_seq": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "BudgetMetric": {
+      "type": "string",
+      "enum": [
+        "chars",
+        "bytes",
+        "lines"
+      ]
+    },
+    "EmbeddedRefusedReason": {
+      "type": "string",
+      "enum": [
+        "not_whitelisted",
+        "self_reentrant",
+        "capability_denied",
+        "property_violation",
+        "permission_denied"
+      ]
+    },
+    "OverflowMetadata": {
+      "type": "object",
+      "required": [
+        "blob_ref",
+        "effective_limit",
+        "head_chars",
+        "original_metric",
+        "original_size",
+        "tail_chars"
+      ],
+      "properties": {
+        "blob_ref": {
+          "$ref": "#/definitions/BlobRef"
+        },
+        "effective_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "head_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "original_metric": {
+          "$ref": "#/definitions/BudgetMetric"
+        },
+        "original_size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "tail_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

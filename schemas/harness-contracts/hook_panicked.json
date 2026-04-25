@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookPanickedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "causation_id",
+    "handler_id",
+    "hook_event_kind",
+    "message_snippet"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "causation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "handler_id": {
+      "type": "string"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    },
+    "message_snippet": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

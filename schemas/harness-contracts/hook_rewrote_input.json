@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookRewroteInputEvent",
+  "type": "object",
+  "required": [
+    "after_hash",
+    "at",
+    "before_hash",
+    "causation_id",
+    "tool_use_id"
+  ],
+  "properties": {
+    "after_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "before_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "causation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpResourceUpdatedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "server_id",
+    "uri"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    },
+    "uri": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "McpServerId": {
+      "type": "string"
+    }
+  }
+}

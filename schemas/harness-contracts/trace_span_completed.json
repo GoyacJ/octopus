@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TraceSpanCompletedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "duration_ms",
+    "name",
+    "span_id",
+    "trace_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "name": {
+      "type": "string"
+    },
+    "span_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    }
+  }
+}

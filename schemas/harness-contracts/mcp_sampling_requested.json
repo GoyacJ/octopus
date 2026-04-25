@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpSamplingRequestedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "request_id",
+    "server_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "model_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    }
+  },
+  "definitions": {
+    "McpServerId": {
+      "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

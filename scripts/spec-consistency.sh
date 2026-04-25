@@ -35,7 +35,9 @@ if grep -RInE '\b(React\.|egui::|tauri::)' crates/octopus-harness-* --include='*
   fail "SDK contracts must not expose UI-specific types"
 fi
 
-if grep -RInE 'enum (My|Custom)?(Tool|Sandbox|Model|Harness)Error' crates/octopus-harness-* --include='*.rs'; then
+if find crates -path 'crates/octopus-harness-*' -type f -name '*.rs' \
+  ! -path 'crates/octopus-harness-contracts/*' \
+  -print0 | xargs -0 grep -InE 'enum (My|Custom)?(Tool|Sandbox|Model|Harness)Error'; then
   fail "custom error families must come from SPEC-defined contracts"
 fi
 

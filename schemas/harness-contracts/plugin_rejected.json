@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginRejectedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "manifest_origin",
+    "reason",
+    "tenant_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "manifest_origin": {
+      "type": "string"
+    },
+    "reason": {
+      "$ref": "#/definitions/PluginRejectedReason"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "PluginRejectedReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "trust_policy",
+            "manifest_invalid",
+            "capability_denied",
+            "duplicate"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "other"
+          ],
+          "properties": {
+            "other": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

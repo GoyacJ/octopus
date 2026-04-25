@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SessionForkedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "cache_impact",
+    "child_session_id",
+    "fork_reason",
+    "from_offset",
+    "parent_session_id",
+    "tenant_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cache_impact": {
+      "$ref": "#/definitions/CacheImpact"
+    },
+    "child_session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "config_delta_hash": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "fork_reason": {
+      "$ref": "#/definitions/ForkReason"
+    },
+    "from_offset": {
+      "$ref": "#/definitions/JournalOffset"
+    },
+    "parent_session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "CacheImpact": {
+      "type": "object",
+      "required": [
+        "prompt_cache_invalidated"
+      ],
+      "properties": {
+        "prompt_cache_invalidated": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ForkReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_requested",
+            "compaction",
+            "hot_reload",
+            "isolation"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "retry_from_checkpoint"
+          ],
+          "properties": {
+            "retry_from_checkpoint": {
+              "$ref": "#/definitions/JournalOffset"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolUseRequestedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "input",
+    "origin",
+    "run_id",
+    "session_id",
+    "tool_name",
+    "tool_use_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "input": true,
+    "origin": {
+      "$ref": "#/definitions/ToolOrigin"
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_name": {
+      "type": "string"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "McpOrigin": {
+      "type": "object",
+      "required": [
+        "server_id",
+        "server_meta",
+        "server_source",
+        "server_trust",
+        "upstream_name"
+      ],
+      "properties": {
+        "server_id": {
+          "$ref": "#/definitions/McpServerId"
+        },
+        "server_meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "server_source": {
+          "$ref": "#/definitions/McpServerSource"
+        },
+        "server_trust": {
+          "$ref": "#/definitions/TrustLevel"
+        },
+        "upstream_name": {
+          "type": "string"
+        }
+      }
+    },
+    "McpServerId": {
+      "type": "string"
+    },
+    "McpServerSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "user",
+            "project",
+            "policy"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "$ref": "#/definitions/PluginId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dynamic"
+          ],
+          "properties": {
+            "dynamic": {
+              "type": "object",
+              "required": [
+                "registered_by"
+              ],
+              "properties": {
+                "registered_by": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "managed"
+          ],
+          "properties": {
+            "managed": {
+              "type": "object",
+              "required": [
+                "registry_url"
+              ],
+              "properties": {
+                "registry_url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PluginId": {
+      "type": "string"
+    },
+    "SkillId": {
+      "type": "string"
+    },
+    "SkillOrigin": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "skill_name",
+        "source_kind",
+        "trust"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/SkillId"
+        },
+        "skill_name": {
+          "type": "string"
+        },
+        "source_kind": {
+          "$ref": "#/definitions/SkillSourceKind"
+        },
+        "trust": {
+          "$ref": "#/definitions/TrustLevel"
+        }
+      }
+    },
+    "SkillSourceKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "bundled",
+            "workspace",
+            "user"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "$ref": "#/definitions/PluginId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp"
+          ],
+          "properties": {
+            "mcp": {
+              "$ref": "#/definitions/McpServerId"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolOrigin": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "builtin"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "type": "object",
+              "required": [
+                "plugin_id",
+                "trust"
+              ],
+              "properties": {
+                "plugin_id": {
+                  "$ref": "#/definitions/PluginId"
+                },
+                "trust": {
+                  "$ref": "#/definitions/TrustLevel"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp"
+          ],
+          "properties": {
+            "mcp": {
+              "$ref": "#/definitions/McpOrigin"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skill"
+          ],
+          "properties": {
+            "skill": {
+              "$ref": "#/definitions/SkillOrigin"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TrustLevel": {
+      "type": "string",
+      "enum": [
+        "admin_trusted",
+        "user_controlled"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

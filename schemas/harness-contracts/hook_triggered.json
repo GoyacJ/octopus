@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookTriggeredEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "duration_ms",
+    "handler_id",
+    "hook_event_kind",
+    "outcome_summary"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "handler_id": {
+      "type": "string"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    },
+    "outcome_summary": {
+      "$ref": "#/definitions/HookOutcomeSummary"
+    }
+  },
+  "definitions": {
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "HookOutcomeSummary": {
+      "type": "object",
+      "required": [
+        "continued",
+        "rewrote_input",
+        "transformed"
+      ],
+      "properties": {
+        "added_context_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "blocked_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "continued": {
+          "type": "boolean"
+        },
+        "overrode_permission": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Decision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rewrote_input": {
+          "type": "boolean"
+        },
+        "transformed": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

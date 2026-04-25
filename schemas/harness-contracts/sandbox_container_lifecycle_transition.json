@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SandboxContainerLifecycleTransitionEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "from",
+    "session_id",
+    "to"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "from": {
+      "type": "string"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "to": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

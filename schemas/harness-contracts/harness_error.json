@@ -1,0 +1,461 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HarnessError",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "prompt_cache_locked",
+        "interrupted",
+        "tenant_mismatch"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "permission_denied"
+      ],
+      "properties": {
+        "permission_denied": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "tool_not_found"
+      ],
+      "properties": {
+        "tool_not_found": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "invalid_tenant"
+      ],
+      "properties": {
+        "invalid_tenant": {
+          "$ref": "#/definitions/TypedUlid"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "budget_exhausted"
+      ],
+      "properties": {
+        "budget_exhausted": {
+          "$ref": "#/definitions/BudgetKind"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "model"
+      ],
+      "properties": {
+        "model": {
+          "$ref": "#/definitions/ModelError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "journal"
+      ],
+      "properties": {
+        "journal": {
+          "$ref": "#/definitions/JournalError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "sandbox"
+      ],
+      "properties": {
+        "sandbox": {
+          "$ref": "#/definitions/SandboxError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "permission"
+      ],
+      "properties": {
+        "permission": {
+          "$ref": "#/definitions/PermissionError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "memory"
+      ],
+      "properties": {
+        "memory": {
+          "$ref": "#/definitions/MemoryError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "tool"
+      ],
+      "properties": {
+        "tool": {
+          "$ref": "#/definitions/ToolError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "session"
+      ],
+      "properties": {
+        "session": {
+          "$ref": "#/definitions/SessionError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "engine"
+      ],
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/EngineError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "plugin"
+      ],
+      "properties": {
+        "plugin": {
+          "$ref": "#/definitions/PluginError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "mcp"
+      ],
+      "properties": {
+        "mcp": {
+          "$ref": "#/definitions/McpError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "hook"
+      ],
+      "properties": {
+        "hook": {
+          "$ref": "#/definitions/HookError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "context"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/ContextError"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "internal"
+      ],
+      "properties": {
+        "internal": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "other"
+      ],
+      "properties": {
+        "other": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "BudgetKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "soft_budget",
+            "hard_budget",
+            "per_turn_tokens",
+            "per_session_tokens"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "per_tool_max_chars"
+          ],
+          "properties": {
+            "per_tool_max_chars": {
+              "type": "object",
+              "required": [
+                "tool_name"
+              ],
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ContextError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EngineError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "HookError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "JournalError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "McpError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MemoryError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ModelError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PermissionError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PluginError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SandboxError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SessionError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

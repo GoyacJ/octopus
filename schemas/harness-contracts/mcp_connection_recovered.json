@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpConnectionRecoveredEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "server_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    }
+  },
+  "definitions": {
+    "McpServerId": {
+      "type": "string"
+    }
+  }
+}

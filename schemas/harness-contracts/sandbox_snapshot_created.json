@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SandboxSnapshotCreatedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "kind",
+    "session_id",
+    "snapshot_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "$ref": "#/definitions/SessionSnapshotKind"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "snapshot_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "SessionSnapshotKind": {
+      "type": "string",
+      "enum": [
+        "filesystem_image",
+        "shell_state",
+        "container_image"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

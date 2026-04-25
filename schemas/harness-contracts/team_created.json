@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamCreatedEvent",
+  "type": "object",
+  "required": [
+    "created_at",
+    "member_specs_hash",
+    "name",
+    "team_id",
+    "tenant_id",
+    "topology_kind"
+  ],
+  "properties": {
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "member_specs_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "name": {
+      "type": "string"
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "topology_kind": {
+      "$ref": "#/definitions/TopologyKind"
+    }
+  },
+  "definitions": {
+    "TopologyKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "supervisor",
+            "peer",
+            "pipeline"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

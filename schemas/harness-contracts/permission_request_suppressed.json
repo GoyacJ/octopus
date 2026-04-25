@@ -1,0 +1,473 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PermissionRequestSuppressedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "causation_id",
+    "original_request_id",
+    "reason",
+    "request_id",
+    "run_id",
+    "scope_hint",
+    "session_id",
+    "severity",
+    "subject",
+    "tenant_id",
+    "tool_name",
+    "tool_use_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "causation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "original_decision_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "original_request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "reason": {
+      "$ref": "#/definitions/SuppressionReason"
+    },
+    "request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "reused_decision": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Decision"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "scope_hint": {
+      "$ref": "#/definitions/DecisionScope"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "severity": {
+      "$ref": "#/definitions/Severity"
+    },
+    "subject": {
+      "$ref": "#/definitions/PermissionSubject"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_name": {
+      "type": "string"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "DecisionScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "any"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_command"
+          ],
+          "properties": {
+            "exact_command": {
+              "type": "object",
+              "required": [
+                "command"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_args"
+          ],
+          "properties": {
+            "exact_args": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_name"
+          ],
+          "properties": {
+            "tool_name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "path_prefix"
+          ],
+          "properties": {
+            "path_prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "glob_pattern"
+          ],
+          "properties": {
+            "glob_pattern": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "execute_code_script"
+          ],
+          "properties": {
+            "execute_code_script": {
+              "type": "object",
+              "required": [
+                "script_hash"
+              ],
+              "properties": {
+                "script_hash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  },
+                  "maxItems": 32,
+                  "minItems": 32
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ExecFingerprint": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "PermissionSubject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "tool_invocation"
+          ],
+          "properties": {
+            "tool_invocation": {
+              "type": "object",
+              "required": [
+                "input",
+                "tool"
+              ],
+              "properties": {
+                "input": true,
+                "tool": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "command_exec"
+          ],
+          "properties": {
+            "command_exec": {
+              "type": "object",
+              "required": [
+                "argv",
+                "command"
+              ],
+              "properties": {
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "command": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fingerprint": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/ExecFingerprint"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "file_write"
+          ],
+          "properties": {
+            "file_write": {
+              "type": "object",
+              "required": [
+                "bytes_preview",
+                "path"
+              ],
+              "properties": {
+                "bytes_preview": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  }
+                },
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "file_delete"
+          ],
+          "properties": {
+            "file_delete": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "network_access"
+          ],
+          "properties": {
+            "network_access": {
+              "type": "object",
+              "required": [
+                "host"
+              ],
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint16",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dangerous_command"
+          ],
+          "properties": {
+            "dangerous_command": {
+              "type": "object",
+              "required": [
+                "command",
+                "pattern_id",
+                "severity"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "pattern_id": {
+                  "type": "string"
+                },
+                "severity": {
+                  "$ref": "#/definitions/Severity"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp_tool_call"
+          ],
+          "properties": {
+            "mcp_tool_call": {
+              "type": "object",
+              "required": [
+                "input",
+                "server",
+                "tool"
+              ],
+              "properties": {
+                "input": true,
+                "server": {
+                  "type": "string"
+                },
+                "tool": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "object",
+              "required": [
+                "kind",
+                "payload"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "payload": true
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "SuppressionReason": {
+      "type": "string",
+      "enum": [
+        "joined_in_flight",
+        "recently_allowed",
+        "recently_denied",
+        "recently_timed_out"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

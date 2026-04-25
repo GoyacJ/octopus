@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SessionCreatedEvent",
+  "type": "object",
+  "required": [
+    "created_at",
+    "effective_config_hash",
+    "options_hash",
+    "session_id",
+    "snapshot_id",
+    "tenant_id"
+  ],
+  "properties": {
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "effective_config_hash": {
+      "$ref": "#/definitions/ConfigHash"
+    },
+    "options_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "snapshot_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ConfigHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

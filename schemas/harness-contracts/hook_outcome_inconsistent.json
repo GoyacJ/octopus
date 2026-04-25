@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookOutcomeInconsistentEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "causation_id",
+    "handler_id",
+    "hook_event_kind",
+    "reason"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "causation_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "handler_id": {
+      "type": "string"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    },
+    "reason": {
+      "$ref": "#/definitions/InconsistentReason"
+    }
+  },
+  "definitions": {
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "InconsistentReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "pre_tool_use_block_exclusive",
+            "prompt_cache_violation"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "schema_invalid"
+          ],
+          "properties": {
+            "schema_invalid": {
+              "type": "object",
+              "required": [
+                "message",
+                "schema_id"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "schema_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "context_patch_too_large"
+          ],
+          "properties": {
+            "context_patch_too_large": {
+              "type": "object",
+              "required": [
+                "actual_bytes",
+                "limit_bytes"
+              ],
+              "properties": {
+                "actual_bytes": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                },
+                "limit_bytes": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PermissionPersistenceTamperedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "file_path_hash",
+    "key_id",
+    "reason",
+    "tenant_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "file_path_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "fingerprint": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExecFingerprint"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "key_id": {
+      "type": "string"
+    },
+    "reason": {
+      "$ref": "#/definitions/PersistenceTamperReason"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ExecFingerprint": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "PersistenceTamperReason": {
+      "type": "string",
+      "enum": [
+        "signature_mismatch",
+        "algorithm_downgrade",
+        "unknown_key_id",
+        "missing_signature"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

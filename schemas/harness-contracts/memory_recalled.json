@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryRecalledEvent",
+  "type": "object",
+  "required": [
+    "actor",
+    "at",
+    "recalled",
+    "run_id",
+    "session_id",
+    "tenant_id"
+  ],
+  "properties": {
+    "actor": {
+      "$ref": "#/definitions/MemoryActor"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recalled": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TypedUlid"
+      }
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "MemoryActor": {
+      "type": "object",
+      "required": [
+        "tenant_id"
+      ],
+      "properties": {
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "team_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tenant_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "user_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

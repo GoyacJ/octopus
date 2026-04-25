@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SteeringMessageQueuedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "body_hash",
+    "body_size",
+    "id",
+    "kind",
+    "priority",
+    "session_id",
+    "source"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "body_blob": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BlobRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "body_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "body_size": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "kind": {
+      "$ref": "#/definitions/SteeringKind"
+    },
+    "priority": {
+      "$ref": "#/definitions/SteeringPriority"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "source": {
+      "$ref": "#/definitions/SteeringSource"
+    }
+  },
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "PluginId": {
+      "type": "string"
+    },
+    "SteeringKind": {
+      "type": "string",
+      "enum": [
+        "append",
+        "replace",
+        "nudge_only"
+      ]
+    },
+    "SteeringPriority": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "high"
+      ]
+    },
+    "SteeringSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "type": "object",
+              "required": [
+                "plugin_id"
+              ],
+              "properties": {
+                "plugin_id": {
+                  "$ref": "#/definitions/PluginId"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "auto_monitor"
+          ],
+          "properties": {
+            "auto_monitor": {
+              "type": "object",
+              "required": [
+                "rule_id"
+              ],
+              "properties": {
+                "rule_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

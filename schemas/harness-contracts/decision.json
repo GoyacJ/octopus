@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Decision",
+  "type": "string",
+  "enum": [
+    "allow_once",
+    "allow_session",
+    "allow_permanent",
+    "deny_once",
+    "deny_permanent",
+    "ask_user",
+    "defer",
+    "escalate"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamTerminatedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "reason",
+    "team_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "$ref": "#/definitions/TeamTerminationReason"
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "TeamTerminationReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "completed",
+            "cancelled",
+            "member_failed"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "error"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

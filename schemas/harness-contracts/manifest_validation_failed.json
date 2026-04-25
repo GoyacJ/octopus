@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ManifestValidationFailedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "failure",
+    "manifest_origin",
+    "raw_bytes_hash",
+    "tenant_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "failure": {
+      "$ref": "#/definitions/ManifestValidationFailure"
+    },
+    "manifest_origin": {
+      "type": "string"
+    },
+    "partial_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "partial_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "raw_bytes_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ManifestValidationFailure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "syntax_error"
+          ],
+          "properties": {
+            "syntax_error": {
+              "type": "object",
+              "required": [
+                "details"
+              ],
+              "properties": {
+                "details": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "schema_violation"
+          ],
+          "properties": {
+            "schema_violation": {
+              "type": "object",
+              "required": [
+                "details",
+                "json_pointer"
+              ],
+              "properties": {
+                "details": {
+                  "type": "string"
+                },
+                "json_pointer": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "unsupported_schema_version"
+          ],
+          "properties": {
+            "unsupported_schema_version": {
+              "type": "object",
+              "required": [
+                "found",
+                "supported"
+              ],
+              "properties": {
+                "found": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "supported": {
+                  "$ref": "#/definitions/SchemaVersionRange"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "cargo_extension_metadata_malformed"
+          ],
+          "properties": {
+            "cargo_extension_metadata_malformed": {
+              "type": "object",
+              "required": [
+                "details"
+              ],
+              "properties": {
+                "details": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "remote_integrity_mismatch"
+          ],
+          "properties": {
+            "remote_integrity_mismatch": {
+              "type": "object",
+              "required": [
+                "expected_etag"
+              ],
+              "properties": {
+                "expected_etag": {
+                  "type": "string"
+                },
+                "got_etag": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SchemaVersionRange": {
+      "type": "object",
+      "required": [
+        "max",
+        "min"
+      ],
+      "properties": {
+        "max": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "min": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UnexpectedErrorEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "error"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "error": {
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

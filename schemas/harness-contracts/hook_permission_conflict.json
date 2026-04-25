@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookPermissionConflictEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "hook_event_kind",
+    "participants",
+    "priority",
+    "resolved_event_id",
+    "winner"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/HookPermissionConflictParticipant"
+      }
+    },
+    "priority": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "resolved_event_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "winner": {
+      "$ref": "#/definitions/HookPermissionConflictParticipant"
+    }
+  },
+  "definitions": {
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "HookPermissionConflictParticipant": {
+      "type": "object",
+      "required": [
+        "decision",
+        "handler_id"
+      ],
+      "properties": {
+        "decision": {
+          "$ref": "#/definitions/Decision"
+        },
+        "handler_id": {
+          "type": "string"
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

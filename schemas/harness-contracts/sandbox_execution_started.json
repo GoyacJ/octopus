@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SandboxExecutionStartedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "policy",
+    "tool_use_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "policy": {
+      "$ref": "#/definitions/SandboxPolicySummary"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "HostRule": {
+      "type": "object",
+      "required": [
+        "pattern"
+      ],
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "ports": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        }
+      }
+    },
+    "LocalIsolationTag": {
+      "type": "string",
+      "enum": [
+        "none",
+        "bubblewrap",
+        "seatbelt",
+        "job_object"
+      ]
+    },
+    "NetworkAccess": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "none",
+            "loopback_only",
+            "unrestricted"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "allow_list"
+          ],
+          "properties": {
+            "allow_list": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/HostRule"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ResourceLimits": {
+      "type": "object",
+      "properties": {
+        "max_cpu_cores": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "max_memory_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_open_files": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_pids": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_wall_clock_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SandboxMode": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "none",
+            "container",
+            "remote"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "os_level"
+          ],
+          "properties": {
+            "os_level": {
+              "$ref": "#/definitions/LocalIsolationTag"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SandboxPolicySummary": {
+      "type": "object",
+      "required": [
+        "mode",
+        "network",
+        "resource_limits",
+        "scope"
+      ],
+      "properties": {
+        "mode": {
+          "$ref": "#/definitions/SandboxMode"
+        },
+        "network": {
+          "$ref": "#/definitions/NetworkAccess"
+        },
+        "resource_limits": {
+          "$ref": "#/definitions/ResourceLimits"
+        },
+        "scope": {
+          "$ref": "#/definitions/SandboxScope"
+        }
+      }
+    },
+    "SandboxScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "workspace_only",
+            "unrestricted"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "workspace_plus"
+          ],
+          "properties": {
+            "workspace_plus": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

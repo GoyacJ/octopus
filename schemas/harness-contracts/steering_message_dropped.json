@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SteeringMessageDroppedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "id",
+    "reason",
+    "session_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "reason": {
+      "$ref": "#/definitions/SteeringDropReason"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "SteeringDropReason": {
+      "type": "string",
+      "enum": [
+        "capacity",
+        "ttl_expired",
+        "dedup_hit",
+        "run_ended",
+        "session_ended",
+        "plugin_denied"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

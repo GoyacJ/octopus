@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginLoadedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "name",
+    "plugin_id",
+    "tenant_id",
+    "version"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "name": {
+      "type": "string"
+    },
+    "plugin_id": {
+      "$ref": "#/definitions/PluginId"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "PluginId": {
+      "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

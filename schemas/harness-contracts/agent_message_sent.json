@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentMessageSentEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "from",
+    "message_id",
+    "team_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "from": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "message_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "to": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

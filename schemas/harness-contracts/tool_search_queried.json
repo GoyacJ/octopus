@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolSearchQueriedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "matched",
+    "query_kind",
+    "run_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "matched": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0.0
+    },
+    "query_kind": {
+      "$ref": "#/definitions/ToolSearchQueryKind"
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ToolSearchQueryKind": {
+      "type": "string",
+      "enum": [
+        "select",
+        "keyword"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

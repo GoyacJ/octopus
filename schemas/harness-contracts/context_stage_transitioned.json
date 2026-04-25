@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextStageTransitionedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "session_id",
+    "to"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "from": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ContextStage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "to": {
+      "$ref": "#/definitions/ContextStage"
+    }
+  },
+  "definitions": {
+    "ContextStage": {
+      "type": "string",
+      "enum": [
+        "gather",
+        "rank",
+        "pack",
+        "compact",
+        "finalize"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

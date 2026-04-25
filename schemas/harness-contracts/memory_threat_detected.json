@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryThreatDetectedEvent",
+  "type": "object",
+  "required": [
+    "action",
+    "at",
+    "category",
+    "direction",
+    "tenant_id"
+  ],
+  "properties": {
+    "action": {
+      "$ref": "#/definitions/ThreatAction"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "category": {
+      "$ref": "#/definitions/ThreatCategory"
+    },
+    "direction": {
+      "$ref": "#/definitions/ThreatDirection"
+    },
+    "memory_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "ThreatAction": {
+      "type": "string",
+      "enum": [
+        "warn",
+        "redact",
+        "block"
+      ]
+    },
+    "ThreatCategory": {
+      "type": "string",
+      "enum": [
+        "prompt_injection",
+        "exfiltration",
+        "backdoor",
+        "credential",
+        "malicious",
+        "special_token"
+      ]
+    },
+    "ThreatDirection": {
+      "type": "string",
+      "enum": [
+        "on_write",
+        "on_recall"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

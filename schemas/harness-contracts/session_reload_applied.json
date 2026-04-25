@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SessionReloadAppliedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "cache_impact",
+    "effective_config_hash",
+    "new_snapshot_id",
+    "session_id",
+    "tenant_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cache_impact": {
+      "$ref": "#/definitions/CacheImpact"
+    },
+    "effective_config_hash": {
+      "$ref": "#/definitions/ConfigHash"
+    },
+    "new_snapshot_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "CacheImpact": {
+      "type": "object",
+      "required": [
+        "prompt_cache_invalidated"
+      ],
+      "properties": {
+        "prompt_cache_invalidated": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ConfigHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

@@ -1,0 +1,311 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PermissionResolvedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "decided_by",
+    "decision",
+    "request_id",
+    "scope"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_by": {
+      "$ref": "#/definitions/DecidedBy"
+    },
+    "decision": {
+      "$ref": "#/definitions/Decision"
+    },
+    "fingerprint": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExecFingerprint"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rationale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "scope": {
+      "$ref": "#/definitions/DecisionScope"
+    }
+  },
+  "definitions": {
+    "DecidedBy": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user",
+            "default_mode"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule"
+          ],
+          "properties": {
+            "rule": {
+              "type": "object",
+              "required": [
+                "rule_id"
+              ],
+              "properties": {
+                "rule_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "broker"
+          ],
+          "properties": {
+            "broker": {
+              "type": "object",
+              "required": [
+                "broker_id"
+              ],
+              "properties": {
+                "broker_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "hook"
+          ],
+          "properties": {
+            "hook": {
+              "type": "object",
+              "required": [
+                "handler_id"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "timeout"
+          ],
+          "properties": {
+            "timeout": {
+              "type": "object",
+              "required": [
+                "default"
+              ],
+              "properties": {
+                "default": {
+                  "$ref": "#/definitions/Decision"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent_forwarded"
+          ],
+          "properties": {
+            "parent_forwarded": {
+              "type": "object",
+              "required": [
+                "original_decided_by",
+                "parent_session_id"
+              ],
+              "properties": {
+                "original_decided_by": {
+                  "$ref": "#/definitions/DecidedBy"
+                },
+                "parent_session_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "DecisionScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "any"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_command"
+          ],
+          "properties": {
+            "exact_command": {
+              "type": "object",
+              "required": [
+                "command"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_args"
+          ],
+          "properties": {
+            "exact_args": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_name"
+          ],
+          "properties": {
+            "tool_name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "path_prefix"
+          ],
+          "properties": {
+            "path_prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "glob_pattern"
+          ],
+          "properties": {
+            "glob_pattern": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "execute_code_script"
+          ],
+          "properties": {
+            "execute_code_script": {
+              "type": "object",
+              "required": [
+                "script_hash"
+              ],
+              "properties": {
+                "script_hash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  },
+                  "maxItems": 32,
+                  "minItems": 32
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ExecFingerprint": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

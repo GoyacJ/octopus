@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolUseDeniedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "decided_by",
+    "reason",
+    "tool_use_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_by": {
+      "$ref": "#/definitions/DecidedBy"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "DecidedBy": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user",
+            "default_mode"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule"
+          ],
+          "properties": {
+            "rule": {
+              "type": "object",
+              "required": [
+                "rule_id"
+              ],
+              "properties": {
+                "rule_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "broker"
+          ],
+          "properties": {
+            "broker": {
+              "type": "object",
+              "required": [
+                "broker_id"
+              ],
+              "properties": {
+                "broker_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "hook"
+          ],
+          "properties": {
+            "hook": {
+              "type": "object",
+              "required": [
+                "handler_id"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "timeout"
+          ],
+          "properties": {
+            "timeout": {
+              "type": "object",
+              "required": [
+                "default"
+              ],
+              "properties": {
+                "default": {
+                  "$ref": "#/definitions/Decision"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent_forwarded"
+          ],
+          "properties": {
+            "parent_forwarded": {
+              "type": "object",
+              "required": [
+                "original_decided_by",
+                "parent_session_id"
+              ],
+              "properties": {
+                "original_decided_by": {
+                  "$ref": "#/definitions/DecidedBy"
+                },
+                "parent_session_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Decision": {
+      "type": "string",
+      "enum": [
+        "allow_once",
+        "allow_session",
+        "allow_permanent",
+        "deny_once",
+        "deny_permanent",
+        "ask_user",
+        "defer",
+        "escalate"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

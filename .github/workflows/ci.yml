@@ -87,6 +87,11 @@ jobs:
       - name: Check Rust docs
         run: cargo doc --no-deps --workspace
 
+      - name: Check harness contracts schema freshness
+        run: |
+          cargo run -p octopus-harness-contracts --example export_schemas
+          git diff --exit-code -- schemas/harness-contracts
+
       - name: Check schema freshness
         run: pnpm schema:check
 

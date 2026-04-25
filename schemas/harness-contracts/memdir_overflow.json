@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemdirOverflowEvent",
+  "type": "object",
+  "required": [
+    "actual_bytes",
+    "at",
+    "file",
+    "limit_bytes",
+    "tenant_id"
+  ],
+  "properties": {
+    "actual_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "file": {
+      "$ref": "#/definitions/MemdirFileTag"
+    },
+    "limit_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "tenant_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "MemdirFileTag": {
+      "type": "string",
+      "enum": [
+        "memory",
+        "user",
+        "dreams"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

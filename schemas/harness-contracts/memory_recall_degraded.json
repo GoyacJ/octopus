@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryRecallDegradedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "reason",
+    "run_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "$ref": "#/definitions/MemoryRecallDegradedReason"
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "MemoryRecallDegradedReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "timeout",
+            "record_too_large",
+            "visibility_violation",
+            "scanner_blocked"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_error"
+          ],
+          "properties": {
+            "provider_error": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

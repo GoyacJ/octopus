@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpElicitationResolvedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "request_id",
+    "server_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "request_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "server_id": {
+      "$ref": "#/definitions/McpServerId"
+    },
+    "value": true
+  },
+  "definitions": {
+    "McpServerId": {
+      "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

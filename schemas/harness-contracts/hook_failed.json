@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HookFailedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "cause_detail",
+    "cause_kind",
+    "duration_ms",
+    "failure_mode",
+    "handler_id",
+    "hook_event_kind"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cause_detail": {
+      "type": "string"
+    },
+    "cause_kind": {
+      "$ref": "#/definitions/HookFailureCauseKind"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "fail_closed_denied": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failure_mode": {
+      "$ref": "#/definitions/HookFailureMode"
+    },
+    "handler_id": {
+      "type": "string"
+    },
+    "hook_event_kind": {
+      "$ref": "#/definitions/HookEventKind"
+    }
+  },
+  "definitions": {
+    "HookEventKind": {
+      "type": "string",
+      "enum": [
+        "pre_tool_use",
+        "post_tool_use",
+        "transform_tool_result",
+        "pre_model",
+        "post_model",
+        "session_start",
+        "session_end"
+      ]
+    },
+    "HookFailureCauseKind": {
+      "type": "string",
+      "enum": [
+        "unsupported",
+        "inconsistent",
+        "panicked",
+        "timeout",
+        "transport",
+        "unauthorized"
+      ]
+    },
+    "HookFailureMode": {
+      "type": "string",
+      "enum": [
+        "fail_open",
+        "fail_closed"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

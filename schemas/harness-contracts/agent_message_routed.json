@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentMessageRoutedEvent",
+  "type": "object",
+  "required": [
+    "at",
+    "message_id",
+    "routed_to",
+    "team_id"
+  ],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "message_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "routed_to": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TypedUlid"
+      }
+    },
+    "team_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
+  },
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}
