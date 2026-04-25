@@ -27,6 +27,8 @@
 
 ### 2.1 核心 Trait
 
+> **必经管道契约**：所有 `EventStore` 实现必须在 `append` 路径上调用 `Redactor::redact_event(...)`（`harness-observability.md §2.5.0`），否则视为违反 `security-trust.md §10.W` / §12 基线断言。SDK 内置实现（`JsonlEventStore` / `SqliteEventStore` / `InMemoryEventStore`）已默认装配 `Arc<Redactor>`，业务自定义 `EventStore` 必须在 PR 描述中声明合规并通过 `RedactorContractTest` 套件验证。
+
 ```rust
 #[async_trait]
 pub trait EventStore: Send + Sync + 'static {

@@ -438,6 +438,41 @@ pub enum HookFailureMode {
 
 无论 mode 如何，**`HookFailedEvent` 都必记**，确保审计可见。Dispatcher 在 mode = `FailClosed` 路径下还会把失败 reason 串到 `ToolUseDenied { reason: HookFailClosed, handler_id }` 上。
 
+### 2.6.2 Hook 失败的事务语义（all-or-nothing）
+
+PreToolUse / PostToolUse / Transform* 等带"链式产出"的 hook 链（`RewriteInput` / `OverridePermission` / `AddContext` 等多 handler 复合输出）必须保证：**任一 handler 失败时，已经累积的链式产出不外泄到主流程**。
+
+#### 事务边界
+
+| 事件类型 | 链式产出 | 失败回滚动作 |
+|---|---|---|
+| **PreToolUse** | `rewrite_input` 累积 + `additional_context` 累积 + `override_permission` | 失败按 `failure_mode` 决定走向；**已累积的 rewrite_input / additional_context / override_permission 全部丢弃**，主流程使用 hook 链触发前的原始 `ToolCall` 与 `Decision` |
+| **PostToolUse** | `transform_result` 累积 | 失败时主流程使用 hook 链触发前的原始 `ToolResultEnvelope` |
+| **TransformInput** / **TransformResult** | 链式 `Bytes` 改写 | 失败时主流程使用上一份**通过 schema 校验**的合法输出（dispatcher §2.6 串联规则已覆盖） |
+| **AddContext**（任意事件） | 跨 handler 累积 | 失败时本次累积**整体丢弃**；不向 ContextEngine 注入半成品 |
+
+#### 与 `failure_mode` 的关系
+
+`failure_mode` 只决定**主流程的走向**（继续 vs 终止），**不改变事务回滚行为**。换言之：
+
+- `FailOpen` + Hook 失败 → 写 `HookFailedEvent` → **链式产出回滚到失败前最近的合法快照** → 主流程按 `Continue` 继续；
+- `FailClosed` + Hook 失败 → 写 `HookFailedEvent` → **链式产出整体丢弃**（无需保留快照，因为后续不会执行）→ 主流程返回 `HookOutcome::Block` 终止 dispatch；
+- 两种路径**都不会**让"已改写一半的 input"或"半截 additional_context"进入 ContextEngine / Permission Broker / Tool 执行链。
+
+#### 实现约束
+
+- Dispatcher 必须在内存中维护本次 dispatch 的**累积快照**（`PreToolUseAccumulator` 等结构），handler 失败时按上述规则丢弃或回滚到上一快照。
+- 累积快照在 `HookFailedEvent` 写入 Journal **之前**清理，避免快照泄漏到 Event payload。
+- Replay 复算时不重做累积——`Audit` 模式按 Journal 中已有 `HookTriggered.outcome_summary` 还原最终结果，跳过中间快照（与 §11.2 幂等契约一致）。
+
+#### 反模式（拒绝）
+
+- ❌ `RewriteInput` 已改写、handler 在写 Journal 前 panic → 主流程使用半成品 input
+- ❌ `AddContext` 累积过半溢出 budget → 仅丢溢出部分而保留前半段（已被 §2.6 串联规则覆盖：整条溢出记录丢弃）
+- ❌ Hook A 给 `AllowOnce`、Hook B panic → 主流程按 A 的 override 继续
+
+以上场景均违反"all-or-nothing"，必须在实现期通过 `HookDispatchTransactionTest` 套件验证。
+
 ### 2.7 与 Tool 流水线的协同（ADR-010 / harness-tool §2.7 / §2.8）
 
 Hook 与 Tool 的协同点固化在 `ToolOrchestrator` 的单次调用流水线里（**权威定义**位于 `harness-tool.md §2.7` 流程图，本节给出 Hook 视角的等价说明）：

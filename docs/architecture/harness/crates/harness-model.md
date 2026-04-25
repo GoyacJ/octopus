@@ -432,6 +432,17 @@ pub trait CredentialSource: Send + Sync + 'static {
 
 /// 凭证键：**必须带 `tenant_id`**，避免多租户场景下同一 `provider_id`
 /// 的不同租户共享冷却状态 / ban 表（Hermes 早期版本有此问题，HER-048 修复后迁移至此模型）。
+///
+/// **多租户安全契约**（强约束）：
+/// - `tenant_id` 字段类型为 `TenantId`，**没有默认值**——业务方构造 `CredentialKey` 时必须显式提供。
+/// - 单租户场景下使用 `TenantId::SINGLE`（`Default::default()`）。
+/// - 想要**跨租户共享**同一把 key（如内部测试账号、企业级共享 quota）必须显式使用 `TenantId::SHARED`
+///   哨兵，**不得**用任意 `TenantId::new()` 当作"全局"占位符。SDK 在凭证池首次解析到 `SHARED`
+///   时必记一条 `Event::CredentialPoolSharedAcrossTenants`（写入 `security-trust §8.1`
+///   必记事件清单），保证审计可见。
+/// - `Default` impl 与所有 builder 默认值**不得**返回 `TenantId::SHARED`；CI 静态检查拦截。
+/// - 任何缺失 `tenant_id` 的旧版 schema 在迁移层（`harness_contracts::migrate`）必须强制升版补值，
+///   不得回退为 `SHARED`，必须由业务方在迁移钩子中显式选择 `SINGLE` 或具体租户。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CredentialKey {
     pub tenant_id: TenantId,

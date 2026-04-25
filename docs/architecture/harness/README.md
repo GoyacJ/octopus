@@ -1,6 +1,6 @@
 # Octopus Agent Harness SDK · 架构文档集
 
-> 版本：1.8
+> 版本：1.8.1
 > 状态：Accepted · 本文档集为开发基线，任何偏离需先提交 ADR
 > 上次更新：2026-04-25
 
@@ -116,6 +116,7 @@ docs/architecture/harness/
 
 ### 5.1 版本索引
 
+- 1.8.1（2026-04-25）：架构评审 P0/P1/P2 修订 14 项（详见 `audit/2026-04-25-architecture-review.md` 与 CHANGELOG）。
 - 1.8（2026-04-25）：PTC、Steering Queue、Loop-Intercepted Tools 反向决议。
 - 1.7（2026-04-25）：Plugin signer、Loader 二分、capability-scoped activation。
 - 1.6（2026-04-25）：Hook 能力矩阵、transport 安全字段、replay 幂等。

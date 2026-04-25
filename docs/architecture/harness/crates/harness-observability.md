@@ -229,6 +229,27 @@ pub enum ExportFormat {
 
 ### 2.5 Redactor
 
+#### 2.5.0 必经管道契约（强约束）
+
+`Redactor` **不是可选脱敏插件**，而是 SDK 内所有事件、追踪、日志、Replay 流出 SDK 边界**之前**的必经管道。下表给出每条必经路径与责任挂钩点：
+
+| 数据流 | 出口 | 必经挂钩点 | 落地位置 |
+|---|---|---|---|
+| Event 写入 Journal | `EventStore::append` | `Redactor::redact_event(...)` 在 `append` 进入持久化前先跑 | `harness-journal` 默认实现 `JsonlEventStore` / `SqliteEventStore` 在内部装配 `Arc<Redactor>`（`harness-journal.md §2.1`） |
+| Event 流出 SDK 给业务方 | `EventStream` | 由 `Harness::event_stream()` 包装层在 yield 前再跑一次（防止业务方绕过 Journal 订阅原始 Event） | `harness-sdk` 门面 |
+| OpenTelemetry Span 出口 | `Tracer::record_event` | `Redactor::redact_value(...)` 在 attribute 序列化前 | `harness-observability §3` |
+| Tracing log 出口 | `tracing::Subscriber` | 自定义 layer 在 `on_event` 时调 `Redactor::redact(text, RedactScope::LogOnly)` | `harness-observability §2.5.X` |
+| Replay 输出 | `ReplayEngine::replay(...)` 流 | Replay 复算时**不再**执行 Redactor（事件已在 append 阶段脱敏，不重复消耗）；若启用"加密事件流"特性，Replay 在解密后重新跑 Redactor | `harness-observability §2.4` |
+| Tool 输出回填到 Context | `ContextEngine::merge_tool_result` | 工具产出已是 `RedactScope::All` 跑过的，不再重复；Redactor 不裁剪 tool result 内容（避免破坏模型理解力），只在写入 Journal 时再扫一次 `EventBody` 范围 | `harness-context` |
+
+**禁止**：
+- 业务方绕过门面直接调 `EventStore::append` 而不带 `Redactor`：`HarnessBuilder::with_store(...)` 在装配阶段会把 `Arc<Redactor>` 注入到内置 EventStore 实现；自定义 `EventStore` 实现必须在文档中显式声明"已遵守必经管道契约"，并在 CI 通过 `RedactorContractTest` 套件验证。
+- `Redactor::default().disable()` 之类禁用 API：`Redactor` 没有"全局关闭"API；如需调试可用 `RedactScope::TraceOnly` 关闭 Trace 层但保留 EventBody 层。
+
+**审计断言**：`security-trust.md §12 安全基线断言`（"`Debug`/`Display` 不得泄漏密文"）由本管道兜底；任何业务测试中发现 sk-* / Bearer / SecretString 形态字符串出现在 Journal 文件内，视为 P0 安全 bug。
+
+#### 2.5.1 数据结构
+
 ```rust
 pub struct Redactor {
     patterns: Arc<RwLock<Vec<RedactPattern>>>,

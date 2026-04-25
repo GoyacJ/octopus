@@ -26,7 +26,7 @@
 
 ### 3.2 L1 · 原语层
 
-| Crate | 可依赖 | 禁止依赖 |
+| Crate | 可依赖（默认） | 禁止依赖 |
 |---|---|---|
 | `harness-model` | `contracts` | L1 其他 / L2 / L3 / L4 |
 | `harness-journal` | `contracts` | L1 其他 / L2 / L3 / L4 |
@@ -35,6 +35,7 @@
 | `harness-memory` | `contracts` | L1 其他 / L2 / L3 / L4 |
 
 > 例外：L1 crate 可互相通过 `contracts` 定义的**共享类型**通信，但**不得直接 use 另一个 L1 crate**。
+> Feature 门控的额外依赖（破窗）见 §3.7 + §10。
 
 ### 3.3 L2 · 复合能力层
 
@@ -71,6 +72,20 @@
 | 业务层 → `harness-sdk` | **唯一允许**的依赖形态（95% 场景覆盖） |
 | 业务层 → 单个内部 crate | **例外**场景（如只复用 `harness-contracts` 类型定义），需 PR 显式说明 |
 | 业务层 → 多个内部 crate | **禁止** |
+
+### 3.7 Feature 触发的额外依赖（破窗附录）
+
+§3.1–3.5 的"可依赖（默认）"列只覆盖 crate 在 `default` feature 下的依赖图。Cargo `[features]` 段允许声明可选 `dep:*`，激活后会在依赖图中引入额外边。这类边按本表治理：
+
+| 规则 | 说明 |
+|---|---|
+| **必须登记** | 任何 `[features]` 中带 `dep:*` 引入的跨 crate 依赖，必须同时出现在 §10 例外登记表 |
+| **必须 ADR** | feature 引入的依赖若违反 §3.1–3.5 默认白名单方向（含 L1↔L1、L1↔L3、L3↔L3），必须有对应 ADR 论证 |
+| **必须 default off** | 跨原语 / 反向层依赖的 feature **不得加入 `default`**；业务层显式启用即视为接受额外耦合 |
+| **CI 校验** | `cargo-deny` 配置须按 feature 矩阵分别检查，不得仅校验 `default` |
+| **业务层启用** | 业务层在 Cargo.toml 显式启用此类 feature 时应写注释，说明启用原因 |
+
+已知合规破窗见 §10。
 
 ## 4. 禁止的耦合模式
 
@@ -169,10 +184,11 @@ multiple-versions = "deny"
 
 ## 10. 例外登记
 
-如需打破本文档规则的例外情况，必须在此表登记：
+本表登记**所有破窗**：默认依赖图之外的同层、跨层或跨原语依赖（含 §3.7 feature 触发的依赖）。每新增一行必须附 ADR 链接；未登记的破窗按 §4.1 拒绝。
 
-| 日期 | Crate A | Crate B | 原因 | ADR 链接 |
-|---|---|---|---|---|
-| 2026-04-25 | `harness-tool-search` | `harness-tool` | Deferred Tool Loading 需要以 `ToolSearchTool` 实现 `Tool` trait，并读取 `ToolDescriptor` / `ToolProperties` 做评分；注入由 L4 完成，避免反向依赖 | ADR-008 / ADR-009 |
-
-每新增一行必须附 ADR 链接。未登记的同层具体实现依赖按 §4.1 拒绝。
+| 日期 | Crate A | Crate B | 类型 | Feature gate | 原因 | ADR 链接 |
+|---|---|---|---|---|---|---|
+| 2026-04-25 | `harness-tool-search` | `harness-tool` | L2 同层 | default-on | Deferred Tool Loading 需要以 `ToolSearchTool` 实现 `Tool` trait，并读取 `ToolDescriptor` / `ToolProperties` 做评分；注入由 L4 完成，避免反向依赖 | ADR-008 / ADR-009 |
+| 2026-04-25 | `harness-permission` | `harness-model` | L1 跨原语 | `auto-mode`（默认 off） | Permission 自动模式（基于过往决策启发式给出建议）需要轻量复用 `ModelProvider` trait 的 `embeddings` 接口；不开启 `auto-mode` 时无依赖 | ADR-007 / harness-permission §8 |
+| 2026-04-25 | `harness-model` | `harness-observability` | L1 → L3（反向） | `redactor`（默认 off） | 模型出入参带敏感信息时复用 `Redactor` trait 做脱敏；不开启 `redactor` 时不引入；业务层若启用须确认 L3 反向依赖已知 | ADR-002 / harness-model §9 |
+| 2026-04-25 | `harness-engine` | `harness-subagent` | L3 同层 | `subagent-tool`（默认 off） | 把 `AgentTool`（父→子委派工具）打包进默认工具集时需要直接构造 `SubagentSpec`；通过 `EngineRunner` trait 在 `harness-subagent` 内反向接收 Engine 实例，避免循环 | ADR-004 / ADR-008 / harness-engine §8 |

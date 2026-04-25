@@ -68,7 +68,15 @@ impl<S> TypedUlid<S> {
 }
 
 impl TenantId {
+    /// 单租户场景下的默认 tenant（`Default::default()`）。
+    /// 多租户场景下不得使用本常量。
     pub const SINGLE: TenantId = /* 固定 ULID */;
+
+    /// 跨租户**显式共享**资源的哨兵；**仅供凭证池等少数共享资源使用**。
+    /// 出现 `SHARED` 必须由业务方在 builder 期主动声明（不得作为默认值），
+    /// 且 SDK 必记一条 `Event::CredentialPoolSharedAcrossTenants`（或同等审计事件）。
+    /// 反模式：把 `SHARED` 当作"无 tenant"占位符塞入业务字段——多租户隔离凭此识别破窗。
+    pub const SHARED: TenantId = /* 固定 ULID，与 SINGLE 不同 */;
 }
 ```
 
@@ -351,14 +359,40 @@ pub enum DecidedBy {
     },
 }
 
+/// `GraceCallTriggered` 是独立事件，不复用 `EndReason`；`Run` 在 grace 态后仍可正常 `Completed`
+/// 或在下一轮越界时 `MaxIterationsReached`（详见 `event-schema.md §3.1.1`）。
 #[non_exhaustive]
 pub enum EndReason {
     Completed,
     MaxIterationsReached,
     TokenBudgetExhausted,
+    /// 系统级中断（区别于用户/父级显式取消）：
+    /// - 网络/IO 异常导致的非正常终止
+    /// - SIGTERM 等进程级信号
+    /// - Engine 内部断言失败的 graceful shutdown
+    /// 不携带 initiator——系统中断没有"发起方"语义。
     Interrupted,
+    /// 显式取消（用户/父 Session/系统配额）。`initiator` 必填，承载审计语义。
+    /// 与 `Interrupted` 的区别：`Cancelled` 是有"发起方"的主动取消，
+    /// `Interrupted` 是无"发起方"的被动终止。
+    Cancelled { initiator: CancelInitiator },
     Error(String),
     Compacted,
+}
+
+/// 取消请求的发起方。
+///
+/// **审计契约**：`EndReason::Cancelled { initiator }` 写入 `RunEndedEvent` 后，
+/// 业务层可按 initiator 维度分类统计，如"用户取消率""配额取消率"。
+#[non_exhaustive]
+pub enum CancelInitiator {
+    /// 用户显式取消（UI 取消按钮 / `Session::cancel()` API / Ctrl-C 信号）。
+    User,
+    /// 父 Session 取消级联（subagent 收到 `SubagentHandle::cancel`，或父 Run 因 Cancelled 终止时级联给所有 in-flight subagent）。
+    Parent,
+    /// 系统级配额/策略取消（租户限额、欠费、运营运维强制取消）。
+    /// `reason` 为审计字符串，不参与控制流。
+    System { reason: String },
 }
 
 #[non_exhaustive]
@@ -417,7 +451,10 @@ pub enum ToolGroup {
 #[non_exhaustive]
 pub enum ToolOrigin {
     Builtin,
-    Plugin { plugin_id: String, trust: TrustLevel },
+    /// `plugin_id` 使用 newtype，与 `McpServerSource::Plugin(PluginId)` /
+    /// `SkillSourceKind::Plugin(PluginId)` / `SteeringSource::Plugin { plugin_id: PluginId }`
+    /// 形态对齐，禁止裸 `String`（`module-boundaries.md §4.2` 的 newtype 强制约束）。
+    Plugin { plugin_id: PluginId, trust: TrustLevel },
     Mcp(McpOrigin),
     Skill(SkillOrigin),
 }

@@ -480,8 +480,11 @@ pub struct ToolResultEnvelope {
 
 **分桶规则**（对齐 CC-07）：
 
-- `is_concurrency_safe = true` → 并行（`tokio::join_all`，`max = concurrency_limit`，默认 10）
-- 其他 → 串行
+- 本 SDK 采用 **bool 二档**（不是三桶 `Shared / Exclusive / FreeForm`）：
+  - `is_concurrency_safe = true` → 并行（`tokio::join_all`，`max = concurrency_limit`，默认 10）
+  - `is_concurrency_safe = false` → 串行
+- "分桶"在本文档语境中等价于"按 bool 字段分组"：safe 归 1 个并行组，unsafe 归 1 个串行组，**不存在中间档**。
+- 不引入三档枚举的理由：90% 内置工具按 safe / unsafe 即可正确编排；引入 `Shared / Exclusive` 等 RWLock 风格语义会逼业务方按资源粒度声明（文件路径、网络端口…），代价远超收益（KISS）。如未来某个工具需要更细粒度的并发控制，应在 `Tool::execute` 内部用业务逻辑互斥，而非升级本字段。
 
 **单次调用流水线**（核心规则，统一所有 Tool）：
 

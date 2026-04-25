@@ -246,20 +246,24 @@ pub enum RulePredicate {
 ```rust
 pub struct DirectBroker<F>
 where
-    F: Fn(PermissionRequest) -> BoxFuture<'static, Decision> + Send + Sync,
+    F: Fn(PermissionRequest, PermissionContext) -> BoxFuture<'static, Decision>
+        + Send + Sync + 'static,
 {
     callback: F,
     persistence: Arc<dyn DecisionPersistence>,
 }
 
 impl<F> DirectBroker<F> {
-    pub fn new(callback: F, persistence: Arc<dyn DecisionPersistence>) -> Self;
+    pub fn new(callback: F) -> Self;
+    pub fn with_persistence(self, persistence: Arc<dyn DecisionPersistence>) -> Self;
 }
 ```
 
 **场景**：CLI / 脚本 / 测试
 
-**优点**：代码简洁，业务层直接 `async fn prompt(req) -> Decision`
+**优点**：代码简洁，业务层直接 `async fn prompt(req, ctx) -> Decision`
+
+**`PermissionContext` 必传**：承载 `tenant_id / session_id / run_id / cwd / timeout_policy` 等审计字段，是 ADR-007 把审批事件化要求的最小信息集合。完整定义见 `crates/harness-permission.md §3.1` 与 `crates/harness-contracts.md §3.4`。
 
 ### 5.2 StreamBasedBroker（事件驱动）
 

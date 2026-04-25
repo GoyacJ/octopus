@@ -1,6 +1,6 @@
 # D3 · 接口契约规范（Trait 总表）
 
-> 依赖 ADR：ADR-002（Tool 不含 UI）, ADR-007（权限决策事件化）
+> 依赖 ADR：ADR-002（Tool 不含 UI）, ADR-007（权限决策事件化）, ADR-009（Deferred Tool Loading）, ADR-0011（Tool Capability Handle）, ADR-0015（Plugin Loader 二分）, ADR-0016（Programmatic Tool Calling）, ADR-0017（Steering Queue）, ADR-0018（No-Loop Intercepted Tools）
 > 状态：Accepted · 本文是 **trait 签名单一事实源**，crate SPEC 细化实现细节
 
 ## 1. 总览
@@ -747,6 +747,27 @@ pub trait InterruptSource: Send + Sync + 'static {
 - **实现者**：`bus`（业务层提供用户取消信号）
 - **对象安全**：是
 
+### 14.3 `EngineRunner`
+
+```rust
+#[async_trait]
+pub trait EngineRunner: Send + Sync + 'static {
+    async fn run(
+        &self,
+        session: SessionHandle,
+        input: TurnInput,
+        ctx: RunContext,
+    ) -> Result<EventStream, EngineError>;
+
+    fn engine_id(&self) -> EngineId;
+}
+```
+
+- **实现者**：`built`（`harness-engine::Engine` 实现），`both`（业务层可注入测试 mock）
+- **对象安全**：是
+- **作用**：把 `harness-engine` 的具体类型 `Engine` 抽象为 trait，供 `harness-subagent` / `harness-team` 通过 `Arc<dyn EngineRunner>` 注入而非直接 `use harness_engine::Engine`，避免 L3↔L3 的实现级耦合（详见 `module-boundaries.md §6` + ADR-008）
+- **完整定义位置**：`crates/harness-engine.md §2.2`（trait 实际声明在 `harness-engine` crate 而非 `harness-contracts`，因签名引用 `RunContext` 等 engine 内部类型）
+
 ## 15. Subagent · `harness-subagent`
 
 ### 15.1 `SubagentRunner`
@@ -852,7 +873,43 @@ pub trait Plugin: Send + Sync + 'static {
 - **实现者**：`bus`
 - **对象安全**：是
 
-### 17.2 `PluginSource`
+### 17.2 `PluginManifestLoader`（ADR-0015）
+
+```rust
+#[async_trait]
+pub trait PluginManifestLoader: Send + Sync + 'static {
+    /// 仅枚举 manifest（YAML 解析 + schema 校验 + 签名验证），
+    /// **不得执行任何插件代码**。
+    async fn enumerate(&self) -> Result<Vec<ManifestRecord>, PluginError>;
+}
+```
+
+- **实现者**：`built`（`WorkspacePluginLoader / UserPluginLoader / ProjectPluginLoader / CargoExtensionLoader` 四源），`bus`（业务私有发现源）
+- **对象安全**：是
+- **类型约束**（ADR-0015 编译期保证）：返回类型固定为 `Vec<ManifestRecord>`；**禁止**返回 `Vec<Arc<dyn Plugin>>`——以类型层强制"发现期不实例化"
+- **完整定义位置**：`crates/harness-plugin.md §3.2`
+
+### 17.3 `PluginRuntimeLoader`（ADR-0015）
+
+```rust
+#[async_trait]
+pub trait PluginRuntimeLoader: Send + Sync + 'static {
+    /// 按 manifest 实例化 `Arc<dyn Plugin>`；仅在 `PluginRegistry::activate`
+    /// 路径上调用，不得在 `enumerate` 期触发。
+    async fn load(
+        &self,
+        record: &ManifestRecord,
+        ctx: PluginActivationContext,
+    ) -> Result<Arc<dyn Plugin>, PluginError>;
+}
+```
+
+- **实现者**：`built`，`bus`
+- **对象安全**：是
+- **调用约束**：仅由 `PluginRegistry::activate` 调用；Loader 实现不得反向依赖 `PluginRegistry` 内部状态（详见 `module-boundaries.md §6`）
+- **完整定义位置**：`crates/harness-plugin.md §3.2`
+
+### 17.4 `PluginSource`
 
 ```rust
 #[async_trait]

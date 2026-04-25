@@ -211,6 +211,8 @@ pub struct IterationBudget {
 
 - 每轮递增计数
 - 达到 `max_iterations - 1` 触发 Grace Call（最后一次让 Assistant 说完而不发新 tool）
+  - **必发**：`Event::GraceCallTriggered { current_iteration, max_iterations, usage_snapshot }`（详见 `event-schema.md §3.1.1`），保证可观测性留痕
+  - 进入 grace 态后，主循环禁止接受新的 `ToolUseRequested`；模型若仍发起 tool_call，Engine 立即写 `RunEnded { reason: MaxIterationsReached }`
 - 达到 `max_iterations` 强制结束，`Event::RunEnded { reason: MaxIterationsReached }`
 
 ### 4.2 Token Budget（对齐 D8 §6）
@@ -246,7 +248,17 @@ Engine 在**每个 safe point** 检查：
 
 - 正在执行的 tool 收到 `ToolError::Interrupted`
 - 正在请求的 model 请求被 abort（`reqwest::Request::abort`）
-- 写 `Event::RunEnded { reason: Interrupted }`
+- 写 `Event::RunEnded { reason }`，`reason` 按下表选择：
+
+| 触发源 | `EndReason` | 备注 |
+|---|---|---|
+| `Session::cancel()` API / UI 取消按钮 / 用户 Ctrl-C | `Cancelled { initiator: User }` | 用户显式取消，主动语义 |
+| 父 Session 取消级联（subagent 链路） | `Cancelled { initiator: Parent }` | 父 Run 已写 `Cancelled` 时，所有 in-flight subagent Run 级联写同源 |
+| 租户配额 / 欠费 / 运营强制取消 | `Cancelled { initiator: System { reason } }` | `reason` 为审计字符串 |
+| 进程级 SIGTERM / 网络硬故障 / Engine 内部断言失败 | `Interrupted` | 无"发起方"，被动终止 |
+| 模型/工具响应中段宿主关闭 stream | `Interrupted` | 同上 |
+
+> **审计契约**：`Cancelled` 与 `Interrupted` 在 SDK 层面不可互替；业务层 UI / 复盘报表必须按此区分（详见 `crates/harness-contracts.md §3` `EndReason` / `CancelInitiator` 定义）。
 
 ## 6. Orchestrator 分派
 

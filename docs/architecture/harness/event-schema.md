@@ -19,7 +19,7 @@
 | 分类 | 完整变体 |
 |---|---|
 | **Session 生命周期** | `SessionCreated / SessionForked / SessionEnded / SessionReloadRequested / SessionReloadApplied` |
-| **Run 执行** | `RunStarted / RunEnded` |
+| **Run 执行** | `RunStarted / RunEnded / GraceCallTriggered` |
 | **消息流** | `UserMessageAppended / AssistantDeltaProduced / AssistantMessageCompleted` |
 | **工具调用** | `ToolUseRequested / ToolUseApproved / ToolUseDenied / ToolUseCompleted / ToolUseFailed / ToolUseHeartbeat / ToolResultOffloaded / ToolRegistrationShadowed` |
 | **权限审批** | `PermissionRequested / PermissionResolved / PermissionPersistenceTampered / PermissionRequestSuppressed` |
@@ -35,6 +35,7 @@
 | **Sandbox** | `SandboxExecutionStarted / SandboxExecutionCompleted / SandboxActivityHeartbeat / SandboxActivityTimeoutFired / SandboxOutputSpilled / SandboxBackpressureApplied / SandboxSnapshotCreated / SandboxContainerLifecycleTransition` |
 | **Plugin 生命周期** | `PluginLoaded / PluginRejected / ManifestValidationFailed` |
 | **可观测性** | `UsageAccumulated / TraceSpanCompleted` |
+| **凭证池审计** | `CredentialPoolSharedAcrossTenants` |
 | **错误** | `EngineFailed / UnexpectedError` |
 
 ## 3. 核心 Event 详表
@@ -94,6 +95,9 @@ pub struct SessionEndedEvent {
 
 `CacheImpact` 定义见 `crates/harness-session.md` §2.4。
 
+`EndReason` / `CancelInitiator` 见 `crates/harness-contracts.md §3`。
+**审计契约**：`EndReason::Cancelled { initiator }`（主动取消，有发起方）与 `EndReason::Interrupted`（被动终止，无发起方）在 SDK 层面不可互替；业务层 UI / 复盘报表按 `initiator` 维度（User / Parent / System）区分。`harness-engine.md §5`（中断节末尾的"`RunEnded.reason` 触发源选择表"）给出完整映射。
+
 ### 3.1 RunStarted
 
 ```rust
@@ -109,6 +113,29 @@ pub struct RunStartedEvent {
     pub correlation_id: CorrelationId,
 }
 ```
+
+### 3.1.1 GraceCallTriggered
+
+迭代预算耗尽前一轮（`current_iteration == max_iterations - 1` 且 `grace_enabled = true`）由 Engine 主动写入；标志 Engine 进入"最后一次让 Assistant 收尾、不再允许发新 tool_call"的特殊态。
+
+```rust
+pub struct GraceCallTriggeredEvent {
+    pub run_id: RunId,
+    pub session_id: SessionId,
+    pub tenant_id: TenantId,
+    /// 当前迭代序号（1-indexed），等于 `max_iterations - 1`
+    pub current_iteration: u32,
+    pub max_iterations: u32,
+    /// 触发时已累计的 token / cost 用量快照（用于复盘）
+    pub usage_snapshot: UsageSnapshot,
+    pub at: DateTime<Utc>,
+    pub correlation_id: CorrelationId,
+}
+```
+
+**Replay 行为**：纯审计事件；`SessionProjection::apply` 不改变状态，仅追加到 `grace_history` 列表（业务复盘用）。
+
+**与 `RunEnded` 的关系**：`GraceCallTriggered` 永远 **早于** 同 Run 的 `RunEnded`；若 grace call 触发后下一轮 Assistant 仍发起 tool_call，Engine 写 `RunEnded { reason: MaxIterationsReached }`；若 Assistant 正常收尾，写 `RunEnded { reason: Completed }`。两者通过同一 `correlation_id` 串联。
 
 ### 3.2 UserMessageAppended
 

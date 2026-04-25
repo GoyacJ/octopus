@@ -108,7 +108,7 @@ Harness
 | **P3** | **事件源持久化** | 所有状态变化先以 Event 形式写入 Append-Only Journal，Projection 派生视图 | OpenClaw 事件不回放（OC-05） |
 | **P4** | **契约优先** | Rust 类型为主契约源，向外派生 OpenAPI/TypeScript/JSON Schema | — |
 | **P5** | **Prompt Cache 硬约束** | Session 运行期内禁止修改 system prompt / toolset / memory 三件套 | Hermes 在 AGENTS.md 明确要求（HER-027）|
-| **P6** | **Fail-Closed 默认值** | Tool 默认不并发安全、不只读、破坏性未知；Broker 默认 Deny-All | Claude Code `buildTool` fail-closed（CC-03）|
+| **P6** | **Fail-Closed 默认值** | Tool 默认不并发安全、不只读、破坏性未知；Broker 默认 Deny-All；Hook 层为受控例外（详见 `crates/harness-hook.md §2.6.1` 与 `security-trust.md §10.W`） | Claude Code `buildTool` fail-closed（CC-03）|
 
 > 以上原则是本架构的"宪法"。任何 PR/ADR 不得违反；如需突破，必须先在 ADR 中论证并获得明确批准。
 
@@ -313,7 +313,7 @@ Business: session.run_turn(input)
     │    └─ ToolUseRequested          ──► 
     │
     ▼
-[Orchestrator] 分桶：concurrency-safe 并行 / 其他串行
+[Orchestrator] 分桶（bool 二档）：is_concurrency_safe=true → 并行；false → 串行
     │
     ▼
 [Permission] check → (allow / ask → broker → resolve / deny)

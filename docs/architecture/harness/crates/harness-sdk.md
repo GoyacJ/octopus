@@ -239,6 +239,49 @@ impl<M: ModelProvider, S: EventStore, SB: SandboxBackend>
 
 **关键**：`build()` 只在 `Model + Store + Sandbox` 都 Set 时才可用，编译期保证必填依赖。
 
+### 8.1 Builder 幂等与覆盖语义
+
+| 行为 | 语义 | 备注 |
+|---|---|---|
+| 同一 setter 重复调用（如 `with_model().with_model()`） | **后调用覆盖前调用** | 业务层显式接受覆盖；不发警告也不 panic |
+| `with_aux_model` 与 `with_model` | 互不冲突 | aux model 与主 model 是独立槽 |
+| `with_observability` 重复调用 | 后调用覆盖；前一个 `Observer` 不会被自动 drop（业务方持有 `Arc` 时手动管理） | 需要级联多个 Observer 时业务方自己组合后再 set |
+| 跨 type-state 边界的二次 `with_model` | 第二次调用类型签名为 `HarnessBuilder<Set<M>, S, SB> -> HarnessBuilder<Set<M2>, S, SB>` | 通过额外 `impl` 块支持，行为与首次设置一致 |
+
+> 反模式：依赖"先 set 后被 reset"恢复 `Unset` 状态——type-state 是单调进入 `Set` 的。如需"清空"必须重新 `HarnessBuilder::new()`。
+
+### 8.2 Session 不走 type-state 的设计声明
+
+与 `HarnessBuilder` 不同，`Session` 的构造**不采用 type-state**，原因：
+
+- Session 的必填依赖（model / event-store / sandbox 等）来自其所属 `Harness`，已在 `HarnessBuilder` 阶段以 type-state 强制；
+- Session 自身只承载"会话级配置"（system_prompt / tools / hooks / memory provider 选择 / steering policy 等），均为可选项，不存在"缺失即应阻止编译"的硬必填字段；
+- 强行给 Session 加 type-state 会把 5+ 维状态炸开成几十种类型组合（Skill / Hook / MCP / Memory / Steering / ToolSearch …），不仅使 IDE 自动补全爆炸，还要为每种 builder 路径写测试；KISS 原则下不值。
+
+因此 Session 走**普通 builder**（`SessionOptions` + `Harness::create_session(opts) -> Session`），运行期校验由 `Harness::create_session` 内部完成（详见 `crates/harness-session.md §2.3`）：
+
+```rust
+impl Harness {
+    pub async fn create_session(&self, opts: SessionOptions) -> Result<Session, HarnessError>;
+}
+
+#[derive(Default)]
+pub struct SessionOptions {
+    pub system_prompt: Option<String>,
+    pub workspace_id: Option<WorkspaceId>,
+    pub tools: ToolPoolSpec,
+    pub hooks: HookSelection,
+    pub mcp: McpSelection,
+    pub memory_provider: Option<Arc<dyn MemoryProvider>>,
+    pub steering_policy: SteeringPolicy,
+    pub tool_search: ToolSearchMode,
+    pub aux_model_override: Option<Arc<dyn AuxModelProvider>>,
+    /* ... 其他可选字段 */
+}
+```
+
+**对比口径**：业务方启动 Harness 时缺必填项 → 编译失败（type-state）；业务方创建 Session 时配置非法 → 运行时 `Result::Err`。这种二分让"启动时确定的硬约束"与"会话级软约束"各得其所。
+
 ## 9. 完整业务层调用示例
 
 ### 9.1 基础启动

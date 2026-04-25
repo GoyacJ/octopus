@@ -5,6 +5,23 @@
 - **决策者**：架构组
 - **影响范围**：`harness-contracts` / `harness-tool` / `harness-subagent` / `harness-engine` / `harness-session` / `harness-permission` / `harness-team`
 
+## 0. 术语对齐（避免命名漂移）
+
+ADR 标题中的 **"Capability Handle"** 是口语化描述，对应的 Rust 类型为：
+
+| 概念 | Rust 类型 | 位置 |
+|---|---|---|
+| Capability 标识枚举 | `enum ToolCapability` | `harness-contracts::capability` |
+| Capability 各项窄接口 | `trait SubagentRunnerCap` / `TodoStoreCap` / `EventEmitterCap` / ...（共 7 个） | 同上 |
+| Capability 注册中心 | `struct CapabilityRegistry` | `harness-contracts::capability` |
+| Tool 取用入口 | `ToolContext::capability::<C>() -> Result<Arc<C>, ToolError::CapabilityMissing>` | `harness-tool::context` |
+
+**禁止使用**：`ToolCapabilityHandle`（无此类型；早期讨论稿术语，现已收敛）。
+**禁止使用**：`ToolCap`（与窄接口的 `*Cap` 后缀冲突）。
+本文及所有 SPEC 引用统一使用上表名称。
+
+---
+
 ## 1. 背景与问题
 
 ### 1.1 症状
