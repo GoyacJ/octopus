@@ -21,11 +21,13 @@
 
 | Crate | 任务卡 | 内容 |
 |---|---|---|
-| **tool** | M3-T01 ~ T05 | Tool trait + Registry + Pool + Orchestrator + 内置 8 工具 |
+| **tool** | M3-T01 ~ T05（T04 拆 a/b）| Tool trait + Registry + Pool + Orchestrator + 内置 9 工具（拆 2 子卡）|
 | **hook** | M3-T06 ~ T10 | Hook 三 transport + Dispatcher + 事务语义 + 20 类事件 |
 | **context** | M3-T11 ~ T15 | 5 阶段管线 + ContextProvider + budget + microcompact / autocompact |
 | **session** | M3-T16 ~ T20 | 生命周期 + Projection + Fork + HotReload + SteeringQueue + E2E driver |
 | **chore** | M3-T21 | M4 / M5 依赖预注入到 `[workspace.dependencies]`（避免后续并行 PR 共改冲突）|
+| **cutover** | M3-T22 | CLI 最简入口先行接入真 harness-sdk（业务面渐进切换 spike）|
+| **spike** | M3-S01 / S02 | Hook replay 幂等 + Steering Queue 长 turn 验证（评审报告 §4.4 第 2/3 项前置）|
 
 ---
 
@@ -87,24 +89,45 @@
 
 ---
 
-### M3-T04 · 内置工具集（8 个）
+### M3-T04 · 内置工具集（9 个，拆 2 子卡）
+
+> **拆分理由**（实施前评估 P1-5）：原标题写"8 个"实际列了 9 个工具（Read/Write/ListDir/Bash/Grep/WebSearch/Clarify/SendMessage/ReadBlob），含测试 ≤ 500 行不现实。按文件 IO / 执行类两组拆 2 子卡。
+
+#### M3-T04a · 文件 IO 工具集（5 个）
 
 **SPEC 锚点**：
-- `harness-tool.md` §6（内置工具集）：Read / Write / ListDir / Bash / Grep / WebSearch / Clarify / SendMessage / ReadBlob
+- `harness-tool.md` §6（内置工具集）
 
 **预期产物**：
-- `src/builtin/read.rs / write.rs / list_dir.rs / bash.rs / grep.rs`
-- `src/builtin/web_search.rs / clarify.rs / send_message.rs / read_blob.rs`
-- `tests/builtin.rs`
+- `src/builtin/read.rs / write.rs / list_dir.rs / grep.rs / read_blob.rs`
+- `tests/builtin_io.rs`
 
 **关键不变量**：
 - 全部需要权限审批（默认）
-- Bash 必须接 SandboxBackend
-- Grep 默认接 ripgrep（`rg`）
+- Grep 默认接 ripgrep（`rg`），命令参数对齐 `harness-tool.md §6.4`
+- `ReadBlob` 必须接 BlobStore（`Arc<dyn BlobStore>`）
 
 **Cargo feature**：`builtin-toolset`
 
-**预期 diff**：< 500 行
+**预期 diff**：< 350 行
+
+#### M3-T04b · 执行类工具集（4 个）
+
+**SPEC 锚点**：
+- `harness-tool.md` §6（内置工具集）
+
+**预期产物**：
+- `src/builtin/bash.rs / web_search.rs / clarify.rs / send_message.rs`
+- `tests/builtin_exec.rs`
+
+**关键不变量**：
+- Bash 必须接 SandboxBackend
+- WebSearch 必须接 PermissionBroker（受 NetworkAccess 决策范围）
+- `SendMessage` / `Clarify` 走特殊 ToolResultPart 变体
+
+**Cargo feature**：`builtin-toolset`
+
+**预期 diff**：< 350 行
 
 ---
 
@@ -481,6 +504,133 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 ```
 
 **PR 描述模板要点**：列出每个新增 dep 对应的 M4/M5 任务卡 ID，作为后续审计追溯依据。
+
+---
+
+### M3-S01 · Spike-2 · Hook 三 transport 失败模式 + replay 幂等（前置 POC）
+
+| 字段 | 值 |
+|---|---|
+| **状态** | 待派发 |
+| **依赖** | M3-T10（Hook contract test 完成） |
+| **预期 diff** | < 300 行 |
+| **预期工时** | AI 2h + 人类评审 30min |
+
+**背景**（实施前评估 P1-3 修订）：
+
+评审报告 §4.4 第 3 项指出 Hook 多 transport 失败模式 + replay 幂等是高风险点。原计划放 M9-P03，但 Hook 实际在 M3 完成；不前置则 M5/M6 都基于"假设可行"的 Hook 推进，失败时回滚成本巨大。
+
+**SPEC 锚点**：
+- `harness-hook.md` §2.6.2（Hook 失败的事务语义，v1.8.1 P1-4）
+- `harness-hook.md` §4.1-§4.3（in-process / Exec / HTTP transport）
+- `audit/2026-04-25-architecture-review.md` §4.4 第 3 项
+
+**预期产物**：
+- `crates/octopus-harness-hook/tests/spike_replay_idempotent.rs`：
+  - in-process panic + FailOpen / FailClosed 各一例
+  - Exec exit≠0 / 超时
+  - HTTP 5xx / SSRF guard / mTLS 失败
+  - replay 同一段事件 → hook 调用次数与首次相同（contract 验证幂等）
+- `docs/architecture/harness/audit/M3-spike-hook-replay.md`
+
+**通过判据**：
+- ✅ 8 个失败场景 / failure_mode 表全部按期望行为
+- ✅ Replay 幂等 contract test 通过
+
+**失败处理**：
+- 失败 → 任务卡 reset；如根因是 SPEC 缺陷 → ADR 修订
+
+---
+
+### M3-T22 · CLI 最简入口先行接入真 harness（业务面渐进切换）
+
+| 字段 | 值 |
+|---|---|
+| **状态** | 待派发 |
+| **依赖** | M3-T20 完成（M3 MVP 闭环可用） |
+| **预期 diff** | < 350 行 |
+| **预期工时** | AI 1.5h + 人类评审 30min |
+
+**背景**（实施前评估 P1-4 修订）：
+
+原计划在 M0~M7 期间业务层全部走 `_octopus-bridge-stub` 桩，runtime 不可用，真集成风险推迟到 M8。本卡把 **CLI 最简非交互入口**（`octopus run --once <prompt>`）从 stub 切到真 `octopus-harness-sdk`（M3 MVP 已具备 create_session + run_turn + ListDir + 流式输出能力），让真集成风险**前移**到 M3 后即可观察。
+
+> 这不是 M8 业务切换的提前完成，仅是单一最简入口的 spike-cutover；其它入口仍走 stub，保留 M8 的全面切换。
+
+**SPEC 锚点**：
+- M3-T20 PR（mini-engine + 完整闭环）
+- `harness-sdk.md` §4-§5（HarnessBuilder / Harness API）
+- `AGENTS.md` § Persistence Governance
+
+**预期产物**：
+- `crates/octopus-cli/src/run_once.rs`：把 `unimplemented!("TODO(M8-...)")` 桩替换为真 `octopus_harness_sdk::HarnessBuilder` 调用：
+  ```rust
+  let harness = HarnessBuilder::new()
+      .with_model(MockProvider::default())   // M3 期允许 mock；M8 切真 anthropic
+      .with_store(InMemoryEventStore::new(redactor.clone()))
+      .with_sandbox(NoopSandbox)
+      .build()
+      .await?;
+  let session = harness.create_session(SessionOptions { workspace_root, ... }).await?;
+  let stream = session.run_turn(TurnInput::user(prompt)).await?;
+  // 流式打印 AssistantDelta + ToolUse* 事件
+  ```
+- `crates/octopus-cli/tests/run_once_smoke.rs`：跑一次 `cargo run -p octopus-cli -- run --once "list cwd"` 验证流程
+- 业务层其它入口（`server / desktop / interactive cli`）保持 stub（M8 处理）
+
+**关键不变量**：
+- 仅 cli 单一入口切换，不动 server / desktop
+- workspace_root 走环境变量或参数传入，对齐 M3-T16 SessionPaths
+- 该入口在 M8 时被覆盖（M8-T10 接管）
+
+**禁止行为**：
+- 不要扩展到 server / desktop（保持范围)
+- 不要在本卡接 Anthropic 真 provider（用 MockProvider 即可，M8 才接真）
+
+**验收命令**：
+
+```bash
+cargo run -p octopus-cli -- run --once "list current dir"
+# 应见 AssistantDelta 流式输出 + ListDir 工具被调用
+cargo test -p octopus-cli run_once_smoke
+```
+
+---
+
+### M3-S02 · Spike-3 · Steering Queue 长 turn 语义（前置 POC）
+
+| 字段 | 值 |
+|---|---|
+| **状态** | 待派发 |
+| **依赖** | M3-T19（SteeringQueue 完成） |
+| **预期 diff** | < 250 行 |
+| **预期工时** | AI 1.5h + 人类评审 30min |
+
+**背景**：
+
+评审报告 §4.4 第 2 项。Steering 涉及主循环 safe-merge-point 时机选择，错误会破坏 prompt cache。原计划 M9 验证太晚（M5/M6/M7 都已基于此推进），失败回滚 2-3 周。
+
+**SPEC 锚点**：
+- `harness-session.md` §6（SteeringQueue）
+- ADR-0017
+- `audit/2026-04-25-architecture-review.md` §4.4 第 2 项
+
+**预期产物**：
+- `crates/octopus-harness-session/tests/spike_steering.rs`：
+  - L1 长 turn 基线（≥ 10 tool calls）
+  - L2 turn 中 push_steering（drain 时机）
+  - L3 多次 push（capacity 内）
+  - L4 超 capacity（DropOldest 触发 + SteeringMessageDroppedEvent）
+  - L5 TTL 过期
+  - 由于 M3 时还没真 engine，本 spike 用 mock LLM + M3-T20 临时 driver 跑
+- `docs/architecture/harness/audit/M3-spike-steering.md`
+
+**通过判据**：
+- ✅ L1-L5 全部按期望行为
+- ✅ Prompt cache 比照测试：L2 与无 steering 对照组下降 ≤ 5%
+
+**失败处理**：
+- 失败 → ADR-0017 召开架构 review
 
 ---
 

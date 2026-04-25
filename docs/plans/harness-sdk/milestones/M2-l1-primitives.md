@@ -55,28 +55,50 @@
 
 ---
 
-### M2-T02 · AnthropicProvider 实现（默认 builtin）
+### M2-T02 · AnthropicProvider 实现（拆 2 子卡）
+
+> **拆分理由**（实施前评估 P1-5）：原单卡含 client + streaming + cache + tokenizer + e2e tests，500 行紧。拆为 client/transport 与 cache/streaming/tokenizer 两卡。
+
+#### M2-T02a · AnthropicClient + 重试限流
 
 **SPEC 锚点**：
 - `harness-model.md` §3.1（Anthropic 实现详情）
-- ADR-003（Prompt Cache style `system_and_3`）
 
 **预期产物**：
 - `src/anthropic/mod.rs`
-- `src/anthropic/client.rs`（HTTP 客户端）
-- `src/anthropic/streaming.rs`（SSE 解析 → ModelStreamEvent）
-- `src/anthropic/cache.rs`（Prompt Cache breakpoint 注入）
-- `src/anthropic/tokenizer.rs`（基于 anthropic-tokenizer 或近似）
-- `tests/anthropic_e2e.rs`（mock HTTP，不打实际 API；也保留 `#[ignore] live` 用例）
+- `src/anthropic/client.rs`（HTTP 客户端 + retry 策略 + 限流）
+- `src/anthropic/error.rs`（错误映射）
+- `tests/anthropic_client.rs`（mock HTTP，不打实际 API）
 
 **关键不变量**：
 - 必须支持 `claude-3-5-sonnet-20241022 / claude-3-7-sonnet-20250219` 等模型
-- `prompt_cache_style()` 返回 `SystemAnd3`
 - 必须实现 retry + 限流（按 SPEC §3.1）
 
 **Cargo feature**：`anthropic`
 
-**预期 diff**：< 500 行
+**预期 diff**：< 350 行
+
+#### M2-T02b · SSE 流解析 + Prompt Cache 注入 + Tokenizer
+
+**SPEC 锚点**：
+- `harness-model.md` §3.1
+- ADR-003（Prompt Cache style `system_and_3`）
+
+**预期产物**：
+- `src/anthropic/streaming.rs`（SSE 解析 → ModelStreamEvent）
+- `src/anthropic/cache.rs`（Prompt Cache breakpoint 注入）
+- `src/anthropic/tokenizer.rs`（基于 anthropic-tokenizer 或近似）
+- `tests/anthropic_streaming.rs`
+- `tests/anthropic_cache.rs`
+
+**关键不变量**：
+- `prompt_cache_style()` 返回 `SystemAnd3`
+- `cache_breakpoints` 字段按 SPEC 注入到 ModelRequest
+- `cache_creation` / `cache_read` 字段按 SPEC 解析到 UsageSnapshot
+
+**Cargo feature**：`anthropic`
+
+**预期 diff**：< 400 行
 
 ---
 
@@ -115,6 +137,55 @@
 
 ---
 
+### M2-T04.5 · 5 个 provider feature stub（占位，对齐 D10 §2.2）
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M2-T04 |
+| **预期 diff** | < 200 行 |
+
+**背景**（实施前评估 P2-1 修订）：
+
+D10 §2.2 要求 `harness-model` 提供 `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / mock` 共 8 个 feature。M2 的 T01-T05 仅落地 `anthropic + mock`。M7-T04 builtin 模块在 `#[cfg(feature = "provider-openai")]` 等时会因 `octopus_harness_model::openai` 不存在导致编译失败。
+
+本卡为 5 个未实现的 provider 落 feature stub（可编译的占位 module），M7 builtin re-export 不破。后续 v1.1 才填入真实现。
+
+**SPEC 锚点**：
+- `feature-flags.md` §2.2（harness-model features 列表）
+- `harness-model.md` §3（provider 实现章节）
+
+**预期产物**：
+
+- `crates/octopus-harness-model/src/openai.rs`：feature gate `#[cfg(feature = "openai")]`，仅含一个 `pub struct OpenAiProvider;` + `impl ModelProvider for OpenAiProvider { ... }` 全 `unimplemented!("TODO(v1.1): implement OpenAI provider")`
+- 同模式生成 `gemini.rs / openrouter.rs / bedrock.rs / codex.rs / local_llama.rs`
+- `src/lib.rs`：5 行 `#[cfg(feature = "...")] pub mod ...;`
+- `Cargo.toml`：5 个 feature 项 `openai = []` / `gemini = []` / ...（不引入真实 dep）
+
+**关键不变量**：
+
+- 5 个 stub provider 编译通过（feature on）
+- 不引入新 dep（`reqwest / google-cloud-sdk / aws-sdk` 等留给 v1.1）
+- 所有方法 `unimplemented!()`，且通过 contract test（必须显式 fail：M2-T05 contract test 加 `#[should_panic]` 用例验证 stub 正确"假装失败"）
+
+**禁止行为**：
+
+- 不要在本卡引入实际 HTTP 依赖
+- 不要让 stub default 启用（对齐 D10 §3.5：default 集只含 anthropic）
+
+**验收命令**：
+
+```bash
+cargo check -p octopus-harness-model --features openai
+cargo check -p octopus-harness-model --features gemini
+cargo check -p octopus-harness-model --features openrouter
+cargo check -p octopus-harness-model --features bedrock
+cargo check -p octopus-harness-model --features codex
+cargo check -p octopus-harness-model --features local-llama
+cargo check -p octopus-harness-model --all-features  # 不能有冲突
+```
+
+---
+
 ### M2-T05 · ModelProvider Contract Test 套件
 
 **SPEC 锚点**：
@@ -137,26 +208,26 @@
 
 ## 3. 路 L1-B · `octopus-harness-journal`
 
-### M2-T06 · EventStore trait + 接口骨架（Redactor 装配槽预留）
+### M2-T06 · EventStore trait + 接口骨架（Redactor 装配点契约）
 
 **SPEC 锚点**：
 - `harness-journal.md` §2.1（EventStore trait + Redactor 必经管道契约 v1.8.1）
-- `api-contracts.md` §5
-- `harness-observability.md` §2.5.0（Redactor 6 行挂钩点表，v1.8.1 P2-7）
+- `api-contracts.md` §5（EventStore trait）
+- `api-contracts.md` §18.2（Redactor 单 method 签名 `fn redact(&str, &RedactRules) -> String`）
+- `harness-observability.md` §2.5.0（Redactor 6 行挂钩点表 = **装配点（call site）契约**，不是 trait 多 method）
 
 **ADR 锚点**：
 - ADR-001（event-sourcing）
-- 实施前评估 P0-D（Redactor 装配槽必须从本卡起预留，不留待 M5 大补丁）
 
 **前置任务产物**（必读 PR）：
-- M1-T07 PR：`octopus-harness-contracts` `Redactor` trait + `NoopRedactor` 默认实现
+- M1-T07 PR：`octopus-harness-contracts` `Redactor` trait（单 method，与 SPEC 一致）+ `NoopRedactor` 默认实现
 
 **预期产物**：
 - `src/store.rs`：
-  - `EventStore` trait（dyn-safe + async）
-  - **trait 构造方法签名必含 Redactor 装配槽**：实现侧通常通过 `pub fn new(..., redactor: Arc<dyn Redactor>) -> Self` 接收，**不允许提供"无 Redactor 默认构造"**
-  - 实现内部所有写路径（`append / append_batch / append_with_blob`）在事件序列化前调用 `redactor.redact_event(&mut event)?`
-  - 测试默认采用 `Arc::new(NoopRedactor::default())`（M1-T07 提供）
+  - `EventStore` trait（dyn-safe + async）—— 与 `api-contracts.md §5` **逐字一致**
+  - **EventStore 实现**（由 T07/T08/T09 各自提供）的构造函数必须接受 `redactor: Arc<dyn Redactor>` 参数，并把它存入实例
+  - 写路径（`append / append_batch / append_with_blob`）在序列化事件**前**：把每个事件的字符串字段（如 `tool_input / message_text / error_message` 等）逐一过 `redactor.redact(field, &RedactRules::default())`，再写入存储
+  - 测试默认采用 `Arc::new(NoopRedactor::default())`
 - `src/projection.rs`：`Projection` trait + `SessionProjection / UsageProjection / ToolPoolProjection`
 - `src/snapshot.rs`：`Snapshot` 类型 + `SnapshotStore` trait
 - `src/blob.rs`：BlobStore impl 入口
@@ -164,16 +235,18 @@
 - `src/retention.rs`：`RetentionEnforcer`
 
 **关键不变量**：
-- 写事件前必经 Redactor（v1.8.1 P2-7 强制）—— **M2 期使用 NoopRedactor 占位，M5-T03 替换为 DefaultRedactor**
+- 写事件前必经 Redactor（v1.8.1 P2-7 强制）—— M2 期使用 `NoopRedactor` 占位，M5-T03 替换为 `DefaultRedactor`
 - append-only：禁止 `delete / update_event`
 - 必须支持 `query_after(after: EventId, limit: usize)`
-- 任何 `EventStore` 实现的构造函数**必须**接受 `Arc<dyn Redactor>` 参数（编译期强制；后续 contract-test 会验证 redact 调用次数）
+- 任何 `EventStore` 实现的构造函数**必须**接受 `Arc<dyn Redactor>` 参数（编译期强制；contract-test 会验证 redact 调用次数）
+- "必经管道"是装配点（call site）契约：调用方在 6 行挂钩点处把字符串过 `redact()`，**不是** Redactor trait 多 method
 
 **禁止行为**：
 - 不允许构造方法默认提供 NoopRedactor（必须由调用方显式传入）
 - 不允许在 trait 内部维护 redactor field（每个实现各自持有）
+- 不允许把 Redactor 当作"事件改写器"（它仅处理字符串）；事件结构本身由调用方自行裁剪
 
-**预期 diff**：< 400 行（比原 350 多出的部分用于装配槽契约 + 文档）
+**预期 diff**：< 400 行
 
 ---
 
@@ -199,25 +272,45 @@
 
 ---
 
-### M2-T08 · SqliteEventStore + FileBlobStore + SqliteBlobStore
+### M2-T08 · SqliteEventStore + BlobStore（拆 2 子卡）
+
+> **拆分理由**（实施前评估 P1-5）：sqlite store + 2 类 blob store 含测试 ≤ 500 行紧；按 EventStore vs BlobStore 拆 2 卡。
+
+#### M2-T08a · SqliteEventStore + Migration
 
 **SPEC 锚点**：
-- `harness-journal.md` §3.3 / §3.4（sqlite / blob 实现）
-- `AGENTS.md` Persistence Governance（data/main.db / data/blobs）
+- `harness-journal.md` §3.3
+- `AGENTS.md` Persistence Governance（data/main.db）
 
 **预期产物**：
 - `src/sqlite/mod.rs`：SqliteEventStore + Migration
-- `src/sqlite/blob.rs`：SqliteBlobStore（小 blob）
-- `src/blob_file.rs`：FileBlobStore（大 blob）
-- `tests/sqlite.rs / blob.rs`
+- `tests/sqlite_event_store.rs`
 
 **关键不变量**：
 - WAL 模式 + FTS5 索引（按 SPEC）
+- 写路径调用 `redactor.redact(...)`（对齐 M2-T06 装配点契约）
+
+**Cargo feature**：`sqlite`
+
+**预期 diff**：< 350 行
+
+#### M2-T08b · FileBlobStore + SqliteBlobStore
+
+**SPEC 锚点**：
+- `harness-journal.md` §3.4
+- `AGENTS.md` Persistence Governance（data/blobs）
+
+**预期产物**：
+- `src/sqlite/blob.rs`：SqliteBlobStore（小 blob）
+- `src/blob_file.rs`：FileBlobStore（大 blob）
+- `tests/blob.rs`
+
+**关键不变量**：
 - BlobStore 选择策略：> 1MB 走 file，否则走 sqlite（业务侧可配置）
 
-**Cargo feature**：`sqlite / blob-file / blob-sqlite`
+**Cargo feature**：`blob-file / blob-sqlite`
 
-**预期 diff**：< 500 行
+**预期 diff**：< 350 行
 
 ---
 
@@ -487,7 +580,44 @@
 
 ---
 
-## 7. M2 Gate 检查
+## 7. M2-Spike-1 · Anthropic Prompt Cache 命中率（前置 POC）
+
+### M2-S01 · Spike-1 · Anthropic Prompt Cache 命中率最小验证
+
+| 字段 | 值 |
+|---|---|
+| **状态** | 待派发 |
+| **依赖** | M2-T05（Anthropic provider + contract test 完成） |
+| **预期 diff** | < 250 行 |
+| **预期工时** | AI 1.5h + 人类评审 30min |
+
+**背景**（实施前评估 P1-3 修订）：
+
+评审报告 §4.4 第 1 项指出 Prompt Cache 假设是高风险设计，POC 失败会触发 ADR-003 重设计（2-4 周返工）。M2 完成 Anthropic provider 后即可做最小 spike：在 contracts + model 两层验证 `system_and_3` cache breakpoint 注入正确性 + 真实 API 命中率。**不**等到 M9 才发现假设不成立。
+
+**SPEC 锚点**：
+- `crates/harness-model.md` §3.1（Anthropic 实现）
+- ADR-003（Prompt Cache `system_and_3`）
+- `audit/2026-04-25-architecture-review.md` §4.4 第 1 项
+
+**预期产物**：
+- `crates/octopus-harness-model/tests/spike_prompt_cache.rs`：
+  - mock SSE 路径验证 `cache_breakpoints` 字段被正确注入到 `ModelRequest`
+  - `cache_creation` / `cache_read` 字段被正确解析到 `UsageSnapshot`
+  - `#[ignore] live` 用例：连接真实 Anthropic（如有 `ANTHROPIC_API_KEY`）跑 3 轮对话，验证第 2-3 轮 `cache_read > 0`
+- `docs/architecture/harness/audit/M2-spike-prompt-cache.md`（人类填写实测报告）
+
+**通过判据**：
+- ✅ Mock 路径：cache breakpoint 注入次数 = 期望、cache_read/creation 字段解析正确
+- ⚠️ Live 路径（应跑）：第 2 轮 `cache_read > 0`；如限流则记 partial-pass
+
+**失败处理**：
+- Mock 失败 → AnthropicProvider 实现 bug，M2-T02 reset
+- Live 全失败 → ADR-003 假设受质疑，召开架构 review；spike 报告归档供 M9 完整 POC 比对
+
+---
+
+## 8. M2 Gate 检查
 
 完成后须通过以下检查（人类 reviewer）：
 
@@ -496,12 +626,13 @@
 - ✅ `cargo deny check --features auto-mode`（破窗 feature）通过
 - ✅ M0 设置的 spec-consistency 脚本继续通过
 - ✅ feature 矩阵 CI（含 `interactive,stream,rule-engine` 等组合）全绿
+- ✅ **M2-S01 spike 通过**（mock 必跑、live 应跑）
 
 未全绿 → 不得开始 M3。
 
 ---
 
-## 8. 索引
+## 9. 索引
 
 - **上一里程碑** → [`M1-l0-contracts.md`](./M1-l0-contracts.md)
 - **下一里程碑** → [`M3-l2-core.md`](./M3-l2-core.md)

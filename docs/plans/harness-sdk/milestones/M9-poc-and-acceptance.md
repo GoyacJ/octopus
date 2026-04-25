@@ -9,12 +9,13 @@
 
 ## 0. 里程碑级注意事项
 
-1. **POC 是最后一道闸门**：架构评审报告（`audit/2026-04-25-architecture-review.md` §4.4）建议的三个高风险设计点必须在此验证
+1. **POC 是端到端集成验证**（实施前评估 P1-3 修订）：
+   - 三个高风险设计点的"最小可行"假设已在 **M2-S01 / M3-S01 / M3-S02 spike** 中前置验证（不再是事后发现）
+   - M9 的 POC 是**集成态长场景验证**：验证 Spike 假设在完整 SDK + 业务层下仍然成立、跨 turn 不退化、跨 session 长稳
 2. **POC 失败的处理**：
-   - POC-1（Prompt Cache 命中率）失败 → ADR-003 重设计 → 部分推倒重做
-   - POC-2（Steering Queue）失败 → ADR-0017 调整
-   - POC-3（Hook 多 transport）失败 → ADR / harness-hook 调整
-3. **POC 不是一次性单元测试**：是产线场景下的"假设验证"，必须包含真实环境跑数据
+   - 若 spike 通过但集成 POC 失败 → 通常是装配 / 业务层接入 bug，可定位回 M5/M6/M7/M8 的具体任务卡
+   - 若集成 POC 与 spike 同时失败 → 召开架构 review，可能 ADR 修订（但概率显著低于无前置 spike 的情况）
+3. **POC 仍包含真实环境数据**（非单元测试）
 4. **验收报告必须归档**：`docs/architecture/harness/audit/2026-XX-implementation-acceptance.md`
 
 ---
@@ -94,7 +95,7 @@
 | L1 · 基线长 turn | 触发一个需要 ≥ 10 工具调用的任务 | 完整跑完 10+ tool calls，无 panic |
 | L2 · turn 中 push_steering | L1 跑到第 5 个 tool call 时 push_steering（"用户说请关注 X 部分"）| Steering 在下个 safe checkpoint drain；不污染 prompt cache |
 | L3 · 多次 push_steering | L1 跑到第 5/7/9 push 三次（capacity=8）| 全部正确合并；无 DropOldest 触发 |
-| L4 · 超 capacity | push_steering 9 次 → 超 capacity=8 | 第 9 次 DropOldest 触发；发出 SteeringDropped 事件 |
+| L4 · 超 capacity | push_steering 9 次 → 超 capacity=8 | 第 9 次 DropOldest 触发；发出 `SteeringMessageDropped` 事件（按 SPEC 名） |
 | L5 · TTL 过期 | push 1 次 → 等 TTL+1s | 该消息 expire；下次 drain 跳过 |
 
 **预期产物**：
@@ -276,7 +277,7 @@
 - [x] 19 个 `octopus-harness-*` crate 全部进入 workspace
 - [x] 14 个旧 `octopus-sdk*` crate 已移除
 - [x] **`_octopus-bridge-stub` 临时 crate 已 `git rm`**（M8 Gate 已验证）
-- [x] **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已删除或重新接入 `octopus-harness-sdk`**
+- [x] **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已全删 + 对应模块已通过 `octopus-harness-sdk` 重接或删除**（不允许永久保留 default-off feature）
 - [x] 业务层全部切换
 - [x] `cargo test --workspace --all-features` 全绿
 - [x] `cargo clippy --workspace -- -D warnings` 零警告

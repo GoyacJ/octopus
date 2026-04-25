@@ -88,17 +88,35 @@
 
 ---
 
-### M4-T05 · DefaultScorer + Contract Test + Session 集成补丁
+### M4-T05 · DefaultScorer + Contract Test
 
 **预期产物**：
 - `src/scorer/default.rs`：DefaultScorer（基于关键词匹配 + tool 元数据）
 - `tests/contract.rs`
-- 补丁：`octopus-harness-session/src/options.rs` 增加 `tool_search: ToolSearchMode` 字段
-- 补丁：`octopus-harness-session/src/projection.rs` 增加 `discovered_tools: DiscoveredToolProjection`
 
 **Cargo feature**：`scorer-default`
 
-**预期 diff**：< 250 行（含 session 补丁）
+**预期 diff**：< 200 行
+
+> Session 集成（`tool_search: ToolSearchMode` + `discovered_tools: DiscoveredToolProjection`）由独立 chore 卡 **M4-T05.5** 处理（实施前评估 P2-2 修订），避免与 M3 后期 / M5 并行 PR 共改 `harness-session/src/{options,projection}.rs`。
+
+---
+
+### M4-T05.5 · Session 集成补丁（chore，跨 crate 文件锁卡）
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M4-T05 + M5 完成 |
+| **预期 diff** | < 100 行 |
+| **文件锁声明** | 独占修改 `crates/octopus-harness-session/src/options.rs` + `src/projection.rs`；冲突卡：M4-T08 / M4-T18 / 任何修改 session crate 的 PR |
+
+**预期产物**：
+- `octopus-harness-session/src/options.rs`：增加 `pub tool_search: ToolSearchMode` 字段
+- `octopus-harness-session/src/projection.rs`：增加 `pub discovered_tools: DiscoveredToolProjection`
+- `tests/session_with_tool_search.rs`：联接 M4 tool-search 输出
+
+**关键不变量**：
+- 本卡是 single-writer 卡，必须等 M4-T05 / M5 全部合并后才能派发，避免 session crate 冲突
 
 ---
 

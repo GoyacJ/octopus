@@ -198,8 +198,9 @@ grep -q 'TenantId::SHARED' crates/octopus-harness-contracts/src/ids.rs
 **关键不变量**：
 
 - 全部 `#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]`（按需）
-- 序列化用 `#[serde(rename_all = "snake_case")]`（与现有事件治理一致）
-- `EndReason` 必须含 `Cancelled` 变体
+- 大型 enum（如 `Decision / DecidedBy / PermissionSubject` 等带判别量需求的）派生 `strum::EnumDiscriminants` + `#[strum_discriminants(name(...), derive(...))]`，**对齐 `harness-contracts.md §3.3 / §3.4` 的派生模板**
+- 序列化默认 `#[serde(rename_all = "snake_case")]`（与 SPEC 一致）；如有 tagged enum，`tag` 字段名以 SPEC 为准（事件层固定 `tag = "type"`）
+- `EndReason` 必须含 `Cancelled` 变体（v1.8.1 P1-3）
 
 **验收命令**：
 
@@ -209,50 +210,66 @@ cargo test -p octopus-harness-contracts enums
 
 ---
 
-### M1-T04a · Event 枚举 · Session(5) + Run(8)
+> **重要原则（事件名权威源）**：
+>
+> M1-T04a/b 与 T05a/b 的所有事件名、字段、`#[serde(...)]` 派生属性，**必须逐字 copy 自** `harness-contracts.md §3.3`（顶层 `Event` 枚举）+ `event-schema.md §3.x`（每个事件结构）。
+> 任务卡**不得**自行列举或重命名事件（铁律 1）。AI 必须先用 `Read` 工具读 SPEC 行号片段，再生成代码。
+> 对齐项：
+> - 顶层 `Event` 派生：`#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, strum::EnumDiscriminants)]` + `#[strum_discriminants(name(EventKind), derive(Hash, Eq, PartialEq, Serialize, Deserialize))]` + `#[serde(tag = "type", rename_all = "snake_case")]`（**不是** `tag = "kind", content = "data"`）
+> - 事件名清单以 `harness-contracts.md` §3.3 L132-L279 为准（约 80 个变体）
+
+### M1-T04a · Event 枚举 · Session + Run + 消息流
 
 | 字段 | 值 |
 |---|---|
 | **依赖** | M1-T03 |
 | **预期 diff** | < 450 行 |
 
-**SPEC 锚点**：
-- `docs/architecture/harness/event-schema.md` §3.0（Session 生命周期，5 个事件）
-- `docs/architecture/harness/event-schema.md` §3.1（Run + Turn，8 个事件，含 v1.8.1 P2-5 新增 GraceCallTriggered §3.1.1）
+**SPEC 锚点**（必读，不要省略）：
+- `crates/harness-contracts.md` §3.3（L120-L150 的 Session/Run/消息流变体清单）
+- `event-schema.md` §3.0 - §3.1（每个事件 struct 字段定义；含 §3.1.1 `GraceCallTriggered`）
 
 **ADR 锚点**：
 - ADR-001（event-sourcing）
-- 评审报告 P1-3 / P2-5（Cancelled + GraceCallTriggered）
+- 评审报告 P1-3（`EndReason::Cancelled`）/ P2-5（`GraceCallTriggered`）
 
 **预期产物**：
 
-- `crates/octopus-harness-contracts/src/events/mod.rs`：声明 `pub mod session; pub mod run;`，**顶层 `Event` 枚举留空架（仅引入待汇总注释）**，待 T05b 汇总
-- `crates/octopus-harness-contracts/src/events/session.rs`：5 个事件结构体 — `SessionCreated / SessionForked / SessionEnded / SessionReloaded / SessionSnapshotCreated`
-- `crates/octopus-harness-contracts/src/events/run.rs`：8 个事件结构体 — `RunStarted / RunEnded / IterationStarted / IterationEnded / GraceCallTriggered / AssistantDeltaProduced / AssistantMessageCompleted`（其中 GraceCallTriggered 必须含 `usage_snapshot` 字段，对齐 §3.1.1）
+- `events/mod.rs`：声明 `pub mod session; pub mod run; pub mod messages;`（顶层 `Event` 留待 T05b）+ `EventEnvelope` trait 首发定义
+- `events/session.rs`：按 SPEC 列出的 Session 生命周期变体（含 `SessionCreated / SessionForked / SessionEnded / SessionReloadRequested / SessionReloadApplied`）
+- `events/run.rs`：按 SPEC 列出的 Run 变体（含 `RunStarted / RunEnded / GraceCallTriggered`）
+- `events/messages.rs`：按 SPEC 列出的消息流变体（含 `UserMessageAppended / AssistantDeltaProduced / AssistantMessageCompleted`）
 
 **关键不变量**：
 
-- 每个事件结构体必带 `tenant_id / session_id / run_id?` 三件套
-- 所有事件必须 `#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]`
-- 事件必须实现 `EventEnvelope` trait（提供 `event_id() / occurred_at() / kind()`），`EventEnvelope` trait 在本卡 `events/mod.rs` 内首发定义
-- `RunEnded.reason: EndReason` 必须能承载 `Cancelled { initiator }`（对齐 v1.8.1 P1-3）
+- 每个事件 struct 字段、字段顺序、字段类型 **逐字** 对齐 `event-schema.md §3.x`
+- 全部 `#[non_exhaustive]`（与顶层 `Event` 一致）
+- 全部事件 struct 派生 `Debug + Clone + Serialize + Deserialize + JsonSchema`
+- `RunEnded.reason: EndReason` 必须能承载 `Cancelled { initiator: CancelInitiator }`（对齐 v1.8.1 P1-3，已在 M1-T03 落地）
+- `GraceCallTriggered` 必须含 `current_iteration / max_iterations / usage_snapshot` 三字段
 
 **禁止行为**：
 
-- 不要省略事件中的"看似冗余"字段（如 `tenant_id`，是反向追踪必备）
-- 不要把"派生数据"塞进事件（事件是 fact）
-- 本卡不汇总顶层 `Event` 枚举（汇总归 T05b）
+- 禁止用计划文档列举的别名（如 `IterationStarted / IterationEnded / SessionReloaded / SessionSnapshotCreated` —— 这些**不是** SPEC 名，纯属上一轮 plan bug）；以 SPEC 为准
+- 禁止省略事件中的"看似冗余"字段
+- 禁止把"派生数据"塞进事件
+- 本卡不汇总顶层 `Event` 枚举
 
-**验收命令**：
+**SPEC 一致性自检**：
 
 ```bash
-cargo test -p octopus-harness-contracts events::session
-cargo test -p octopus-harness-contracts events::run
+# Session/Run/Message 关键事件名以 SPEC 为准（grep 命中 == 通过）
+for ev in SessionCreatedEvent SessionForkedEvent SessionEndedEvent SessionReloadRequestedEvent SessionReloadAppliedEvent RunStartedEvent RunEndedEvent GraceCallTriggeredEvent UserMessageAppendedEvent AssistantDeltaProducedEvent AssistantMessageCompletedEvent; do
+    grep -q "pub struct ${ev}" crates/octopus-harness-contracts/src/events/{session,run,messages}.rs || echo "MISSING: $ev"
+done
+
+# 反向验证：禁止出现 plan v1 误命名
+! grep -rE 'pub struct (IterationStartedEvent|IterationEndedEvent|SessionReloadedEvent|SessionSnapshotCreatedEvent)' crates/octopus-harness-contracts/src/events/
 ```
 
 ---
 
-### M1-T04b · Event 枚举 · Tool(10) + Permission(5)
+### M1-T04b · Event 枚举 · Tool 执行 + Permission 审批
 
 | 字段 | 值 |
 |---|---|
@@ -260,35 +277,41 @@ cargo test -p octopus-harness-contracts events::run
 | **预期 diff** | < 450 行 |
 
 **SPEC 锚点**：
-- `event-schema.md` §3.4（Tool 执行，10 个事件）
-- `event-schema.md` §3.2（Permission 事件 5 个，含 v1.8.1 P1-5 新增 `CredentialPoolSharedAcrossTenants`）
+- `crates/harness-contracts.md` §3.3（L146-L165 Tool / L158-L165 Permission 变体清单）
+- `event-schema.md` §3.4（Tool 执行 - ToolUse* 系列）
+- `event-schema.md` §3.2（Permission 审批 - 含 v1.8.1 P1-5 新增 `CredentialPoolSharedAcrossTenants`）
 
 **ADR 锚点**：
 - ADR-007（permission-events）
-- ADR-009（deferred-tool-loading：ToolDeferredPoolChanged）
-- ADR-0010（tool-result-budget：ToolResultBudgetExceeded）
+- ADR-009（ToolDeferredPoolChanged / ToolSearchQueried / ToolSchemaMaterialized）
+- ADR-0010（ToolResultOffloaded）
 
 **预期产物**：
 
-- `crates/octopus-harness-contracts/src/events/tool.rs`：10 个事件结构体 — `ToolUseRequested / ToolExecutionStarted / ToolExecutionCompleted / ToolExecutionFailed / ToolResultBudgetExceeded / ToolPoolChanged / ToolDeferredPoolChanged / ToolSearchQueried / ToolSchemaMaterialized / ToolSearchResultMaterialized`
-- `crates/octopus-harness-contracts/src/events/permission.rs`：5 个事件结构体 — `PermissionRequested / PermissionResolved / PermissionRuleAdded / PermissionContextElevated / CredentialPoolSharedAcrossTenants`
+- `events/tool.rs`：按 SPEC 列出（包含但不限于 `ToolUseRequested / ToolUseApproved / ToolUseDenied / ToolUseCompleted / ToolUseFailed / ToolUseHeartbeat / ToolResultOffloaded / ToolRegistrationShadowed / ToolDeferredPoolChanged / ToolSearchQueried / ToolSchemaMaterialized`）
+- `events/permission.rs`：按 SPEC 列出（含 `PermissionRequested / PermissionResolved / PermissionPersistenceTampered / PermissionRequestSuppressed / CredentialPoolSharedAcrossTenants`）
 
 **关键不变量**：
 
-- `PermissionResolved.decided_by: DecidedBy` 必须区分 User / Hook / Rule / Auto 四类
-- `CredentialPoolSharedAcrossTenants` 字段必须含 `from_tenant_id / to_tenant_id_hint` 反向追踪字段（v1.8.1 P1-5）
+- 事件名采用 SPEC 的 `ToolUse*` 形态（不是 `ToolExecution*` —— 那是 plan v1 误命名）
+- `PermissionResolved.decided_by: DecidedBy` 区分多 4 类（按 SPEC §3.4）
 - `events/mod.rs` 声明 `pub mod tool; pub mod permission;`
 
-**验收命令**：
+**SPEC 一致性自检**：
 
 ```bash
-cargo test -p octopus-harness-contracts events::tool
-cargo test -p octopus-harness-contracts events::permission
+# Tool / Permission 关键事件名以 SPEC 为准
+for ev in ToolUseRequestedEvent ToolUseApprovedEvent ToolUseDeniedEvent ToolUseCompletedEvent ToolUseFailedEvent ToolUseHeartbeatEvent ToolResultOffloadedEvent PermissionRequestedEvent PermissionResolvedEvent CredentialPoolSharedAcrossTenantsEvent; do
+    grep -q "pub struct ${ev}" crates/octopus-harness-contracts/src/events/{tool,permission}.rs || echo "MISSING: $ev"
+done
+
+# 反向：plan v1 误命名禁出现
+! grep -rE 'pub struct (ToolExecutionStartedEvent|ToolExecutionCompletedEvent|ToolExecutionFailedEvent|ToolPoolChangedEvent)' crates/octopus-harness-contracts/src/events/
 ```
 
 ---
 
-### M1-T05a · Event 枚举 · Steering(3) + ExecuteCode(2) + Memory(6)
+### M1-T05a · Event 枚举 · Steering + ExecuteCode + Memory + Hook
 
 | 字段 | 值 |
 |---|---|
@@ -296,36 +319,39 @@ cargo test -p octopus-harness-contracts events::permission
 | **预期 diff** | < 450 行 |
 
 **SPEC 锚点**：
-- `event-schema.md` §3.5.1（Steering 事件 3 个）
-- `event-schema.md` §3.5.2（ExecuteCode 事件 2 个）
-- `event-schema.md` §3.6（Memory 事件 6 个，含 v1.4 新增 4 个）
+- `crates/harness-contracts.md` §3.3（L259-L275 Steering/ExecuteCode；L229-L236 Memory；L167-L182 Hook）
+- `event-schema.md` §3.5.1（Steering）/ §3.5.2（ExecuteCode）/ §3.6（Memory）/ §3.7（Hook）
 
 **ADR 锚点**：
-- ADR-0017（steering-queue）
-- ADR-0016（programmatic-tool-calling）
+- ADR-0016 / ADR-0017（execute_code / steering-queue）
 
 **预期产物**：
 
-- `events/steering.rs`：`SteeringPushed / SteeringMerged / SteeringDropped`
-- `events/execute_code.rs`：`ExecuteCodeStarted / ExecuteCodeCompleted`
-- `events/memory.rs`：6 个事件 — `MemoryRecalled / MemoryUpserted / MemoryForgotten / MemoryThreatDetected / MemoryAccessDenied / MemoryProviderSwitched`
+- `events/steering.rs`：以 SPEC 为准（**应为** `SteeringMessageQueued / SteeringMessageApplied / SteeringMessageDropped`，**不是** plan v1 误命名 `SteeringPushed/Merged/Dropped`）
+- `events/execute_code.rs`：以 SPEC 为准（应为 `ExecuteCodeStepInvoked / ExecuteCodeWhitelistExtended`）
+- `events/memory.rs`：以 SPEC 为准（含 `MemoryUpserted / MemoryRecalled / MemoryRecallDegraded / MemoryRecallSkipped / MemoryThreatDetected / MemdirOverflow / MemoryConsolidationRan`）
+- `events/hook.rs`：以 SPEC 为准（含 `HookTriggered / HookRewroteInput / HookContextPatchEvent / HookFailed / HookReturnedUnsupported / HookOutcomeInconsistent / HookPanicked / HookPermissionConflict`）
 
 **关键不变量**：
 
-- Steering 事件 `SteeringPushed.merge_behavior: SteeringMergeBehavior` 必填
-- ExecuteCode 事件必须能在 `decision_scope: DecisionScope::ExecuteCodeScript` 下被审批
+- Steering 名采用 SPEC `SteeringMessage*`（plan v1 写过的 `SteeringPushed/Merged/Dropped` 是误命名，已废弃）
+- ExecuteCode 必须连接 `parent_tool_use_id`（嵌入式工具调用追溯链）
+- Hook 事件 `HookFailedEvent` 字段必须含 `failure_mode / cause_kind`（对齐 v1.8.1 P0-1 受控例外审计）
 
-**验收命令**：
+**SPEC 一致性自检**：
 
 ```bash
-cargo test -p octopus-harness-contracts events::steering
-cargo test -p octopus-harness-contracts events::execute_code
-cargo test -p octopus-harness-contracts events::memory
+for ev in SteeringMessageQueuedEvent SteeringMessageAppliedEvent SteeringMessageDroppedEvent ExecuteCodeStepInvokedEvent ExecuteCodeWhitelistExtendedEvent MemoryUpsertedEvent MemoryRecalledEvent MemoryThreatDetectedEvent HookTriggeredEvent HookFailedEvent HookPanickedEvent; do
+    grep -q "pub struct ${ev}" crates/octopus-harness-contracts/src/events/{steering,execute_code,memory,hook}.rs || echo "MISSING: $ev"
+done
+
+# 反向：plan v1 误命名禁出现
+! grep -rE 'pub struct (SteeringPushedEvent|SteeringMergedEvent|SteeringDroppedEvent|ExecuteCodeStartedEvent|ExecuteCodeCompletedEvent)' crates/octopus-harness-contracts/src/events/
 ```
 
 ---
 
-### M1-T05b · Event 枚举 · Hook(5) + MCP(8) + Plugin(7) + Team(3) + 顶层 Event 汇总
+### M1-T05b · Event 枚举 · MCP + Plugin + Team + Sandbox + Subagent + Context + 其他 + 顶层 Event 汇总
 
 | 字段 | 值 |
 |---|---|
@@ -333,46 +359,49 @@ cargo test -p octopus-harness-contracts events::memory
 | **预期 diff** | < 450 行 |
 
 **SPEC 锚点**：
-- `event-schema.md` §3.7（Hook 事件 5 个，含 `HookFailed`）
-- `event-schema.md` §3.19（MCP 事件 8 个）
-- `event-schema.md` §3.20（Plugin Lifecycle 7 个，含 v1.8.1 `ManifestValidationFailed`）
-- `event-schema.md` §3.21（Team 事件 3 个）
+- `crates/harness-contracts.md` §3.3（L186-L279 全部剩余变体清单）
+- `event-schema.md` §3.8 - §3.21（每个事件 struct 字段定义）
 
 **预期产物**：
 
-- `events/hook.rs`：`HookInvoked / HookCompleted / HookFailed / HookSkipped / HookTransportTimeout`
-- `events/mcp.rs`：`McpServerConnected / McpServerDisconnected / McpToolsListChanged / McpResourceFetched / McpSamplingRequested / McpSamplingApproved / McpElicitationRequested / McpElicitationResolved`
-- `events/plugin.rs`：`PluginManifestDiscovered / PluginManifestValidated / ManifestValidationFailed / PluginActivationStarted / PluginActivationCompleted / PluginActivationFailed / PluginRevoked`
-- `events/team.rs`：`TeamCreated / TeamMemberJoined / TeamMemberLeft`
-- **顶层 `Event` 枚举汇总**：在 `events/mod.rs` 完成 `pub enum Event { Session(...), Run(...), Tool(...), Permission(...), Steering(...), ExecuteCode(...), Memory(...), Hook(...), Mcp(...), Plugin(...), Team(...) }`（`#[serde(tag = "kind", content = "data")]` tagged）
+- `events/mcp.rs`：以 SPEC 为准（`McpToolInjected / McpConnectionLost / McpConnectionRecovered / McpElicitationRequested / McpElicitationResolved / McpToolsListChanged / McpResourceUpdated / McpSamplingRequested`）
+- `events/plugin.rs`：以 SPEC 为准（`PluginLoaded / PluginRejected / ManifestValidationFailed`）
+- `events/sandbox.rs`：以 SPEC 为准（`SandboxExecutionStarted / SandboxExecutionCompleted / SandboxActivityHeartbeat / SandboxActivityTimeoutFired / SandboxOutputSpilled / SandboxBackpressureApplied / SandboxSnapshotCreated / SandboxContainerLifecycleTransition`）
+- `events/subagent.rs`：以 SPEC 为准（`SubagentSpawned / SubagentAnnounced / SubagentTerminated / SubagentSpawnPaused / SubagentPermissionForwarded / SubagentPermissionResolved`）
+- `events/team.rs`：以 SPEC 为准（`TeamCreated / TeamMemberJoined / TeamMemberLeft / TeamMemberStalled / AgentMessageSent / AgentMessageRouted / TeamTurnCompleted / TeamTerminated`）
+- `events/context.rs`：以 SPEC 为准（`CompactionApplied / ContextBudgetExceeded / ContextStageTransitioned`）
+- `events/observability.rs`：以 SPEC 为准（`UsageAccumulated / TraceSpanCompleted`）
+- `events/error.rs`：以 SPEC 为准（`EngineFailed / UnexpectedError`）
+- **顶层 `Event` 枚举汇总** 在 `events/mod.rs`：
+  - `#[non_exhaustive]`
+  - `#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, strum::EnumDiscriminants)]`
+  - `#[strum_discriminants(name(EventKind), derive(Hash, Eq, PartialEq, Serialize, Deserialize))]`
+  - `#[serde(tag = "type", rename_all = "snake_case")]`
+  - 变体数量：以 `harness-contracts.md` L132-L279 为准（约 80 个变体）
 
 **关键不变量**：
 
-- 顶层 `Event` 是 `#[serde(tag = "kind", content = "data")]` 的 tagged enum
-- 必须包含 v1.8.1 修订引入的全部事件（P0/P1/P2 修订点逐一对照）
-- `Event` 必须实现 `EventEnvelope` trait 的 dispatch（按变体 forward 到内部事件结构）
+- 顶层 `Event` 是 `tag = "type"`（**不是** `tag = "kind"`），与 SPEC 一字不差
+- 派生 `strum::EnumDiscriminants` 自动生成 `EventKind`（业务方不得另立判别枚举）
+- 必须包含全部 v1.8.1 修订引入的事件（`GraceCallTriggered / CredentialPoolSharedAcrossTenants / ManifestValidationFailed / HookFailed / SteeringMessage* / ExecuteCode* / SandboxBackpressureApplied / SubagentSpawnPaused / ...`）
 
 **禁止行为**：
 
-- 不要在本卡修改前 4 张子卡定义的事件结构体（如发现 bug 走铁律 1 例外）
-
-**验收命令**：
-
-```bash
-cargo test -p octopus-harness-contracts events::hook
-cargo test -p octopus-harness-contracts events::mcp
-cargo test -p octopus-harness-contracts events::plugin
-cargo test -p octopus-harness-contracts events::team
-cargo test -p octopus-harness-contracts events::Event   # 顶层 dispatch 用例
-```
+- 禁止使用任何 plan v1 误命名（`IterationStarted/Ended` / `SessionReloaded` / `SessionSnapshotCreated` / `ToolExecution*` / `SteeringPushed/Merged/Dropped` / `ExecuteCodeStarted/Completed`）
+- 禁止改 serde tag 为 `kind` 或 `content` 字段名
 
 **SPEC 一致性自检**：
 
 ```bash
-# 12 个 v1.8.1 修订事件必须全部存在
-for ev in GraceCallTriggered SteeringPushed SteeringMerged SteeringDropped ExecuteCodeStarted ExecuteCodeCompleted CredentialPoolSharedAcrossTenants ManifestValidationFailed HookFailed; do
-    grep -q "pub struct ${ev}" crates/octopus-harness-contracts/src/events/*.rs || echo "MISSING: $ev"
-done
+# 顶层 Event 派生与 serde 属性
+grep -E '#\[serde\(tag = "type", rename_all = "snake_case"\)\]' crates/octopus-harness-contracts/src/events/mod.rs
+grep -E 'strum::EnumDiscriminants' crates/octopus-harness-contracts/src/events/mod.rs
+
+# 不允许 tag = "kind" 这个 plan v1 误写
+! grep -rE 'tag = "kind"|content = "data"' crates/octopus-harness-contracts/
+
+# 顶层 Event 变体计数应 ≥ 75（SPEC 实际约 80）
+test "$(grep -E '^    [A-Z][a-zA-Z]+\(' crates/octopus-harness-contracts/src/events/mod.rs | wc -l)" -ge 75
 ```
 
 ---
@@ -410,51 +439,54 @@ done
 | 字段 | 值 |
 |---|---|
 | **依赖** | M1-T03 |
-| **预期 diff** | < 350 行 |
+| **预期 diff** | < 300 行 |
 
 **SPEC 锚点**：
 - `harness-contracts.md` §3.6（BlobStore trait + BlobMeta + BlobRetention + BlobError）
 - `harness-contracts.md` §3.4（ToolCapability + CapabilityRegistry + 7 个 *Cap 窄接口）
 - `harness-contracts.md` §3.4（DecisionScope）
-- `docs/architecture/harness/harness-observability.md` §2.5.0（**Redactor 必经管道契约**，v1.8.1 P2-7）
-- `docs/architecture/harness/crates/harness-journal.md` §2.1（EventStore 头注：必装配 `Arc<Redactor>`）
+- `api-contracts.md` §18.2（**Redactor trait 权威定义**：`fn redact(&self, input: &str, rules: &RedactRules) -> String`）
+- `harness-observability.md` §2.5.0（"必经管道"是**装配点契约**，6 个挂钩点由调用方负责把字符串过 `redact()`，不是 trait 多 method）
 
 **ADR 锚点**：
 - ADR-0011 / ADR-012（capability handle）
-- 实施前评估 P0-D（Redactor trait 必须在 contracts 层定义，供 M2 EventStore 装配槽预留）
 
 **预期产物**：
 
 - `src/blob.rs`（BlobStore trait + 三类型）
 - `src/capability.rs`（ToolCapability enum + CapabilityRegistry + 7 个 *Cap trait）
 - `src/scope.rs`（DecisionScope，含 v1.8 新增 `ExecuteCodeScript`）
-- `src/redactor.rs`（**新增**）：
-  - `Redactor` trait（`Send + Sync + 'static + dyn-safe`）：
-    ```rust
-    pub trait Redactor: Send + Sync + 'static {
-        fn redact_event(&self, event: &mut Event) -> Result<(), RedactorError>;
-        fn redact_message_part(&self, part: &mut MessagePart) -> Result<(), RedactorError>;
-        fn redact_tool_input(&self, input: &mut serde_json::Value) -> Result<(), RedactorError>;
-        fn redact_tool_output(&self, output: &mut serde_json::Value) -> Result<(), RedactorError>;
-        fn redact_model_request(&self, req: &mut ModelRequest) -> Result<(), RedactorError>;
-        fn redact_model_response(&self, resp: &mut ModelStreamEvent) -> Result<(), RedactorError>;
-    }
-    ```
-  - `pub struct NoopRedactor;` 实现 Redactor，所有方法返回 `Ok(())`（M2 期 EventStore 默认装配，待 M5 替换）
-  - `RedactorError` enum（`thiserror::Error`，含 `Internal / Pattern / Encoding` 三档）
+- `src/redactor.rs`（与 `api-contracts.md §18.2` 完全一致）：
+  ```rust
+  pub trait Redactor: Send + Sync + 'static {
+      fn redact(&self, input: &str, rules: &RedactRules) -> String;
+  }
+
+  pub struct RedactRules { /* 字段以 SPEC 为准 */ }
+
+  pub struct NoopRedactor;
+  impl Redactor for NoopRedactor {
+      fn redact(&self, input: &str, _: &RedactRules) -> String { input.to_owned() }
+  }
+  ```
+  - **不允许** trait 内多 method、不允许引用 L1 类型（`Event / MessagePart / ModelRequest / ModelStreamEvent` 等）
+  - "6 行挂钩点"是**装配点（call site）契约**，由 EventStore / Hook / MCP / Model in-out 各自调用 `redact()` 处理需要脱敏的字符串字段，不是 trait 形态
 
 **关键不变量**：
 
 - `BlobStore` trait 必须是 `Send + Sync + 'static + dyn-safe`
 - ToolCapability enum 不得使用别名 `ToolCapabilityHandle / ToolCap`（v1.8.1 P2-2 修订）
 - 7 个 *Cap trait：`PermissionCap / SandboxCap / ModelCap / MemoryCap / SubagentCap / TeamCap / SkillCap`
-- `Redactor` 必须 dyn-safe（M2 EventStore 通过 `Arc<dyn Redactor>` 装配）
+- `Redactor` 必须 dyn-safe，签名**逐字** copy 自 `api-contracts.md §18.2`
+- contracts crate **零依赖** L1 类型（dependency 必须保持 §M1-T01 列表，不许引入 `octopus-harness-model` 等）
 - `NoopRedactor` 必须 `Default + Clone + Debug`
 
 **禁止行为**：
 
-- 不要把 `Redactor` 真实现（默认正则规则）写在本 crate（归属 M5-T03 `harness-observability`）
-- 本卡 Redactor trait 仅定义契约 + Noop 默认；任何具体规则 30+ 模式都不入 contracts
+- **不要**让 Redactor trait 引用 `Event / MessagePart / ModelRequest / ModelStreamEvent`（违反 L0→L1 依赖方向）
+- **不要**自创 `redact_event / redact_message_part / redact_tool_input / ...` 多 method 形态（plan v1 误命名，已废弃）
+- **不要**把 `Redactor` 真实现（默认正则规则）写在本 crate（归属 M5-T03 `harness-observability`）
+- 本卡 Redactor trait 仅定义契约 + Noop 默认
 
 **验收命令**：
 
@@ -468,10 +500,14 @@ cargo test -p octopus-harness-contracts redactor
 **SPEC 一致性自检**：
 
 ```bash
-# Redactor trait 必经管道 6 个挂钩点全部存在
-for hook in redact_event redact_message_part redact_tool_input redact_tool_output redact_model_request redact_model_response; do
-    grep -q "fn ${hook}" crates/octopus-harness-contracts/src/redactor.rs || echo "MISSING hook: $hook"
-done
+# Redactor trait 单 method（与 api-contracts §18.2 一致）
+grep -E '^\s*fn redact\(&self, input: &str, rules: &RedactRules\) -> String' crates/octopus-harness-contracts/src/redactor.rs
+
+# 反向：禁出现 plan v1 多 method 误命名
+! grep -E 'fn redact_(event|message_part|tool_input|tool_output|model_request|model_response)' crates/octopus-harness-contracts/src/redactor.rs
+
+# contracts 不依赖 L1 类型
+! grep -rE 'use octopus_harness_(model|journal|sandbox|permission|memory)' crates/octopus-harness-contracts/src/
 
 # NoopRedactor 默认实现存在
 grep -q 'pub struct NoopRedactor' crates/octopus-harness-contracts/src/redactor.rs
@@ -548,20 +584,20 @@ ls schemas/harness-contracts/*.json | wc -l   # ≥ 60
 - ✅ `cargo test -p octopus-harness-contracts --all-features` 全绿
 - ✅ schemas 输出 ≥ 60 文件
 - ✅ 与 D3 `api-contracts.md` trait/struct 列表 100% 对齐（人工 grep 比对）
-- ✅ 12 个 v1.8.1 修订项全部体现：
-  - TenantId::SINGLE + SHARED 双哨兵
-  - EndReason::Cancelled + CancelInitiator
-  - GraceCallTriggered Event
-  - ToolOrigin::Plugin { plugin_id: PluginId } newtype
-  - CredentialPoolSharedAcrossTenants Event
-  - ManifestValidationFailed Event
-  - HookFailureMode FailOpen / FailClosed
-  - SteeringId + 3 Steering Events（Pushed/Merged/Dropped）
-  - ExecuteCodeScript / 2 ExecuteCode Events
-  - ToolCapability::CodeRuntime
-  - ToolResultPart 8 正向白名单
-  - DecisionScope::ExecuteCodeScript
-- ✅ **Redactor trait + NoopRedactor 已落地**（contracts 层 6 个 hook 完整，对应 v1.8.1 P2-7 必经管道契约；M2 EventStore 据此预留装配槽）
+- ✅ 12 个 v1.8.1 修订项全部体现（事件名以 `harness-contracts.md §3.3` 与 `event-schema.md §3` 为权威源）：
+  - `TenantId::SINGLE` + `TenantId::SHARED` 双哨兵
+  - `EndReason::Cancelled { initiator }` + `CancelInitiator` 枚举
+  - `GraceCallTriggeredEvent`（`event-schema.md §3.1.1`）
+  - `ToolOrigin::Plugin { plugin_id: PluginId, trust }` newtype
+  - `CredentialPoolSharedAcrossTenantsEvent`
+  - `ManifestValidationFailedEvent`
+  - `HookFailureMode::FailOpen / FailClosed` + `HookFailedEvent`
+  - `SteeringId` + 3 Steering 事件（**以 SPEC 为准**：`SteeringMessageQueuedEvent / SteeringMessageAppliedEvent / SteeringMessageDroppedEvent`）
+  - `ExecuteCodeStepInvokedEvent / ExecuteCodeWhitelistExtendedEvent`
+  - `ToolCapability::CodeRuntime`
+  - `ToolResultPart` 8 正向白名单
+  - `DecisionScope::ExecuteCodeScript`
+- ✅ **Redactor trait + NoopRedactor 已落地**（contracts 层签名对齐 `api-contracts.md §18.2`：`fn redact(&self, input: &str, rules: &RedactRules) -> String`；不引用 L1 类型；M2/M5 EventStore 装配 redactor 时调用方负责把 6 行挂钩点的字符串过 `redact()`）
 
 未全绿 → 不得开始 M2。
 

@@ -60,34 +60,53 @@
 
 ---
 
-### M5-T03 · Redactor 必经管道契约（v1.8.1 P2-7）+ DefaultRedactor 实现
+### M5-T03 · DefaultRedactor 实现 + 6 挂钩点装配契约测试（v1.8.1 P2-7）
 
 **SPEC 锚点**：
-- `harness-observability.md` §2.5.0（Redactor 必经管道，6 行挂钩点表）
-- `harness-journal.md` §2.1（EventStore 必装配 Redactor）
+- `api-contracts.md` §18.2（Redactor trait 权威签名 `fn redact(&str, &RedactRules) -> String`）
+- `harness-observability.md` §2.5.0（6 个**装配点（call site）**：events / messages / hooks / mcp / model in / model out）
+- `harness-journal.md` §2.1（EventStore 装配点：写入前调 `redact()` 处理字符串字段）
 
 **前置任务产物**（必读 PR）：
-- M1-T07 PR：`octopus-harness-contracts` 已定义 `Redactor` trait + `NoopRedactor`
-- M2-T06 PR：`octopus-harness-journal` `EventStore` 实现已预留 `Arc<dyn Redactor>` 装配槽
+- M1-T07 PR：`octopus-harness-contracts` `Redactor` trait（单 method）+ `NoopRedactor` + `RedactRules`
+- M2-T06 PR：`octopus-harness-journal` EventStore 实现已在写路径调用 `redactor.redact(field, &rules)`
 
 **预期产物**：
 - `src/redactor.rs`：
-  - `pub struct DefaultRedactor`（实现 contracts 层 `Redactor` trait，含 30+ 默认正则规则）
-  - 不再重复定义 `Redactor` trait（trait 在 contracts 层 M1-T07 已定义）
-- `src/contract.rs`：`RedactorContractTest` 套件
-  - 验证 6 条数据流（events / messages / hooks / mcp / model in/out）全部挂钩
-  - 验证 `NoopRedactor`（已在 contracts）和 `DefaultRedactor`（本卡）都通过同一组用例
-- **补丁**：`octopus-harness-journal/tests/redactor_pipeline.rs`（contract test 接入到 EventStore 三种实现：jsonl / sqlite / memory）
+  - `pub struct DefaultRedactor { rules_default: RedactRules, /* compiled regex set */ }`
+  - 实现 contracts 层 `Redactor` trait（**单 method `fn redact(&str, &RedactRules) -> String`**）
+  - 内含 30+ 默认正则模式（API key / Bearer token / private IP / SSH key / OAuth code / database connection string / etc），由 `RedactRules` 控制启用范围
+  - 不再重复定义 `Redactor` trait
+- `src/contract.rs`：`RedactorContractTest` 套件验证：
+  - `NoopRedactor` 与 `DefaultRedactor` 都通过同一组用例
+  - 同一字符串多次 `redact()` 等幂（contract-test 验证幂等性）
+  - 30+ 模式全部命中（用例数据集）
+
+> Journal 装配点 contract test 由独立 chore 卡 **M5-T03.5** 处理（实施前评估 P2-2 修订），避免与 M2-T07/T08/T09 并行 PR 共改 `harness-journal` crate。
+
+---
+
+### M5-T03.5 · Journal 装配 Redactor 集成测试（chore，跨 crate 文件锁卡）
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M5-T03 完成 + M2 全部完成 |
+| **预期 diff** | < 200 行 |
+| **文件锁声明** | 独占新增 `crates/octopus-harness-journal/tests/redactor_pipeline.rs`；冲突卡：无（仅新增） |
+
+**预期产物**：
+- `octopus-harness-journal/tests/redactor_pipeline.rs`：contract test 接入到 EventStore 三种实现（jsonl / sqlite / memory）
+- 验证写路径**确实调用了 `redact()`**，且关键字符串字段（如 `error_message / tool_input.text / message_text`）已被替换
 
 **关键不变量**：
-- EventStore 写入前必经 Redactor（v1.8.1 P2-7 强制）
-- 6 条数据流（events / messages / hooks / mcp / model in/out）全部挂钩
-- Redactor 失败 → 阻塞写入（fail-closed）
-- `DefaultRedactor::default()` 自带 30+ 模式（API key / Bearer token / private IP / SSH key / OAuth code / database connection string / etc）
+- EventStore / Hook / MCP / Model in-out 6 个装配点：调用方自行把字符串过 `redact()`（**装配契约**而非 trait 形态）
+- Redactor 自身**不应失败**（returns `String`，不是 `Result`）；正则不匹配则原样返回
+- `DefaultRedactor::default()` 自带 30+ 模式
 
 **禁止行为**：
-- 不要重复定义 `Redactor` trait（已在 contracts 层 M1-T07）
-- 不要把 `DefaultRedactor` 的具体规则写入 contracts crate（仅留 `NoopRedactor` 默认实现）
+- 不要把 trait 改成多 method（违反 SPEC §18.2）
+- 不要让 redact() 返回 Result（业务上 redact 不应阻塞主流程）
+- 不要把 `DefaultRedactor` 的具体规则写入 contracts crate
 
 **Cargo feature**：`redactor`
 
@@ -179,13 +198,28 @@
 
 ---
 
-### M5-T09 · Plugin Contract Test + Skill plugin source 集成
+### M5-T09 · Plugin Contract Test
 
 **预期产物**：
 - `tests/contract.rs`：ManifestLoader / RuntimeLoader 一致性
-- 补丁：`octopus-harness-skill/src/sources/plugin.rs`（与 plugin crate 集成）
 
-**预期 diff**：< 250 行
+**预期 diff**：< 200 行
+
+> Skill plugin source 集成由独立 chore 卡 **M5-T09.5** 处理（实施前评估 P2-2 修订），避免与 M4-T07 (Skill 三 source 卡) 并行 PR 共改 `harness-skill/src/sources/`。
+
+---
+
+### M5-T09.5 · Skill plugin source 集成（chore，跨 crate 文件锁卡）
+
+| 字段 | 值 |
+|---|---|
+| **依赖** | M5-T09 + M4-T07 完成 |
+| **预期 diff** | < 150 行 |
+| **文件锁声明** | 独占新增 `crates/octopus-harness-skill/src/sources/plugin.rs` + 修改 `sources/mod.rs`；冲突卡：M4-T07（必须先合） |
+
+**预期产物**：
+- `octopus-harness-skill/src/sources/plugin.rs`：与 plugin crate 集成的 PluginSkillSource
+- `octopus-harness-skill/src/sources/mod.rs`：增加 `pub mod plugin;`
 
 ---
 

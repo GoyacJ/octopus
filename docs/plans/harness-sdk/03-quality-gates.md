@@ -183,11 +183,14 @@ copyleft = "deny"
 
 [bans]
 multiple-versions = "warn"
-deny = [
-    # 阻塞型 Mutex 在异步中是反模式
-    { name = "std-sync-mutex" },
-]
+# cargo-deny [bans] 只能禁 crate（不是 std 类型）。
+# `std::sync::Mutex` / `std::sync::RwLock` 阻塞型 Mutex 在异步中是反模式，
+# 由 `[workspace.lints.clippy] disallowed_types` 在编译期拒绝（见根 Cargo.toml），
+# 并由 scripts/spec-consistency.sh 在 CI 期 grep 兜底。
+deny = []
 ```
+
+> `[bans] deny` 中**不要**写 `{ name = "std-sync-mutex" }` 这类条目 —— cargo-deny 不识别 std 类型，会变成静默无效；此前任务卡模板曾有该错误，**已废弃**。
 
 ### 5.2 命令
 
@@ -240,7 +243,7 @@ cargo deny check --all-features
 
 ## 6. G5 · SPEC 一致性
 
-### 6.1 自动 grep 模板（AI 自检）
+### 6.1 自动 grep 模板（AI 自检 · 文本层）
 
 每张任务卡的"SPEC 一致性自检"段会列出**针对该卡**的 grep 命令。通用模板：
 
@@ -251,8 +254,8 @@ grep -E '^\s*(async )?fn (decide|infer|append|exec|recall)' crates/octopus-harne
 # 2. 错误类型未自定义新族
 ! grep -E 'enum (My|Custom)?(Tool|Sandbox|Model)Error' crates/octopus-harness-*/src/**/*.rs | grep -v 'use harness_contracts'
 
-# 3. 无 std::sync::Mutex（D2 §4.1 硬禁止）
-! grep -E 'std::sync::Mutex' crates/octopus-harness-*/src/**/*.rs
+# 3. 无 std::sync::Mutex / RwLock（D2 §4.1 硬禁止；clippy::disallowed_types 兜底）
+! grep -E 'std::sync::(Mutex|RwLock)' crates/octopus-harness-*/src/**/*.rs
 
 # 4. 无 unsafe（workspace.lints 已 forbid，二次确认）
 ! grep -E '^\s*unsafe ' crates/octopus-harness-*/src/**/*.rs
@@ -260,6 +263,42 @@ grep -E '^\s*(async )?fn (decide|infer|append|exec|recall)' crates/octopus-harne
 # 5. 无 UI 类型暴露（D2 §4.1 + ADR-002）
 ! grep -E '(React|Tauri|egui|ratatui|crossterm)' crates/octopus-harness-*/src/**/*.rs
 ```
+
+> grep 不能抓到的(别名导入 / 间接依赖 / feature 触发依赖 / 跨 crate 反向依赖)由 §6.2 依赖图脚本兜底。
+
+### 6.2 依赖图与边界检查（CI 自检 · 结构层）
+
+文本 grep 不能覆盖以下场景：
+
+| 场景 | 文本 grep 漏检 | 用何工具 |
+|---|---|---|
+| `use foo::Foo as Bar` 别名导入 | 漏 | cargo metadata 解析 + crate 名维度白名单 |
+| `feature = "X"` 触发的 dep | 漏（grep 看 use 不看 features 矩阵）| feature 矩阵脚本 |
+| 间接依赖（A → B → C，C 是黑名单）| 漏 | cargo tree --duplicates / cargo-depgraph |
+| L1 反向依赖 L3 | 漏 | 边界白名单 + cargo metadata |
+
+补 3 个脚本（在 M0-T06 落地，与 spec-consistency.sh 同级）：
+
+```bash
+# scripts/dep-boundary-check.sh
+# 解析 cargo metadata，验证每个 crate 的依赖列表都在 D2 §3 / §10 白名单中
+cargo metadata --format-version 1 --no-deps \
+    | jq '.packages[] | select(.name | startswith("octopus-harness-")) | {name, deps: [.dependencies[].name]}' \
+    | python3 scripts/check_layer_boundaries.py
+
+# scripts/feature-matrix.sh
+# 跑 D10 所有 typical profile 组合的 cargo check
+for profile in default "sqlite-store,local-sandbox,interactive-permission,provider-anthropic" "all-features"; do
+    cargo check --workspace --features "$profile" || exit 1
+done
+
+# scripts/depgraph-snapshot.sh
+# 生成依赖图 SVG 并与 D2 §5 期望图比对（MD5 / 图同构）
+cargo depgraph --workspace-only > target/depgraph.dot
+diff <(sort target/depgraph.dot) <(sort docs/architecture/harness/expected-depgraph.dot) || echo "FAIL: 依赖图与 D2 §5 不一致"
+```
+
+PR 流水线必须接入这 3 个脚本（见 §7.1 matrix.deny / boundary 段）。
 
 ### 6.2 人类 reviewer checklist
 

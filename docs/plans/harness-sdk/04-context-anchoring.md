@@ -73,6 +73,21 @@ AI 在以下场景容易"幻觉"（生成与 SPEC 不一致的代码）：
 **SPEC 锚点**：参见 harness-permission 文档
 ```
 
+**强制 grep 自检模板**（任务卡撰写者必跑、CI 验证）：
+
+```bash
+# 抽出每个里程碑文件的所有任务卡 SPEC 锚点段
+for f in docs/plans/harness-sdk/milestones/*.md; do
+  # 锚点行没有 L<digit> 即视为锚点不精确
+  awk '/^\*\*SPEC 锚点\*\*/,/^---|^### |^\*\*ADR/' "$f" \
+    | grep -E '^- ' \
+    | grep -vE 'L[0-9]+|（必读|^- $|^- *$' \
+    && echo "FAIL in $f"
+done
+```
+
+**渐进收敛策略**：M0/M1/M2/M3 关键路径任务卡必须 100% 行号；M4 之后允许"章节 + 行号"二选一，但 CI 必须有工具粗略校验。
+
 ---
 
 ## 4. ADR 锚点的特殊性

@@ -12,11 +12,10 @@
 1. **本里程碑是从"M0 `_octopus-bridge-stub` 桩"恢复到"业务可用"的关键步骤**
 2. **3 路并行**：`octopus-server / octopus-desktop / octopus-cli` 各自一路；`apps/desktop/src-tauri` 在 desktop 路内
 3. **保留 octopus-core / octopus-persistence / octopus-platform / octopus-infra**：这些是业务基础设施，不在 SDK 范畴
-4. **过渡 stub crate 必须 `git rm`**（实施前评估 P0-A/E）：
+4. **过渡 stub crate 与 legacy-sdk feature 必须 `git rm`**（实施前评估 P2-3 统一立场）：
    - `crates/_octopus-bridge-stub/` 整个目录 M8 末必删（M8-T12 Gate 强制验证）
-   - `octopus-platform / octopus-infra` 的 `legacy-sdk` feature 须由业务负责人决定：
-     - 选项 A：删除 `legacy-sdk` feature + 对应模块，改为通过 `octopus-harness-sdk` 重新接入
-     - 选项 B：保留 `legacy-sdk` feature 但永久 default-off（仅历史回放用）
+   - `octopus-platform / octopus-infra` 的 `legacy-sdk` feature **必须删除**（连同对应模块 `runtime_sdk / agent_assets / resources_skills`）；如业务仍需相关功能，由该业务路负责人**重新基于 `octopus-harness-sdk` 接入**（M8-T01-T11 范围内完成，不留尾巴）
+   - 历史会话回放需求由 `octopus-harness-sdk` adapter 满足（不作为 live feature 保留）
 5. **`AGENTS.md` Persistence Governance** 必须严格遵守：
    - `runtime/events/*.jsonl` 接 JsonlEventStore
    - `data/main.db` 接 SqliteEventStore（仅作 projection / blob 元数据）
@@ -73,7 +72,7 @@
 - 把 `EventStream` 通过 SSE 推给前端（轮询 → SSE）
 - StreamBasedBroker 接 HTTP 审批接口
 - **OpenAPI / schema 同步动作**（实施前评估 P2-1）：
-  - 评估 SDK 引入的新事件（`GraceCallTriggered / SteeringPushed / SteeringMerged / SteeringDropped / ExecuteCodeStarted / ExecuteCodeCompleted / CredentialPoolSharedAcrossTenants / ManifestValidationFailed / HookFailed / 其他 v1.8.1 新增`）是否对外（SSE / REST 响应）暴露
+  - 评估 SDK 引入的新事件（**事件名以 `harness-contracts.md §3.3` 与 `event-schema.md §3` 为权威源**：`GraceCallTriggered / SteeringMessageQueued / SteeringMessageApplied / SteeringMessageDropped / ExecuteCodeStepInvoked / ExecuteCodeWhitelistExtended / CredentialPoolSharedAcrossTenants / ManifestValidationFailed / HookFailed / HookPanicked / 其他 v1.8.1 新增`）是否对外（SSE / REST 响应）暴露
   - 如对外暴露 → 走 `docs/api-openapi-governance.md` 流程：先改 `contracts/openapi/src/**` → 跑 `pnpm openapi:bundle` → 跑 `pnpm schema:generate` → 同步 `packages/schema/src/*` 业务 schema → 再改 server handler
   - 如仅内部事件（不暴露给前端）→ 在 PR 描述明确声明"本卡未引入对外 schema 变更，原因：xxx"
 
@@ -220,7 +219,7 @@ pnpm --filter desktop type-check
 - ✅ M0 留的所有 `unimplemented!("TODO(M8-...)")` 桩全部清除（grep 验证）
 - ✅ 旧 `octopus-sdk*` 引用全部清除（grep 验证）
 - ✅ **`crates/_octopus-bridge-stub/` 已 `git rm`**（M0 临时脚手架退役；强制 grep 验证）
-- ✅ **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已按 §0 注意事项 4 处理**（删除 / 永久 default-off）
+- ✅ **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已删除** + 对应模块（`runtime_sdk / agent_assets / resources_skills`）已通过 `octopus-harness-sdk` 重新接入或删除（**不允许永久保留**）
 - ✅ `pnpm openapi:bundle` + `pnpm schema:generate` 通过；前端 schema 与 SDK 事件对齐
 
 ---
@@ -245,8 +244,8 @@ grep -q 'octopus-harness-sdk' crates/octopus-server/Cargo.toml
 grep -q 'octopus-harness-sdk' crates/octopus-desktop/Cargo.toml
 grep -q 'octopus-harness-sdk' crates/octopus-cli/Cargo.toml
 
-# legacy-sdk feature 处理：要么删除，要么仅出现在 platform/infra 且 default-off
-! grep -rE 'features.*=.*\[.*"legacy-sdk"' crates/octopus-server/Cargo.toml crates/octopus-desktop/Cargo.toml crates/octopus-cli/Cargo.toml apps/desktop/src-tauri/Cargo.toml
+# legacy-sdk feature 必须全删（不允许永久保留）
+! grep -rE 'legacy-sdk' crates/ apps/ --include='*.toml' --include='*.rs'
 ```
 
 ---

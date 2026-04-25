@@ -2,7 +2,7 @@
 
 > 状态：待启动 · 依赖：无 · 阻塞：所有后续里程碑
 > 关键交付：14 旧 crate 移除 · 19 新 crate 空骨架 · 过渡 stub crate · CI 接入 · `cargo check --workspace` 绿
-> 预计任务卡：12 张（T01a/b/c/d + T01.5/T01.6 + T02-T08）· 预计累计工时：AI 6 小时 + 人类评审 3 小时
+> 预计任务卡：15 张（T01a/b/c/d + T01.5/T01.6 + T02a/b/c/d + T03-T08）· 预计累计工时：AI 7 小时 + 人类评审 3.5 小时
 > 并行度：1（串行，因 workspace 文件互斥）
 
 ---
@@ -14,10 +14,11 @@
 3. **保留 crate 与"反向解耦"**（关键修订，对应实施前评估 P0-A）：
    - 保留 crate：`octopus-core / octopus-persistence / octopus-server / octopus-desktop / octopus-cli`（业务入口）
    - **`octopus-platform / octopus-infra` 名义保留，但其内部对旧 SDK 的依赖必须在 T01.5 内反向解耦**（实际仓库现状显示这两个 crate 深度耦合旧 SDK，详见 T01.5）
-4. **过渡 stub crate `_octopus-bridge-stub`**（M0~M7 脚手架，对应 P0-A/E）：
-   - 路径：`crates/_octopus-bridge-stub/`（带下划线前缀以示临时）
-   - 不进入 `default-members`，仅供业务层占位
-   - **M8 业务切换完成后必须 `git rm`**，否则 M8 Gate 不通过
+4. **过渡 stub crate `_octopus-bridge-stub` 与 `legacy-sdk` feature 都是临时治理产物，M8 必删**（实施前评估 P2-3 统一立场）：
+   - `crates/_octopus-bridge-stub/`（带下划线前缀以示临时），不进入 `default-members`，仅供业务层占位
+   - `octopus-platform / octopus-infra` 内 `legacy-sdk` feature 仅供 M0~M7 期间隔离旧 SDK
+   - **M8 业务切换完成后两者都必须 `git rm` / 删除**，否则 M9 完成定义（README §4「14 个旧 sdk crate 已移除」）不成立
+   - 历史回放需求 → 走 `octopus-harness-sdk` adapter（M8 显式重接），**不**作为 live feature 永久保留
 5. **新 crate 命名规则**：`octopus-harness-<x>`（路径 `crates/octopus-harness-<x>`，包名同），内部 module 用 `harness_<x>`（详见 ADR-008）
 6. **任务卡 diff 治理例外**：T01a~T01d 因为是删除型 PR，diff 上限不适用 §00-strategy 铁律 2 的"≤ 500 行"，但每个 commit 必须 ≤ 500 行（按 crate 维度切 commit）
 
@@ -33,8 +34,11 @@
 | M0-T01b | 删除旧 SDK · L1-L2 组（tools / permissions / sandbox / hooks）| T01a | × | 同上 |
 | M0-T01c | 删除旧 SDK · L2-L3 组（context / session / subagent / observability）| T01b | × | 同上 |
 | M0-T01d | 删除旧 SDK · L2-L4 组（mcp / plugin / sdk）+ 业务层 import 全部切到 stub | T01c | × | 同上 |
-| M0-T02 | 创建 19 个 `octopus-harness-*` crate 空骨架 | T01d | × | 19 × 30 = ~600 |
-| M0-T03 | workspace `Cargo.toml` 重组（members + dependencies）| T02 | × | < 100 |
+| M0-T02a | 创建 L0 `harness-contracts` 空骨架 | T01d | × | < 100 |
+| M0-T02b | 创建 L1 五原语 crate 空骨架 | T02a | × | < 200 |
+| M0-T02c | 创建 L2 七复合能力 crate 空骨架 | T02b | × | < 250 |
+| M0-T02d | 创建 L3+L4 六 crate 空骨架 | T02c | × | < 250 |
+| M0-T03 | workspace `Cargo.toml` 重组（members + dependencies）| T02d | × | < 100 |
 | M0-T04 | 根 `deny.toml` 与 `cargo deny` 配置 | T03 | × | < 100 |
 | M0-T05 | GitHub Actions CI workflow（fmt/check/clippy/test/deny）| T03 | × | < 200 |
 | M0-T06 | `scripts/spec-consistency.sh`（SPEC grep 自检脚本）| T03 | × | < 100 |
@@ -335,13 +339,16 @@ grep -rE 'TODO\(M8-T[0-9]+' crates/octopus-server crates/octopus-desktop crates/
 
 ---
 
-### M0-T02 · 创建 19 个新 `octopus-harness-*` crate 空骨架
+### M0-T02 · 创建 19 个新 `octopus-harness-*` crate 空骨架（拆 4 子卡）
 
-| 字段 | 值 |
-|---|---|
-| **状态** | 待派发 |
-| **依赖** | M0-T01 |
-| **预期 diff** | ~600 行（19 crate × ~30 行）|
+> **拆分理由**（实施前评估 P1-5）：原单卡 ~600 行违反 00-strategy 铁律 2 ≤ 500 行硬上限。按 5 层依赖拆 4 子卡，每卡 ≤ 200 行。
+
+| 子卡 ID | 创建的 crate | 数量 | 依赖 | 预期 diff |
+|---|---|:---:|---|---|
+| M0-T02a | L0：`harness-contracts` | 1 | M0-T01d | < 100 |
+| M0-T02b | L1：`harness-{model, journal, sandbox, permission, memory}` | 5 | T02a | < 200 |
+| M0-T02c | L2：`harness-{tool, tool-search, skill, mcp, hook, context, session}` | 7 | T02b | < 250 |
+| M0-T02d | L3+L4：`harness-{engine, subagent, team, plugin, observability, sdk}` | 6 | T02c | < 250 |
 
 **SPEC 锚点**：
 - `docs/architecture/harness/overview.md` §4.1（19 crate 清单）
@@ -519,8 +526,10 @@ cargo check --workspace
 
 - `[advisories] vulnerability = "deny"`
 - `[licenses] allow` 至少包含：MIT / Apache-2.0 / BSD-3-Clause / BSD-2-Clause / ISC / Unicode-DFS-2016 / Zlib
-- `[bans] deny` 至少包含禁止 `std::sync::Mutex`（可通过 lint 或 `unmaintained` 兜底）
 - 必须配置 feature 矩阵检查（含 `auto-mode / redactor / subagent-tool` 三个已登记破窗）
+- **`std::sync::Mutex` 不属于 cargo-deny 职责**（cargo-deny `[bans]` 只能禁 crate 名）；该禁令由两条独立约束承担：
+  1. `clippy::disallowed_types`（在 `[workspace.lints.clippy]` 配置）—— 编译期拒绝
+  2. `scripts/spec-consistency.sh` 的 grep —— PR 期 CI 拒绝（已在 M0-T06 模板）
 
 **验收命令**：
 
@@ -575,23 +584,29 @@ gh workflow list
 | **预期 diff** | < 100 行 |
 
 **SPEC 锚点**：
-- `docs/plans/harness-sdk/03-quality-gates.md` §6.1
+- `docs/plans/harness-sdk/03-quality-gates.md` §6.1（grep 模板）
+- `docs/plans/harness-sdk/03-quality-gates.md` §6.2（依赖图与边界检查脚本）
 
 **预期产物**：
 
-- `scripts/spec-consistency.sh`（详细见 03-quality-gates §6.1 模板）
-- `scripts/feature-matrix.sh`（cargo deny 全 feature 矩阵跑一遍）
+- `scripts/spec-consistency.sh`（详细见 03-quality-gates §6.1 模板：trait 签名 / 错误类型 / std::sync::Mutex / unsafe / UI 类型 grep）
+- `scripts/feature-matrix.sh`（cargo check 全 feature profile 跑一遍，对齐 D10 §3.1-§3.4）
+- `scripts/dep-boundary-check.sh` + `scripts/check_layer_boundaries.py`（cargo metadata 解析 + crate 维度白名单校验，覆盖别名导入、间接依赖、feature 触发依赖、L1 反向依赖等 grep 漏检场景）
+- `scripts/depgraph-snapshot.sh`（cargo depgraph + 与 D2 §5 期望图差异检查）
 
 **关键不变量**：
 
 - 退出码：0 = 全通过；非 0 = 失败
 - 输出失败原因 + 失败位置文件路径
+- 4 个脚本可独立运行（CI matrix 各自一格）
 
 **验收命令**：
 
 ```bash
-bash scripts/spec-consistency.sh
-echo $?   # 应为 0
+bash scripts/spec-consistency.sh && echo "OK spec"
+bash scripts/feature-matrix.sh && echo "OK features"
+bash scripts/dep-boundary-check.sh && echo "OK boundary"
+bash scripts/depgraph-snapshot.sh && echo "OK depgraph"
 ```
 
 ---
