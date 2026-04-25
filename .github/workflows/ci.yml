@@ -66,6 +66,9 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all --check
 
+      - name: Check Rust workspace
+        run: cargo check --workspace
+
       - name: Check Rust linting
         run: cargo clippy --workspace --all-targets -- -D warnings
 

@@ -139,7 +139,7 @@ testing = [
 | `harness-model` | `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / deepseek / minimax / qwen / doubao / zhipu / km / all-providers / mock` |
 | `harness-journal` | `sqlite / jsonl / in-memory` |
 | `harness-sandbox` | `local / docker / ssh / noop / code-runtime`（ADR-0016） |
-| `harness-permission` | `interactive / stream / rule-engine / mock` |
+| `harness-permission` | `interactive / stream / rule-engine / auto-mode / mock` |
 | `harness-memory` | `builtin / external-slot / threat-scanner` |
 | `harness-tool` | `builtin-toolset / programmatic-tool-calling`（ADR-0016） |
 | `harness-skill` | `workspace-source / user-source / plugin-source / mcp-source` |
