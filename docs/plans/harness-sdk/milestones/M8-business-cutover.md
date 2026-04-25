@@ -1,7 +1,7 @@
 # M8 · Business Cutover · 业务层切换到 `octopus-harness-sdk`
 
 > 状态：待启动 · 依赖：M7 完成 · 阻塞：M9
-> 关键交付：`octopus-server / octopus-desktop / octopus-cli` 全面切到 `octopus-harness-sdk`
+> 关键交付：`octopus-server / octopus-desktop / octopus-cli` 全面切到 `octopus-harness-sdk` · 14 个旧 `octopus-sdk*` crate 删除
 > 预计任务卡：12 张 · 累计工时：AI 16 小时（3 路并行约 6 小时墙钟）+ 人类评审 8 小时
 > 并行度：**3 路并行**（server / desktop / cli 独立）
 
@@ -9,13 +9,13 @@
 
 ## 0. 里程碑级注意事项
 
-1. **本里程碑是从"M0 `_octopus-bridge-stub` 桩"恢复到"业务可用"的关键步骤**
+1. **本里程碑是从冻结旧 SDK 切到新 `octopus-harness-sdk` 的关键步骤**
 2. **3 路并行**：`octopus-server / octopus-desktop / octopus-cli` 各自一路；`apps/desktop/src-tauri` 在 desktop 路内
 3. **保留 octopus-core / octopus-persistence / octopus-platform / octopus-infra**：这些是业务基础设施，不在 SDK 范畴
-4. **过渡 stub crate 与 legacy-sdk feature 必须 `git rm`**（实施前评估 P2-3 统一立场）：
-   - `crates/_octopus-bridge-stub/` 整个目录 M8 末必删（M8-T12 Gate 强制验证）
-   - `octopus-platform / octopus-infra` 的 `legacy-sdk` feature **必须删除**（连同对应模块 `runtime_sdk / agent_assets / resources_skills`）；如业务仍需相关功能，由该业务路负责人**重新基于 `octopus-harness-sdk` 接入**（M8-T01-T11 范围内完成，不留尾巴）
-   - 历史会话回放需求由 `octopus-harness-sdk` adapter 满足（不作为 live feature 保留）
+4. **旧 SDK 必须在业务全切后删除**：
+   - 14 个 `octopus-sdk*` crate 整体在 M8-T12 Gate 前 `git rm`
+   - `octopus-platform / octopus-infra` 中只服务旧 SDK 的模块必须删除或基于 `octopus-harness-sdk` 重接
+   - 历史会话回放需求由 `octopus-harness-sdk` adapter 满足，不保留旧 SDK live path
 5. **`AGENTS.md` Persistence Governance** 必须严格遵守：
    - `runtime/events/*.jsonl` 接 JsonlEventStore
    - `data/main.db` 接 SqliteEventStore（仅作 projection / blob 元数据）
@@ -33,7 +33,7 @@
 | **B-S** server | M8-T01 ~ T04 | HTTP API 接 SDK 事件流 + 凭证池 + Stream Permission |
 | **B-D** desktop | M8-T05 ~ T08 | Tauri command 接 SDK + adapter 切换 |
 | **B-C** cli | M8-T09 ~ T11 | CLI 启动 + interactive broker 接线 |
-| **共用** | M8-T12 | M8 Gate 检查 + 集成测试 |
+| **共用** | M8-T12 | M8 Gate 检查 + 旧 SDK 删除 + 集成测试 |
 
 ---
 
@@ -46,7 +46,7 @@
   - 删除 `octopus-sdk*` 依赖
   - 添加 `octopus-harness-sdk = { path = "...", features = [<server profile>] }`
   - 启用 `feature-flags.md` §3.2 服务器生产 profile
-- 删除所有 `// TODO(M8): re-import after migration` 桩
+- 清除 server 内所有旧 SDK import 与 dependency
 
 **关键不变量**：
 - `Cargo.toml` 仅依赖 `octopus-harness-sdk` 和 `octopus-harness-contracts`（除业务专属 crate）
@@ -138,7 +138,7 @@ pnpm --filter desktop type-check
 
 **预期产物**：
 - 修改 `apps/desktop/src-tauri/src/commands/*.rs`：把 session / run / permission 命令切换到 SDK
-- 删除 M0 留的 `unimplemented!()` 桩
+- 清除 Tauri command 内所有旧 SDK import 与 dependency
 
 **关键不变量**：
 - 现有 Tauri command 名称不变（前端 adapter 兼容）
@@ -205,6 +205,7 @@ pnpm --filter desktop type-check
 
 **预期产物**：
 - 一份 `docs/plans/harness-sdk/audit/M8-cutover-gate.md`（人类填写）
+- 14 个旧 `octopus-sdk*` crate 已从 workspace 与磁盘删除
 - 跑全 workspace 集成测试：`cargo test --workspace --release`
 - `pnpm openapi:bundle` 通过
 
@@ -216,10 +217,10 @@ pnpm --filter desktop type-check
 - ✅ `crates/octopus-cli` 可执行命令成功
 - ✅ `runtime/events/*.jsonl` 被正确写入
 - ✅ `data/main.db` 投影正确
-- ✅ M0 留的所有 `unimplemented!("TODO(M8-...)")` 桩全部清除（grep 验证）
-- ✅ 旧 `octopus-sdk*` 引用全部清除（grep 验证）
-- ✅ **`crates/_octopus-bridge-stub/` 已 `git rm`**（M0 临时脚手架退役；强制 grep 验证）
-- ✅ **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已删除** + 对应模块（`runtime_sdk / agent_assets / resources_skills`）已通过 `octopus-harness-sdk` 重新接入或删除（**不允许永久保留**）
+- ✅ 业务层旧 `octopus-sdk*` 引用全部清除（grep 验证）
+- ✅ 14 个旧 `octopus-sdk*` crate 已 `git rm`
+- ✅ `octopus-platform / octopus-infra` 中只服务旧 SDK 的模块已通过 `octopus-harness-sdk` 重新接入或删除
+- ✅ 不存在 `_octopus-bridge-stub` 或 `legacy-sdk` feature
 - ✅ `pnpm openapi:bundle` + `pnpm schema:generate` 通过；前端 schema 与 SDK 事件对齐
 
 ---
@@ -228,24 +229,19 @@ pnpm --filter desktop type-check
 
 ```bash
 # 不应再出现旧 sdk 引用
-! grep -rE 'octopus_sdk[_]' crates/octopus-server crates/octopus-desktop crates/octopus-cli apps/desktop/src-tauri --include='*.rs'
+! grep -rE 'octopus_sdk' crates/octopus-server crates/octopus-desktop crates/octopus-cli apps/desktop/src-tauri --include='*.rs'
+! grep -rE 'octopus-sdk' crates/octopus-server crates/octopus-desktop crates/octopus-cli apps/desktop/src-tauri --include='Cargo.toml'
 
-# 不应残留 _octopus-bridge-stub 引用（M8 必删）
-! grep -rE '_octopus[-_]bridge[-_]stub' crates/octopus-server crates/octopus-desktop crates/octopus-cli apps/desktop/src-tauri --include='*.rs' --include='*.toml'
-
-# 临时 stub crate 目录已被删除
-! test -d crates/_octopus-bridge-stub
-
-# 不应残留 TODO(M8-...) 桩
-! grep -rE 'unimplemented!.*"TODO\(M8' crates/octopus-server crates/octopus-desktop crates/octopus-cli apps/desktop/src-tauri --include='*.rs'
+# 旧 SDK crate 目录已被删除
+! ls crates/ | grep -E '^octopus-sdk'
 
 # 必须依赖 octopus-harness-sdk
 grep -q 'octopus-harness-sdk' crates/octopus-server/Cargo.toml
 grep -q 'octopus-harness-sdk' crates/octopus-desktop/Cargo.toml
 grep -q 'octopus-harness-sdk' crates/octopus-cli/Cargo.toml
 
-# legacy-sdk feature 必须全删（不允许永久保留）
-! grep -rE 'legacy-sdk' crates/ apps/ --include='*.toml' --include='*.rs'
+# 不应残留临时兼容通道
+! grep -rE '_octopus[-_]bridge[-_]stub|legacy-sdk' crates/ apps/ --include='*.toml' --include='*.rs'
 ```
 
 ---

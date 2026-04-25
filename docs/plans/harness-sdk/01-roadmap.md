@@ -9,7 +9,7 @@
 
 ```text
                           ┌────────────────┐
-                          │ M0 Bootstrap   │  workspace 清理 + 19 crate 空骨架
+                          │ M0 Bootstrap   │  workspace 共存整理 + 19 crate 空骨架
                           └───────┬────────┘
                                   ▼
                           ┌────────────────┐
@@ -62,15 +62,16 @@
 
 ### M0 · Bootstrap
 
-- **目标**：清理旧工作空间、建立 19 个 crate 空骨架、CI 接入
-- **入口任务卡**：`milestones/M0-bootstrap.md` T01.5/T01.6 + T01a-d + T02a-d + T03-T08
+- **目标**：冻结旧 SDK、建立 19 个 crate 空骨架、CI 接入
+- **入口任务卡**：`milestones/M0-bootstrap.md` T01a-b + T02a-d + T03-T08
 - **关键交付**：
-  - 14 个 `octopus-sdk*` crate 已 `git rm -rf`（保留 `octopus-core/persistence/platform/infra/server/desktop/cli`）
+  - 14 个 `octopus-sdk*` crate 仍保留，但进入 freeze 状态：只允许修编译和安全问题，不允许新增能力
   - 19 个 `octopus-harness-*` crate 出现在 workspace（仅含 `lib.rs` 占位 + `Cargo.toml`）
+  - 边界检查脚本验证新 harness 不依赖旧 `octopus-sdk*`
   - `cargo check --workspace` 通过
   - GitHub Actions / `cargo deny` / `cargo clippy` CI workflow 就位
-- **退出条件**：`cargo metadata` 列出 19 个新 crate；`cargo check` 通过；CI 首次绿
-- **预估任务卡数**：16
+- **退出条件**：`cargo metadata` 列出 19 个新 crate；旧 SDK freeze 清单归档；`cargo check` 通过；CI 首次绿
+- **预估任务卡数**：12
 
 ### M1 · L0 Contracts
 
@@ -156,13 +157,13 @@
 
 ### M8 · Business Cutover（并行 3 路，需 M7 完成）
 
-- **目标**：业务层从 `octopus-sdk*` 切换到 `octopus-harness-sdk`
+- **目标**：业务层从 `octopus-sdk*` 切换到 `octopus-harness-sdk`，切完后删除旧 SDK
 - **入口任务卡**：`milestones/M8-business-cutover.md` T01-T12
 - **并行单元**：
   - **B-S**：`octopus-server`（HTTP API 适配 SDK 事件流）
   - **B-D**：`octopus-desktop` + `apps/desktop/src-tauri`（Tauri command 切换）
   - **B-C**：`octopus-cli`（CLI 启动 + interactive broker 接线）
-- **退出条件**：`cargo build --workspace --release` 通过；3 个业务入口在本地能启动
+- **退出条件**：`cargo build --workspace --release` 通过；3 个业务入口在本地能启动；旧 `octopus-sdk*` crate 已删除且无引用
 - **预估任务卡数**：12
 
 ### M9 · Integration Verification + Acceptance（串行）
@@ -184,7 +185,7 @@
 
 | 里程碑 | 并行度 | 协调点（多卡共修文件） | **评审者吞吐瓶颈** |
 |---|---|---|---|
-| M0 | 1（串行）| `Cargo.toml` workspace.members | 1 reviewer / 16 卡 ≈ 4-5 工作日 |
+| M0 | 1（串行）| `Cargo.toml` workspace.members | 1 reviewer / 12 卡 ≈ 3-4 工作日 |
 | M1 | 1（串行）| `harness-contracts/src/lib.rs` 是单一汇出口 | 1 reviewer / 12 卡 ≈ 4 工作日 |
 | M2 | **5（理论）/ 2-3（实际）** | 各 crate 独立 + 无共享文件；末端合并各卡更新根 `Cargo.toml` | 5 路并行受 reviewer 吞吐限制；按 1 reviewer ≤ 3 PR/天 → 34 卡需 11-13 工作日 |
 | M3 | 1（串行 4 步） | session 是聚合者，必须等 tool/hook/context 完成 | 1 reviewer / 25 卡 ≈ 7-8 工作日 |
@@ -210,7 +211,7 @@
 
 | Gate | 位置 | 检查内容 |
 |---|---|---|
-| **G-Bootstrap** | M0 完成后 | workspace 19 crate 拓扑符合 SPEC；旧 crate 全删；CI 矩阵就位 |
+| **G-Bootstrap** | M0 完成后 | workspace 19 crate 拓扑符合 SPEC；旧 SDK freeze 清单归档；新 harness 不依赖旧 SDK；CI 矩阵就位 |
 | **G-Contracts** | M1 完成后 | 全量类型与 D3 `api-contracts.md` 完全一致；`schemars` 输出 schema 与现有契约对齐 |
 | **G-MVP** | M3 完成后 | 最小 SDK 闭环 E2E 跑通；可演示给业务方 |
 | **G-Facade** | M7 完成后 | `prelude` 可作为业务方唯一 import 入口；feature flags 对齐 D10 |
@@ -224,7 +225,7 @@
 
 | 里程碑 | 任务卡总数 | 已完成 | 进行中 | AI 工时 | 评审工时 | 估算墙钟 | 状态 | 下一步 |
 |---|---:|---:|---:|---:|---:|---:|---|---|
-| M0 | 16 | 0 | 0 | 7h | 3.5h | 4-5d | 待启动 | 派发 M0-T01.5（含 T02 拆 a/b/c/d）|
+| M0 | 12 | 0 | 0 | 5h | 2.5h | 3-4d | 待启动 | 派发 M0-T01a（旧 SDK freeze 清单）|
 | M1 | 12 | 0 | 0 | 8h | 4h | 4-5d | 待启动 | — |
 | M2 | 34 | 0 | 0 | 38.5h | 18h | 11-13d | 待启动 | 含 M2-T02a/b、T04.5~T04.10 全量 Provider、T08a/b、S01 spike |
 | M3 | 25 | 0 | 0 | 31h | 12h | 7-8d | 待启动 | 含 M3-T04 拆 a/b、M3-S01/S02 spike + T22 cli cutover |
@@ -234,12 +235,12 @@
 | M7 | 6 | 0 | 0 | 8h | 6h | 2d | 待启动 | — |
 | M8 | 12 | 0 | 0 | 16h | 8h | 4d | 待启动 | — |
 | M9 | 8 | 0 | 0 | 12h | 16h | 3-5d | 待启动 | — |
-| **合计** | **159** | 0 | 0 | **179h** | **91.5h** | **45-58d** | — | — |
+| **合计** | **155** | 0 | 0 | **177h** | **90.5h** | **44-57d** | — | — |
 
 > **总墙钟估算**：约 15-22 周（3.5-5.5 个月）。M4/M5 并行节省约 5-6 工作日。
 > 如评审者从 1 名增至 2 名，M2/M4/M8 墙钟可压缩 30%-40%（总墙钟降至 11-15 周）。
-> 任务卡总数 159 = 132（原计划）+ 27（修订增量，分布如下；拆分子卡不新增总工时）：
-> - M0：+8（T01.5/T01.6 + T01a-d + T02 拆 a/b/c/d，原 8 → 16）
+> 任务卡总数 155 = 132（原计划）+ 23（修订增量，分布如下；拆分子卡不新增总工时）：
+> - M0：+4（T01a/T01b + T02 拆 a/b/c/d，原 8 → 12）
 > - M1：+2（T04 拆 a/b、T05 拆 a/b，原 10 → 12）
 > - M2：+9（T02 拆 a/b、T04.5~T04.10 全量 Provider、T08 拆 a/b、S01 spike，原 25 → 34）
 > - M3：+5（T04 拆 a/b、T21 dep 预注入、T22 cli cutover、S01/S02 spike，原 20 → 25）
@@ -258,7 +259,7 @@
 | AI 在 trait 签名上"自由发挥" | 中 | 高 | 铁律 1（00-strategy）+ 闸门-5 SPEC grep 自检 |
 | feature 矩阵爆炸（组合数 > 100）| 中 | 中 | CI 仅跑核心 8 组合 + nightly 跑全矩阵；feature-flags.md §6.1 已定 |
 | Codex 上下文长度不够 | 高 | 中 | 任务卡严格 ≤ 500 行 diff；SPEC 锚点精确到行号片段 |
-| 旧 SDK 删除后业务层短期崩溃 | 高 | 中 | M0 删除前先在 `apps/desktop` 关闭对旧 SDK 的依赖（M0-T05）|
+| 新旧 SDK 长期并存导致边界污染 | 中 | 高 | M0 起建立 freeze 清单与依赖边界脚本；`octopus-harness-*` 禁止依赖 `octopus-sdk*`；M8 Gate 必须删除旧 SDK |
 | Anthropic API 真实命中率不达预期 | 中 | 高 | M2-S01 先做最小实测；M9 只做完整 SDK 集成回归。若 M9 与 M2-S01 证据冲突，先按 provider 行为变化或集成 bug 定位，再决定是否重审 ADR-003 |
 | Codex 多会话并行造成 PR 冲突 | 中 | 低 | 并行任务卡声明"可能修改文件"清单（00-strategy §3.2）|
 | 测试 mock 偷工 | 高 | 中 | 闸门-3 强制 contract-test 覆盖度（03-quality-gates）|

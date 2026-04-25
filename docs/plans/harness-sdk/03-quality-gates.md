@@ -277,7 +277,7 @@ grep -E '^\s*(async )?fn (decide|infer|append|exec|recall)' crates/octopus-harne
 | 间接依赖（A → B → C，C 是黑名单）| 漏 | cargo tree --duplicates / cargo-depgraph |
 | L1 反向依赖 L3 | 漏 | 边界白名单 + cargo metadata |
 
-补 3 个脚本（在 M0-T06 落地，与 spec-consistency.sh 同级）：
+补 4 个脚本（在 M0-T06 落地，与 spec-consistency.sh 同级）：
 
 ```bash
 # scripts/dep-boundary-check.sh
@@ -305,9 +305,15 @@ diff <(sort target/depgraph.dot) <(sort docs/architecture/harness/expected-depgr
     echo "FAIL: 依赖图与 D2 §5 不一致"
     exit 1
 }
+
+# scripts/harness-legacy-boundary.sh
+# M0~M7 允许旧 octopus-sdk* 存在并服务业务层；
+# 但新 octopus-harness-* 不得依赖或引用旧 SDK。
+! grep -rE 'octopus-sdk|octopus_sdk' crates/octopus-harness-* --include='Cargo.toml' --include='*.rs'
+! grep -rE '_octopus[-_]bridge[-_]stub|legacy-sdk' crates/ apps/ --include='Cargo.toml' --include='*.rs'
 ```
 
-PR 流水线必须接入这 3 个脚本（见 §7.1 matrix.deny / boundary 段）。
+PR 流水线必须接入这 4 个脚本（见 §7.1 matrix.deny / boundary 段）。
 
 ### 6.2 人类 reviewer checklist
 
@@ -383,6 +389,12 @@ jobs:
   spec-grep:
     steps:
       - run: bash scripts/spec-consistency.sh
+
+  boundary:
+    steps:
+      - run: bash scripts/harness-legacy-boundary.sh
+      - run: bash scripts/dep-boundary-check.sh
+      - run: bash scripts/depgraph-snapshot.sh
 
   coverage:
     if: github.event.pull_request.draft == false

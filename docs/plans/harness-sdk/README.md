@@ -27,7 +27,7 @@
 |---|---|---|
 | **范围** | 全量 19 crate + 业务层切换（M0~M9） | SDK 是基础设施，半成品对业务无价值 |
 | **AI 并行度** | M2/L1 与 M4/L2 扩展层并行 5~3 路；L0/L4/M3 串行 | L1 五原语正交无耦合；聚合层须串行避免分支冲突 |
-| **旧 SDK** | M0 删除旧 SDK + `_octopus-bridge-stub` 临时桩；**M3 末 cli 最简入口先行接入 lower-level harness driver（非 facade）** | 临时桩让 M0~M7 业务层可编译；M3 渐进切换让真集成风险前移到 M3 而非 M8；`octopus-harness-sdk` 门面仍在 M7 交付 |
+| **旧 SDK** | M0 冻结保留旧 SDK；新 `octopus-harness-*` 并行实现；**M3 末 cli 最简入口先行接入 lower-level harness driver（非 facade）**；M8 业务全切后删除旧 SDK | 业务层在 M0~M7 继续可运行；新 harness 不依赖旧 SDK，避免套壳；M3 渐进切换让真集成风险前移到 M3 而非 M8；`octopus-harness-sdk` 门面仍在 M7 交付 |
 | **测试** | 严格：每 crate mock + contract-test + ≥1 正反用例 | 对齐 ADR-012；AI 易在边界条件偷工，必须用例兜底 |
 | **验证时机** | **3 个 spike 前置（M2/M3 末尾），M9 只做 post-spike 集成回归与端到端验收** | 评审报告 §4.4 三个高风险点的失败代价是 2-4 周返工，必须在 M5/M6/M7 之前用最小 prototype 把假设钉死 |
 
@@ -56,7 +56,7 @@ docs/plans/harness-sdk/
 ├── 03-quality-gates.md             ← 5 道质量闸门 + CI 矩阵
 ├── 04-context-anchoring.md         ← 防 AI 幻觉的上下文锚定规范
 └── milestones/
-    ├── M0-bootstrap.md             ← 工作空间脚手架 + 旧 SDK 退役
+    ├── M0-bootstrap.md             ← 工作空间脚手架 + 旧 SDK 冻结
     ├── M1-l0-contracts.md          ← L0 契约层（harness-contracts）
     ├── M2-l1-primitives.md         ← L1 五原语并行（model/journal/sandbox/permission/memory）
     ├── M3-l2-core.md               ← L2 核心闭环（tool/hook/context/session）
@@ -75,7 +75,7 @@ docs/plans/harness-sdk/
 整个 Plan 完成判据：
 
 1. ✅ 19 个 `octopus-harness-*` crate 全部进入 workspace，`cargo check --workspace --all-features` 通过
-2. ✅ 14 个旧 `octopus-sdk*` crate 已从仓库移除
+2. ✅ M8 业务切换完成后，14 个旧 `octopus-sdk*` crate 已从仓库移除
 3. ✅ `octopus-server / octopus-desktop / octopus-cli` 已切到 `octopus-harness-sdk`
 4. ✅ `cargo test --workspace --all-features` 全部 green
 5. ✅ `cargo clippy --workspace --all-targets -- -D warnings` 零警告
@@ -102,7 +102,7 @@ docs/plans/harness-sdk/
 
 | 里程碑 | 状态 | 关键交付 |
 |---|---|---|
-| M0 Bootstrap | 待开始 | workspace 清理 + 过渡 stub crate + 19 crate 空骨架 |
+| M0 Bootstrap | 待开始 | workspace 共存整理 + 旧 SDK 冻结 + 19 crate 空骨架 |
 | M1 L0 Contracts | 待开始 | `harness-contracts` 全量类型 + Redactor trait + NoopRedactor |
 | M2 L1 Primitives | 待开始 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
 | M3 L2 Core | 待开始 | 最小可运行 SDK 闭环 + dep 预注入 |
@@ -110,7 +110,7 @@ docs/plans/harness-sdk/
 | M5 L3 Engine | 待开始 | 单 Agent 主循环（DefaultRedactor 替换 Noop）|
 | M6 L3 Agents | 待开始 | Subagent + Team |
 | M7 L4 Facade | 待开始 | `harness-sdk` 整合 |
-| M8 Business Cutover | 待开始 | 业务层完全迁移 + `_octopus-bridge-stub` `git rm` |
+| M8 Business Cutover | 待开始 | 业务层完全迁移 + 14 个旧 `octopus-sdk*` crate `git rm` |
 | M9 Integration Verification + Acceptance | 待开始 | 集成回归 + 端到端验收报告 |
 
 ---

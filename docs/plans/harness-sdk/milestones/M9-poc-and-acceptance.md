@@ -275,10 +275,10 @@
 
 **最终 Definition of Done 复核**（与 README §4 一致）：
 - [x] 19 个 `octopus-harness-*` crate 全部进入 workspace
-- [x] 14 个旧 `octopus-sdk*` crate 已移除
-- [x] **`_octopus-bridge-stub` 临时 crate 已 `git rm`**（M8 Gate 已验证）
-- [x] **`octopus-platform / octopus-infra` 的 `legacy-sdk` feature 已全删 + 对应模块已通过 `octopus-harness-sdk` 重接或删除**（不允许永久保留 default-off feature）
 - [x] 业务层全部切换
+- [x] 14 个旧 `octopus-sdk*` crate 已移除（M8 Gate 已验证）
+- [x] `octopus-platform / octopus-infra` 中只服务旧 SDK 的模块已通过 `octopus-harness-sdk` 重接或删除
+- [x] 不存在 `_octopus-bridge-stub` 或 `legacy-sdk` feature
 - [x] `cargo test --workspace --all-features` 全绿
 - [x] `cargo clippy --workspace -- -D warnings` 零警告
 - [x] `cargo deny check` 通过

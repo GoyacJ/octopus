@@ -554,9 +554,9 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 **背景**（实施前评估 P1-4 修订）：
 
-原计划在 M0~M7 期间业务层全部走 `_octopus-bridge-stub` 桩，runtime 不可用，真集成风险推迟到 M8。本卡把 **CLI 最简非交互入口**（`octopus run --once <prompt>`）从 stub 切到 M3 已完成的 lower-level harness driver（M3 MVP 已具备 create_session + run_turn + ListDir + 流式输出能力），让真集成风险**前移**到 M3 后即可观察。
+M0~M7 期间业务层默认继续走冻结的旧 `octopus-sdk*` 路径，真集成风险会自然推迟到 M8。本卡把 **CLI 最简非交互入口**（`octopus run --once <prompt>`）从旧 SDK 路径切到 M3 已完成的 lower-level harness driver（M3 MVP 已具备 create_session + run_turn + ListDir + 流式输出能力），让真集成风险**前移**到 M3 后即可观察。
 
-> 这不是 M8 业务切换的提前完成，仅是单一最简入口的 spike-cutover；其它入口仍走 stub，保留 M8 的全面切换。
+> 这不是 M8 业务切换的提前完成，仅是单一最简入口的 spike-cutover；其它入口仍走旧 SDK，保留 M8 的全面切换。
 
 **SPEC 锚点**：
 - M3-T20 PR（mini-engine + 完整闭环）
@@ -566,7 +566,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 - `AGENTS.md` § Persistence Governance
 
 **预期产物**：
-- `crates/octopus-cli/src/run_once.rs`：把 `unimplemented!("TODO(M8-...)")` 桩替换为 M3 临时 driver 调用：
+- `crates/octopus-cli/src/run_once.rs`：把 `run --once` 的旧 SDK 调用路径替换为 M3 临时 driver 调用：
   ```rust
   let driver = M3RunOnceDriver::new(
       MockProvider::default(),     // M3 期允许 mock；M8 切真 anthropic
@@ -578,7 +578,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
   // 流式打印 AssistantDelta + ToolUse* 事件
   ```
 - `crates/octopus-cli/tests/run_once_smoke.rs`：跑一次 `cargo run -p octopus-cli -- run --once "list cwd"` 验证流程
-- 业务层其它入口（`server / desktop / interactive cli`）保持 stub（M8 处理）
+- 业务层其它入口（`server / desktop / interactive cli`）保持旧 SDK 路径（M8 处理）
 
 **关键不变量**：
 - 仅 cli 单一入口切换，不动 server / desktop

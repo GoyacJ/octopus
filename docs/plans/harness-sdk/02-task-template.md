@@ -221,7 +221,7 @@ grep 'PermissionContext' crates/octopus-harness-permission/src/broker/direct.rs
      ' docs/plans/harness-sdk/milestones/<file>.md || failed=1
      exit "$failed"
      ```
-   - 补行号优先级（按风险）：M0-T01.5（platform 反向解耦）/ M1-T07（Redactor）/ M2-T01-05（model）/ M3-T01-T05（tool）/ M3-T11-T15（context）/ M4-T11-T18（mcp）。其他卡可允许仅章节号，但必须在 PR 评审 checklist 中显式勾选"已确认 SPEC 锚点精度可接受"。
+   - 补行号优先级（按风险）：M0-T01b（harness / legacy 边界脚本）/ M1-T07（Redactor）/ M2-T01-05（model）/ M3-T01-T05（tool）/ M3-T11-T15（context）/ M4-T11-T18（mcp）。其他卡可允许仅章节号，但必须在 PR 评审 checklist 中显式勾选"已确认 SPEC 锚点精度可接受"。
 2. **预期产物清单必完整**：列出所有文件路径，AI 不会自行决定文件位置
 3. **关键不变量必显式**：哪怕看似显然（如 Fail-Closed），也要写出来防止 AI 偷工
 4. **禁止行为必兜底**：列出常见的踩坑（错误依赖、错误 use 路径等）
