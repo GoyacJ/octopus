@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use harness_contracts::PermissionError;
+use parking_lot::RwLock;
 use ring::hmac;
 use serde_json::{Map, Value};
 use zeroize::Zeroizing;
@@ -64,10 +65,7 @@ impl StaticSignerStore {
     }
 
     pub fn insert_key(&self, key_id: impl Into<String>, key: Vec<u8>) {
-        self.keys
-            .write()
-            .unwrap()
-            .insert(key_id.into(), Zeroizing::new(key));
+        self.keys.write().insert(key_id.into(), Zeroizing::new(key));
     }
 
     pub fn signer(
@@ -75,7 +73,7 @@ impl StaticSignerStore {
         key_id: &str,
         algorithm: IntegrityAlgorithm,
     ) -> Result<Arc<dyn IntegritySigner>, PermissionError> {
-        let keys = self.keys.read().unwrap();
+        let keys = self.keys.read();
         let Some(key) = keys.get(key_id) else {
             return Err(PermissionError::Message(format!(
                 "integrity key `{key_id}` is not registered"

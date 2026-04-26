@@ -6,6 +6,9 @@ use rust_decimal::Decimal;
 
 use crate::{BillingMode, Currency, ModelPricing, Ratio};
 
+const NOOP_CALCULATOR_ID: &str = "noop";
+const PRICING_TABLE_CALCULATOR_ID: &str = "pricing-table";
+
 pub trait CostCalculator: Send + Sync + 'static {
     fn calculator_id(&self) -> &str;
 
@@ -40,7 +43,7 @@ pub struct NoopCostCalculator;
 
 impl CostCalculator for NoopCostCalculator {
     fn calculator_id(&self) -> &str {
-        "noop"
+        NOOP_CALCULATOR_ID
     }
 
     fn compute(
@@ -76,7 +79,7 @@ impl PricingTableCostCalculator {
 
 impl CostCalculator for PricingTableCostCalculator {
     fn calculator_id(&self) -> &str {
-        "pricing-table"
+        PRICING_TABLE_CALCULATOR_ID
     }
 
     fn compute(

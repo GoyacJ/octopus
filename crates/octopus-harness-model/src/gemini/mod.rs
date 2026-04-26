@@ -20,6 +20,7 @@ use crate::{
 const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com";
 const API_VERSION: &str = "v1beta";
 const DEFAULT_MAX_TOKENS: u32 = 1024;
+const PROVIDER_ID: &str = "gemini";
 pub const GEMINI_API_KEY_ENV: &str = "GEMINI_API_KEY";
 
 #[derive(Clone)]
@@ -95,7 +96,7 @@ impl GeminiProvider {
 #[async_trait]
 impl ModelProvider for GeminiProvider {
     fn provider_id(&self) -> &str {
-        "gemini"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {
@@ -191,10 +192,9 @@ fn request_body(req: &ModelRequest) -> Result<Value, ModelError> {
 
 fn content(message: &Message) -> Result<Value, ModelError> {
     let role = match message.role {
-        MessageRole::User => "user",
         MessageRole::Assistant => "model",
         MessageRole::Tool => "function",
-        MessageRole::System => "user",
+        MessageRole::User | MessageRole::System => "user",
         _ => {
             return Err(ModelError::InvalidRequest(
                 "unsupported Gemini message role".to_owned(),
@@ -252,9 +252,10 @@ fn tool_result(content: &ToolResult) -> Result<Value, ModelError> {
 
 fn tool_result_part(part: &ToolResultPart) -> Result<Value, ModelError> {
     match part {
-        ToolResultPart::Text { text } => Ok(json!({ "text": text })),
         ToolResultPart::Structured { value, .. } => Ok(value.clone()),
-        ToolResultPart::Code { text, .. } => Ok(json!({ "text": text })),
+        ToolResultPart::Text { text } | ToolResultPart::Code { text, .. } => {
+            Ok(json!({ "text": text }))
+        }
         ToolResultPart::Reference { summary, .. } => Ok(json!({ "text": summary })),
         ToolResultPart::Blob { .. } => Err(ModelError::InvalidRequest(
             "GeminiProvider does not inline blob tool result parts in M2-T04.7".to_owned(),
@@ -416,7 +417,7 @@ impl GeminiStreamState {
                             function_call
                                 .get("args")
                                 .cloned()
-                                .unwrap_or(Value::Object(Default::default()))
+                                .unwrap_or(Value::Object(serde_json::Map::default()))
                                 .to_string(),
                         ),
                     });

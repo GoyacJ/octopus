@@ -1,12 +1,15 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use chrono::Utc;
+use futures::StreamExt;
 use harness_contracts::{
     Decision, DecisionId, DecisionScope, FallbackPolicy, InteractivityLevel, PermissionError,
     PermissionSubject, RuleSource, ShellKind, TenantId,
 };
+use tokio::task::JoinHandle;
 
 use crate::{
     DangerousPatternLibrary, InlineRuleProvider, NoopDecisionPersistence, PermissionBroker,
@@ -14,12 +17,13 @@ use crate::{
 };
 
 pub struct RuleEngineBroker {
-    snapshot: ArcSwap<RuleSnapshot>,
+    snapshot: Arc<ArcSwap<RuleSnapshot>>,
     rule_providers: Vec<Arc<dyn RuleProvider>>,
     fallback: FallbackPolicy,
     tenant: TenantId,
     persistence: Arc<dyn crate::DecisionPersistence>,
     dangerous_patterns: Option<DangerousPatternLibrary>,
+    watch_task: Option<JoinHandle<()>>,
 }
 
 pub struct RuleEngineBrokerBuilder {
@@ -94,13 +98,17 @@ impl RuleEngineBrokerBuilder {
 
     pub async fn build(self) -> Result<RuleEngineBroker, PermissionError> {
         let snapshot = build_snapshot(&self.rule_providers, self.tenant, 1).await?;
+        let snapshot = Arc::new(ArcSwap::from_pointee(snapshot));
+        let watch_task =
+            spawn_watch_task(self.rule_providers.clone(), self.tenant, snapshot.clone());
         Ok(RuleEngineBroker {
-            snapshot: ArcSwap::from_pointee(snapshot),
+            snapshot,
             rule_providers: self.rule_providers,
             fallback: self.fallback,
             tenant: self.tenant,
             persistence: Arc::new(NoopDecisionPersistence),
             dangerous_patterns: self.dangerous_patterns,
+            watch_task,
         })
     }
 }
@@ -125,7 +133,7 @@ impl PermissionBroker for RuleEngineBroker {
         }
 
         let Some(rule) = rule else {
-            return fallback_decision(self.fallback);
+            return fallback_decision(self.fallback, &request, &ctx);
         };
 
         match &rule.action {
@@ -160,6 +168,39 @@ impl RuleEngineBroker {
 
         library.detect(command).is_some()
     }
+}
+
+impl Drop for RuleEngineBroker {
+    fn drop(&mut self) {
+        if let Some(watch_task) = &self.watch_task {
+            watch_task.abort();
+        }
+    }
+}
+
+fn spawn_watch_task(
+    providers: Vec<Arc<dyn RuleProvider>>,
+    tenant: TenantId,
+    snapshot: Arc<ArcSwap<RuleSnapshot>>,
+) -> Option<JoinHandle<()>> {
+    let watches = providers
+        .iter()
+        .filter_map(|provider| provider.watch())
+        .collect::<Vec<_>>();
+    if watches.is_empty() {
+        return None;
+    }
+
+    Some(tokio::spawn(async move {
+        let mut updates = futures::stream::select_all(watches);
+        while updates.next().await.is_some() {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let generation = snapshot.load().generation + 1;
+            if let Ok(next_snapshot) = build_snapshot(&providers, tenant, generation).await {
+                snapshot.store(Arc::new(next_snapshot));
+            }
+        }
+    }))
 }
 
 async fn build_snapshot(
@@ -237,12 +278,75 @@ fn source_rank(source: RuleSource) -> u8 {
     }
 }
 
-fn fallback_decision(fallback: FallbackPolicy) -> Decision {
+fn fallback_decision(
+    fallback: FallbackPolicy,
+    request: &PermissionRequest,
+    ctx: &PermissionContext,
+) -> Decision {
     match fallback {
-        FallbackPolicy::DenyAll => Decision::DenyOnce,
-        FallbackPolicy::AskUser
-        | FallbackPolicy::AllowReadOnly
-        | FallbackPolicy::ClosestMatchingRule
-        | _ => Decision::Escalate,
+        FallbackPolicy::AskUser => match ctx.interactivity {
+            InteractivityLevel::FullyInteractive => Decision::Escalate,
+            InteractivityLevel::NoInteractive | InteractivityLevel::DeferredInteractive => {
+                Decision::DenyOnce
+            }
+            _ => Decision::DenyOnce,
+        },
+        FallbackPolicy::AllowReadOnly => {
+            if is_read_only_subject(&request.subject) {
+                Decision::AllowOnce
+            } else {
+                Decision::DenyOnce
+            }
+        }
+        _ => Decision::DenyOnce,
     }
+}
+
+fn is_read_only_subject(subject: &PermissionSubject) -> bool {
+    match subject {
+        PermissionSubject::CommandExec { command, argv, .. } => {
+            is_read_only_command(command) && argv.iter().all(|arg| !is_mutating_arg(arg))
+        }
+        PermissionSubject::ToolInvocation { input, .. }
+        | PermissionSubject::McpToolCall { input, .. } => input
+            .get("read_only")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn is_read_only_command(command: &str) -> bool {
+    matches!(
+        command.split_whitespace().next(),
+        Some(
+            "cat"
+                | "cd"
+                | "find"
+                | "grep"
+                | "head"
+                | "ls"
+                | "pwd"
+                | "rg"
+                | "sed"
+                | "tail"
+                | "test"
+                | "wc"
+        )
+    )
+}
+
+fn is_mutating_arg(arg: &str) -> bool {
+    matches!(
+        arg,
+        "-delete"
+            | "-exec"
+            | "-i"
+            | "--in-place"
+            | "--delete"
+            | "--remove"
+            | "--write"
+            | "--output"
+            | "-o"
+    )
 }

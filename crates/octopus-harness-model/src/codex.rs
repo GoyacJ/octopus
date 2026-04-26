@@ -8,6 +8,7 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com";
+const PROVIDER_ID: &str = "codex";
 pub const CODEX_API_KEY_ENV: &str = "CODEX_API_KEY";
 
 #[derive(Clone)]
@@ -39,7 +40,7 @@ impl OpenAiCompatibleProviderExt for CodexResponsesProvider {
 #[async_trait]
 impl ModelProvider for CodexResponsesProvider {
     fn provider_id(&self) -> &str {
-        "codex"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {

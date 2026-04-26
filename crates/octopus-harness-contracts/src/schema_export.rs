@@ -138,6 +138,11 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     );
     insert_schema!(
         schemas,
+        "permission_awaiting_heartbeat",
+        PermissionAwaitingHeartbeatEvent
+    );
+    insert_schema!(
+        schemas,
         "credential_pool_shared_across_tenants",
         CredentialPoolSharedAcrossTenantsEvent
     );

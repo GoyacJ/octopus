@@ -73,6 +73,7 @@ pub enum Event {
     PermissionResolved(PermissionResolvedEvent),
     PermissionPersistenceTampered(PermissionPersistenceTamperedEvent),
     PermissionRequestSuppressed(PermissionRequestSuppressedEvent),
+    PermissionAwaitingHeartbeat(PermissionAwaitingHeartbeatEvent),
     CredentialPoolSharedAcrossTenants(CredentialPoolSharedAcrossTenantsEvent),
     HookTriggered(HookTriggeredEvent),
     HookRewroteInput(HookRewroteInputEvent),

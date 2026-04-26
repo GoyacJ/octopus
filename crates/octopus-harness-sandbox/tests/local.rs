@@ -1,6 +1,7 @@
 #![cfg(all(feature = "local", unix))]
 
 use std::collections::BTreeSet;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,7 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use futures::StreamExt;
 use harness_contracts::{Event, KillScope, SandboxError, SandboxExitStatus};
 use harness_sandbox::{
-    EventSink, ExecContext, ExecSpec, LocalSandbox, SandboxBackend, SandboxBaseConfig, StdioSpec,
+    EventSink, ExecContext, ExecSpec, LocalSandbox, OutputOverflowPolicy, SandboxBackend,
+    SandboxBaseConfig, SessionSnapshotFile, SnapshotMetadata, SnapshotSpec, StdioSpec,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -153,6 +155,183 @@ async fn local_sandbox_applies_relative_cwd_inside_root_and_rejects_escape() {
         Err(error) => error,
     };
     assert!(error.to_string().contains("workspace path denied"));
+}
+
+#[tokio::test]
+async fn local_sandbox_reports_cwd_marker_over_side_fd_without_polluting_stdout() {
+    let root = temp_root("cwd-marker");
+    std::fs::create_dir_all(root.join("child")).expect("child dir should be created");
+    let sandbox = LocalSandbox::new(&root);
+
+    let mut handle = sandbox
+        .execute(
+            shell_spec("cd child && printf stdout-clean"),
+            ExecContext::for_test(Arc::new(NullSink)),
+        )
+        .await
+        .expect("execute should spawn process");
+    let output = collect_stdout(handle.stdout.take().expect("stdout should be piped")).await;
+    let marker = handle
+        .cwd_marker
+        .take()
+        .expect("cwd marker should be piped")
+        .next()
+        .await
+        .expect("cwd marker should be emitted");
+    let outcome = handle.activity.wait().await.expect("wait should succeed");
+
+    assert_eq!(output, "stdout-clean");
+    assert_eq!(marker.sequence, 1);
+    assert!(marker.cwd.ends_with("child"));
+    assert_eq!(outcome.exit_status, SandboxExitStatus::Code(0));
+}
+
+#[tokio::test]
+async fn local_sandbox_snapshot_restore_roundtrips_filesystem() {
+    let root = temp_root("snapshot");
+    std::fs::write(root.join("state.txt"), "before").unwrap();
+    let (sink, mut rx) = recording_sink();
+    let sandbox = LocalSandbox::new(&root).with_snapshot_event_sink(sink);
+    let snapshot = sandbox
+        .snapshot_session(&SnapshotSpec::default())
+        .await
+        .expect("snapshot should succeed");
+
+    std::fs::write(root.join("state.txt"), "after").unwrap();
+    sandbox
+        .restore_session(&snapshot)
+        .await
+        .expect("restore should succeed");
+
+    assert_eq!(
+        std::fs::read_to_string(root.join("state.txt")).unwrap(),
+        "before"
+    );
+    assert!(snapshot.metadata.size_bytes > 0);
+    assert!(drain_events(&mut rx)
+        .iter()
+        .any(|event| matches!(event, Event::SandboxSnapshotCreated(_))));
+}
+
+#[tokio::test]
+async fn local_sandbox_restore_rejects_path_traversal_archive() {
+    let root = temp_root("snapshot-traversal");
+    let archive_path = root.join("malicious.tar");
+    let file = std::fs::File::create(&archive_path).unwrap();
+    let mut builder = tar::Builder::new(file);
+    let mut header = tar::Header::new_gnu();
+    header.as_mut_bytes()[..13].copy_from_slice(b"../escape.txt");
+    header.set_size(4);
+    header.set_mode(0o644);
+    header.set_cksum();
+    builder.append(&header, Cursor::new(b"nope")).unwrap();
+    builder.finish().unwrap();
+
+    let sandbox = LocalSandbox::new(&root);
+    let error = sandbox
+        .restore_session(&SessionSnapshotFile {
+            path: archive_path,
+            metadata: SnapshotMetadata::default(),
+            ..SessionSnapshotFile::default()
+        })
+        .await
+        .expect_err("path traversal archive must be rejected");
+
+    assert!(error.to_string().contains("escapes sandbox root"));
+}
+
+#[tokio::test]
+async fn local_sandbox_output_truncate_sets_overflow() {
+    let root = temp_root("truncate");
+    let sandbox = LocalSandbox::new(&root);
+    let mut spec = shell_spec("printf abcdef");
+    spec.output_policy.max_inline_bytes = 3;
+    spec.output_policy.overflow = OutputOverflowPolicy::Truncate;
+
+    let mut handle = sandbox
+        .execute(spec, ExecContext::for_test(Arc::new(NullSink)))
+        .await
+        .expect("execute should spawn process");
+    let output = collect_stdout(handle.stdout.take().expect("stdout should be piped")).await;
+    let outcome = handle.activity.wait().await.expect("wait should succeed");
+
+    assert_eq!(output, "abc");
+    assert_eq!(outcome.overflow.unwrap().effective_limit, 3);
+}
+
+#[tokio::test]
+async fn local_sandbox_output_spill_records_blob_and_events() {
+    let root = temp_root("spill");
+    let (sink, mut rx) = recording_sink();
+    let sandbox = LocalSandbox::new(&root);
+    let mut ctx = ExecContext::for_test(sink);
+    ctx.workspace_root = root.clone();
+    let mut spec = shell_spec("printf abcdef");
+    spec.output_policy.max_inline_bytes = 3;
+    spec.output_policy.overflow = OutputOverflowPolicy::SpillToBlob;
+
+    let mut handle = sandbox
+        .execute(spec, ctx)
+        .await
+        .expect("execute should spawn process");
+    let output = collect_stdout(handle.stdout.take().expect("stdout should be piped")).await;
+    let outcome = handle.activity.wait().await.expect("wait should succeed");
+
+    assert_eq!(output, "abc");
+    assert!(outcome.overflow.unwrap().blob_ref.is_some());
+    let events = drain_events(&mut rx);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, Event::SandboxOutputSpilled(_))));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, Event::SandboxBackpressureApplied(_))));
+}
+
+#[tokio::test]
+async fn local_sandbox_output_abort_exec_returns_budget_error() {
+    let root = temp_root("abort-output");
+    let sandbox = LocalSandbox::new(&root);
+    let mut spec = shell_spec("printf abcdef");
+    spec.output_policy.max_inline_bytes = 3;
+    spec.output_policy.overflow = OutputOverflowPolicy::AbortExec;
+
+    let handle = sandbox
+        .execute(spec, ExecContext::for_test(Arc::new(NullSink)))
+        .await
+        .expect("execute should spawn process");
+    let error = handle
+        .activity
+        .wait()
+        .await
+        .expect_err("overflow should abort exec");
+
+    assert!(error.to_string().contains("output budget exceeded"));
+}
+
+#[tokio::test]
+async fn local_sandbox_emits_backpressure_when_consumer_pauses() {
+    let root = temp_root("backpressure");
+    let (sink, mut rx) = recording_sink();
+    let sandbox = LocalSandbox::new(&root);
+    let mut spec = shell_spec("dd if=/dev/zero bs=8192 count=8 2>/dev/null | tr '\\0' x");
+    spec.output_policy.max_inline_bytes = 100_000;
+
+    let mut handle = sandbox
+        .execute(spec, ExecContext::for_test(sink))
+        .await
+        .expect("execute should spawn process");
+    let stdout = handle.stdout.take().expect("stdout should be piped");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let output = collect_stdout(stdout).await;
+    let outcome = handle.activity.wait().await.expect("wait should succeed");
+
+    assert_eq!(output.len(), 65_536);
+    assert_eq!(outcome.exit_status, SandboxExitStatus::Code(0));
+    assert!(drain_events(&mut rx).iter().any(|event| matches!(
+        event,
+        Event::SandboxBackpressureApplied(backpressure) if backpressure.paused_for_ms > 0
+    )));
 }
 
 #[tokio::test]

@@ -122,17 +122,28 @@ async fn contract_lifecycle_hooks_and_shutdown_are_safe() {
             .expect("after_execute should be safe");
         backend.shutdown().await.expect("shutdown should be safe");
 
-        let snapshot_error = backend
-            .snapshot_session(&snapshot_spec)
-            .await
-            .expect_err("snapshot should be an explicit stub");
-        assert!(matches!(snapshot_error, SandboxError::Message(_)));
+        if backend.backend_id() == "local" {
+            let snapshot = backend
+                .snapshot_session(&snapshot_spec)
+                .await
+                .expect("local snapshot should succeed");
+            backend
+                .restore_session(&snapshot)
+                .await
+                .expect("local restore should succeed");
+        } else {
+            let snapshot_error = backend
+                .snapshot_session(&snapshot_spec)
+                .await
+                .expect_err("snapshot should be an explicit stub");
+            assert!(matches!(snapshot_error, SandboxError::Message(_)));
 
-        let restore_error = backend
-            .restore_session(&snapshot_file)
-            .await
-            .expect_err("restore should be an explicit stub");
-        assert!(matches!(restore_error, SandboxError::Message(_)));
+            let restore_error = backend
+                .restore_session(&snapshot_file)
+                .await
+                .expect_err("restore should be an explicit stub");
+            assert!(matches!(restore_error, SandboxError::Message(_)));
+        }
     }
 }
 

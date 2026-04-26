@@ -123,7 +123,7 @@ async fn gemini_streams_text_tool_usage_and_request_shape() {
 async fn gemini_rejects_cache_breakpoints() {
     let mut req = request(false);
     req.cache_breakpoints.push(CacheBreakpoint {
-        after_message_id: req.messages[0].id.clone(),
+        after_message_id: req.messages[0].id,
         reason: BreakpointReason::RecentMessage,
     });
 

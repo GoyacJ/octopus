@@ -32,6 +32,7 @@ chrono = { workspace = true }
 dashmap = { workspace = true, optional = true }
 futures = { workspace = true }
 notify = { workspace = true, optional = true }
+parking_lot = "0.12"
 regex = { workspace = true, optional = true }
 ring = { workspace = true, optional = true }
 serde = { workspace = true }

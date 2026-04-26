@@ -89,7 +89,7 @@ where
     assert_eq!(error, ModelError::Cancelled);
 
     let mut expired = InferContext::for_test();
-    expired.deadline = Some(Instant::now() - Duration::from_millis(1));
+    expired.deadline = Instant::now().checked_sub(Duration::from_millis(1));
     let error = match provider.infer(req, expired).await {
         Ok(_) => panic!("expired deadline should fail"),
         Err(error) => error,

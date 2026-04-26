@@ -23,7 +23,7 @@ while IFS= read -r lib; do
     || fail "$lib is missing SPEC path"
 done < <(find crates -path '*/octopus-harness-*/src/lib.rs' -type f | sort)
 
-if grep -RInE 'std::sync::(Mutex|RwLock)' crates/octopus-harness-* --include='*.rs'; then
+if grep -RInE 'std::sync::([A-Za-z0-9_]+ as )?(Mutex|RwLock)|std::sync::\{[^}]*\b(Mutex|RwLock)\b' crates/octopus-harness-* --include='*.rs'; then
   fail "blocking std sync primitives are forbidden in harness crates"
 fi
 

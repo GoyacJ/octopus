@@ -1,8 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use harness_contracts::{CredentialPoolSharedAcrossTenantsEvent, ModelError, TenantId};
 use harness_model::*;
+use parking_lot::Mutex;
 use secrecy::SecretString;
 
 #[derive(Default)]
@@ -13,7 +14,7 @@ struct Source {
 #[async_trait::async_trait]
 impl CredentialSource for Source {
     async fn fetch(&self, key: CredentialKey) -> Result<CredentialValue, CredentialError> {
-        self.seen.lock().unwrap().push(key.clone());
+        self.seen.lock().push(key.clone());
         Ok(CredentialValue {
             secret: SecretString::new(key.key_label.clone().into()),
             metadata: CredentialMetadata::default(),
@@ -32,7 +33,7 @@ struct Audit {
 
 impl CredentialPoolAuditSink for Audit {
     fn record_shared_across_tenants(&self, event: CredentialPoolSharedAcrossTenantsEvent) {
-        self.events.lock().unwrap().push(event);
+        self.events.lock().push(event);
     }
 }
 
@@ -163,7 +164,7 @@ async fn shared_tenant_key_emits_audit_event_once() {
     pool.pick(std::slice::from_ref(&shared)).await.unwrap();
     pool.pick(&[shared]).await.unwrap();
 
-    let events = audit.events.lock().unwrap();
+    let events = audit.events.lock();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].tenant_id, TenantId::SHARED);
     assert_eq!(events[0].provider_id, "anthropic");

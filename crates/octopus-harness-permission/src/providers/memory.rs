@@ -1,10 +1,11 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use harness_contracts::{PermissionError, RuleSource, TenantId};
+use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -34,7 +35,7 @@ impl InMemoryRuleProvider {
     }
 
     pub fn replace_rules(&self, rules: Vec<PermissionRule>) {
-        *self.rules.write().unwrap() = rules.clone();
+        *self.rules.write() = rules.clone();
         let _ = self.updates.send(RulesUpdated {
             provider_id: self.provider_id.clone(),
             tenant_id: TenantId::SHARED,
@@ -58,7 +59,7 @@ impl RuleProvider for InMemoryRuleProvider {
         &self,
         _tenant: TenantId,
     ) -> Result<Vec<PermissionRule>, PermissionError> {
-        Ok(self.rules.read().unwrap().clone())
+        Ok(self.rules.read().clone())
     }
 
     fn watch(&self) -> Option<BoxStream<'static, RulesUpdated>> {

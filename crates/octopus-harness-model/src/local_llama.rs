@@ -9,6 +9,7 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:8080";
+const PROVIDER_ID: &str = "local-llama";
 
 #[derive(Clone)]
 pub struct LocalLlamaProvider {
@@ -63,7 +64,7 @@ impl OpenAiCompatibleProviderExt for LocalLlamaProvider {
 #[async_trait]
 impl ModelProvider for LocalLlamaProvider {
     fn provider_id(&self) -> &str {
-        "local-llama"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {

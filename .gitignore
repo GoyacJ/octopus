@@ -19,6 +19,7 @@ target/
 crates/rusty-claude-cli/.claw/
 
 # Octopus local workspace state
+/.octopus/
 /config/workspace.toml
 /config/runtime/
 /data/

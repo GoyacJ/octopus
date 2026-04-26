@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use harness_contracts::{Decision, DecisionId, DecisionScope, PermissionError};
+use parking_lot::Mutex;
 
 use crate::{
     DecisionPersistence, NoopDecisionPersistence, PermissionBroker, PermissionContext,
@@ -38,7 +39,7 @@ impl MockBroker {
     }
 
     pub fn calls(&self) -> Vec<MockBrokerCall> {
-        self.calls.lock().unwrap().clone()
+        self.calls.lock().clone()
     }
 }
 
@@ -51,13 +52,9 @@ impl Default for MockBroker {
 #[async_trait]
 impl PermissionBroker for MockBroker {
     async fn decide(&self, request: PermissionRequest, ctx: PermissionContext) -> Decision {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(MockBrokerCall { request, ctx });
+        self.calls.lock().push(MockBrokerCall { request, ctx });
         self.decisions
             .lock()
-            .unwrap()
             .pop_front()
             .unwrap_or(Decision::DenyOnce)
     }

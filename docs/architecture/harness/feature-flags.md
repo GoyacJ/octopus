@@ -137,9 +137,9 @@ testing = [
 |---|---|
 | `harness-contracts` | — |
 | `harness-model` | `http-client`（内部传输底座）/ `openai-compatible`（OpenAI-compatible Provider 共享底座）/ `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / deepseek / minimax / qwen / doubao / zhipu / km / all-providers / mock` |
-| `harness-journal` | `sqlite / jsonl / in-memory` |
+| `harness-journal` | `sqlite / jsonl / in-memory / mock / blob-file / blob-sqlite` |
 | `harness-sandbox` | `local / docker / ssh / noop / code-runtime`（ADR-0016） |
-| `harness-permission` | `interactive / stream / rule-engine / auto-mode / mock` |
+| `harness-permission` | `interactive / stream / rule-engine / auto-mode / mock / dangerous / integrity` |
 | `harness-memory` | `builtin / external-slot / threat-scanner` |
 | `harness-tool` | `builtin-toolset / programmatic-tool-calling`（ADR-0016） |
 | `harness-skill` | `workspace-source / user-source / plugin-source / mcp-source` |

@@ -483,9 +483,8 @@ fn tool_result_content(content: &ToolResult) -> Result<String, ModelError> {
 
 fn tool_result_part_content(part: &ToolResultPart) -> Result<String, ModelError> {
     match part {
-        ToolResultPart::Text { text } => Ok(text.clone()),
         ToolResultPart::Structured { value, .. } => Ok(value.to_string()),
-        ToolResultPart::Code { text, .. } => Ok(text.clone()),
+        ToolResultPart::Text { text } | ToolResultPart::Code { text, .. } => Ok(text.clone()),
         ToolResultPart::Reference { summary, .. } => Ok(summary.clone().unwrap_or_default()),
         ToolResultPart::Blob { .. } => Err(ModelError::InvalidRequest(
             "blob tool result parts are not supported by OpenAI-compatible providers in M2-T04.5"

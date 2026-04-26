@@ -5,10 +5,13 @@ use futures::StreamExt;
 use harness_contracts::{Message, MessageId, MessagePart, MessageRole, UsageSnapshot};
 use harness_model::{anthropic::AnthropicProvider, *};
 use serde_json::{json, Value};
+use std::path::Path;
 use wiremock::{
     matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
 };
+
+const LIVE_ANTHROPIC_API_KEY_PATH: &str = ".octopus/live-secrets/anthropic-api-key";
 
 fn message(id: MessageId, text: &str) -> Message {
     Message {
@@ -32,6 +35,38 @@ fn request(messages: Vec<Message>, stream: bool) -> ModelRequest {
         api_mode: ApiMode::Messages,
         extra: Value::Null,
     }
+}
+
+fn live_anthropic_api_key_path() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("model crate should live under workspace crates directory")
+        .join(LIVE_ANTHROPIC_API_KEY_PATH)
+}
+
+fn read_live_anthropic_api_key() -> Option<String> {
+    let path = live_anthropic_api_key_path();
+    match read_live_anthropic_api_key_from_file(&path) {
+        Ok(secret) => secret,
+        Err(error) => {
+            eprintln!(
+                "skipping live Anthropic prompt-cache test; cannot read {}: {error}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+fn read_live_anthropic_api_key_from_file(path: &Path) -> std::io::Result<Option<String>> {
+    let secret = match std::fs::read_to_string(path) {
+        Ok(secret) => secret,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let secret = secret.trim().to_owned();
+    Ok((!secret.is_empty()).then_some(secret))
 }
 
 #[tokio::test]
@@ -116,10 +151,24 @@ async fn spike_mock_prompt_cache_injection_and_usage_mapping() {
     }));
 }
 
-#[ignore = "manual live Anthropic prompt-cache validation; requires ANTHROPIC_API_KEY"]
+#[test]
+fn live_anthropic_secret_file_is_trimmed() {
+    let path =
+        std::env::temp_dir().join(format!("octopus-live-anthropic-key-{}", MessageId::new()));
+    std::fs::write(&path, "  test-secret\n").expect("secret fixture should be writable");
+
+    let api_key = read_live_anthropic_api_key_from_file(&path)
+        .expect("secret fixture should be readable")
+        .expect("secret fixture should be present");
+
+    std::fs::remove_file(&path).expect("secret fixture should be removed");
+    assert_eq!(api_key, "test-secret");
+}
+
+#[ignore = "manual live Anthropic prompt-cache validation; requires local secret file"]
 #[tokio::test]
 async fn live_anthropic_prompt_cache_reads_after_warmup() {
-    let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") else {
+    let Some(api_key) = read_live_anthropic_api_key() else {
         return;
     };
     let provider = AnthropicProvider::from_api_key(api_key);
@@ -152,6 +201,7 @@ async fn live_anthropic_prompt_cache_reads_after_warmup() {
         observed_cache_read = observed_cache_read.max(max_cache_read(&events));
     }
 
+    println!("live Anthropic prompt-cache observed_cache_read_tokens={observed_cache_read}");
     assert!(observed_cache_read > 0);
 }
 

@@ -2,20 +2,23 @@
 
 mod exec;
 
+use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use harness_contracts::ShellKind;
 
-use crate::SandboxBaseConfig;
+use crate::{EventSink, SandboxBaseConfig};
 
 pub use exec::LocalActivity;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LocalSandbox {
     pub(crate) base: SandboxBaseConfig,
     pub(crate) root: PathBuf,
     pub(crate) shell: ShellKind,
     pub(crate) isolation: LocalIsolation,
+    pub(crate) snapshot_event_sink: Option<Arc<dyn EventSink>>,
 }
 
 impl LocalSandbox {
@@ -29,6 +32,7 @@ impl LocalSandbox {
             root: root.into(),
             shell: ShellKind::System,
             isolation: LocalIsolation::None,
+            snapshot_event_sink: None,
         }
     }
 
@@ -48,6 +52,25 @@ impl LocalSandbox {
 
     pub fn isolation(&self) -> LocalIsolation {
         self.isolation
+    }
+
+    #[must_use]
+    pub fn with_snapshot_event_sink(mut self, event_sink: Arc<dyn EventSink>) -> Self {
+        self.snapshot_event_sink = Some(event_sink);
+        self
+    }
+}
+
+impl fmt::Debug for LocalSandbox {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LocalSandbox")
+            .field("base", &self.base)
+            .field("root", &self.root)
+            .field("shell", &self.shell)
+            .field("isolation", &self.isolation)
+            .field("snapshot_event_sink", &self.snapshot_event_sink.is_some())
+            .finish()
     }
 }
 

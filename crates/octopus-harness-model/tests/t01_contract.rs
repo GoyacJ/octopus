@@ -12,7 +12,7 @@ struct TestProvider;
 #[async_trait::async_trait]
 impl ModelProvider for TestProvider {
     fn provider_id(&self) -> &str {
-        "test"
+        TEST_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {
@@ -41,9 +41,11 @@ struct TestMiddleware;
 #[async_trait::async_trait]
 impl InferMiddleware for TestMiddleware {
     fn middleware_id(&self) -> &str {
-        "test"
+        TEST_ID
     }
 }
+
+const TEST_ID: &str = "test";
 
 #[test]
 fn model_provider_is_dyn_safe_with_prompt_cache_default() {

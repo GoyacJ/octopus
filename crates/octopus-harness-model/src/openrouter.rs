@@ -7,6 +7,7 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api";
+const PROVIDER_ID: &str = "openrouter";
 pub const OPENROUTER_API_KEY_ENV: &str = "OPENROUTER_API_KEY";
 
 #[derive(Clone)]
@@ -37,7 +38,7 @@ impl OpenAiCompatibleProviderExt for OpenRouterProvider {
 #[async_trait]
 impl ModelProvider for OpenRouterProvider {
     fn provider_id(&self) -> &str {
-        "openrouter"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {

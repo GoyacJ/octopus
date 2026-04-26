@@ -63,6 +63,12 @@ pub struct PermissionRequestSuppressedEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PermissionAwaitingHeartbeatEvent {
+    pub request_id: RequestId,
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CredentialPoolSharedAcrossTenantsEvent {
     pub tenant_id: TenantId,
     pub provider_id: String,

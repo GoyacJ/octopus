@@ -17,6 +17,8 @@ use crate::{
     ThinkingDelta,
 };
 
+const PROVIDER_ID: &str = "bedrock";
+
 #[derive(Clone)]
 pub struct BedrockProvider {
     transport: Arc<dyn BedrockTransport>,
@@ -190,7 +192,7 @@ fn bedrock_tools(
         .iter()
         .map(|tool| {
             let spec = br::ToolSpecification::builder()
-                .name(tool.name.to_string())
+                .name(tool.name.clone())
                 .description(tool.description.clone())
                 .input_schema(br::ToolInputSchema::Json(json_to_document(
                     &tool.input_schema,
@@ -376,7 +378,7 @@ fn usage_snapshot(usage: &br::TokenUsage) -> UsageSnapshot {
 #[async_trait]
 impl ModelProvider for BedrockProvider {
     fn provider_id(&self) -> &str {
-        "bedrock"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {

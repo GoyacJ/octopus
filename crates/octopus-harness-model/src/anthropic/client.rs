@@ -24,6 +24,7 @@ use super::{cache::apply_prompt_cache, streaming};
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const API_VERSION: &str = "2023-06-01";
 const DEFAULT_MAX_TOKENS: u32 = 1024;
+const PROVIDER_ID: &str = "anthropic";
 
 #[derive(Clone)]
 pub struct AnthropicClient {
@@ -174,7 +175,7 @@ impl AnthropicProvider {
 #[async_trait]
 impl ModelProvider for AnthropicProvider {
     fn provider_id(&self) -> &str {
-        "anthropic"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {
@@ -351,10 +352,10 @@ fn response_to_stream(response: AnthropicResponse) -> Result<ModelStream, ModelE
 
 fn usage(usage: AnthropicUsage) -> UsageSnapshot {
     UsageSnapshot {
-        input_tokens: usage.input_tokens.unwrap_or_default(),
-        output_tokens: usage.output_tokens.unwrap_or_default(),
-        cache_read_tokens: usage.cache_read_input_tokens.unwrap_or_default(),
-        cache_write_tokens: usage.cache_creation_input_tokens.unwrap_or_default(),
+        input_tokens: usage.input.unwrap_or_default(),
+        output_tokens: usage.output.unwrap_or_default(),
+        cache_read_tokens: usage.cache_read_input.unwrap_or_default(),
+        cache_write_tokens: usage.cache_creation_input.unwrap_or_default(),
         cost_micros: 0,
     }
 }
@@ -404,8 +405,12 @@ enum AnthropicContent {
 
 #[derive(Debug, Default, Deserialize)]
 struct AnthropicUsage {
-    input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
-    cache_creation_input_tokens: Option<u64>,
-    cache_read_input_tokens: Option<u64>,
+    #[serde(rename = "input_tokens")]
+    input: Option<u64>,
+    #[serde(rename = "output_tokens")]
+    output: Option<u64>,
+    #[serde(rename = "cache_creation_input_tokens")]
+    cache_creation_input: Option<u64>,
+    #[serde(rename = "cache_read_input_tokens")]
+    cache_read_input: Option<u64>,
 }

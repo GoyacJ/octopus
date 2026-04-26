@@ -29,7 +29,6 @@ impl TokenCounter for AnthropicTokenCounter {
                         MessagePart::ToolResult { content, .. } => {
                             self.count_tokens(&format!("{content:?}"), model)
                         }
-                        MessagePart::Image { .. } => 0,
                         _ => 0,
                     })
                     .sum::<usize>();

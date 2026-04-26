@@ -70,6 +70,33 @@ async fn stream_broker_uses_context_timeout_default() {
 }
 
 #[tokio::test]
+async fn stream_broker_emits_heartbeat_and_sweeps_timed_out_pending() {
+    let (broker, mut receiver, resolver) = StreamBasedBroker::new(StreamBrokerConfig {
+        default_timeout: Some(Duration::from_millis(80)),
+        heartbeat_interval: Some(Duration::from_millis(20)),
+        max_pending: 16,
+    });
+    let mut heartbeats = broker.subscribe_heartbeats();
+    let request = permission_request();
+    let request_id = request.request_id;
+
+    let decide =
+        tokio::spawn(async move { broker.decide(request, permission_context(None)).await });
+
+    receiver.recv().await.unwrap();
+    let heartbeat = tokio::time::timeout(Duration::from_secs(1), heartbeats.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(heartbeat.request_id, request_id);
+    assert_eq!(decide.await.unwrap(), Decision::DenyOnce);
+    assert!(matches!(
+        resolver.resolve(request_id, Decision::AllowOnce).await,
+        Err(PermissionError::Message(_))
+    ));
+}
+
+#[tokio::test]
 async fn stream_broker_denies_when_pending_queue_is_full() {
     let (broker, _receiver, _resolver) = StreamBasedBroker::new(StreamBrokerConfig {
         default_timeout: Some(Duration::from_secs(5)),

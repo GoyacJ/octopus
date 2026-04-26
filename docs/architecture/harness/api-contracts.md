@@ -451,13 +451,18 @@ impl<T: MemoryStore + MemoryLifecycle> MemoryProvider for T {}
 ### 6.2 `MemoryThreatScanner`
 
 ```rust
-pub trait MemoryThreatScanner: Send + Sync + 'static {
-    fn scan(&self, content: &str) -> ThreatReport;
+pub struct MemoryThreatScanner { /* fields omitted */ }
+
+impl MemoryThreatScanner {
+    pub fn default() -> Self;
+    pub fn from_patterns(patterns: Vec<ThreatPattern>) -> Self;
+    pub fn scan(&self, content: &str) -> ThreatReport;
+    pub fn redact(&self, content: &str) -> ThreatScanOutcome;
 }
 ```
 
 - **实现者**：`built`（正则模式库，对齐 HER-019）
-- **对象安全**：是
+- **复用方式**：以 `Arc<MemoryThreatScanner>` 注入 `BuiltinMemory`、`ExternalMemorySlot`
 
 ## 7. 工具 · `harness-tool`
 

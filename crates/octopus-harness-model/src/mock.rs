@@ -34,11 +34,13 @@ impl Default for MockProvider {
 }
 
 impl MockProvider {
+    #[must_use]
     pub fn with_events(mut self, events: Vec<ModelStreamEvent>) -> Self {
         self.events = events;
         self
     }
 
+    #[must_use]
     pub fn with_health(mut self, health: HealthStatus) -> Self {
         self.health = health;
         self
@@ -176,7 +178,7 @@ impl CredentialSource for MockCredentialSource {
             .await
             .get(&key)
             .cloned()
-            .ok_or_else(|| CredentialError::Missing(key.key_label))
+            .ok_or(CredentialError::Missing(key.key_label))
     }
 
     async fn rotate(&self, key: CredentialKey) -> Result<(), CredentialError> {

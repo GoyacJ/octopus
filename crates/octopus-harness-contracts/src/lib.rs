@@ -8,6 +8,7 @@
 
 pub mod blob;
 pub mod capability;
+pub mod dangerous_patterns;
 pub mod enums;
 pub mod errors;
 pub mod events;
@@ -19,6 +20,7 @@ pub mod tool;
 
 pub use blob::*;
 pub use capability::*;
+pub use dangerous_patterns::*;
 pub use enums::*;
 pub use errors::*;
 pub use events::*;

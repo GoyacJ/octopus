@@ -824,21 +824,21 @@ impl AnthropicProvider {
 
 ## 7. 认证支持（对齐 HER-049）
 
-内置 Provider 必须声明认证来源、环境变量名和 secret ref key。首批规则：
+内置 Provider 必须声明认证来源和 secret ref key。Provider 构造只接收显式 secret 或业务层注入的 `CredentialSource`，不得在 provider 内部直接读取环境变量。
 
-- Anthropic：`ANTHROPIC_API_KEY` / Bearer OAuth / Claude Code credentials（读 `~/.claude/credentials.json`）
-- OpenAI：`OPENAI_API_KEY`
-- OpenRouter：`OPENROUTER_API_KEY`
-- Gemini：`GEMINI_API_KEY` / OAuth
+- Anthropic：`anthropic_api_key` / Bearer OAuth / Claude Code credentials（由业务层读取）
+- OpenAI：`openai_api_key`
+- OpenRouter：`openrouter_api_key`
+- Gemini：`gemini_api_key` / OAuth
 - Bedrock：AWS credential provider chain
 - Codex：`CODEX_API_KEY` 或 OpenAI-compatible credential source
 - Local Llama：本地 endpoint + 可选 bearer token
-- DeepSeek：`DEEPSEEK_API_KEY`
-- Minimax：`MINIMAX_API_KEY`
-- Qwen：`QWEN_API_KEY`
-- Doubao：`DOUBAO_API_KEY`
-- Zhipu：`ZHIPU_API_KEY`
-- KM：`KM_API_KEY`
+- DeepSeek：`deepseek_api_key`
+- Minimax：`minimax_api_key`
+- Qwen：`qwen_api_key`
+- Doubao：`doubao_api_key`
+- Zhipu：`zhipu_api_key`
+- KM：`km_api_key`
 
 ```rust
 pub enum AnthropicAuth {
@@ -935,10 +935,15 @@ all-providers = [
 ```rust
 use octopus_harness_model::anthropic::AnthropicProvider;
 
-let provider = AnthropicProvider::builder()
-    .api_key(env::var("ANTHROPIC_API_KEY")?)
-    .prompt_cache_mode(AnthropicCacheMode::SystemAnd3)
-    .build()?;
+let secret = credential_source
+    .fetch(CredentialKey {
+        tenant_id,
+        provider_id: "anthropic".into(),
+        key_label: "anthropic_api_key".into(),
+    })
+    .await?;
+
+let provider = AnthropicProvider::from_api_key(secret.secret.expose_secret().to_owned());
 
 let req = ModelRequest {
     model_id: "claude-sonnet-4.5".into(),

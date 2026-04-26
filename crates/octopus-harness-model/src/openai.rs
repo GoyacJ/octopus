@@ -8,6 +8,7 @@ use crate::{
 };
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com";
+const PROVIDER_ID: &str = "openai";
 pub const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 
 #[derive(Clone)]
@@ -38,7 +39,7 @@ impl OpenAiCompatibleProviderExt for OpenAiProvider {
 #[async_trait]
 impl ModelProvider for OpenAiProvider {
     fn provider_id(&self) -> &str {
-        "openai"
+        PROVIDER_ID
     }
 
     fn supported_models(&self) -> Vec<ModelDescriptor> {

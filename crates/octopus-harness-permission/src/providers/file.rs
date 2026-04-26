@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -7,6 +7,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use harness_contracts::{PermissionError, RuleSource, TenantId};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use parking_lot::Mutex;
 use serde::Deserialize;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;

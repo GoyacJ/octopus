@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use harness_contracts::{CredentialPoolSharedAcrossTenantsEvent, ModelError, TenantId};
+use parking_lot::Mutex;
 
 use crate::{CredentialError, CredentialKey, CredentialSource, CredentialValue};
 
@@ -60,7 +61,7 @@ impl CredentialPool {
         candidates: &[CredentialKey],
     ) -> Result<PickedCredential, CredentialError> {
         let key = {
-            let mut state = self.state.lock().expect("credential pool state poisoned");
+            let mut state = self.state.lock();
             state.prune_expired_cooldowns(Instant::now());
             let available: Vec<CredentialKey> = candidates
                 .iter()
@@ -84,14 +85,14 @@ impl CredentialPool {
     }
 
     pub fn mark_rate_limited(&self, key: &CredentialKey, cooldown: Duration) {
-        let mut state = self.state.lock().expect("credential pool state poisoned");
+        let mut state = self.state.lock();
         state
             .cooldown_until
             .insert(key.clone(), Instant::now() + cooldown);
     }
 
     pub fn mark_banned(&self, key: &CredentialKey) {
-        let mut state = self.state.lock().expect("credential pool state poisoned");
+        let mut state = self.state.lock();
         state.banned.insert(key.clone());
     }
 
@@ -116,7 +117,7 @@ impl CredentialPool {
 
     fn record_success(&self, key: &CredentialKey) {
         let event = {
-            let mut state = self.state.lock().expect("credential pool state poisoned");
+            let mut state = self.state.lock();
             *state.use_counts.entry(key.clone()).or_default() += 1;
 
             if key.tenant_id == TenantId::SHARED && state.audited_shared.insert(key.clone()) {
@@ -145,16 +146,19 @@ pub struct CredentialPoolBuilder {
 }
 
 impl CredentialPoolBuilder {
+    #[must_use]
     pub fn strategy(mut self, strategy: PoolStrategy) -> Self {
         self.strategy = Some(strategy);
         self
     }
 
+    #[must_use]
     pub fn add_source(mut self, source: Arc<dyn CredentialSource>) -> Self {
         self.sources.push(source);
         self
     }
 
+    #[must_use]
     pub fn audit_sink(mut self, sink: Arc<dyn CredentialPoolAuditSink>) -> Self {
         self.audit_sink = Some(sink);
         self

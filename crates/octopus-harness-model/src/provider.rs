@@ -342,13 +342,6 @@ impl ModelErrorExt for ModelError {
             Self::ContextTooLong { .. } => ErrorClass::ContextOverflow,
             Self::AuthExpired(_) => ErrorClass::AuthExpired,
             Self::ProviderUnavailable(_) | Self::Io(_) => ErrorClass::Transient,
-            Self::Message(_)
-            | Self::InvalidRequest(_)
-            | Self::AllCredentialsBanned
-            | Self::AuxModelNotConfigured
-            | Self::UnexpectedResponse(_)
-            | Self::Cancelled
-            | Self::DeadlineExceeded(_) => ErrorClass::Fatal,
             _ => ErrorClass::Fatal,
         }
     }

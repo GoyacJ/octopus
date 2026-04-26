@@ -1,6 +1,6 @@
 #![cfg(feature = "interactive")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -13,6 +13,7 @@ use harness_permission::{
     DecisionPersistence, DirectBroker, PermissionBroker, PermissionContext, PermissionRequest,
     RuleSnapshot,
 };
+use parking_lot::Mutex;
 
 #[derive(Default)]
 struct RecordingPersistence {
@@ -26,7 +27,7 @@ impl DecisionPersistence for RecordingPersistence {
         decision_id: DecisionId,
         scope: DecisionScope,
     ) -> Result<(), PermissionError> {
-        self.calls.lock().unwrap().push((decision_id, scope));
+        self.calls.lock().push((decision_id, scope));
         Ok(())
     }
 }
@@ -61,10 +62,7 @@ async fn direct_broker_persist_delegates_to_persistence() {
 
     broker.persist(decision_id, scope.clone()).await.unwrap();
 
-    assert_eq!(
-        persistence.calls.lock().unwrap().as_slice(),
-        &[(decision_id, scope)]
-    );
+    assert_eq!(persistence.calls.lock().as_slice(), &[(decision_id, scope)]);
 }
 
 fn permission_request() -> PermissionRequest {

@@ -119,6 +119,60 @@ async fn no_match_uses_fallback_policy() {
             .await,
         Decision::DenyOnce
     );
+
+    assert_eq!(
+        ask_broker
+            .decide(
+                permission_request(),
+                permission_context(InteractivityLevel::NoInteractive)
+            )
+            .await,
+        Decision::DenyOnce
+    );
+
+    assert_eq!(
+        ask_broker
+            .decide(
+                permission_request(),
+                permission_context(InteractivityLevel::DeferredInteractive)
+            )
+            .await,
+        Decision::DenyOnce
+    );
+}
+
+#[tokio::test]
+async fn allow_read_only_fallback_allows_only_explicit_read_only_subjects() {
+    let broker = RuleEngineBroker::builder()
+        .with_fallback(FallbackPolicy::AllowReadOnly)
+        .build()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        broker
+            .decide(
+                permission_request(),
+                permission_context(InteractivityLevel::NoInteractive)
+            )
+            .await,
+        Decision::AllowOnce
+    );
+
+    let mut write_request = permission_request();
+    write_request.subject = PermissionSubject::FileWrite {
+        path: "state.json".into(),
+        bytes_preview: b"{}".to_vec(),
+    };
+    assert_eq!(
+        broker
+            .decide(
+                write_request,
+                permission_context(InteractivityLevel::FullyInteractive)
+            )
+            .await,
+        Decision::DenyOnce
+    );
 }
 
 #[tokio::test]
@@ -198,8 +252,42 @@ async fn memory_provider_replace_rules_reload_updates_snapshot() {
     broker.reload().await.unwrap();
 
     let snapshot = broker.current_snapshot();
-    assert_eq!(snapshot.generation, 2);
+    assert!(snapshot.generation >= 2);
     assert_eq!(snapshot.rules[0].id, "session-allow");
+}
+
+#[tokio::test]
+async fn memory_provider_watch_updates_broker_snapshot_without_manual_reload() {
+    let provider = Arc::new(InMemoryRuleProvider::new(
+        "memory",
+        RuleSource::Session,
+        Vec::new(),
+    ));
+    let broker = RuleEngineBroker::builder()
+        .with_rule_provider(provider.clone())
+        .build()
+        .await
+        .unwrap();
+
+    provider.replace_rules(vec![rule(
+        "session-allow",
+        RuleSource::Session,
+        1,
+        RuleAction::Allow,
+    )]);
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if broker.current_snapshot().generation >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(broker.current_snapshot().rules[0].id, "session-allow");
 }
 
 #[tokio::test]

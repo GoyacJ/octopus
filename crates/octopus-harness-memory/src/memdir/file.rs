@@ -65,6 +65,9 @@ fn content_for_edit<'a>(
     content: &'a str,
     edit: Edit,
 ) -> Result<Cow<'a, str>, MemoryError> {
+    #[cfg(not(feature = "threat-scanner"))]
+    let _ = memory;
+
     if matches!(edit, Edit::Delete) {
         return Ok(Cow::Borrowed(content));
     }
