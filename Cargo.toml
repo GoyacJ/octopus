@@ -99,9 +99,11 @@ arc-swap = "1.9.1"
 async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["http1", "json", "macros", "tokio"] }
 bytes = "1.11.1"
+blake3 = "1.8.2"
 chrono = { version = "0.4.42", features = ["serde"] }
 dashmap = "6.1.0"
 futures = "0.3.32"
+fs2 = "0.4.3"
 globset = "0.4.18"
 http = "1.4.0"
 ignore = "0.4.25"

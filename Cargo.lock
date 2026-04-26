@@ -3241,9 +3241,15 @@ name = "octopus-harness-journal"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "blake3",
+ "bytes",
+ "chrono",
+ "fs2",
+ "futures",
  "octopus-harness-contracts",
  "rusqlite",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
 ]
