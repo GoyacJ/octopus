@@ -450,6 +450,8 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 
 ### M3-T18 · Hot Reload（reload_with）三档
 
+**状态**：已提交待评审。
+
 **SPEC 锚点**：
 - `harness-session.md` §5（Hot Reload）
 - ADR-003（CacheImpact）
@@ -467,6 +469,8 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 **Cargo feature**：`hot-reload-fork`
 
 **预期 diff**：< 400 行
+
+**下一步**：M3-T19 · SteeringQueue（ADR-0017）。
 
 ---
 

@@ -12,10 +12,14 @@ pub mod fork;
 pub mod lifecycle;
 pub mod paths;
 pub mod projection;
+#[cfg(feature = "hot-reload-fork")]
+pub mod reload;
 pub mod session;
 pub mod snapshot;
 
 pub use builder::*;
 pub use paths::*;
 pub use projection::*;
+#[cfg(feature = "hot-reload-fork")]
+pub use reload::*;
 pub use session::*;
