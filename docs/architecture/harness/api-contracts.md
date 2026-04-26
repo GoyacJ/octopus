@@ -235,17 +235,36 @@ pub trait BlobStore: Send + Sync + 'static {
 pub trait SandboxBackend: Send + Sync + 'static {
     fn backend_id(&self) -> &str;
     fn capabilities(&self) -> SandboxCapabilities;
-    
+
+    async fn before_execute(
+        &self,
+        spec: &ExecSpec,
+        ctx: &ExecContext,
+    ) -> Result<(), SandboxError>;
+
     async fn execute(
         &self,
         spec: ExecSpec,
         ctx: ExecContext,
     ) -> Result<ProcessHandle, SandboxError>;
-    
+
+    async fn after_execute(
+        &self,
+        outcome: &ExecOutcome,
+        ctx: &ExecContext,
+    ) -> Result<(), SandboxError>;
+
     async fn snapshot_session(
         &self,
         spec: &SnapshotSpec,
     ) -> Result<SessionSnapshotFile, SandboxError>;
+
+    async fn restore_session(
+        &self,
+        snapshot: &SessionSnapshotFile,
+    ) -> Result<(), SandboxError>;
+
+    async fn shutdown(&self) -> Result<(), SandboxError>;
 }
 ```
 
@@ -255,18 +274,37 @@ pub trait SandboxBackend: Send + Sync + 'static {
 ### 4.2 `ProcessHandle`
 
 ```rust
+pub struct ProcessHandle {
+    pub pid: Option<ProcessId>,
+    pub stdout: Option<BoxStream<Bytes>>,
+    pub stderr: Option<BoxStream<Bytes>>,
+    pub stdin: Option<BoxStdin>,
+    pub cwd_marker: Option<BoxStream<CwdMarkerLine>>,
+    pub activity: Arc<dyn ActivityHandle>,
+}
+```
+
+`ProcessHandle` 只承载进程句柄和流端点。等待、kill、心跳统一下沉到 `ActivityHandle`，让本地进程、远端命令、容器 exec、测试替身暴露同一活动状态面。
+
+### 4.3 `ActivityHandle`
+
+```rust
 #[async_trait]
-pub trait ProcessHandle: Send + Sync + 'static {
-    fn id(&self) -> ProcessId;
-    async fn stdout(&self) -> BoxStream<Bytes>;
-    async fn stderr(&self) -> BoxStream<Bytes>;
-    async fn wait(&self) -> Result<ExitStatus, SandboxError>;
-    async fn kill(&self, signal: Signal) -> Result<(), SandboxError>;
-    fn heartbeat(&self) -> ActivityHeartbeat;
+pub trait ActivityHandle: Send + Sync + 'static {
+    async fn wait(&self) -> Result<ExecOutcome, SandboxError>;
+    async fn kill(&self, signal: Signal, scope: KillScope) -> Result<(), SandboxError>;
+    fn touch(&self);
+    fn last_activity(&self) -> Instant;
 }
 ```
 
 - **对象安全**：是
+
+### 4.4 公开扩展 trait
+
+- `EventSink`：sandbox 发出 `SandboxExecution*`、heartbeat、timeout 等事件，不反向依赖 `harness-journal`。
+- `CodeSandbox`：代码运行时沙箱，独立于进程级 `SandboxBackend`。`harness-sandbox` crate 内由 `code-runtime` feature 门控；门面层 `programmatic-tool-calling` feature 组合启用 `harness-tool/programmatic-tool-calling` 与 `harness-sandbox/code-runtime`。
+- `UsageMeter`：代码运行时统计 instruction / wall-clock 用量。
 
 ## 5. 权限 · `harness-permission`
 
