@@ -3661,11 +3661,13 @@ name = "octopus-harness-context"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "chrono",
  "octopus-harness-contracts",
  "octopus-harness-journal",
  "octopus-harness-memory",
  "octopus-harness-model",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
 ]

@@ -6,3 +6,14 @@
 //! Status: M0 empty skeleton; concrete implementation lands in M3.
 
 #![forbid(unsafe_code)]
+
+pub mod buffer;
+pub mod engine;
+pub mod prompt;
+pub mod provider;
+
+pub use buffer::*;
+pub use engine::*;
+pub use harness_contracts::ContextStageId;
+pub use prompt::*;
+pub use provider::*;

@@ -1,0 +1,291 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use harness_context::{
+    CompactHint, ContextBuffer, ContextEngine, ContextOutcome, ContextProvider, ContextSessionView,
+};
+use harness_contracts::{
+    ContextError, ContextStageId, Message, MessageId, MessagePart, MessageRole, SessionId,
+    ToolDescriptor, TurnInput,
+};
+use serde_json::json;
+use tokio::sync::Mutex;
+
+#[tokio::test]
+async fn empty_engine_compact_returns_no_change() {
+    let engine = ContextEngine::builder().build().unwrap();
+    let mut buffer = ContextBuffer::default();
+
+    let outcome = engine
+        .compact(&mut buffer, CompactHint::default())
+        .await
+        .unwrap();
+
+    assert_eq!(outcome, ContextOutcome::NoChange);
+}
+
+#[tokio::test]
+async fn compact_runs_providers_in_fixed_stage_order() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let engine = ContextEngine::builder()
+        .with_provider(RecordingProvider::new(
+            "autocompact",
+            ContextStageId::Autocompact,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .with_provider(RecordingProvider::new(
+            "tool-result-budget",
+            ContextStageId::ToolResultBudget,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .with_provider(RecordingProvider::new(
+            "collapse",
+            ContextStageId::Collapse,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .with_provider(RecordingProvider::new(
+            "microcompact",
+            ContextStageId::Microcompact,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .with_provider(RecordingProvider::new(
+            "snip",
+            ContextStageId::Snip,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .build()
+        .unwrap();
+
+    let mut buffer = ContextBuffer::default();
+    engine
+        .compact(&mut buffer, CompactHint::default())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        calls.lock().await.as_slice(),
+        [
+            "tool-result-budget",
+            "snip",
+            "microcompact",
+            "collapse",
+            "autocompact"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn compact_sorts_same_stage_by_provider_id() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let engine = ContextEngine::builder()
+        .with_provider(RecordingProvider::new(
+            "beta",
+            ContextStageId::Snip,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .with_provider(RecordingProvider::new(
+            "alpha",
+            ContextStageId::Snip,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .build()
+        .unwrap();
+
+    let mut buffer = ContextBuffer::default();
+    engine
+        .compact(&mut buffer, CompactHint::default())
+        .await
+        .unwrap();
+
+    assert_eq!(calls.lock().await.as_slice(), ["alpha", "beta"]);
+}
+
+#[tokio::test]
+async fn compact_stops_on_provider_error() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let engine = ContextEngine::builder()
+        .with_provider(RecordingProvider::new(
+            "first",
+            ContextStageId::Snip,
+            Arc::clone(&calls),
+            ProviderAction::Error,
+        ))
+        .with_provider(RecordingProvider::new(
+            "second",
+            ContextStageId::Microcompact,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .build()
+        .unwrap();
+
+    let mut buffer = ContextBuffer::default();
+    let error = engine
+        .compact(&mut buffer, CompactHint::default())
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, ContextError::Message("first failed".to_owned()));
+    assert_eq!(calls.lock().await.as_slice(), ["first"]);
+}
+
+#[tokio::test]
+async fn compact_stops_when_provider_forks() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let child = SessionId::new();
+    let engine = ContextEngine::builder()
+        .with_provider(RecordingProvider::new(
+            "fork",
+            ContextStageId::Snip,
+            Arc::clone(&calls),
+            ProviderAction::Fork(child),
+        ))
+        .with_provider(RecordingProvider::new(
+            "after-fork",
+            ContextStageId::Microcompact,
+            Arc::clone(&calls),
+            ProviderAction::NoChange,
+        ))
+        .build()
+        .unwrap();
+
+    let mut buffer = ContextBuffer::default();
+    let outcome = engine
+        .compact(&mut buffer, CompactHint::default())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        outcome,
+        ContextOutcome::Forked {
+            new_session_id: child
+        }
+    );
+    assert_eq!(calls.lock().await.as_slice(), ["fork"]);
+}
+
+#[tokio::test]
+async fn assemble_uses_read_only_session_projection() {
+    let engine = ContextEngine::builder().build().unwrap();
+    let session = TestSession {
+        system: Some("system header".to_owned()),
+        history: vec![message(MessageRole::User, "hello")],
+        tools: Vec::new(),
+    };
+    let input = TurnInput {
+        message: message(MessageRole::User, "next"),
+        metadata: json!({}),
+    };
+
+    let prompt = engine.assemble(&session, &input).await.unwrap();
+
+    assert_eq!(prompt.system.as_deref(), Some("system header"));
+    assert_eq!(prompt.messages.len(), 2);
+    assert_eq!(prompt.messages[1], input.message);
+    assert!(prompt.tools_snapshot.is_empty());
+    assert!(prompt.cache_breakpoints.is_empty());
+    assert!(prompt.tokens_estimate > 0);
+    assert!(prompt.budget_utilization >= 0.0);
+}
+
+#[test]
+fn context_crate_keeps_dependency_boundary() {
+    let manifest =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();
+
+    assert!(!manifest.contains("octopus-harness-tool"));
+    assert!(!manifest.contains("octopus-harness-session"));
+    assert!(!manifest.contains("octopus-harness-engine"));
+    assert!(!manifest.contains("octopus-harness-hook"));
+    assert!(!manifest.contains("octopus-harness-observability"));
+}
+
+#[derive(Clone, Copy)]
+enum ProviderAction {
+    NoChange,
+    Error,
+    Fork(SessionId),
+}
+
+struct RecordingProvider {
+    id: String,
+    stage: ContextStageId,
+    calls: Arc<Mutex<Vec<String>>>,
+    action: ProviderAction,
+}
+
+impl RecordingProvider {
+    fn new(
+        id: &str,
+        stage: ContextStageId,
+        calls: Arc<Mutex<Vec<String>>>,
+        action: ProviderAction,
+    ) -> Self {
+        Self {
+            id: id.to_owned(),
+            stage,
+            calls,
+            action,
+        }
+    }
+}
+
+#[async_trait]
+impl ContextProvider for RecordingProvider {
+    fn provider_id(&self) -> &str {
+        &self.id
+    }
+
+    fn stage(&self) -> ContextStageId {
+        self.stage.clone()
+    }
+
+    async fn apply(
+        &self,
+        _ctx: &mut ContextBuffer,
+        _hint: &CompactHint,
+    ) -> Result<ContextOutcome, ContextError> {
+        self.calls.lock().await.push(self.id.clone());
+        match self.action {
+            ProviderAction::NoChange => Ok(ContextOutcome::NoChange),
+            ProviderAction::Error => Err(ContextError::Message(format!("{} failed", self.id))),
+            ProviderAction::Fork(new_session_id) => Ok(ContextOutcome::Forked { new_session_id }),
+        }
+    }
+}
+
+struct TestSession {
+    system: Option<String>,
+    history: Vec<Message>,
+    tools: Vec<ToolDescriptor>,
+}
+
+impl ContextSessionView for TestSession {
+    fn system(&self) -> Option<String> {
+        self.system.clone()
+    }
+
+    fn messages(&self) -> Vec<Message> {
+        self.history.clone()
+    }
+
+    fn tools_snapshot(&self) -> Vec<ToolDescriptor> {
+        self.tools.clone()
+    }
+}
+
+fn message(role: MessageRole, text: &str) -> Message {
+    Message {
+        id: MessageId::new(),
+        role,
+        parts: vec![MessagePart::Text(text.to_owned())],
+        created_at: chrono::Utc::now(),
+    }
+}

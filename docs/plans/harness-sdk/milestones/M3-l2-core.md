@@ -278,17 +278,21 @@
 
 ### M3-T11 · ContextEngine 5 阶段管线骨架
 
+**状态**：已提交待评审。
+
 **SPEC 锚点**：
 - `context-engineering.md` §3（5 阶段固定顺序：tool-result-budget → snip → microcompact → collapse → autocompact）
 - `harness-context.md` §2
 
 **预期产物**：
-- `src/engine.rs`：ContextEngine + ContextStageId 枚举
-- `src/provider.rs`：ContextProvider trait + ContextOutput
+- `src/engine.rs`：ContextEngine + 固定五阶段调度
+- `src/provider.rs`：ContextProvider trait + ContextOutcome
+- 复用 `harness_contracts::ContextStageId`，不在 context crate 重复定义 enum
 
 **关键不变量**：
 - 5 阶段顺序硬编码不可重排（ADR-003 / Prompt Cache）
 - 每阶段可插拔 ContextProvider 但 stage 顺序不变
+- `harness-context` 不依赖 `harness-session` / `harness-tool`；Session 与 Tool 快照通过只读投影传入
 
 **预期 diff**：< 350 行
 

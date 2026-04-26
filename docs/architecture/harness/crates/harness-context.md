@@ -38,17 +38,20 @@ impl ContextEngine {
 
     pub async fn assemble(
         &self,
-        session: &SessionState,
+        session: &dyn ContextSessionView,
         turn_input: &TurnInput,
     ) -> Result<AssembledPrompt, ContextError>;
 
     pub async fn after_turn(
         &self,
-        session: &SessionState,
+        session: &dyn ContextSessionView,
         results: &[ToolResultEnvelope],
     ) -> Result<ContextOutcome, ContextError>;
 }
 ```
+
+`ContextSessionView` 是 session 层传入 context 层的只读投影。`harness-context`
+不得依赖 `octopus-harness-session`，也不得回调 session 内部状态。
 
 ### 2.2 ContextProvider
 
@@ -125,6 +128,14 @@ pub struct AssembledPrompt {
     pub cache_breakpoints: Vec<CacheBreakpoint>,
     pub tokens_estimate: u64,
     pub budget_utilization: f32,
+}
+```
+
+```rust
+pub trait ContextSessionView: Send + Sync {
+    fn system(&self) -> Option<String>;
+    fn messages(&self) -> Vec<Message>;
+    fn tools_snapshot(&self) -> Vec<ToolDescriptor>;
 }
 ```
 
@@ -207,8 +218,9 @@ pub struct ContextBuffer {
 pub struct FrozenContext {
     /// 已合成的 system header 字面值（产品身份 / 政策 / skills 入口名单）。
     pub system_header: Arc<str>,
-    /// 工具池快照（ADR-003 §2.4）；分区 1/2/3 详见 ADR-009。
-    pub tools_snapshot: Arc<ToolRegistrySnapshot>,
+    /// 工具池快照的 context 侧投影（ADR-003 §2.4）；分区 1/2/3 详见 ADR-009。
+    /// 由 session/tool 层从 `ToolRegistrySnapshot` 映射而来，避免 context 依赖 tool crate。
+    pub tools_snapshot: Arc<ContextToolSnapshot>,
     /// Memdir 装配快照；运行期不重读（harness-memory.md §3.5）。
     pub memory_snapshot: Arc<MemdirSnapshot>,
     /// 已加载的 Bootstrap 文件展开内容（含截断标记）。
