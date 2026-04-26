@@ -124,6 +124,12 @@ impl ToolPool {
         &self.runtime_appended
     }
 
+    pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
+        self.iter()
+            .find(|tool| tool.descriptor().name == name)
+            .map(Arc::clone)
+    }
+
     pub fn append_runtime_tool(&mut self, tool: Arc<dyn Tool>) {
         let descriptor = tool.descriptor().clone();
         self.descriptors

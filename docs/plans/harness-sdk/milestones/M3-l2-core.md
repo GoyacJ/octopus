@@ -97,8 +97,14 @@
 
 ### M3-T03 · Orchestrator（并发分桶 + 串行执行）
 
+**状态**：本地实现待评审。
+
 **SPEC 锚点**：
-- `harness-tool.md` §5（Orchestrator）+ §2.7（bool 二档分桶）
+- `docs/architecture/harness/crates/harness-tool.md` §2.7（ToolOrchestrator / bool 二档分桶）
+
+**范围冻结**：
+- 本卡实现核心流水线：分桶调度、PermissionBroker、ToolStream 收集、hard timeout。
+- Hook 真接入留到 M3-T06+；ResultBudget offload E2E 留到 M3-T05。
 
 **预期产物**：
 - `src/orchestrator.rs`：bool 分桶 + 并行/串行执行
@@ -108,6 +114,7 @@
 - `is_concurrency_safe = true` → 并行执行
 - `is_concurrency_safe = false` → 串行（FIFO）
 - 每个 tool 必经 PermissionBroker 检查（除非已声明 NoApproval）
+- 返回结果顺序等于输入 ToolCall 顺序
 
 **预期 diff**：< 350 行
 
