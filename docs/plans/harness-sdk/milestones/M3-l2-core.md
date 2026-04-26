@@ -560,7 +560,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 | 字段 | 值 |
 |---|---|
-| **状态** | 待派发 |
+| **状态** | 已提交待评审 |
 | **依赖** | M3-T10（Hook contract test 完成） |
 | **预期 diff** | < 300 行 |
 | **预期工时** | AI 2h + 人类评审 30min |
@@ -582,6 +582,11 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
   - HTTP 5xx / SSRF guard / mTLS 失败
   - replay 同一段事件 → hook 调用次数与首次相同（contract 验证幂等）
 - `docs/architecture/harness/audit/M3-spike-hook-replay.md`
+
+**提交结果**：
+- 8 个失败模式 / replay 场景已由 `spike_replay_idempotent.rs` 覆盖
+- 当前实现无需生产代码修复
+- 评审通过后进入 M3-T11
 
 **通过判据**：
 - ✅ 8 个失败场景 / failure_mode 表全部按期望行为
