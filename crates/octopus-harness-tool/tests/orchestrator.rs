@@ -16,9 +16,9 @@ use harness_permission::{
     PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest, RuleSnapshot,
 };
 use harness_tool::{
-    default_result_budget, InterruptToken, OrchestratorContext, Tool, ToolCall, ToolContext,
-    ToolEvent, ToolOrchestrator, ToolPool, ToolPoolFilter, ToolPoolModelProfile, ToolRegistry,
-    ToolSearchMode, ValidationError,
+    default_result_budget, BuiltinToolset, InterruptToken, OrchestratorContext, Tool, ToolCall,
+    ToolContext, ToolEvent, ToolOrchestrator, ToolPool, ToolPoolFilter, ToolPoolModelProfile,
+    ToolRegistry, ToolSearchMode, ValidationError,
 };
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -28,6 +28,7 @@ async fn safe_tools_run_in_parallel_and_preserve_input_order() {
     let active = Arc::new(AtomicUsize::new(0));
     let max_active = Arc::new(AtomicUsize::new(0));
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "b",
             true,
@@ -63,6 +64,7 @@ async fn unsafe_tools_run_serially() {
     let active = Arc::new(AtomicUsize::new(0));
     let max_active = Arc::new(AtomicUsize::new(0));
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "a",
             false,
@@ -109,6 +111,7 @@ async fn unsafe_tools_run_serially() {
 async fn unsafe_tool_is_a_barrier_between_safe_batches() {
     let log = Arc::new(Mutex::new(Vec::new()));
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "safe_a",
             true,
@@ -165,6 +168,7 @@ async fn validation_failure_skips_permission_and_execute() {
     let executed = Arc::new(AtomicBool::new(false));
     let broker = RecordingBroker::new(vec![Decision::AllowOnce]);
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "bad",
             true,
@@ -192,6 +196,7 @@ async fn allowed_permission_check_still_calls_broker_and_deny_blocks_execute() {
     let executed = Arc::new(AtomicBool::new(false));
     let broker = RecordingBroker::new(vec![Decision::DenyOnce]);
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "guarded",
             true,
@@ -218,6 +223,7 @@ async fn allowed_permission_check_still_calls_broker_and_deny_blocks_execute() {
 async fn permission_check_denied_short_circuits_before_broker() {
     let broker = RecordingBroker::new(vec![Decision::AllowOnce]);
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool(
             "denied",
             true,
@@ -243,6 +249,7 @@ async fn permission_check_denied_short_circuits_before_broker() {
 async fn dangerous_command_check_is_mapped_to_permission_request() {
     let broker = RecordingBroker::new(vec![Decision::AllowOnce]);
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool("danger", true, Behavior::Dangerous)))
         .build()
         .unwrap();
@@ -266,6 +273,7 @@ async fn dangerous_command_check_is_mapped_to_permission_request() {
 #[tokio::test]
 async fn progress_final_error_unknown_interrupted_and_timeout_paths_are_reported() {
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(test_tool("progress", true, Behavior::Progress)))
         .with_tool(Box::new(test_tool("error", true, Behavior::StreamError)))
         .with_tool(Box::new(test_tool("slow", true, Behavior::Slow)))

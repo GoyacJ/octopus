@@ -35,7 +35,17 @@ impl ToolRegistryBuilder {
         let registry = ToolRegistry::empty();
 
         match self.builtin_toolset {
-            BuiltinToolset::Default | BuiltinToolset::Empty => {}
+            BuiltinToolset::Default => {
+                #[cfg(feature = "builtin-toolset")]
+                {
+                    registry.register(Box::<crate::builtin::FileReadTool>::default())?;
+                    registry.register(Box::<crate::builtin::FileWriteTool>::default())?;
+                    registry.register(Box::<crate::builtin::ListDirTool>::default())?;
+                    registry.register(Box::<crate::builtin::GrepTool>::default())?;
+                    registry.register(Box::<crate::builtin::ReadBlobTool>::default())?;
+                }
+            }
+            BuiltinToolset::Empty => {}
             BuiltinToolset::Custom(tools) => {
                 for tool in tools {
                     registry.register(tool)?;

@@ -3959,6 +3959,7 @@ name = "octopus-harness-tool"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "bytes",
  "chrono",
  "futures",
  "octopus-harness-contracts",
@@ -3967,6 +3968,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
 ]

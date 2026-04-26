@@ -8,6 +8,8 @@
 #![forbid(unsafe_code)]
 
 pub mod builder;
+#[cfg(feature = "builtin-toolset")]
+pub mod builtin;
 pub mod context;
 pub mod error;
 pub mod orchestrator;
@@ -17,6 +19,8 @@ pub mod result_budget;
 pub mod tool;
 
 pub use builder::*;
+#[cfg(feature = "builtin-toolset")]
+pub use builtin::*;
 pub use context::*;
 pub use error::*;
 pub use orchestrator::*;

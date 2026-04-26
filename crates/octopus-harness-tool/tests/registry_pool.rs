@@ -13,8 +13,9 @@ use harness_contracts::{
 };
 use harness_permission::PermissionCheck;
 use harness_tool::{
-    default_result_budget, RegistrationError, SchemaResolverContext, Tool, ToolContext, ToolEvent,
-    ToolPool, ToolPoolFilter, ToolPoolModelProfile, ToolRegistry, ToolSearchMode, ValidationError,
+    default_result_budget, BuiltinToolset, RegistrationError, SchemaResolverContext, Tool,
+    ToolContext, ToolEvent, ToolPool, ToolPoolFilter, ToolPoolModelProfile, ToolRegistry,
+    ToolSearchMode, ValidationError,
 };
 use serde_json::{json, Value};
 
@@ -61,7 +62,10 @@ impl Tool for TestTool {
 
 #[test]
 fn registry_registers_tools_and_snapshots_are_immutable() {
-    let registry = ToolRegistry::builder().build().unwrap();
+    let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
+        .build()
+        .unwrap();
     registry
         .register(Box::new(tool(
             "alpha",
@@ -87,7 +91,10 @@ fn registry_registers_tools_and_snapshots_are_immutable() {
 
 #[test]
 fn registry_records_shadowing_and_applies_builtin_and_trust_precedence() {
-    let registry = ToolRegistry::builder().build().unwrap();
+    let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
+        .build()
+        .unwrap();
     registry
         .register(Box::new(tool(
             "read",
@@ -165,6 +172,7 @@ fn registry_records_shadowing_and_applies_builtin_and_trust_precedence() {
 #[tokio::test]
 async fn pool_assembles_stable_partitions_filters_and_runtime_append_order() {
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(tool_with(
             "always",
             DeferPolicy::AlwaysLoad,
@@ -233,6 +241,7 @@ async fn pool_assembles_stable_partitions_filters_and_runtime_append_order() {
 #[tokio::test]
 async fn pool_applies_allowlists_origin_filters_and_provider_denylists() {
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(tool_with_origin(
             "alpha",
             DeferPolicy::AlwaysLoad,
@@ -326,6 +335,7 @@ async fn pool_applies_allowlists_origin_filters_and_provider_denylists() {
 async fn pool_resolves_dynamic_schema_once_during_assembly() {
     let count = Arc::new(AtomicUsize::new(0));
     let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
         .with_tool(Box::new(dynamic_tool(Arc::clone(&count))))
         .build()
         .unwrap();
@@ -349,7 +359,10 @@ async fn pool_resolves_dynamic_schema_once_during_assembly() {
 
 #[test]
 fn registry_rejects_user_controlled_tools_requesting_admin_only_capability() {
-    let registry = ToolRegistry::builder().build().unwrap();
+    let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
+        .build()
+        .unwrap();
     let error = registry
         .register(Box::new(tool_requiring_subagent_runner()))
         .unwrap_err();
