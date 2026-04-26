@@ -51,13 +51,26 @@
     "HookEventKind": {
       "type": "string",
       "enum": [
+        "user_prompt_submit",
         "pre_tool_use",
         "post_tool_use",
-        "transform_tool_result",
-        "pre_model",
-        "post_model",
+        "post_tool_use_failure",
+        "permission_request",
         "session_start",
-        "session_end"
+        "setup",
+        "session_end",
+        "subagent_start",
+        "subagent_stop",
+        "notification",
+        "pre_llm_call",
+        "post_llm_call",
+        "pre_api_request",
+        "post_api_request",
+        "transform_tool_result",
+        "transform_terminal_output",
+        "elicitation",
+        "pre_tool_search",
+        "post_tool_search_materialize"
       ]
     },
     "HookFailureCauseKind": {

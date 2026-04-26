@@ -46,6 +46,12 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     insert_schema!(schemas, "tool_descriptor", ToolDescriptor);
     insert_schema!(schemas, "deny_reason", DenyReason);
     insert_schema!(schemas, "tool_error_payload", ToolErrorPayload);
+    insert_schema!(schemas, "hook_event_kind", HookEventKind);
+    insert_schema!(
+        schemas,
+        "hook_outcome_discriminant",
+        HookOutcomeDiscriminant
+    );
     insert_schema!(schemas, "pricing_snapshot_id", PricingSnapshotId);
     insert_schema!(schemas, "model_ref", ModelRef);
     insert_schema!(schemas, "context_stage_id", ContextStageId);

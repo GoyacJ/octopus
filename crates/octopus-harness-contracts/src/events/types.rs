@@ -313,13 +313,26 @@ pub enum ContainerLifecycleReason {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HookEventKind {
+    UserPromptSubmit,
     PreToolUse,
     PostToolUse,
-    TransformToolResult,
-    PreModel,
-    PostModel,
+    PostToolUseFailure,
+    PermissionRequest,
     SessionStart,
+    Setup,
     SessionEnd,
+    SubagentStart,
+    SubagentStop,
+    Notification,
+    PreLlmCall,
+    PostLlmCall,
+    PreApiRequest,
+    PostApiRequest,
+    TransformToolResult,
+    TransformTerminalOutput,
+    Elicitation,
+    PreToolSearch,
+    PostToolSearchMaterialize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -358,10 +371,11 @@ pub enum HookFailureCauseKind {
 pub enum HookOutcomeDiscriminant {
     Continue,
     Block,
+    PreToolUse,
     RewriteInput,
     OverridePermission,
     AddContext,
-    TransformResult,
+    Transform,
 }
 
 #[non_exhaustive]

@@ -3717,8 +3717,11 @@ name = "octopus-harness-hook"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "bytes",
+ "chrono",
  "octopus-harness-contracts",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
 ]

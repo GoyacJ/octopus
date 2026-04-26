@@ -21,6 +21,9 @@ http = []
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

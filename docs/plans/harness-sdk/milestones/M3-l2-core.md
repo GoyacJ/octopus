@@ -169,7 +169,7 @@
 
 ### M3-T05 · Tool Contract Test + ResultBudget E2E
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`6141d9f2`）。
 
 **预期产物**：
 - `tests/contract.rs`
@@ -182,6 +182,8 @@
 ## 3. 步骤 2 · `octopus-harness-hook`
 
 ### M3-T06 · HookHandler trait + 20 类事件 + HookContext
+
+**状态**：本地实现待评审。
 
 **SPEC 锚点**：
 - `harness-hook.md` §2（HookHandler / HookEvent / HookContext / HookSessionView）
