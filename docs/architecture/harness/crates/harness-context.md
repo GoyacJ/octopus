@@ -433,7 +433,7 @@ pub mod providers {
 ```
 
 M3-T12 默认实现已覆盖 `ToolResultBudgetProvider` / `SnipProvider` /
-`CollapseProvider`。`MicrocompactProvider` / `AutocompactProvider` 留给 M3-T13。
+`CollapseProvider`。M3-T13 覆盖 `MicrocompactProvider` / `AutocompactProvider`。
 
 ## 4. Bootstrap 文件注入
 
@@ -492,9 +492,9 @@ impl ContextSanitizer {
 
 ```toml
 [features]
-default = ["anthropic-cache", "compact-aux-llm"]
+default = []
 anthropic-cache = []
-compact-aux-llm = ["dep:octopus-harness-model"]
+compact-aux-llm = []
 ```
 
 ## 7. 错误类型

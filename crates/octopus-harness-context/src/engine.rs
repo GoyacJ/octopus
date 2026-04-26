@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use harness_contracts::{ContextError, ContextStageId, MessagePart, ToolResultEnvelope, TurnInput};
+use harness_model::AuxModelProvider;
 
 use crate::{
-    AssembledPrompt, CompactHint, ContextBuffer, ContextOutcome, ContextProvider,
-    ContextSessionView, FrozenContext, PromptCachePolicy, TokenBudget,
+    AssembledPrompt, AutocompactProvider, CompactHint, ContextBuffer, ContextOutcome,
+    ContextProvider, ContextSessionView, FrozenContext, MicrocompactProvider, PromptCachePolicy,
+    TokenBudget,
 };
 
 const COMPACT_STAGE_ORDER: [ContextStageId; 5] = [
@@ -37,6 +39,7 @@ impl ContextEngine {
         hint: CompactHint,
     ) -> Result<ContextOutcome, ContextError> {
         let mut bytes_saved = 0_u64;
+        let mut modified = false;
 
         for stage in &COMPACT_STAGE_ORDER {
             for provider in self
@@ -51,6 +54,7 @@ impl ContextEngine {
                 match outcome {
                     ContextOutcome::NoChange => {}
                     ContextOutcome::Modified { bytes_saved: saved } => {
+                        modified = true;
                         bytes_saved = bytes_saved.saturating_add(saved);
                     }
                     forked @ ContextOutcome::Forked { .. } => return Ok(forked),
@@ -58,10 +62,10 @@ impl ContextEngine {
             }
         }
 
-        if bytes_saved == 0 {
-            Ok(ContextOutcome::NoChange)
-        } else {
+        if modified {
             Ok(ContextOutcome::Modified { bytes_saved })
+        } else {
+            Ok(ContextOutcome::NoChange)
         }
     }
 
@@ -117,6 +121,7 @@ impl ContextEngine {
 #[derive(Default)]
 pub struct ContextEngineBuilder {
     providers: Vec<Arc<dyn ContextProvider>>,
+    aux_provider: Option<Arc<dyn AuxModelProvider>>,
     budget: TokenBudget,
     cache_policy: PromptCachePolicy,
 }
@@ -140,7 +145,20 @@ impl ContextEngineBuilder {
         self
     }
 
+    #[must_use]
+    pub fn with_aux_provider(mut self, aux_provider: Arc<dyn AuxModelProvider>) -> Self {
+        self.aux_provider = Some(aux_provider);
+        self
+    }
+
     pub fn build(mut self) -> Result<ContextEngine, ContextError> {
+        if let Some(aux_provider) = &self.aux_provider {
+            self.providers
+                .push(Arc::new(MicrocompactProvider::new(aux_provider.clone())));
+            self.providers.push(Arc::new(AutocompactProvider::new(Some(
+                aux_provider.clone(),
+            ))));
+        }
         self.providers
             .sort_by(|left, right| compare_providers(left.as_ref(), right.as_ref()));
 
