@@ -529,6 +529,12 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 
 未全绿 → 不得开始 M4 / M5。
 
+**提交结果**：
+- `e2e_minimal.rs` 已实现临时 mini-engine 闭环验证
+- `docs/plans/harness-sdk/audit/M3-mvp-gate.md` 已记录 T20 gate 结果与剩余 Gate
+
+**下一步**：M3-S02 · Steering Queue 长 turn 语义 Spike。
+
 ---
 
 ### M3-T21 · 依赖预注入 chore（M4 / M5 共用）
@@ -695,7 +701,7 @@ cargo test -p octopus-cli run_once_smoke
 | 字段 | 值 |
 |---|---|
 | **状态** | 待派发 |
-| **依赖** | M3-T19（SteeringQueue 完成） |
+| **依赖** | M3-T20（临时 driver 完成） |
 | **预期 diff** | < 250 行 |
 | **预期工时** | AI 1.5h + 人类评审 30min |
 
