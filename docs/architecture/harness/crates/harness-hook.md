@@ -661,7 +661,6 @@ pub struct HookHttpSpec {
     pub url: Url,
     pub auth: HookHttpAuth,
     pub timeout: Duration,
-    pub retry: RetryPolicy,
     pub security: HookHttpSecurityPolicy,
     pub protocol_version: HookProtocolVersion,
     pub trust: TrustLevel,
@@ -669,21 +668,19 @@ pub struct HookHttpSpec {
 
 pub enum HookHttpAuth {
     None,
-    Bearer(SecretString),
-    Hmac { key: SecretString },
-    Custom(Arc<dyn HookHttpAuthProvider>),
+    BearerToken(String),
+    StaticHeader { name: String, value: String },
 }
 
 pub struct HookHttpSecurityPolicy {
     /// 仅允许命中 allowlist 的 host 才发起请求；UserControlled plugin **必填**。
-    /// 空 allowlist 视为 fail-closed（任何 URL 都会被拒）。
+    /// AdminTrusted manifest 可使用空 allowlist 表示不启用 host allowlist。
     pub allowlist: HostAllowlist,
-    /// SSRF 兜底：阻止 DNS 解析到链路本地 / 私网 / loopback 地址
-    /// （除非 `allow_private` 在 admin manifest 里显式开启）。
+    /// SSRF 兜底：阻止链路本地 / 私网 / loopback / metadata 地址。
     pub ssrf_guard: SsrfGuardPolicy,
     /// HTTP redirect 最多跟随次数；默认 0（禁止 redirect，防止跨域逃逸）。
-    pub max_redirects: u8,
-    /// 单次响应体最大字节；超出 dispatcher 截断并按 `Inconsistent::SchemaInvalid` 失败。
+    pub max_redirects: usize,
+    /// 单次响应体最大字节；超出后按 `TransportFailureKind::BodyTooLarge` 失败。
     pub max_body_bytes: u64,
     /// 是否允许 hook 调用方自带 mTLS client cert（admin only）。
     pub mtls: Option<MtlsConfig>,
@@ -693,8 +690,7 @@ pub struct SsrfGuardPolicy {
     pub deny_loopback: bool,        // 默认 true
     pub deny_link_local: bool,      // 默认 true
     pub deny_private: bool,         // 默认 true（10.x / 172.16.x / 192.168.x / fc00::/7）
-    pub deny_metadata_endpoints: bool, // 默认 true（169.254.169.254 / metadata.google.internal 等）
-    pub allow_private: Vec<IpNet>,  // 例外白名单（admin only）
+    pub deny_metadata: bool,        // 默认 true（169.254.169.254 等 metadata endpoint）
 }
 ```
 
@@ -703,8 +699,8 @@ POST JSON 到 `url`，响应同 Exec 格式。
 **约束**：
 
 - `Plugin{UserControlled}` 安装的 HTTP hook 必须提供非空 `allowlist`，且 `ssrf_guard` 字段全部 `true`；admin manifest 可放宽（详见 ADR-006 §3）。
-- DNS 解析在每次请求时重新进行（防 DNS rebinding）；解析后立即按 `ssrf_guard` 校验目标 IP。
-- `auth = Bearer / Hmac` 的密钥**不**进 Journal，仅 `redacted_view` 中可见 hash。
+- URL host 在每次请求前按 `allowlist` 和 `ssrf_guard` 校验；DNS rebinding 的解析后校验由 M3-T10 contract test 收束。
+- `auth = BearerToken / StaticHeader` 的密钥**不**进 Journal，仅 `redacted_view` 中可见 hash。
 
 ### 3.4 协议版本化
 
@@ -734,7 +730,7 @@ pub enum HookProtocolVersion {
 [features]
 default = []
 in-process = []
-exec = ["dep:tokio"]
+exec = ["tokio/io-util", "tokio/process"]
 http = ["dep:reqwest"]
 ```
 

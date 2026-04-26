@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TransportFailureKind",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "ssrf_blocked",
+        "allowlist_miss",
+        "protocol_version_mismatch",
+        "body_too_large",
+        "network_error"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "non_zero_exit"
+      ],
+      "properties": {
+        "non_zero_exit": {
+          "type": "object",
+          "required": [
+            "code"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

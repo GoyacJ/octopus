@@ -3722,6 +3722,7 @@ dependencies = [
  "futures",
  "octopus-harness-contracts",
  "parking_lot",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

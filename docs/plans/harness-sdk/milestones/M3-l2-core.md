@@ -243,7 +243,9 @@
 
 ### M3-T09 · Hook Transport（Exec + HTTP）
 
-**SPEC 锚点**：`harness-hook.md` §4.2 / §4.3（Exec + HTTP transport，含 SSRF guard / mTLS）
+**状态**：已提交待评审。
+
+**SPEC 锚点**：`harness-hook.md` §3.2 / §3.3（Exec + HTTP transport，含 SSRF guard / mTLS）
 
 **预期产物**：
 - `src/transport/exec.rs`：HookExecSpec + working_dir / resource_limits / signal_policy

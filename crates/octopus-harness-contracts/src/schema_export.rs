@@ -47,6 +47,7 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     insert_schema!(schemas, "deny_reason", DenyReason);
     insert_schema!(schemas, "tool_error_payload", ToolErrorPayload);
     insert_schema!(schemas, "hook_event_kind", HookEventKind);
+    insert_schema!(schemas, "transport_failure_kind", TransportFailureKind);
     insert_schema!(
         schemas,
         "hook_outcome_discriminant",

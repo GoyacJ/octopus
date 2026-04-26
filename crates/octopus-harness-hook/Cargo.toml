@@ -15,8 +15,8 @@ workspace = true
 [features]
 default = []
 in-process = []
-exec = []
-http = []
+exec = ["tokio/io-util", "tokio/process"]
+http = ["dep:reqwest"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
@@ -29,3 +29,4 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 parking_lot = "0.12"
+reqwest = { workspace = true, optional = true }

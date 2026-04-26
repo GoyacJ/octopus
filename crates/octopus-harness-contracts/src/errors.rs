@@ -5,7 +5,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{BudgetKind, BudgetMetric, TenantId, ToolCapability};
+use crate::{
+    BudgetKind, BudgetMetric, HookOutcomeDiscriminant, InconsistentReason, TenantId, ToolCapability,
+};
 
 pub type Result<T, E = HarnessError> = std::result::Result<T, E>;
 
@@ -64,8 +66,54 @@ define_error_family! {
     EngineError,
     PluginError,
     McpError,
-    HookError,
     ContextError,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TransportFailureKind {
+    SsrfBlocked,
+    AllowlistMiss,
+    ProtocolVersionMismatch,
+    BodyTooLarge,
+    NetworkError,
+    NonZeroExit { code: i32 },
+}
+
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema, thiserror::Error,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum HookError {
+    #[error("{0}")]
+    Message(String),
+    #[error("handler timeout: {handler_id}")]
+    Timeout { handler_id: String },
+    #[error("handler error: {handler_id}: {cause}")]
+    HandlerError { handler_id: String, cause: String },
+    #[error("handler panicked: {handler_id}")]
+    Panicked { handler_id: String, snippet: String },
+    #[error("outcome inconsistent: {handler_id}: {reason:?}")]
+    Inconsistent {
+        handler_id: String,
+        reason: InconsistentReason,
+    },
+    #[error("outcome unsupported: {handler_id}: {kind:?}")]
+    Unsupported {
+        handler_id: String,
+        kind: HookOutcomeDiscriminant,
+    },
+    #[error("protocol parse: {0}")]
+    ProtocolParse(String),
+    #[error("transport: {kind:?}: {detail}")]
+    Transport {
+        kind: TransportFailureKind,
+        detail: String,
+    },
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
 }
 
 #[non_exhaustive]

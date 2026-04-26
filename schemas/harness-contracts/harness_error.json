@@ -333,6 +333,245 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "timeout"
+          ],
+          "properties": {
+            "timeout": {
+              "type": "object",
+              "required": [
+                "handler_id"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "handler_error"
+          ],
+          "properties": {
+            "handler_error": {
+              "type": "object",
+              "required": [
+                "cause",
+                "handler_id"
+              ],
+              "properties": {
+                "cause": {
+                  "type": "string"
+                },
+                "handler_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "panicked"
+          ],
+          "properties": {
+            "panicked": {
+              "type": "object",
+              "required": [
+                "handler_id",
+                "snippet"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "inconsistent"
+          ],
+          "properties": {
+            "inconsistent": {
+              "type": "object",
+              "required": [
+                "handler_id",
+                "reason"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "$ref": "#/definitions/InconsistentReason"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "unsupported"
+          ],
+          "properties": {
+            "unsupported": {
+              "type": "object",
+              "required": [
+                "handler_id",
+                "kind"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/definitions/HookOutcomeDiscriminant"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "protocol_parse"
+          ],
+          "properties": {
+            "protocol_parse": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "transport"
+          ],
+          "properties": {
+            "transport": {
+              "type": "object",
+              "required": [
+                "detail",
+                "kind"
+              ],
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/definitions/TransportFailureKind"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "unauthorized"
+          ],
+          "properties": {
+            "unauthorized": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "HookOutcomeDiscriminant": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "block",
+        "pre_tool_use",
+        "rewrite_input",
+        "override_permission",
+        "add_context",
+        "transform"
+      ]
+    },
+    "InconsistentReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "pre_tool_use_block_exclusive",
+            "prompt_cache_violation"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "schema_invalid"
+          ],
+          "properties": {
+            "schema_invalid": {
+              "type": "object",
+              "required": [
+                "message",
+                "schema_id"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "schema_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "context_patch_too_large"
+          ],
+          "properties": {
+            "context_patch_too_large": {
+              "type": "object",
+              "required": [
+                "actual_bytes",
+                "limit_bytes"
+              ],
+              "properties": {
+                "actual_bytes": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                },
+                "limit_bytes": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -748,6 +987,41 @@
           "properties": {
             "internal": {
               "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TransportFailureKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ssrf_blocked",
+            "allowlist_miss",
+            "protocol_version_mismatch",
+            "body_too_large",
+            "network_error"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "non_zero_exit"
+          ],
+          "properties": {
+            "non_zero_exit": {
+              "type": "object",
+              "required": [
+                "code"
+              ],
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
             }
           },
           "additionalProperties": false

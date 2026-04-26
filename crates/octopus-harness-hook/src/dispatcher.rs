@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use futures::FutureExt;
 use harness_contracts::{
     Decision, HookError, HookEventKind, HookFailureCauseKind, HookFailureMode,
-    HookOutcomeDiscriminant, InconsistentReason,
+    HookOutcomeDiscriminant, InconsistentReason, TransportFailureKind,
 };
 
 use crate::{
@@ -53,12 +53,12 @@ impl HookDispatcher {
             let outcome = match outcome {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(error)) => {
-                    let failure =
-                        failure_record(handler.handler_id(), handler.failure_mode(), duration, {
-                            HookFailureCause::Panicked {
-                                snippet: error.to_string(),
-                            }
-                        });
+                    let failure = failure_record(
+                        handler.handler_id(),
+                        handler.failure_mode(),
+                        duration,
+                        failure_cause_from_error(error),
+                    );
                     if apply_failure(&mut result, failure) == FailureAction::Block {
                         return Ok(result);
                     }
@@ -134,12 +134,12 @@ impl HookDispatcher {
             let outcome = match outcome {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(error)) => {
-                    let failure =
-                        failure_record(handler.handler_id(), handler.failure_mode(), duration, {
-                            HookFailureCause::Panicked {
-                                snippet: error.to_string(),
-                            }
-                        });
+                    let failure = failure_record(
+                        handler.handler_id(),
+                        handler.failure_mode(),
+                        duration,
+                        failure_cause_from_error(error),
+                    );
                     apply_pre_tool_use_failure(&mut result, failure);
                     return result;
                 }
@@ -262,12 +262,23 @@ pub struct HookFailureRecord {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HookFailureCause {
-    Unsupported { kind: HookOutcomeDiscriminant },
-    Inconsistent { reason: InconsistentReason },
-    Panicked { snippet: String },
+    Unsupported {
+        kind: HookOutcomeDiscriminant,
+    },
+    Inconsistent {
+        reason: InconsistentReason,
+    },
+    Panicked {
+        snippet: String,
+    },
     Timeout,
-    Transport { detail: String },
-    Unauthorized { capability: String },
+    Transport {
+        kind: TransportFailureKind,
+        detail: String,
+    },
+    Unauthorized {
+        capability: String,
+    },
 }
 
 #[derive(Default)]
@@ -478,4 +489,25 @@ fn panic_snippet(panic: Box<dyn std::any::Any + Send>) -> String {
 
 fn is_deny(decision: &Decision) -> bool {
     matches!(decision, Decision::DenyOnce | Decision::DenyPermanent)
+}
+
+fn failure_cause_from_error(error: HookError) -> HookFailureCause {
+    match error {
+        HookError::Timeout { .. } => HookFailureCause::Timeout,
+        HookError::Inconsistent { reason, .. } => HookFailureCause::Inconsistent { reason },
+        HookError::Unsupported { kind, .. } => HookFailureCause::Unsupported { kind },
+        HookError::Transport { kind, detail } => HookFailureCause::Transport { kind, detail },
+        HookError::Unauthorized(capability) => HookFailureCause::Unauthorized { capability },
+        HookError::ProtocolParse(detail) => HookFailureCause::Transport {
+            kind: TransportFailureKind::ProtocolVersionMismatch,
+            detail,
+        },
+        HookError::Panicked { snippet, .. } => HookFailureCause::Panicked { snippet },
+        HookError::Message(message) | HookError::HandlerError { cause: message, .. } => {
+            HookFailureCause::Panicked { snippet: message }
+        }
+        _ => HookFailureCause::Panicked {
+            snippet: "unknown hook error".to_owned(),
+        },
+    }
 }
