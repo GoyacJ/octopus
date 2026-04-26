@@ -4,19 +4,41 @@
   "type": "object",
   "required": [
     "at",
-    "reason",
-    "tool_use_id"
+    "paused_for_ms",
+    "queued_bytes",
+    "run_id",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "reason": {
-      "type": "string"
+    "paused_for_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "queued_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
     },
     "tool_use_id": {
-      "$ref": "#/definitions/TypedUlid"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {

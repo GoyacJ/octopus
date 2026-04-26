@@ -4,23 +4,99 @@
   "type": "object",
   "required": [
     "at",
+    "outcome",
     "request_id",
-    "server_id"
+    "server_id",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "outcome": {
+      "$ref": "#/definitions/ElicitationOutcome"
+    },
     "request_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
     },
-    "value": true
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    }
   },
   "definitions": {
+    "ElicitationOutcome": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_declined",
+            "timeout",
+            "no_handler_registered"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provided"
+          ],
+          "properties": {
+            "provided": {
+              "type": "object",
+              "required": [
+                "value_hash"
+              ],
+              "properties": {
+                "value_hash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  },
+                  "maxItems": 32,
+                  "minItems": 32
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "invalid"
+          ],
+          "properties": {
+            "invalid": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "McpServerId": {
       "type": "string"
     },

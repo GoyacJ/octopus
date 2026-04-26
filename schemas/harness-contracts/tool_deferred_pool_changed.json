@@ -3,31 +3,133 @@
   "title": "ToolDeferredPoolChangedEvent",
   "type": "object",
   "required": [
+    "added",
     "at",
-    "deferred",
-    "loaded",
-    "tenant_id"
+    "deferred_total",
+    "removed",
+    "session_id",
+    "source"
   ],
   "properties": {
+    "added": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DeferredToolHint"
+      }
+    },
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "deferred": {
+    "deferred_total": {
       "type": "integer",
-      "format": "uint",
+      "format": "uint32",
       "minimum": 0.0
     },
-    "loaded": {
-      "type": "integer",
-      "format": "uint",
-      "minimum": 0.0
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
-    "tenant_id": {
+    "session_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "source": {
+      "$ref": "#/definitions/ToolPoolChangeSource"
     }
   },
   "definitions": {
+    "DeferredToolHint": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "McpServerId": {
+      "type": "string"
+    },
+    "ToolPoolChangeSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "initial_classification"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp_list_changed"
+          ],
+          "properties": {
+            "mcp_list_changed": {
+              "type": "object",
+              "required": [
+                "server_id"
+              ],
+              "properties": {
+                "server_id": {
+                  "$ref": "#/definitions/McpServerId"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin_registration"
+          ],
+          "properties": {
+            "plugin_registration": {
+              "type": "object",
+              "required": [
+                "plugin_id"
+              ],
+              "properties": {
+                "plugin_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skill_hot_reload"
+          ],
+          "properties": {
+            "skill_hot_reload": {
+              "type": "object",
+              "required": [
+                "skill_id"
+              ],
+              "properties": {
+                "skill_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

@@ -4,24 +4,118 @@
   "type": "object",
   "required": [
     "at",
-    "server_id",
-    "uri"
+    "kind",
+    "server_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "kind": {
+      "$ref": "#/definitions/McpResourceUpdateKind"
+    },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
     },
-    "uri": {
-      "type": "string"
+    "session_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
+    "McpResourceUpdateKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "list_changed"
+          ],
+          "properties": {
+            "list_changed": {
+              "type": "object",
+              "required": [
+                "added",
+                "removed"
+              ],
+              "properties": {
+                "added": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "removed": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "resource_updated"
+          ],
+          "properties": {
+            "resource_updated": {
+              "type": "object",
+              "required": [
+                "uri"
+              ],
+              "properties": {
+                "uri": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "prompts_list_changed"
+          ],
+          "properties": {
+            "prompts_list_changed": {
+              "type": "object",
+              "required": [
+                "added",
+                "removed"
+              ],
+              "properties": {
+                "added": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "removed": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "McpServerId": {
       "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

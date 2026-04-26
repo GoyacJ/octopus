@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DenyReason",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "user_denied",
+        "rule_denied",
+        "default_mode_denied",
+        "subagent_blocked",
+        "policy_denied"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "hook_blocked"
+      ],
+      "properties": {
+        "hook_blocked": {
+          "type": "object",
+          "required": [
+            "handler_id"
+          ],
+          "properties": {
+            "handler_id": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "other"
+      ],
+      "properties": {
+        "other": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

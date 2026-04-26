@@ -1,0 +1,239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RejectionReason",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "signature_invalid"
+      ],
+      "properties": {
+        "signature_invalid": {
+          "type": "object",
+          "required": [
+            "details"
+          ],
+          "properties": {
+            "details": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "unknown_signer"
+      ],
+      "properties": {
+        "unknown_signer": {
+          "type": "object",
+          "required": [
+            "signer"
+          ],
+          "properties": {
+            "signer": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "signer_revoked"
+      ],
+      "properties": {
+        "signer_revoked": {
+          "type": "object",
+          "required": [
+            "revoked_at",
+            "signer"
+          ],
+          "properties": {
+            "revoked_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "signer": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "trust_mismatch"
+      ],
+      "properties": {
+        "trust_mismatch": {
+          "type": "object",
+          "required": [
+            "declared",
+            "source"
+          ],
+          "properties": {
+            "declared": {
+              "$ref": "#/definitions/TrustLevel"
+            },
+            "source": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "namespace_conflict"
+      ],
+      "properties": {
+        "namespace_conflict": {
+          "type": "object",
+          "required": [
+            "details"
+          ],
+          "properties": {
+            "details": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "dependency_unsatisfied"
+      ],
+      "properties": {
+        "dependency_unsatisfied": {
+          "type": "object",
+          "required": [
+            "dependency",
+            "requirement"
+          ],
+          "properties": {
+            "dependency": {
+              "type": "string"
+            },
+            "requirement": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "dependency_cycle"
+      ],
+      "properties": {
+        "dependency_cycle": {
+          "type": "object",
+          "required": [
+            "cycle"
+          ],
+          "properties": {
+            "cycle": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "harness_version_incompatible"
+      ],
+      "properties": {
+        "harness_version_incompatible": {
+          "type": "object",
+          "required": [
+            "actual",
+            "required"
+          ],
+          "properties": {
+            "actual": {
+              "type": "string"
+            },
+            "required": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "slot_occupied"
+      ],
+      "properties": {
+        "slot_occupied": {
+          "type": "object",
+          "required": [
+            "occupant",
+            "slot"
+          ],
+          "properties": {
+            "occupant": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "admission_denied"
+      ],
+      "properties": {
+        "admission_denied": {
+          "type": "object",
+          "required": [
+            "policy"
+          ],
+          "properties": {
+            "policy": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "TrustLevel": {
+      "type": "string",
+      "enum": [
+        "admin_trusted",
+        "user_controlled"
+      ]
+    }
+  }
+}

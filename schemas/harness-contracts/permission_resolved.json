@@ -167,8 +167,6 @@
         "allow_permanent",
         "deny_once",
         "deny_permanent",
-        "ask_user",
-        "defer",
         "escalate"
       ]
     },

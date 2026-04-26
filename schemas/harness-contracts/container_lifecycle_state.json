@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContainerLifecycleState",
+  "type": "string",
+  "enum": [
+    "provisioning",
+    "ready",
+    "in_use",
+    "idle",
+    "stopping",
+    "stopped",
+    "failed"
+  ]
+}

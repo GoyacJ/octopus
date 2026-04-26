@@ -4,26 +4,44 @@
   "type": "object",
   "required": [
     "at",
-    "input_count",
-    "output_count",
-    "tenant_id"
+    "demoted",
+    "draft_dreams_chars",
+    "duration_ms",
+    "hook_id",
+    "promoted",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "input_count": {
+    "demoted": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TypedUlid"
+      }
+    },
+    "draft_dreams_chars": {
       "type": "integer",
       "format": "uint32",
       "minimum": 0.0
     },
-    "output_count": {
+    "duration_ms": {
       "type": "integer",
       "format": "uint32",
       "minimum": 0.0
     },
-    "tenant_id": {
+    "hook_id": {
+      "type": "string"
+    },
+    "promoted": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TypedUlid"
+      }
+    },
+    "session_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },

@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{BlobRef, MemoryId, MessageId, ToolUseId, TranscriptRef, UsageSnapshot};
+use crate::{BlobRef, JournalOffset, MemoryId, MessageId, ToolUseId, TranscriptRef, UsageSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TurnInput {
@@ -35,42 +35,46 @@ pub enum MessageRole {
     System,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageContent {
+    Text(String),
+    Structured(Value),
+    Multimodal(Vec<MessagePart>),
+}
+
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum MessagePart {
-    Text {
-        text: String,
-    },
+    Text(String),
     Image {
         mime_type: String,
         blob_ref: BlobRef,
     },
-    Audio {
-        mime_type: String,
-        blob_ref: BlobRef,
-    },
-    File {
+    ToolUse {
+        id: ToolUseId,
         name: String,
-        mime_type: String,
-        blob_ref: BlobRef,
+        input: Value,
     },
     ToolResult {
         tool_use_id: ToolUseId,
-        result: ToolResult,
+        content: ToolResult,
     },
     Thinking(ThinkingBlock),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ThinkingBlock {
-    pub text: String,
+    pub text: Option<String>,
+    pub provider_id: String,
+    pub provider_native: Option<Value>,
     pub signature: Option<String>,
 }
 
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ToolResult {
     Text(String),
     Structured(Value),
@@ -149,4 +153,10 @@ pub enum ReferenceKind {
     Memory {
         memory_id: MemoryId,
     },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct TranscriptRange {
+    pub from_offset: JournalOffset,
+    pub to_offset: JournalOffset,
 }

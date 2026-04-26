@@ -5,6 +5,7 @@
   "required": [
     "at",
     "decision_id",
+    "scope",
     "tool_use_id"
   ],
   "properties": {
@@ -15,11 +16,135 @@
     "decision_id": {
       "$ref": "#/definitions/TypedUlid"
     },
+    "scope": {
+      "$ref": "#/definitions/DecisionScope"
+    },
     "tool_use_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },
   "definitions": {
+    "DecisionScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "any"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_command"
+          ],
+          "properties": {
+            "exact_command": {
+              "type": "object",
+              "required": [
+                "command"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "exact_args"
+          ],
+          "properties": {
+            "exact_args": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_name"
+          ],
+          "properties": {
+            "tool_name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "path_prefix"
+          ],
+          "properties": {
+            "path_prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "glob_pattern"
+          ],
+          "properties": {
+            "glob_pattern": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "execute_code_script"
+          ],
+          "properties": {
+            "execute_code_script": {
+              "type": "object",
+              "required": [
+                "script_hash"
+              ],
+              "properties": {
+                "script_hash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  },
+                  "maxItems": 32,
+                  "minItems": 32
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

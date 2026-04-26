@@ -3,35 +3,66 @@
   "title": "McpToolsListChangedEvent",
   "type": "object",
   "required": [
-    "added",
-    "at",
-    "removed",
+    "added_count",
+    "disposition",
+    "received_at",
+    "removed_count",
     "server_id"
   ],
   "properties": {
-    "added": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "added_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     },
-    "at": {
+    "disposition": {
+      "$ref": "#/definitions/ToolsListChangedDisposition"
+    },
+    "pending_since": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "received_at": {
       "type": "string",
       "format": "date-time"
     },
-    "removed": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "removed_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
     "McpServerId": {
       "type": "string"
+    },
+    "ToolsListChangedDisposition": {
+      "type": "string",
+      "enum": [
+        "deferred_applied",
+        "pending_for_reload",
+        "no_change"
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

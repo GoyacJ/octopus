@@ -1,7 +1,7 @@
 # `octopus-harness-contracts` · L0 契约层 SPEC
 
 > 层级：L0（最底层） · 状态：Accepted
-> 版本：1.0 · 依赖：仅标准库 + `serde` + `ulid` + `schemars` + `thiserror` + `chrono` + `strum`
+> 版本：1.0 · 依赖：仅标准库 + `serde` + `ulid` + `schemars` + `thiserror` + `chrono` + `strum` + `async-trait` + `futures`
 
 ## 1. 职责
 
@@ -23,6 +23,8 @@ chrono = { version = "0.4", features = ["serde"] }
 bytes = { version = "1", features = ["serde"] }
 secrecy = { version = "0.8", features = ["serde"] }
 strum = { version = "0.27", features = ["derive"] }
+async-trait = "0.1"
+futures = "0.3"
 ```
 
 ## 3. 对外 API
@@ -1207,9 +1209,10 @@ pub enum ToolResultPart {
         language: String,
         text: String,
     },
-    /// 引用类内容（链接 / 文件 / 子代理 transcript）。`kind` 见 `ReferenceKind`。
+    /// 引用类内容（链接 / 文件 / 子代理 transcript）。`reference_kind` 见 `ReferenceKind`。
+    /// 字段不能命名为 `kind`，因为外层 `#[serde(tag = "kind")]` 已占用该 key。
     Reference {
-        kind: ReferenceKind,
+        reference_kind: ReferenceKind,
         title: Option<String>,
         summary: Option<String>,
     },

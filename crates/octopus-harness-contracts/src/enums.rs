@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
@@ -23,8 +24,6 @@ pub enum Decision {
     AllowPermanent,
     DenyOnce,
     DenyPermanent,
-    AskUser,
-    Defer,
     Escalate,
 }
 
@@ -82,14 +81,14 @@ pub enum CancelInitiator {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StopReason {
-    ToolUseRequested,
-    AssistantFinished,
-    UserInterrupted,
-    TokenBudgetExceeded,
+    EndTurn,
+    ToolUse,
     MaxIterations,
+    Interrupt,
+    Error(String),
 }
 
 #[non_exhaustive]
@@ -249,6 +248,10 @@ pub struct PluginId(pub String);
 )]
 pub struct McpServerId(pub String);
 
+pub type ToolName = String;
+pub type SemverString = String;
+pub type ToolLoadingBackendName = String;
+
 #[derive(
     Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -323,6 +326,41 @@ pub struct OverflowMetadata {
     pub original_size: u64,
     pub original_metric: BudgetMetric,
     pub effective_limit: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolProperties {
+    pub is_concurrency_safe: bool,
+    pub is_read_only: bool,
+    pub is_destructive: bool,
+    pub long_running: Option<LongRunningPolicy>,
+    pub defer_policy: DeferPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LongRunningPolicy {
+    pub stall_threshold: Duration,
+    pub hard_timeout: Duration,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DenyReason {
+    UserDenied,
+    RuleDenied,
+    DefaultModeDenied,
+    HookBlocked { handler_id: String },
+    SubagentBlocked,
+    PolicyDenied,
+    Other(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolErrorPayload {
+    pub code: String,
+    pub message: String,
+    pub retriable: bool,
 }
 
 #[non_exhaustive]
@@ -408,6 +446,38 @@ pub enum MemoryRecallDegradedReason {
     RecordTooLarge,
     VisibilityViolation,
     ScannerBlocked,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RecallSkipReason {
+    NoExternalProvider,
+    PolicyDecidedSkip,
+    DeadlineZero,
+    Cancelled,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TakesEffect {
+    CurrentSession,
+    NextSession,
+    AfterReloadWith { session_id: SessionId },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OverflowStrategy {
+    SectionTruncated {
+        kept_sections: u32,
+        dropped_sections: u32,
+    },
+    HeadOnly {
+        kept_chars: u32,
+    },
 }
 
 #[non_exhaustive]

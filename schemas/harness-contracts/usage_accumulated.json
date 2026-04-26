@@ -4,13 +4,36 @@
   "type": "object",
   "required": [
     "at",
-    "session_id",
-    "usage"
+    "delta",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
+    },
+    "delta": {
+      "$ref": "#/definitions/UsageSnapshot"
+    },
+    "model_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ModelRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pricing_snapshot_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PricingSnapshotId"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "run_id": {
       "anyOf": [
@@ -24,12 +47,41 @@
     },
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
-    },
-    "usage": {
-      "$ref": "#/definitions/UsageSnapshot"
     }
   },
   "definitions": {
+    "ModelRef": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "provider_id"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string"
+        },
+        "provider_id": {
+          "type": "string"
+        }
+      }
+    },
+    "PricingSnapshotId": {
+      "type": "object",
+      "required": [
+        "pricing_id",
+        "version"
+      ],
+      "properties": {
+        "pricing_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

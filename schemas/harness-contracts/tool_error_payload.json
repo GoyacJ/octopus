@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolErrorPayload",
+  "type": "object",
+  "required": [
+    "code",
+    "message",
+    "retriable"
+  ],
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "retriable": {
+      "type": "boolean"
+    }
+  }
+}

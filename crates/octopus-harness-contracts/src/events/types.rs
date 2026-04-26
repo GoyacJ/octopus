@@ -43,7 +43,26 @@ pub type DeltaHash = [u8; 32];
 pub type HandlerId = String;
 pub type SchemaId = String;
 pub type CompactStrategyId = String;
-pub type ManifestOriginRef = String;
+pub type PermissionRequestId = RequestId;
+pub type PricingId = String;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct PricingSnapshotId {
+    pub pricing_id: PricingId,
+    pub version: u32,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct ModelRef {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct AgentRef {
+    pub id: AgentId,
+    pub name: String,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct ContentHash(pub [u8; 32]);
@@ -106,9 +125,9 @@ pub enum SubagentStatus {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TopologyKind {
-    Supervisor,
-    Peer,
-    Pipeline,
+    CoordinatorWorker,
+    PeerToPeer,
+    RoleRouted,
     Custom(String),
 }
 
@@ -124,8 +143,17 @@ pub enum TeamTerminationReason {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CompactionHandoff {
-    pub summary_ref: BlobRef,
-    pub metadata: Value,
+    pub active_task_ref: BlobRef,
+    pub remaining_budget: RemainingBudget,
+    pub pending_tool_uses: Vec<ToolUseId>,
+    pub outstanding_permissions: Vec<PermissionRequestId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RemainingBudget {
+    pub iterations_remaining: u32,
+    pub tokens_remaining_in_session: u64,
+    pub wall_clock_deadline: Option<DateTime<Utc>>,
 }
 
 #[non_exhaustive]
@@ -134,7 +162,7 @@ pub struct CompactionHandoff {
 pub enum CompactTrigger {
     SoftBudget,
     HardBudget,
-    ProviderReported,
+    ProviderReport { reported_tokens: u64 },
     UserCommand,
 }
 
@@ -142,20 +170,41 @@ pub enum CompactTrigger {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CompactOutcome {
-    Applied,
-    Degraded,
-    ReactiveFailed,
+    Succeeded,
+    DegradedNoAuxProvider,
+    DegradedAuxFailure { failure_count: u32 },
+    ReactiveAttemptFailed,
 }
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum ContextStage {
-    Gather,
-    Rank,
-    Pack,
-    Compact,
-    Finalize,
+pub enum ContextStageId {
+    ToolResultBudget,
+    Snip,
+    Microcompact,
+    Collapse,
+    Autocompact,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextStageOutcome {
+    NoChange,
+    Modified,
+    Forked { child: SessionId },
+    SkippedNoAuxProvider,
+    SkippedAuxCooldown { until_turn: u32 },
+    Failed { reason: String },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetExceedanceSource {
+    LocalEstimate,
+    ProviderReport { reported_tokens: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -173,7 +222,59 @@ pub enum SandboxExitStatus {
     Code(i32),
     Signal(i32),
     Timeout,
+    InactivityTimeout,
+    OutputBudgetExceeded,
     Cancelled,
+    BackendError,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SandboxOutputStream {
+    Stdout,
+    Stderr,
+    Combined,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SandboxOverflowSummary {
+    pub stream: SandboxOutputStream,
+    pub original_bytes: u64,
+    pub effective_limit: u64,
+    pub blob_ref: Option<BlobRef>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct ContainerRef {
+    pub backend_kind: String,
+    pub container_id: String,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerLifecycleState {
+    Provisioning,
+    Ready,
+    InUse,
+    Idle,
+    Stopping,
+    Stopped,
+    Failed,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerLifecycleReason {
+    SessionAttached,
+    SessionDetached,
+    PoolReused,
+    PoolEvicted,
+    HealthCheckFailed,
+    SnapshotRestore,
+    Manual,
 }
 
 #[non_exhaustive]
@@ -303,8 +404,85 @@ pub enum McpConnectionLostReason {
     Network(String),
     AuthFailure(String),
     HandshakeMismatch(String),
-    ServerExited,
+    StdioProcessExited {
+        exit_code: Option<i32>,
+        signal: Option<i32>,
+    },
+    Shutdown,
     Other(String),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct ElicitationSchemaSummary {
+    pub field_count: u16,
+    pub required_count: u16,
+    pub has_secret_field: bool,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ElicitationOutcome {
+    Provided { value_hash: [u8; 32] },
+    UserDeclined,
+    Timeout,
+    Invalid { reason: String },
+    NoHandlerRegistered,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolsListChangedDisposition {
+    DeferredApplied,
+    PendingForReload,
+    NoChange,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpResourceUpdateKind {
+    ListChanged { added: u32, removed: u32 },
+    ResourceUpdated { uri: String },
+    PromptsListChanged { added: u32, removed: u32 },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingOutcome {
+    Completed,
+    Denied { reason: SamplingDenyReason },
+    BudgetExceeded { dimension: SamplingBudgetDimension },
+    RateLimited,
+    UpstreamError { code: i32, message: String },
+    Cancelled,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingDenyReason {
+    PolicyDenied,
+    ApprovalDenied,
+    ModelNotAllowed,
+    PermissionModeBlocked,
+    InlineUserSourceRefused,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingBudgetDimension {
+    PerRequestInputTokens,
+    PerRequestOutputTokens,
+    PerRequestTimeout,
+    PerRequestToolRounds,
+    PerServerSessionInput,
+    PerServerSessionOutput,
+    PerSessionInput,
+    PerSessionOutput,
 }
 
 #[non_exhaustive]
@@ -316,6 +494,158 @@ pub enum PluginRejectedReason {
     CapabilityDenied,
     Duplicate,
     Other(String),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct PluginCapabilitiesSummary {
+    pub tools: u16,
+    pub hooks: u16,
+    pub mcp_servers: u16,
+    pub skills: u16,
+    pub memory_provider: bool,
+    pub coordinator: bool,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestOriginRef {
+    File { path: String },
+    CargoExtension { binary: String },
+    RemoteRegistry { endpoint: String },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginLifecycleStateDiscriminant {
+    Validated,
+    Activating,
+    Activated,
+    Deactivating,
+    Deactivated,
+    Rejected,
+    Failed,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RejectionReason {
+    SignatureInvalid {
+        details: String,
+    },
+    UnknownSigner {
+        signer: String,
+    },
+    SignerRevoked {
+        signer: String,
+        revoked_at: DateTime<Utc>,
+    },
+    TrustMismatch {
+        declared: TrustLevel,
+        source: String,
+    },
+    NamespaceConflict {
+        details: String,
+    },
+    DependencyUnsatisfied {
+        dependency: String,
+        requirement: String,
+    },
+    DependencyCycle {
+        cycle: Vec<String>,
+    },
+    HarnessVersionIncompatible {
+        required: String,
+        actual: String,
+    },
+    SlotOccupied {
+        slot: String,
+        occupant: String,
+    },
+    AdmissionDenied {
+        policy: String,
+    },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextVisibility {
+    All,
+    Allowlist(Vec<AgentId>),
+    AllowlistQuote(Vec<AgentId>),
+    Private,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberLeaveReason {
+    GoalAchieved,
+    QuotaExceeded,
+    Interrupted,
+    Error(String),
+    Removed,
+    StalledRemoved,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StalledAction {
+    Reported,
+    Interrupted,
+    Removed,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Recipient {
+    Agent(AgentId),
+    Role(String),
+    Broadcast,
+    Coordinator,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MessagePayload {
+    Text(String),
+    Structured(Value),
+    Request { reply_to: MessageId },
+    Response { in_reply_to: MessageId, body: Value },
+    Handoff { to: AgentId, summary: String },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingPolicyKind {
+    Direct,
+    Role,
+    Broadcast,
+    Coordinator,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DeferredToolHint {
+    pub name: ToolName,
+    pub hint: Option<String>,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPoolChangeSource {
+    InitialClassification,
+    McpListChanged { server_id: McpServerId },
+    PluginRegistration { plugin_id: String },
+    SkillHotReload { skill_id: String },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]

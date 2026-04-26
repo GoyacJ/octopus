@@ -16,8 +16,10 @@ workspace = true
 default = []
 
 [dependencies]
+async-trait = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
 schemars = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }

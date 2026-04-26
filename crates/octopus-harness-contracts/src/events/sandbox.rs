@@ -1,64 +1,97 @@
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxExecutionStartedEvent {
-    pub tool_use_id: ToolUseId,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub backend_id: String,
+    pub fingerprint: ExecFingerprint,
     pub policy: SandboxPolicySummary,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxExecutionCompletedEvent {
-    pub tool_use_id: ToolUseId,
-    pub status: SandboxExitStatus,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub backend_id: String,
+    pub fingerprint: ExecFingerprint,
+    pub exit_status: SandboxExitStatus,
+    pub stdout_bytes_observed: u64,
+    pub stderr_bytes_observed: u64,
     pub duration_ms: u64,
+    pub overflow: Option<SandboxOverflowSummary>,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxActivityHeartbeatEvent {
-    pub tool_use_id: ToolUseId,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub backend_id: String,
+    pub since_last_io_ms: u64,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxActivityTimeoutFiredEvent {
-    pub tool_use_id: ToolUseId,
-    pub timeout_ms: u64,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub backend_id: String,
+    pub configured_timeout: Duration,
+    pub kill_scope: KillScope,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxOutputSpilledEvent {
-    pub tool_use_id: ToolUseId,
-    pub stream: String,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub stream: SandboxOutputStream,
     pub blob_ref: BlobRef,
+    pub head_bytes: u32,
+    pub tail_bytes: u32,
+    pub original_bytes: u64,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxBackpressureAppliedEvent {
-    pub tool_use_id: ToolUseId,
-    pub reason: String,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub tool_use_id: Option<ToolUseId>,
+    pub queued_bytes: u64,
+    pub paused_for_ms: u64,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxSnapshotCreatedEvent {
-    pub snapshot_id: SnapshotId,
     pub session_id: SessionId,
+    pub backend_id: String,
     pub kind: SessionSnapshotKind,
+    pub size_bytes: u64,
+    pub content_hash: [u8; 32],
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxContainerLifecycleTransitionEvent {
     pub session_id: SessionId,
-    pub from: String,
-    pub to: String,
+    pub backend_id: String,
+    pub container_ref: ContainerRef,
+    pub from: ContainerLifecycleState,
+    pub to: ContainerLifecycleState,
+    pub reason: ContainerLifecycleReason,
     pub at: DateTime<Utc>,
 }

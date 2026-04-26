@@ -44,9 +44,9 @@
         {
           "type": "string",
           "enum": [
-            "supervisor",
-            "peer",
-            "pipeline"
+            "coordinator_worker",
+            "peer_to_peer",
+            "role_routed"
           ]
         },
         {

@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DeltaChunk",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "thought"
+      ],
+      "properties": {
+        "thought": {
+          "$ref": "#/definitions/ThoughtChunk"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "tool_use_start"
+      ],
+      "properties": {
+        "tool_use_start": {
+          "type": "object",
+          "required": [
+            "tool_name",
+            "tool_use_id"
+          ],
+          "properties": {
+            "tool_name": {
+              "type": "string"
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "tool_use_input_delta"
+      ],
+      "properties": {
+        "tool_use_input_delta": {
+          "type": "object",
+          "required": [
+            "delta",
+            "tool_use_id"
+          ],
+          "properties": {
+            "delta": {
+              "type": "string"
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "tool_use_end"
+      ],
+      "properties": {
+        "tool_use_end": {
+          "type": "object",
+          "required": [
+            "tool_use_id"
+          ],
+          "properties": {
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "ThoughtChunk": {
+      "type": "object",
+      "required": [
+        "provider_id"
+      ],
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_native": true,
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

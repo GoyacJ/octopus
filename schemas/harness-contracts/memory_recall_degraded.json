@@ -4,19 +4,33 @@
   "type": "object",
   "required": [
     "at",
+    "provider_id",
     "reason",
-    "run_id"
+    "run_id",
+    "session_id",
+    "turn"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "provider_id": {
+      "type": "string"
+    },
     "reason": {
       "$ref": "#/definitions/MemoryRecallDegradedReason"
     },
     "run_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "turn": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     }
   },
   "definitions": {

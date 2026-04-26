@@ -6,7 +6,9 @@
     "at",
     "from",
     "message_id",
-    "team_id"
+    "payload",
+    "team_id",
+    "to"
   ],
   "properties": {
     "at": {
@@ -19,21 +21,144 @@
     "message_id": {
       "$ref": "#/definitions/TypedUlid"
     },
+    "payload": {
+      "$ref": "#/definitions/MessagePayload"
+    },
     "team_id": {
       "$ref": "#/definitions/TypedUlid"
     },
     "to": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "$ref": "#/definitions/Recipient"
     }
   },
   "definitions": {
+    "MessagePayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "structured"
+          ],
+          "properties": {
+            "structured": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "request"
+          ],
+          "properties": {
+            "request": {
+              "type": "object",
+              "required": [
+                "reply_to"
+              ],
+              "properties": {
+                "reply_to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "response"
+          ],
+          "properties": {
+            "response": {
+              "type": "object",
+              "required": [
+                "body",
+                "in_reply_to"
+              ],
+              "properties": {
+                "body": true,
+                "in_reply_to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "handoff"
+          ],
+          "properties": {
+            "handoff": {
+              "type": "object",
+              "required": [
+                "summary",
+                "to"
+              ],
+              "properties": {
+                "summary": {
+                  "type": "string"
+                },
+                "to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Recipient": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "broadcast",
+            "coordinator"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "agent"
+          ],
+          "properties": {
+            "agent": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "role"
+          ],
+          "properties": {
+            "role": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

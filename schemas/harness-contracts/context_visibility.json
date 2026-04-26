@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextVisibility",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "all",
+        "private"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "allowlist"
+      ],
+      "properties": {
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "allowlist_quote"
+      ],
+      "properties": {
+        "allowlist_quote": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

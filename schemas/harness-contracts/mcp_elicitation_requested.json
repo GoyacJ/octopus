@@ -4,26 +4,96 @@
   "type": "object",
   "required": [
     "at",
-    "prompt",
     "request_id",
-    "server_id"
+    "schema_summary",
+    "server_id",
+    "session_id",
+    "subject"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "prompt": {
-      "type": "string"
-    },
     "request_id": {
       "$ref": "#/definitions/TypedUlid"
     },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_summary": {
+      "$ref": "#/definitions/ElicitationSchemaSummary"
+    },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "timeout": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Duration"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ElicitationSchemaSummary": {
+      "type": "object",
+      "required": [
+        "field_count",
+        "has_secret_field",
+        "required_count"
+      ],
+      "properties": {
+        "field_count": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "has_secret_field": {
+          "type": "boolean"
+        },
+        "required_count": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        }
+      }
+    },
     "McpServerId": {
       "type": "string"
     },

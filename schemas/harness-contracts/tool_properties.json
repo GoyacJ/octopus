@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolProperties",
+  "type": "object",
+  "required": [
+    "defer_policy",
+    "is_concurrency_safe",
+    "is_destructive",
+    "is_read_only"
+  ],
+  "properties": {
+    "defer_policy": {
+      "$ref": "#/definitions/DeferPolicy"
+    },
+    "is_concurrency_safe": {
+      "type": "boolean"
+    },
+    "is_destructive": {
+      "type": "boolean"
+    },
+    "is_read_only": {
+      "type": "boolean"
+    },
+    "long_running": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LongRunningPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "DeferPolicy": {
+      "type": "string",
+      "enum": [
+        "always_load",
+        "auto_defer",
+        "force_defer"
+      ]
+    },
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "LongRunningPolicy": {
+      "type": "object",
+      "required": [
+        "hard_timeout",
+        "stall_threshold"
+      ],
+      "properties": {
+        "hard_timeout": {
+          "$ref": "#/definitions/Duration"
+        },
+        "stall_threshold": {
+          "$ref": "#/definitions/Duration"
+        }
+      }
+    }
+  }
+}

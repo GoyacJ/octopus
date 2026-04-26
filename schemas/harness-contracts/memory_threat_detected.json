@@ -6,8 +6,11 @@
     "action",
     "at",
     "category",
+    "content_hash",
     "direction",
-    "tenant_id"
+    "pattern_id",
+    "session_id",
+    "severity"
   ],
   "properties": {
     "action": {
@@ -20,10 +23,22 @@
     "category": {
       "$ref": "#/definitions/ThreatCategory"
     },
+    "content_hash": {
+      "$ref": "#/definitions/ContentHash"
+    },
     "direction": {
       "$ref": "#/definitions/ThreatDirection"
     },
-    "memory_id": {
+    "pattern_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_id": {
       "anyOf": [
         {
           "$ref": "#/definitions/TypedUlid"
@@ -33,11 +48,34 @@
         }
       ]
     },
-    "tenant_id": {
+    "session_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "severity": {
+      "$ref": "#/definitions/Severity"
     }
   },
   "definitions": {
+    "ContentHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
     "ThreatAction": {
       "type": "string",
       "enum": [

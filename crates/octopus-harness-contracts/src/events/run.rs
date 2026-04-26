@@ -28,18 +28,11 @@ pub struct RunEndedEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct GraceCallTriggeredEvent {
     pub run_id: RunId,
-    #[serde(default = "SessionId::new")]
     pub session_id: SessionId,
-    #[serde(default = "default_tenant")]
     pub tenant_id: TenantId,
     pub current_iteration: u32,
     pub max_iterations: u32,
     pub usage_snapshot: UsageSnapshot,
     pub at: DateTime<Utc>,
-    #[serde(default = "CorrelationId::new")]
     pub correlation_id: CorrelationId,
-}
-
-fn default_tenant() -> TenantId {
-    TenantId::SINGLE
 }

@@ -5,8 +5,12 @@
   "required": [
     "at",
     "blob_ref",
+    "head_bytes",
+    "original_bytes",
+    "run_id",
+    "session_id",
     "stream",
-    "tool_use_id"
+    "tail_bytes"
   ],
   "properties": {
     "at": {
@@ -16,11 +20,39 @@
     "blob_ref": {
       "$ref": "#/definitions/BlobRef"
     },
+    "head_bytes": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "original_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
     "stream": {
-      "type": "string"
+      "$ref": "#/definitions/SandboxOutputStream"
+    },
+    "tail_bytes": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     },
     "tool_use_id": {
-      "$ref": "#/definitions/TypedUlid"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
@@ -57,6 +89,14 @@
           "minimum": 0.0
         }
       }
+    },
+    "SandboxOutputStream": {
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "combined"
+      ]
     },
     "TypedUlid": {
       "type": "string",

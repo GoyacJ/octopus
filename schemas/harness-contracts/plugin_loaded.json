@@ -4,32 +4,181 @@
   "type": "object",
   "required": [
     "at",
-    "name",
+    "capabilities",
+    "from_state",
+    "manifest_hash",
+    "manifest_origin",
     "plugin_id",
+    "plugin_name",
+    "plugin_version",
     "tenant_id",
-    "version"
+    "trust_level"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "name": {
-      "type": "string"
+    "capabilities": {
+      "$ref": "#/definitions/PluginCapabilitiesSummary"
+    },
+    "from_state": {
+      "$ref": "#/definitions/PluginLifecycleStateDiscriminant"
+    },
+    "manifest_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "manifest_origin": {
+      "$ref": "#/definitions/ManifestOriginRef"
     },
     "plugin_id": {
       "$ref": "#/definitions/PluginId"
     },
+    "plugin_name": {
+      "type": "string"
+    },
+    "plugin_version": {
+      "type": "string"
+    },
     "tenant_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "version": {
-      "type": "string"
+    "trust_level": {
+      "$ref": "#/definitions/TrustLevel"
     }
   },
   "definitions": {
+    "ManifestOriginRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "cargo_extension"
+          ],
+          "properties": {
+            "cargo_extension": {
+              "type": "object",
+              "required": [
+                "binary"
+              ],
+              "properties": {
+                "binary": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "remote_registry"
+          ],
+          "properties": {
+            "remote_registry": {
+              "type": "object",
+              "required": [
+                "endpoint"
+              ],
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PluginCapabilitiesSummary": {
+      "type": "object",
+      "required": [
+        "coordinator",
+        "hooks",
+        "mcp_servers",
+        "memory_provider",
+        "skills",
+        "tools"
+      ],
+      "properties": {
+        "coordinator": {
+          "type": "boolean"
+        },
+        "hooks": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "mcp_servers": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "memory_provider": {
+          "type": "boolean"
+        },
+        "skills": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "tools": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        }
+      }
+    },
     "PluginId": {
       "type": "string"
+    },
+    "PluginLifecycleStateDiscriminant": {
+      "type": "string",
+      "enum": [
+        "validated",
+        "activating",
+        "activated",
+        "deactivating",
+        "deactivated",
+        "rejected",
+        "failed"
+      ]
+    },
+    "TrustLevel": {
+      "type": "string",
+      "enum": [
+        "admin_trusted",
+        "user_controlled"
+      ]
     },
     "TypedUlid": {
       "type": "string",

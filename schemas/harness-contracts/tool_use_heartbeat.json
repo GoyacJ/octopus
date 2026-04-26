@@ -4,7 +4,9 @@
   "type": "object",
   "required": [
     "at",
-    "stage",
+    "message",
+    "run_id",
+    "silent_for_ms",
     "tool_use_id"
   ],
   "properties": {
@@ -12,8 +14,23 @@
       "type": "string",
       "format": "date-time"
     },
-    "stage": {
+    "fraction": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "float"
+    },
+    "message": {
       "type": "string"
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "silent_for_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "tool_use_id": {
       "$ref": "#/definitions/TypedUlid"

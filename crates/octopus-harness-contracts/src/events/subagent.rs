@@ -9,9 +9,13 @@ use crate::*;
 pub struct SubagentSpawnedEvent {
     pub subagent_id: SubagentId,
     pub parent_session_id: SessionId,
-    pub tenant_id: TenantId,
-    pub spec_snapshot_id: BlobRef,
+    pub parent_run_id: RunId,
+    pub agent_ref: AgentRef,
+    pub spec_snapshot_id: SnapshotId,
     pub spec_hash: [u8; 32],
+    pub depth: u8,
+    pub trigger_tool_use_id: Option<ToolUseId>,
+    pub trigger_tool_name: Option<String>,
     pub at: DateTime<Utc>,
 }
 
@@ -33,6 +37,7 @@ pub struct SubagentTerminatedEvent {
     pub subagent_id: SubagentId,
     pub parent_session_id: SessionId,
     pub reason: SubagentTerminationReason,
+    pub final_usage: UsageSnapshot,
     pub at: DateTime<Utc>,
 }
 
@@ -40,6 +45,7 @@ pub struct SubagentTerminatedEvent {
 pub struct SubagentSpawnPausedEvent {
     pub tenant_id: TenantId,
     pub paused: bool,
+    pub by: String,
     pub reason: Option<String>,
     pub at: DateTime<Utc>,
 }
@@ -48,15 +54,19 @@ pub struct SubagentSpawnPausedEvent {
 pub struct SubagentPermissionForwardedEvent {
     pub parent_session_id: SessionId,
     pub subagent_id: SubagentId,
-    pub request_id: RequestId,
-    pub at: DateTime<Utc>,
+    pub original_request_id: PermissionRequestId,
+    pub subject: PermissionSubject,
+    pub presented_options: Vec<Decision>,
+    pub timeout_policy: Option<TimeoutPolicy>,
+    pub forwarded_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SubagentPermissionResolvedEvent {
     pub parent_session_id: SessionId,
     pub subagent_id: SubagentId,
-    pub request_id: RequestId,
+    pub original_request_id: PermissionRequestId,
     pub decision: Decision,
+    pub decided_by: DecidedBy,
     pub at: DateTime<Utc>,
 }

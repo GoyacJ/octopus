@@ -4,20 +4,126 @@
   "type": "object",
   "required": [
     "at",
-    "server_id"
+    "attempts_used",
+    "schema_changed",
+    "server_id",
+    "server_source",
+    "total_downtime_ms",
+    "was_first"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "attempts_used": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "schema_changed": {
+      "type": "boolean"
+    },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
+    },
+    "server_source": {
+      "$ref": "#/definitions/McpServerSource"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "total_downtime_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "was_first": {
+      "type": "boolean"
     }
   },
   "definitions": {
     "McpServerId": {
       "type": "string"
+    },
+    "McpServerSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "user",
+            "project",
+            "policy"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "$ref": "#/definitions/PluginId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dynamic"
+          ],
+          "properties": {
+            "dynamic": {
+              "type": "object",
+              "required": [
+                "registered_by"
+              ],
+              "properties": {
+                "registered_by": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "managed"
+          ],
+          "properties": {
+            "managed": {
+              "type": "object",
+              "required": [
+                "registry_url"
+              ],
+              "properties": {
+                "registry_url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PluginId": {
+      "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextStageId",
+  "type": "string",
+  "enum": [
+    "tool_result_budget",
+    "snip",
+    "microcompact",
+    "collapse",
+    "autocompact"
+  ]
+}

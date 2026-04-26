@@ -4,35 +4,126 @@
   "type": "object",
   "required": [
     "at",
+    "backend_id",
     "duration_ms",
-    "status",
-    "tool_use_id"
+    "exit_status",
+    "fingerprint",
+    "run_id",
+    "session_id",
+    "stderr_bytes_observed",
+    "stdout_bytes_observed"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "backend_id": {
+      "type": "string"
+    },
     "duration_ms": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "status": {
+    "exit_status": {
       "$ref": "#/definitions/SandboxExitStatus"
     },
-    "tool_use_id": {
+    "fingerprint": {
+      "$ref": "#/definitions/ExecFingerprint"
+    },
+    "overflow": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SandboxOverflowSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "stderr_bytes_observed": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "stdout_bytes_observed": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "tool_use_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ExecFingerprint": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
     "SandboxExitStatus": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
             "timeout",
-            "cancelled"
+            "inactivity_timeout",
+            "output_budget_exceeded",
+            "cancelled",
+            "backend_error"
           ]
         },
         {
@@ -62,6 +153,47 @@
           "additionalProperties": false
         }
       ]
+    },
+    "SandboxOutputStream": {
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "combined"
+      ]
+    },
+    "SandboxOverflowSummary": {
+      "type": "object",
+      "required": [
+        "effective_limit",
+        "original_bytes",
+        "stream"
+      ],
+      "properties": {
+        "blob_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BlobRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "original_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "stream": {
+          "$ref": "#/definitions/SandboxOutputStream"
+        }
+      }
     },
     "TypedUlid": {
       "type": "string",

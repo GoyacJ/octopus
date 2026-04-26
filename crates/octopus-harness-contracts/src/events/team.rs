@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::*;
 
@@ -18,24 +19,30 @@ pub struct TeamCreatedEvent {
 pub struct TeamMemberJoinedEvent {
     pub team_id: TeamId,
     pub agent_id: AgentId,
+    pub role: String,
+    pub session_id: SessionId,
+    pub visibility: ContextVisibility,
     pub spec_snapshot_id: BlobRef,
     pub spec_hash: [u8; 32],
-    pub at: DateTime<Utc>,
+    pub joined_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TeamMemberLeftEvent {
     pub team_id: TeamId,
     pub agent_id: AgentId,
-    pub reason: String,
-    pub at: DateTime<Utc>,
+    pub reason: MemberLeaveReason,
+    pub left_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TeamMemberStalledEvent {
     pub team_id: TeamId,
     pub agent_id: AgentId,
-    pub silent_for_ms: u64,
+    pub session_id: SessionId,
+    pub last_activity_at: DateTime<Utc>,
+    pub stalled_for: Duration,
+    pub action: StalledAction,
     pub at: DateTime<Utc>,
 }
 
@@ -43,7 +50,8 @@ pub struct TeamMemberStalledEvent {
 pub struct AgentMessageSentEvent {
     pub team_id: TeamId,
     pub from: AgentId,
-    pub to: Option<AgentId>,
+    pub to: Recipient,
+    pub payload: MessagePayload,
     pub message_id: MessageId,
     pub at: DateTime<Utc>,
 }
@@ -52,7 +60,8 @@ pub struct AgentMessageSentEvent {
 pub struct AgentMessageRoutedEvent {
     pub team_id: TeamId,
     pub message_id: MessageId,
-    pub routed_to: Vec<AgentId>,
+    pub resolved_recipients: Vec<AgentId>,
+    pub routing_policy: RoutingPolicyKind,
     pub at: DateTime<Utc>,
 }
 

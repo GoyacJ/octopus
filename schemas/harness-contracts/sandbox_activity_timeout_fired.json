@@ -4,24 +4,71 @@
   "type": "object",
   "required": [
     "at",
-    "timeout_ms",
-    "tool_use_id"
+    "backend_id",
+    "configured_timeout",
+    "kill_scope",
+    "run_id",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "timeout_ms": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+    "backend_id": {
+      "type": "string"
+    },
+    "configured_timeout": {
+      "$ref": "#/definitions/Duration"
+    },
+    "kill_scope": {
+      "$ref": "#/definitions/KillScope"
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
     },
     "tool_use_id": {
-      "$ref": "#/definitions/TypedUlid"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "KillScope": {
+      "type": "string",
+      "enum": [
+        "process",
+        "process_group",
+        "session_leader"
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

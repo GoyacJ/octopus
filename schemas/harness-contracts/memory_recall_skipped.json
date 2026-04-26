@@ -5,7 +5,9 @@
   "required": [
     "at",
     "reason",
-    "run_id"
+    "run_id",
+    "session_id",
+    "turn"
   ],
   "properties": {
     "at": {
@@ -13,13 +15,30 @@
       "format": "date-time"
     },
     "reason": {
-      "type": "string"
+      "$ref": "#/definitions/RecallSkipReason"
     },
     "run_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "turn": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     }
   },
   "definitions": {
+    "RecallSkipReason": {
+      "type": "string",
+      "enum": [
+        "no_external_provider",
+        "policy_decided_skip",
+        "deadline_zero",
+        "cancelled"
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

@@ -6,8 +6,10 @@
 
 - `octopus-harness-contracts` now exports IDs, enums, events, messages, blob refs, capabilities, redaction, errors, and schema export.
 - `strum` is recorded in the contracts SPEC dependency table and crate dependencies.
+- `async-trait` and `futures` are recorded in the contracts SPEC dependency table because `BlobStore` is an async object-safe contract.
 - Generated schemas are written under `schemas/harness-contracts/`.
 - Legacy `octopus-sdk*` crates remain untouched.
+- The `ToolResultPart::Reference` field is `reference_kind`; `kind` remains reserved for the serde variant tag.
 
 ## Local Gate Evidence
 
@@ -26,19 +28,23 @@ bash scripts/spec-consistency.sh
 bash scripts/harness-legacy-boundary.sh
 bash scripts/dep-boundary-check.sh
 cargo check --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-features --no-fail-fast
 ```
 
 Observed results:
 
 - contracts check: pass
 - contracts clippy: pass
-- contracts tests: 5 integration tests pass; 1 doctest pass
-- schema export: pass; 105 JSON schema files
+- contracts tests: 9 integration tests pass; 1 doctest pass
+- schema export: pass; 133 JSON schema files
 - contracts docs: pass
 - SPEC consistency: pass
 - harness legacy boundary: pass
 - dependency boundaries: pass
 - workspace all-targets check: pass
+- workspace clippy: pass
+- workspace tests: pass
 
 ## M1 Boundaries
 

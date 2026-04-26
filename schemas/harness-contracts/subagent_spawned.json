@@ -3,17 +3,30 @@
   "title": "SubagentSpawnedEvent",
   "type": "object",
   "required": [
+    "agent_ref",
     "at",
+    "depth",
+    "parent_run_id",
     "parent_session_id",
     "spec_hash",
     "spec_snapshot_id",
-    "subagent_id",
-    "tenant_id"
+    "subagent_id"
   ],
   "properties": {
+    "agent_ref": {
+      "$ref": "#/definitions/AgentRef"
+    },
     "at": {
       "type": "string",
       "format": "date-time"
+    },
+    "depth": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
+    "parent_run_id": {
+      "$ref": "#/definitions/TypedUlid"
     },
     "parent_session_id": {
       "$ref": "#/definitions/TypedUlid"
@@ -29,47 +42,41 @@
       "minItems": 32
     },
     "spec_snapshot_id": {
-      "$ref": "#/definitions/BlobRef"
+      "$ref": "#/definitions/TypedUlid"
     },
     "subagent_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "tenant_id": {
-      "$ref": "#/definitions/TypedUlid"
+    "trigger_tool_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trigger_tool_use_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
-    "BlobRef": {
+    "AgentRef": {
       "type": "object",
       "required": [
-        "content_hash",
         "id",
-        "size"
+        "name"
       ],
       "properties": {
-        "content_hash": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
-        },
-        "content_type": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "size": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
+        "name": {
+          "type": "string"
         }
       }
     },

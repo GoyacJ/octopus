@@ -4,9 +4,12 @@
   "type": "object",
   "required": [
     "at",
+    "correlation_id",
     "current_iteration",
     "max_iterations",
     "run_id",
+    "session_id",
+    "tenant_id",
     "usage_snapshot"
   ],
   "properties": {
@@ -15,12 +18,7 @@
       "format": "date-time"
     },
     "correlation_id": {
-      "default": "01KQ2T01KT8NVTN31XWWEA8DN2",
-      "allOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        }
-      ]
+      "$ref": "#/definitions/TypedUlid"
     },
     "current_iteration": {
       "type": "integer",
@@ -36,20 +34,10 @@
       "$ref": "#/definitions/TypedUlid"
     },
     "session_id": {
-      "default": "01KQ2T01KT0FRWXKS6Q6MP2ZPD",
-      "allOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        }
-      ]
+      "$ref": "#/definitions/TypedUlid"
     },
     "tenant_id": {
-      "default": "00000000000000000000000001",
-      "allOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        }
-      ]
+      "$ref": "#/definitions/TypedUlid"
     },
     "usage_snapshot": {
       "$ref": "#/definitions/UsageSnapshot"

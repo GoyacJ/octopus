@@ -4,7 +4,7 @@
   "type": "object",
   "required": [
     "agent_id",
-    "at",
+    "left_at",
     "reason",
     "team_id"
   ],
@@ -12,18 +12,44 @@
     "agent_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "at": {
+    "left_at": {
       "type": "string",
       "format": "date-time"
     },
     "reason": {
-      "type": "string"
+      "$ref": "#/definitions/MemberLeaveReason"
     },
     "team_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },
   "definitions": {
+    "MemberLeaveReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "goal_achieved",
+            "quota_exceeded",
+            "interrupted",
+            "removed",
+            "stalled_removed"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "error"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

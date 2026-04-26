@@ -39,6 +39,54 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     insert_schema!(schemas, "blob_meta", BlobMeta);
     insert_schema!(schemas, "redact_rules", RedactRules);
     insert_schema!(schemas, "harness_error", HarnessError);
+    insert_schema!(schemas, "message_content", MessageContent);
+    insert_schema!(schemas, "delta_chunk", DeltaChunk);
+    insert_schema!(schemas, "thought_chunk", ThoughtChunk);
+    insert_schema!(schemas, "tool_properties", ToolProperties);
+    insert_schema!(schemas, "deny_reason", DenyReason);
+    insert_schema!(schemas, "tool_error_payload", ToolErrorPayload);
+    insert_schema!(schemas, "pricing_snapshot_id", PricingSnapshotId);
+    insert_schema!(schemas, "model_ref", ModelRef);
+    insert_schema!(schemas, "context_stage_id", ContextStageId);
+    insert_schema!(schemas, "context_stage_outcome", ContextStageOutcome);
+    insert_schema!(schemas, "budget_exceedance_source", BudgetExceedanceSource);
+    insert_schema!(schemas, "agent_ref", AgentRef);
+    insert_schema!(schemas, "context_visibility", ContextVisibility);
+    insert_schema!(schemas, "recipient", Recipient);
+    insert_schema!(schemas, "message_payload", MessagePayload);
+    insert_schema!(schemas, "sandbox_exit_status", SandboxExitStatus);
+    insert_schema!(schemas, "sandbox_output_stream", SandboxOutputStream);
+    insert_schema!(schemas, "container_ref", ContainerRef);
+    insert_schema!(
+        schemas,
+        "container_lifecycle_state",
+        ContainerLifecycleState
+    );
+    insert_schema!(
+        schemas,
+        "container_lifecycle_reason",
+        ContainerLifecycleReason
+    );
+    insert_schema!(
+        schemas,
+        "elicitation_schema_summary",
+        ElicitationSchemaSummary
+    );
+    insert_schema!(schemas, "elicitation_outcome", ElicitationOutcome);
+    insert_schema!(
+        schemas,
+        "tools_list_changed_disposition",
+        ToolsListChangedDisposition
+    );
+    insert_schema!(schemas, "mcp_resource_update_kind", McpResourceUpdateKind);
+    insert_schema!(schemas, "sampling_outcome", SamplingOutcome);
+    insert_schema!(
+        schemas,
+        "plugin_capabilities_summary",
+        PluginCapabilitiesSummary
+    );
+    insert_schema!(schemas, "manifest_origin_ref", ManifestOriginRef);
+    insert_schema!(schemas, "rejection_reason", RejectionReason);
 
     insert_schema!(schemas, "session_created", SessionCreatedEvent);
     insert_schema!(schemas, "session_forked", SessionForkedEvent);

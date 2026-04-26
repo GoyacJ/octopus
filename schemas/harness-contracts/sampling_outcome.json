@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SamplingOutcome",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "completed",
+        "rate_limited",
+        "cancelled"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "denied"
+      ],
+      "properties": {
+        "denied": {
+          "type": "object",
+          "required": [
+            "reason"
+          ],
+          "properties": {
+            "reason": {
+              "$ref": "#/definitions/SamplingDenyReason"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "budget_exceeded"
+      ],
+      "properties": {
+        "budget_exceeded": {
+          "type": "object",
+          "required": [
+            "dimension"
+          ],
+          "properties": {
+            "dimension": {
+              "$ref": "#/definitions/SamplingBudgetDimension"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "upstream_error"
+      ],
+      "properties": {
+        "upstream_error": {
+          "type": "object",
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "SamplingBudgetDimension": {
+      "type": "string",
+      "enum": [
+        "per_request_input_tokens",
+        "per_request_output_tokens",
+        "per_request_timeout",
+        "per_request_tool_rounds",
+        "per_server_session_input",
+        "per_server_session_output",
+        "per_session_input",
+        "per_session_output"
+      ]
+    },
+    "SamplingDenyReason": {
+      "type": "string",
+      "enum": [
+        "policy_denied",
+        "approval_denied",
+        "model_not_allowed",
+        "permission_mode_blocked",
+        "inline_user_source_refused"
+      ]
+    }
+  }
+}

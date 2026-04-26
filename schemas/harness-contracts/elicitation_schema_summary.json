@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ElicitationSchemaSummary",
+  "type": "object",
+  "required": [
+    "field_count",
+    "has_secret_field",
+    "required_count"
+  ],
+  "properties": {
+    "field_count": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "has_secret_field": {
+      "type": "boolean"
+    },
+    "required_count": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    }
+  }
+}

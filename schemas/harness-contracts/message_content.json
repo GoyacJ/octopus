@@ -1,0 +1,617 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MessageContent",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "structured"
+      ],
+      "properties": {
+        "structured": true
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "multimodal"
+      ],
+      "properties": {
+        "multimodal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MessagePart"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "BlobRef": {
+      "type": "object",
+      "required": [
+        "content_hash",
+        "id",
+        "size"
+      ],
+      "properties": {
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "JournalOffset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "MessagePart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "image"
+          ],
+          "properties": {
+            "image": {
+              "type": "object",
+              "required": [
+                "blob_ref",
+                "mime_type"
+              ],
+              "properties": {
+                "blob_ref": {
+                  "$ref": "#/definitions/BlobRef"
+                },
+                "mime_type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_use"
+          ],
+          "properties": {
+            "tool_use": {
+              "type": "object",
+              "required": [
+                "id",
+                "input",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/definitions/TypedUlid"
+                },
+                "input": true,
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_result"
+          ],
+          "properties": {
+            "tool_result": {
+              "type": "object",
+              "required": [
+                "content",
+                "tool_use_id"
+              ],
+              "properties": {
+                "content": {
+                  "$ref": "#/definitions/ToolResult"
+                },
+                "tool_use_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "thinking"
+          ],
+          "properties": {
+            "thinking": {
+              "$ref": "#/definitions/ThinkingBlock"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ReferenceKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "url"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "url"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "ref_kind"
+          ],
+          "properties": {
+            "line_range": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "path": {
+              "type": "string"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob",
+            "from_offset",
+            "ref_kind",
+            "to_offset"
+          ],
+          "properties": {
+            "blob": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "from_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "transcript"
+              ]
+            },
+            "to_offset": {
+              "$ref": "#/definitions/JournalOffset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ref_kind",
+            "tool_use_id"
+          ],
+          "properties": {
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "tool_use"
+              ]
+            },
+            "tool_use_id": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "memory_id",
+            "ref_kind"
+          ],
+          "properties": {
+            "memory_id": {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            "ref_kind": {
+              "type": "string",
+              "enum": [
+                "memory"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ThinkingBlock": {
+      "type": "object",
+      "required": [
+        "provider_id"
+      ],
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_native": true,
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ToolResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "structured"
+          ],
+          "properties": {
+            "structured": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob"
+          ],
+          "properties": {
+            "blob": {
+              "type": "object",
+              "required": [
+                "blob_ref",
+                "content_type"
+              ],
+              "properties": {
+                "blob_ref": {
+                  "$ref": "#/definitions/BlobRef"
+                },
+                "content_type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mixed"
+          ],
+          "properties": {
+            "mixed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ToolResultPart"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolResultPart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structured"
+              ]
+            },
+            "schema_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob_ref",
+            "content_type",
+            "kind"
+          ],
+          "properties": {
+            "blob_ref": {
+              "$ref": "#/definitions/BlobRef"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "blob"
+              ]
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "language",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "code"
+              ]
+            },
+            "language": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reference_kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reference"
+              ]
+            },
+            "reference_kind": {
+              "$ref": "#/definitions/ReferenceKind"
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "headers",
+            "kind",
+            "rows"
+          ],
+          "properties": {
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": true
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "stage"
+          ],
+          "properties": {
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "progress"
+              ]
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "float"
+            },
+            "stage": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "code",
+            "kind",
+            "message",
+            "retriable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "error"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "retriable": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
+    }
+  }
+}

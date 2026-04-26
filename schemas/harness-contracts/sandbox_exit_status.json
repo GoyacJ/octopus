@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SandboxExitStatus",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "timeout",
+        "inactivity_timeout",
+        "output_budget_exceeded",
+        "cancelled",
+        "backend_error"
+      ]
+    },
+    {
+      "type": "object",
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "signal"
+      ],
+      "properties": {
+        "signal": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

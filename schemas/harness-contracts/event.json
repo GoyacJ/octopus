@@ -307,9 +307,12 @@
       "type": "object",
       "required": [
         "at",
+        "correlation_id",
         "current_iteration",
         "max_iterations",
         "run_id",
+        "session_id",
+        "tenant_id",
         "type",
         "usage_snapshot"
       ],
@@ -319,12 +322,7 @@
           "format": "date-time"
         },
         "correlation_id": {
-          "default": "01KQ2T01KPYEJBJRQP23PCVXP7",
-          "allOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            }
-          ]
+          "$ref": "#/definitions/TypedUlid"
         },
         "current_iteration": {
           "type": "integer",
@@ -340,20 +338,10 @@
           "$ref": "#/definitions/TypedUlid"
         },
         "session_id": {
-          "default": "01KQ2T01KPCRZBTHYZ5FYF7T6K",
-          "allOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            }
-          ]
+          "$ref": "#/definitions/TypedUlid"
         },
         "tenant_id": {
-          "default": "00000000000000000000000001",
-          "allOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            }
-          ]
+          "$ref": "#/definitions/TypedUlid"
         },
         "type": {
           "type": "string",
@@ -370,9 +358,10 @@
       "type": "object",
       "required": [
         "at",
-        "input",
+        "content",
         "message_id",
-        "session_id",
+        "metadata",
+        "run_id",
         "type"
       ],
       "properties": {
@@ -380,23 +369,16 @@
           "type": "string",
           "format": "date-time"
         },
-        "input": {
-          "$ref": "#/definitions/TurnInput"
+        "content": {
+          "$ref": "#/definitions/MessageContent"
         },
         "message_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "run_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "metadata": {
+          "$ref": "#/definitions/MessageMetadata"
         },
-        "session_id": {
+        "run_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "type": {
@@ -411,8 +393,7 @@
       "type": "object",
       "required": [
         "at",
-        "content",
-        "delta_id",
+        "delta",
         "message_id",
         "run_id",
         "type"
@@ -422,9 +403,8 @@
           "type": "string",
           "format": "date-time"
         },
-        "content": true,
-        "delta_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "delta": {
+          "$ref": "#/definitions/DeltaChunk"
         },
         "message_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -444,9 +424,11 @@
       "type": "object",
       "required": [
         "at",
-        "message",
+        "content",
+        "message_id",
         "run_id",
         "stop_reason",
+        "tool_uses",
         "type",
         "usage"
       ],
@@ -455,14 +437,33 @@
           "type": "string",
           "format": "date-time"
         },
-        "message": {
-          "$ref": "#/definitions/Message"
+        "content": {
+          "$ref": "#/definitions/MessageContent"
+        },
+        "message_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "pricing_snapshot_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PricingSnapshotId"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "run_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "stop_reason": {
           "$ref": "#/definitions/StopReason"
+        },
+        "tool_uses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ToolUseSummary"
+          }
         },
         "type": {
           "type": "string",
@@ -479,10 +480,10 @@
       "type": "object",
       "required": [
         "at",
+        "causation_id",
         "input",
-        "origin",
+        "properties",
         "run_id",
-        "session_id",
         "tool_name",
         "tool_use_id",
         "type"
@@ -492,14 +493,14 @@
           "type": "string",
           "format": "date-time"
         },
-        "input": true,
-        "origin": {
-          "$ref": "#/definitions/ToolOrigin"
-        },
-        "run_id": {
+        "causation_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "session_id": {
+        "input": true,
+        "properties": {
+          "$ref": "#/definitions/ToolProperties"
+        },
+        "run_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "tool_name": {
@@ -521,6 +522,7 @@
       "required": [
         "at",
         "decision_id",
+        "scope",
         "tool_use_id",
         "type"
       ],
@@ -531,6 +533,9 @@
         },
         "decision_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "scope": {
+          "$ref": "#/definitions/DecisionScope"
         },
         "tool_use_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -547,7 +552,6 @@
       "type": "object",
       "required": [
         "at",
-        "decided_by",
         "reason",
         "tool_use_id",
         "type"
@@ -557,11 +561,8 @@
           "type": "string",
           "format": "date-time"
         },
-        "decided_by": {
-          "$ref": "#/definitions/DecidedBy"
-        },
         "reason": {
-          "type": "string"
+          "$ref": "#/definitions/DenyReason"
         },
         "tool_use_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -578,6 +579,7 @@
       "type": "object",
       "required": [
         "at",
+        "duration_ms",
         "result",
         "tool_use_id",
         "type"
@@ -587,8 +589,13 @@
           "type": "string",
           "format": "date-time"
         },
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "result": {
-          "$ref": "#/definitions/ToolResultEnvelope"
+          "$ref": "#/definitions/ToolResult"
         },
         "tool_use_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -598,6 +605,16 @@
           "enum": [
             "tool_use_completed"
           ]
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UsageSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -606,7 +623,6 @@
       "required": [
         "at",
         "error",
-        "retriable",
         "tool_use_id",
         "type"
       ],
@@ -616,10 +632,7 @@
           "format": "date-time"
         },
         "error": {
-          "type": "string"
-        },
-        "retriable": {
-          "type": "boolean"
+          "$ref": "#/definitions/ToolErrorPayload"
         },
         "tool_use_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -636,7 +649,9 @@
       "type": "object",
       "required": [
         "at",
-        "stage",
+        "message",
+        "run_id",
+        "silent_for_ms",
         "tool_use_id",
         "type"
       ],
@@ -645,8 +660,23 @@
           "type": "string",
           "format": "date-time"
         },
-        "stage": {
+        "fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "message": {
           "type": "string"
+        },
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "silent_for_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "tool_use_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -664,7 +694,12 @@
       "required": [
         "at",
         "blob_ref",
+        "effective_limit",
+        "head_chars",
+        "original_metric",
         "original_size",
+        "run_id",
+        "tail_chars",
         "tool_use_id",
         "type"
       ],
@@ -676,9 +711,30 @@
         "blob_ref": {
           "$ref": "#/definitions/BlobRef"
         },
+        "effective_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "head_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "original_metric": {
+          "$ref": "#/definitions/BudgetMetric"
+        },
         "original_size": {
           "type": "integer",
           "format": "uint64",
+          "minimum": 0.0
+        },
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "tail_chars": {
+          "type": "integer",
+          "format": "uint32",
           "minimum": 0.0
         },
         "tool_use_id": {
@@ -696,7 +752,9 @@
       "type": "object",
       "required": [
         "at",
+        "kept",
         "reason",
+        "rejected",
         "tool_name",
         "type"
       ],
@@ -705,8 +763,24 @@
           "type": "string",
           "format": "date-time"
         },
+        "causation_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kept": {
+          "$ref": "#/definitions/ToolOrigin"
+        },
         "reason": {
           "$ref": "#/definitions/ShadowReason"
+        },
+        "rejected": {
+          "$ref": "#/definitions/ToolOrigin"
         },
         "tool_name": {
           "type": "string"
@@ -1438,10 +1512,11 @@
       "type": "object",
       "required": [
         "at",
-        "budget",
-        "current_tokens",
-        "limit_tokens",
+        "budget_kind",
+        "max",
+        "requested",
         "session_id",
+        "source",
         "type"
       ],
       "properties": {
@@ -1449,31 +1524,24 @@
           "type": "string",
           "format": "date-time"
         },
-        "budget": {
+        "budget_kind": {
           "$ref": "#/definitions/BudgetKind"
         },
-        "current_tokens": {
+        "max": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
-        "limit_tokens": {
+        "requested": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
-        },
-        "run_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "session_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "source": {
+          "$ref": "#/definitions/BudgetExceedanceSource"
         },
         "type": {
           "type": "string",
@@ -1486,41 +1554,53 @@
     {
       "type": "object",
       "required": [
+        "after_tokens",
         "at",
+        "before_tokens",
+        "bytes_saved",
+        "duration_ms",
+        "outcome",
+        "provider_id",
         "session_id",
-        "to",
+        "stage",
         "type"
       ],
       "properties": {
+        "after_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "at": {
           "type": "string",
           "format": "date-time"
         },
-        "from": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ContextStage"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "before_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
-        "run_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "bytes_saved": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "outcome": {
+          "$ref": "#/definitions/ContextStageOutcome"
+        },
+        "provider_id": {
+          "type": "string"
         },
         "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "to": {
-          "$ref": "#/definitions/ContextStage"
+        "stage": {
+          "$ref": "#/definitions/ContextStageId"
         },
         "type": {
           "type": "string",
@@ -1534,21 +1614,36 @@
       "type": "object",
       "required": [
         "at",
-        "canonical_name",
+        "defer_policy",
+        "filtered_out",
         "server_id",
+        "session_id",
         "tool_name",
-        "type"
+        "type",
+        "upstream_name"
       ],
       "properties": {
         "at": {
           "type": "string",
           "format": "date-time"
         },
-        "canonical_name": {
-          "type": "string"
+        "defer_policy": {
+          "$ref": "#/definitions/DeferPolicy"
+        },
+        "filter_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filtered_out": {
+          "type": "boolean"
         },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "tool_name": {
           "type": "string"
@@ -1558,6 +1653,9 @@
           "enum": [
             "mcp_tool_injected"
           ]
+        },
+        "upstream_name": {
+          "type": "string"
         }
       }
     },
@@ -1565,8 +1663,11 @@
       "type": "object",
       "required": [
         "at",
+        "attempts_so_far",
         "reason",
         "server_id",
+        "server_source",
+        "terminal",
         "type"
       ],
       "properties": {
@@ -1574,11 +1675,32 @@
           "type": "string",
           "format": "date-time"
         },
+        "attempts_so_far": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
         "reason": {
           "$ref": "#/definitions/McpConnectionLostReason"
         },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "server_source": {
+          "$ref": "#/definitions/McpServerSource"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "terminal": {
+          "type": "boolean"
         },
         "type": {
           "type": "string",
@@ -1592,22 +1714,56 @@
       "type": "object",
       "required": [
         "at",
+        "attempts_used",
+        "schema_changed",
         "server_id",
-        "type"
+        "server_source",
+        "total_downtime_ms",
+        "type",
+        "was_first"
       ],
       "properties": {
         "at": {
           "type": "string",
           "format": "date-time"
         },
+        "attempts_used": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "schema_changed": {
+          "type": "boolean"
+        },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "server_source": {
+          "$ref": "#/definitions/McpServerSource"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_downtime_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
           "enum": [
             "mcp_connection_recovered"
           ]
+        },
+        "was_first": {
+          "type": "boolean"
         }
       }
     },
@@ -1615,9 +1771,11 @@
       "type": "object",
       "required": [
         "at",
-        "prompt",
         "request_id",
+        "schema_summary",
         "server_id",
+        "session_id",
+        "subject",
         "type"
       ],
       "properties": {
@@ -1625,14 +1783,40 @@
           "type": "string",
           "format": "date-time"
         },
-        "prompt": {
-          "type": "string"
-        },
         "request_id": {
           "$ref": "#/definitions/TypedUlid"
         },
+        "run_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema_summary": {
+          "$ref": "#/definitions/ElicitationSchemaSummary"
+        },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -1646,8 +1830,10 @@
       "type": "object",
       "required": [
         "at",
+        "outcome",
         "request_id",
         "server_id",
+        "session_id",
         "type"
       ],
       "properties": {
@@ -1655,49 +1841,83 @@
           "type": "string",
           "format": "date-time"
         },
+        "outcome": {
+          "$ref": "#/definitions/ElicitationOutcome"
+        },
         "request_id": {
           "$ref": "#/definitions/TypedUlid"
         },
+        "run_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "type": {
           "type": "string",
           "enum": [
             "mcp_elicitation_resolved"
           ]
-        },
-        "value": true
+        }
       }
     },
     {
       "type": "object",
       "required": [
-        "added",
-        "at",
-        "removed",
+        "added_count",
+        "disposition",
+        "received_at",
+        "removed_count",
         "server_id",
         "type"
       ],
       "properties": {
-        "added": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "added_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
-        "at": {
+        "disposition": {
+          "$ref": "#/definitions/ToolsListChangedDisposition"
+        },
+        "pending_since": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "received_at": {
           "type": "string",
           "format": "date-time"
         },
-        "removed": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "removed_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -1711,34 +1931,7 @@
       "type": "object",
       "required": [
         "at",
-        "server_id",
-        "type",
-        "uri"
-      ],
-      "properties": {
-        "at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "server_id": {
-          "$ref": "#/definitions/McpServerId"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "mcp_resource_updated"
-          ]
-        },
-        "uri": {
-          "type": "string"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "at",
-        "request_id",
+        "kind",
         "server_id",
         "type"
       ],
@@ -1747,17 +1940,94 @@
           "type": "string",
           "format": "date-time"
         },
-        "model_hint": {
+        "kind": {
+          "$ref": "#/definitions/McpResourceUpdateKind"
+        },
+        "server_id": {
+          "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "mcp_resource_updated"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "at",
+        "input_tokens",
+        "latency_ms",
+        "outcome",
+        "output_tokens",
+        "prompt_cache_namespace",
+        "request_id",
+        "server_id",
+        "session_id",
+        "type"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "input_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "latency_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "model_id": {
           "type": [
             "string",
             "null"
           ]
         },
+        "outcome": {
+          "$ref": "#/definitions/SamplingOutcome"
+        },
+        "output_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "prompt_cache_namespace": {
+          "type": "string"
+        },
         "request_id": {
           "$ref": "#/definitions/TypedUlid"
         },
+        "run_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "server_id": {
           "$ref": "#/definitions/McpServerId"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "type": {
           "type": "string",
@@ -1770,29 +2040,41 @@
     {
       "type": "object",
       "required": [
+        "added",
         "at",
-        "deferred",
-        "loaded",
-        "tenant_id",
+        "deferred_total",
+        "removed",
+        "session_id",
+        "source",
         "type"
       ],
       "properties": {
+        "added": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeferredToolHint"
+          }
+        },
         "at": {
           "type": "string",
           "format": "date-time"
         },
-        "deferred": {
+        "deferred_total": {
           "type": "integer",
-          "format": "uint",
+          "format": "uint32",
           "minimum": 0.0
         },
-        "loaded": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0.0
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        "tenant_id": {
+        "session_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "source": {
+          "$ref": "#/definitions/ToolPoolChangeSource"
         },
         "type": {
           "type": "string",
@@ -1807,8 +2089,13 @@
       "required": [
         "at",
         "matched",
+        "query",
         "query_kind",
         "run_id",
+        "scored",
+        "session_id",
+        "tool_use_id",
+        "truncated_by_max_results",
         "type"
       ],
       "properties": {
@@ -1817,15 +2104,46 @@
           "format": "date-time"
         },
         "matched": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0.0
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "query": {
+          "type": "string"
         },
         "query_kind": {
           "$ref": "#/definitions/ToolSearchQueryKind"
         },
         "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "scored": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "tool_use_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "truncated_by_max_results": {
+          "type": "boolean"
         },
         "type": {
           "type": "string",
@@ -1839,8 +2157,14 @@
       "type": "object",
       "required": [
         "at",
-        "schema_hash",
-        "tool_name",
+        "backend",
+        "cache_impact",
+        "coalesced_count",
+        "names",
+        "run_id",
+        "session_id",
+        "tool_use_id",
+        "triggered_session_reload",
         "type"
       ],
       "properties": {
@@ -1848,18 +2172,34 @@
           "type": "string",
           "format": "date-time"
         },
-        "schema_hash": {
+        "backend": {
+          "type": "string"
+        },
+        "cache_impact": {
+          "$ref": "#/definitions/CacheImpact"
+        },
+        "coalesced_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "names": {
           "type": "array",
           "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
+            "type": "string"
+          }
         },
-        "tool_name": {
-          "type": "string"
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "tool_use_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "triggered_session_reload": {
+          "type": "boolean"
         },
         "type": {
           "type": "string",
@@ -1872,18 +2212,31 @@
     {
       "type": "object",
       "required": [
+        "agent_ref",
         "at",
+        "depth",
+        "parent_run_id",
         "parent_session_id",
         "spec_hash",
         "spec_snapshot_id",
         "subagent_id",
-        "tenant_id",
         "type"
       ],
       "properties": {
+        "agent_ref": {
+          "$ref": "#/definitions/AgentRef"
+        },
         "at": {
           "type": "string",
           "format": "date-time"
+        },
+        "depth": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "parent_run_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "parent_session_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -1899,13 +2252,26 @@
           "minItems": 32
         },
         "spec_snapshot_id": {
-          "$ref": "#/definitions/BlobRef"
+          "$ref": "#/definitions/TypedUlid"
         },
         "subagent_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "trigger_tool_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trigger_tool_use_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -1973,6 +2339,7 @@
       "type": "object",
       "required": [
         "at",
+        "final_usage",
         "parent_session_id",
         "reason",
         "subagent_id",
@@ -1982,6 +2349,9 @@
         "at": {
           "type": "string",
           "format": "date-time"
+        },
+        "final_usage": {
+          "$ref": "#/definitions/UsageSnapshot"
         },
         "parent_session_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -2004,6 +2374,7 @@
       "type": "object",
       "required": [
         "at",
+        "by",
         "paused",
         "tenant_id",
         "type"
@@ -2012,6 +2383,9 @@
         "at": {
           "type": "string",
           "format": "date-time"
+        },
+        "by": {
+          "type": "string"
         },
         "paused": {
           "type": "boolean"
@@ -2036,25 +2410,46 @@
     {
       "type": "object",
       "required": [
-        "at",
+        "forwarded_at",
+        "original_request_id",
         "parent_session_id",
-        "request_id",
+        "presented_options",
         "subagent_id",
+        "subject",
         "type"
       ],
       "properties": {
-        "at": {
+        "forwarded_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "original_request_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "parent_session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "request_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "presented_options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Decision"
+          }
         },
         "subagent_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "subject": {
+          "$ref": "#/definitions/PermissionSubject"
+        },
+        "timeout_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimeoutPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2068,9 +2463,10 @@
       "type": "object",
       "required": [
         "at",
+        "decided_by",
         "decision",
+        "original_request_id",
         "parent_session_id",
-        "request_id",
         "subagent_id",
         "type"
       ],
@@ -2079,13 +2475,16 @@
           "type": "string",
           "format": "date-time"
         },
+        "decided_by": {
+          "$ref": "#/definitions/DecidedBy"
+        },
         "decision": {
           "$ref": "#/definitions/Decision"
         },
-        "parent_session_id": {
+        "original_request_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "request_id": {
+        "parent_session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "subagent_id": {
@@ -2149,19 +2548,28 @@
       "type": "object",
       "required": [
         "agent_id",
-        "at",
+        "joined_at",
+        "role",
+        "session_id",
         "spec_hash",
         "spec_snapshot_id",
         "team_id",
-        "type"
+        "type",
+        "visibility"
       ],
       "properties": {
         "agent_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "at": {
+        "joined_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "role": {
+          "type": "string"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "spec_hash": {
           "type": "array",
@@ -2184,6 +2592,9 @@
           "enum": [
             "team_member_joined"
           ]
+        },
+        "visibility": {
+          "$ref": "#/definitions/ContextVisibility"
         }
       }
     },
@@ -2191,7 +2602,7 @@
       "type": "object",
       "required": [
         "agent_id",
-        "at",
+        "left_at",
         "reason",
         "team_id",
         "type"
@@ -2200,12 +2611,12 @@
         "agent_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "at": {
+        "left_at": {
           "type": "string",
           "format": "date-time"
         },
         "reason": {
-          "type": "string"
+          "$ref": "#/definitions/MemberLeaveReason"
         },
         "team_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -2221,13 +2632,19 @@
     {
       "type": "object",
       "required": [
+        "action",
         "agent_id",
         "at",
-        "silent_for_ms",
+        "last_activity_at",
+        "session_id",
+        "stalled_for",
         "team_id",
         "type"
       ],
       "properties": {
+        "action": {
+          "$ref": "#/definitions/StalledAction"
+        },
         "agent_id": {
           "$ref": "#/definitions/TypedUlid"
         },
@@ -2235,10 +2652,15 @@
           "type": "string",
           "format": "date-time"
         },
-        "silent_for_ms": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
+        "last_activity_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "stalled_for": {
+          "$ref": "#/definitions/Duration"
         },
         "team_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -2257,7 +2679,9 @@
         "at",
         "from",
         "message_id",
+        "payload",
         "team_id",
+        "to",
         "type"
       ],
       "properties": {
@@ -2271,18 +2695,14 @@
         "message_id": {
           "$ref": "#/definitions/TypedUlid"
         },
+        "payload": {
+          "$ref": "#/definitions/MessagePayload"
+        },
         "team_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "to": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "#/definitions/Recipient"
         },
         "type": {
           "type": "string",
@@ -2297,7 +2717,8 @@
       "required": [
         "at",
         "message_id",
-        "routed_to",
+        "resolved_recipients",
+        "routing_policy",
         "team_id",
         "type"
       ],
@@ -2309,11 +2730,14 @@
         "message_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "routed_to": {
+        "resolved_recipients": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/TypedUlid"
           }
+        },
+        "routing_policy": {
+          "$ref": "#/definitions/RoutingPolicyKind"
         },
         "team_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -2394,73 +2818,130 @@
       "type": "object",
       "required": [
         "action",
-        "actor",
         "at",
+        "bytes_written",
         "content_hash",
+        "kind",
         "memory_id",
+        "provider_id",
+        "session_id",
         "source",
-        "target",
-        "tenant_id",
-        "type"
+        "takes_effect",
+        "type",
+        "visibility"
       ],
       "properties": {
         "action": {
           "$ref": "#/definitions/MemoryWriteAction"
         },
-        "actor": {
-          "$ref": "#/definitions/MemoryActor"
-        },
         "at": {
           "type": "string",
           "format": "date-time"
         },
+        "bytes_written": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "content_hash": {
           "$ref": "#/definitions/ContentHash"
         },
+        "kind": {
+          "$ref": "#/definitions/MemoryKind"
+        },
         "memory_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "source": {
           "$ref": "#/definitions/MemorySource"
         },
-        "target": {
-          "$ref": "#/definitions/MemoryWriteTarget"
-        },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "takes_effect": {
+          "$ref": "#/definitions/TakesEffect"
         },
         "type": {
           "type": "string",
           "enum": [
             "memory_upserted"
           ]
+        },
+        "visibility": {
+          "$ref": "#/definitions/MemoryVisibility"
         }
       }
     },
     {
       "type": "object",
       "required": [
-        "actor",
         "at",
-        "recalled",
+        "deadline_used_ms",
+        "injected_chars",
+        "kept_count",
+        "kinds_returned",
+        "min_similarity",
+        "provider_id",
+        "query_text_hash",
+        "returned_count",
         "run_id",
         "session_id",
-        "tenant_id",
+        "turn",
         "type"
       ],
       "properties": {
-        "actor": {
-          "$ref": "#/definitions/MemoryActor"
-        },
         "at": {
           "type": "string",
           "format": "date-time"
         },
-        "recalled": {
+        "deadline_used_ms": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "injected_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "kept_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "kinds_returned": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/TypedUlid"
+            "$ref": "#/definitions/MemoryKind"
           }
+        },
+        "min_similarity": {
+          "type": "number",
+          "format": "float"
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "query_text_hash": {
+          "$ref": "#/definitions/ContentHash"
+        },
+        "returned_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "run_id": {
           "$ref": "#/definitions/TypedUlid"
@@ -2468,8 +2949,10 @@
         "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "turn": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
@@ -2483,8 +2966,11 @@
       "type": "object",
       "required": [
         "at",
+        "provider_id",
         "reason",
         "run_id",
+        "session_id",
+        "turn",
         "type"
       ],
       "properties": {
@@ -2492,11 +2978,22 @@
           "type": "string",
           "format": "date-time"
         },
+        "provider_id": {
+          "type": "string"
+        },
         "reason": {
           "$ref": "#/definitions/MemoryRecallDegradedReason"
         },
         "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "turn": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
@@ -2512,6 +3009,8 @@
         "at",
         "reason",
         "run_id",
+        "session_id",
+        "turn",
         "type"
       ],
       "properties": {
@@ -2520,10 +3019,18 @@
           "format": "date-time"
         },
         "reason": {
-          "type": "string"
+          "$ref": "#/definitions/RecallSkipReason"
         },
         "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "turn": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
@@ -2539,8 +3046,11 @@
         "action",
         "at",
         "category",
+        "content_hash",
         "direction",
-        "tenant_id",
+        "pattern_id",
+        "session_id",
+        "severity",
         "type"
       ],
       "properties": {
@@ -2554,10 +3064,22 @@
         "category": {
           "$ref": "#/definitions/ThreatCategory"
         },
+        "content_hash": {
+          "$ref": "#/definitions/ContentHash"
+        },
         "direction": {
           "$ref": "#/definitions/ThreatDirection"
         },
-        "memory_id": {
+        "pattern_id": {
+          "type": "string"
+        },
+        "provider_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
           "anyOf": [
             {
               "$ref": "#/definitions/TypedUlid"
@@ -2567,8 +3089,11 @@
             }
           ]
         },
-        "tenant_id": {
+        "session_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "severity": {
+          "$ref": "#/definitions/Severity"
         },
         "type": {
           "type": "string",
@@ -2581,33 +3106,41 @@
     {
       "type": "object",
       "required": [
-        "actual_bytes",
         "at",
+        "current_chars",
         "file",
-        "limit_bytes",
+        "session_id",
+        "strategy_applied",
         "tenant_id",
+        "threshold",
         "type"
       ],
       "properties": {
-        "actual_bytes": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "at": {
           "type": "string",
           "format": "date-time"
         },
-        "file": {
-          "$ref": "#/definitions/MemdirFileTag"
-        },
-        "limit_bytes": {
+        "current_chars": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
+        "file": {
+          "$ref": "#/definitions/MemdirFileTag"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "strategy_applied": {
+          "$ref": "#/definitions/OverflowStrategy"
+        },
         "tenant_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "threshold": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
@@ -2621,9 +3154,12 @@
       "type": "object",
       "required": [
         "at",
-        "input_count",
-        "output_count",
-        "tenant_id",
+        "demoted",
+        "draft_dreams_chars",
+        "duration_ms",
+        "hook_id",
+        "promoted",
+        "session_id",
         "type"
       ],
       "properties": {
@@ -2631,17 +3167,32 @@
           "type": "string",
           "format": "date-time"
         },
-        "input_count": {
+        "demoted": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "draft_dreams_chars": {
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
         },
-        "output_count": {
+        "duration_ms": {
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
         },
-        "tenant_id": {
+        "hook_id": {
+          "type": "string"
+        },
+        "promoted": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "type": {
@@ -2656,14 +3207,37 @@
       "type": "object",
       "required": [
         "at",
+        "delta",
         "session_id",
-        "type",
-        "usage"
+        "type"
       ],
       "properties": {
         "at": {
           "type": "string",
           "format": "date-time"
+        },
+        "delta": {
+          "$ref": "#/definitions/UsageSnapshot"
+        },
+        "model_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pricing_snapshot_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PricingSnapshotId"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "run_id": {
           "anyOf": [
@@ -2683,9 +3257,6 @@
           "enum": [
             "usage_accumulated"
           ]
-        },
-        "usage": {
-          "$ref": "#/definitions/UsageSnapshot"
         }
       }
     },
@@ -2730,44 +3301,15 @@
       "type": "object",
       "required": [
         "at",
-        "name",
-        "plugin_id",
-        "tenant_id",
-        "type",
-        "version"
-      ],
-      "properties": {
-        "at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "name": {
-          "type": "string"
-        },
-        "plugin_id": {
-          "$ref": "#/definitions/PluginId"
-        },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "plugin_loaded"
-          ]
-        },
-        "version": {
-          "type": "string"
-        }
-      }
-    },
-    {
-      "type": "object",
-      "required": [
-        "at",
+        "capabilities",
+        "from_state",
+        "manifest_hash",
         "manifest_origin",
-        "reason",
+        "plugin_id",
+        "plugin_name",
+        "plugin_version",
         "tenant_id",
+        "trust_level",
         "type"
       ],
       "properties": {
@@ -2775,14 +3317,97 @@
           "type": "string",
           "format": "date-time"
         },
+        "capabilities": {
+          "$ref": "#/definitions/PluginCapabilitiesSummary"
+        },
+        "from_state": {
+          "$ref": "#/definitions/PluginLifecycleStateDiscriminant"
+        },
+        "manifest_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
         "manifest_origin": {
+          "$ref": "#/definitions/ManifestOriginRef"
+        },
+        "plugin_id": {
+          "$ref": "#/definitions/PluginId"
+        },
+        "plugin_name": {
           "type": "string"
         },
-        "reason": {
-          "$ref": "#/definitions/PluginRejectedReason"
+        "plugin_version": {
+          "type": "string"
         },
         "tenant_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "trust_level": {
+          "$ref": "#/definitions/TrustLevel"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "plugin_loaded"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "at",
+        "manifest_hash",
+        "manifest_origin",
+        "plugin_id",
+        "plugin_name",
+        "plugin_version",
+        "reason",
+        "tenant_id",
+        "trust_level",
+        "type"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "manifest_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "manifest_origin": {
+          "$ref": "#/definitions/ManifestOriginRef"
+        },
+        "plugin_id": {
+          "$ref": "#/definitions/PluginId"
+        },
+        "plugin_name": {
+          "type": "string"
+        },
+        "plugin_version": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/definitions/RejectionReason"
+        },
+        "tenant_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "trust_level": {
+          "$ref": "#/definitions/TrustLevel"
         },
         "type": {
           "type": "string",
@@ -2811,7 +3436,7 @@
           "$ref": "#/definitions/ManifestValidationFailure"
         },
         "manifest_origin": {
-          "type": "string"
+          "$ref": "#/definitions/ManifestOriginRef"
         },
         "partial_name": {
           "type": [
@@ -2850,8 +3475,11 @@
       "type": "object",
       "required": [
         "at",
+        "backend_id",
+        "fingerprint",
         "policy",
-        "tool_use_id",
+        "run_id",
+        "session_id",
         "type"
       ],
       "properties": {
@@ -2859,11 +3487,30 @@
           "type": "string",
           "format": "date-time"
         },
+        "backend_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/definitions/ExecFingerprint"
+        },
         "policy": {
           "$ref": "#/definitions/SandboxPolicySummary"
         },
-        "tool_use_id": {
+        "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "tool_use_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2877,9 +3524,14 @@
       "type": "object",
       "required": [
         "at",
+        "backend_id",
         "duration_ms",
-        "status",
-        "tool_use_id",
+        "exit_status",
+        "fingerprint",
+        "run_id",
+        "session_id",
+        "stderr_bytes_observed",
+        "stdout_bytes_observed",
         "type"
       ],
       "properties": {
@@ -2887,16 +3539,55 @@
           "type": "string",
           "format": "date-time"
         },
+        "backend_id": {
+          "type": "string"
+        },
         "duration_ms": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
-        "status": {
+        "exit_status": {
           "$ref": "#/definitions/SandboxExitStatus"
         },
-        "tool_use_id": {
+        "fingerprint": {
+          "$ref": "#/definitions/ExecFingerprint"
+        },
+        "overflow": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SandboxOverflowSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "stderr_bytes_observed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "stdout_bytes_observed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "tool_use_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2910,7 +3601,10 @@
       "type": "object",
       "required": [
         "at",
-        "tool_use_id",
+        "backend_id",
+        "run_id",
+        "session_id",
+        "since_last_io_ms",
         "type"
       ],
       "properties": {
@@ -2918,8 +3612,29 @@
           "type": "string",
           "format": "date-time"
         },
-        "tool_use_id": {
+        "backend_id": {
+          "type": "string"
+        },
+        "run_id": {
           "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "since_last_io_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "tool_use_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2933,8 +3648,11 @@
       "type": "object",
       "required": [
         "at",
-        "timeout_ms",
-        "tool_use_id",
+        "backend_id",
+        "configured_timeout",
+        "kill_scope",
+        "run_id",
+        "session_id",
         "type"
       ],
       "properties": {
@@ -2942,13 +3660,30 @@
           "type": "string",
           "format": "date-time"
         },
-        "timeout_ms": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
+        "backend_id": {
+          "type": "string"
+        },
+        "configured_timeout": {
+          "$ref": "#/definitions/Duration"
+        },
+        "kill_scope": {
+          "$ref": "#/definitions/KillScope"
+        },
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "tool_use_id": {
-          "$ref": "#/definitions/TypedUlid"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2963,8 +3698,12 @@
       "required": [
         "at",
         "blob_ref",
+        "head_bytes",
+        "original_bytes",
+        "run_id",
+        "session_id",
         "stream",
-        "tool_use_id",
+        "tail_bytes",
         "type"
       ],
       "properties": {
@@ -2975,11 +3714,39 @@
         "blob_ref": {
           "$ref": "#/definitions/BlobRef"
         },
+        "head_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "original_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
         "stream": {
-          "type": "string"
+          "$ref": "#/definitions/SandboxOutputStream"
+        },
+        "tail_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "tool_use_id": {
-          "$ref": "#/definitions/TypedUlid"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -2993,8 +3760,10 @@
       "type": "object",
       "required": [
         "at",
-        "reason",
-        "tool_use_id",
+        "paused_for_ms",
+        "queued_bytes",
+        "run_id",
+        "session_id",
         "type"
       ],
       "properties": {
@@ -3002,11 +3771,31 @@
           "type": "string",
           "format": "date-time"
         },
-        "reason": {
-          "type": "string"
+        "paused_for_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "queued_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "run_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "session_id": {
+          "$ref": "#/definitions/TypedUlid"
         },
         "tool_use_id": {
-          "$ref": "#/definitions/TypedUlid"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TypedUlid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -3020,9 +3809,11 @@
       "type": "object",
       "required": [
         "at",
+        "backend_id",
+        "content_hash",
         "kind",
         "session_id",
-        "snapshot_id",
+        "size_bytes",
         "type"
       ],
       "properties": {
@@ -3030,14 +3821,29 @@
           "type": "string",
           "format": "date-time"
         },
+        "backend_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
         "kind": {
           "$ref": "#/definitions/SessionSnapshotKind"
         },
         "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
-        "snapshot_id": {
-          "$ref": "#/definitions/TypedUlid"
+        "size_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "type": {
           "type": "string",
@@ -3051,7 +3857,10 @@
       "type": "object",
       "required": [
         "at",
+        "backend_id",
+        "container_ref",
         "from",
+        "reason",
         "session_id",
         "to",
         "type"
@@ -3061,14 +3870,23 @@
           "type": "string",
           "format": "date-time"
         },
-        "from": {
+        "backend_id": {
           "type": "string"
+        },
+        "container_ref": {
+          "$ref": "#/definitions/ContainerRef"
+        },
+        "from": {
+          "$ref": "#/definitions/ContainerLifecycleState"
+        },
+        "reason": {
+          "$ref": "#/definitions/ContainerLifecycleReason"
         },
         "session_id": {
           "$ref": "#/definitions/TypedUlid"
         },
         "to": {
-          "type": "string"
+          "$ref": "#/definitions/ContainerLifecycleState"
         },
         "type": {
           "type": "string",
@@ -3458,6 +4276,21 @@
     }
   ],
   "definitions": {
+    "AgentRef": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "BlobRef": {
       "type": "object",
       "required": [
@@ -3491,6 +4324,38 @@
           "minimum": 0.0
         }
       }
+    },
+    "BudgetExceedanceSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local_estimate"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_report"
+          ],
+          "properties": {
+            "provider_report": {
+              "type": "object",
+              "required": [
+                "reported_tokens"
+              ],
+              "properties": {
+                "reported_tokens": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "BudgetKind": {
       "oneOf": [
@@ -3582,32 +4447,99 @@
       ]
     },
     "CompactOutcome": {
-      "type": "string",
-      "enum": [
-        "applied",
-        "degraded",
-        "reactive_failed"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "degraded_no_aux_provider",
+            "reactive_attempt_failed"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "degraded_aux_failure"
+          ],
+          "properties": {
+            "degraded_aux_failure": {
+              "type": "object",
+              "required": [
+                "failure_count"
+              ],
+              "properties": {
+                "failure_count": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "CompactTrigger": {
-      "type": "string",
-      "enum": [
-        "soft_budget",
-        "hard_budget",
-        "provider_reported",
-        "user_command"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "soft_budget",
+            "hard_budget",
+            "user_command"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_report"
+          ],
+          "properties": {
+            "provider_report": {
+              "type": "object",
+              "required": [
+                "reported_tokens"
+              ],
+              "properties": {
+                "reported_tokens": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "CompactionHandoff": {
       "type": "object",
       "required": [
-        "metadata",
-        "summary_ref"
+        "active_task_ref",
+        "outstanding_permissions",
+        "pending_tool_uses",
+        "remaining_budget"
       ],
       "properties": {
-        "metadata": true,
-        "summary_ref": {
+        "active_task_ref": {
           "$ref": "#/definitions/BlobRef"
+        },
+        "outstanding_permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "pending_tool_uses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "remaining_budget": {
+          "$ref": "#/definitions/RemainingBudget"
         }
       }
     },
@@ -3621,6 +4553,45 @@
       "maxItems": 32,
       "minItems": 32
     },
+    "ContainerLifecycleReason": {
+      "type": "string",
+      "enum": [
+        "session_attached",
+        "session_detached",
+        "pool_reused",
+        "pool_evicted",
+        "health_check_failed",
+        "snapshot_restore",
+        "manual"
+      ]
+    },
+    "ContainerLifecycleState": {
+      "type": "string",
+      "enum": [
+        "provisioning",
+        "ready",
+        "in_use",
+        "idle",
+        "stopping",
+        "stopped",
+        "failed"
+      ]
+    },
+    "ContainerRef": {
+      "type": "object",
+      "required": [
+        "backend_kind",
+        "container_id"
+      ],
+      "properties": {
+        "backend_kind": {
+          "type": "string"
+        },
+        "container_id": {
+          "type": "string"
+        }
+      }
+    },
     "ContentHash": {
       "type": "array",
       "items": {
@@ -3631,14 +4602,129 @@
       "maxItems": 32,
       "minItems": 32
     },
-    "ContextStage": {
+    "ContextStageId": {
       "type": "string",
       "enum": [
-        "gather",
-        "rank",
-        "pack",
-        "compact",
-        "finalize"
+        "tool_result_budget",
+        "snip",
+        "microcompact",
+        "collapse",
+        "autocompact"
+      ]
+    },
+    "ContextStageOutcome": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "no_change",
+            "modified",
+            "skipped_no_aux_provider"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "forked"
+          ],
+          "properties": {
+            "forked": {
+              "type": "object",
+              "required": [
+                "child"
+              ],
+              "properties": {
+                "child": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skipped_aux_cooldown"
+          ],
+          "properties": {
+            "skipped_aux_cooldown": {
+              "type": "object",
+              "required": [
+                "until_turn"
+              ],
+              "properties": {
+                "until_turn": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "failed"
+          ],
+          "properties": {
+            "failed": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ContextVisibility": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "all",
+            "private"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "allowlist"
+          ],
+          "properties": {
+            "allowlist": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TypedUlid"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "allowlist_quote"
+          ],
+          "properties": {
+            "allowlist_quote": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TypedUlid"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "DecidedBy": {
@@ -3764,8 +4850,6 @@
         "allow_permanent",
         "deny_once",
         "deny_permanent",
-        "ask_user",
-        "defer",
         "escalate"
       ]
     },
@@ -3889,6 +4973,274 @@
           "additionalProperties": false
         }
       ]
+    },
+    "DeferPolicy": {
+      "type": "string",
+      "enum": [
+        "always_load",
+        "auto_defer",
+        "force_defer"
+      ]
+    },
+    "DeferredToolHint": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "DeltaChunk": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "thought"
+          ],
+          "properties": {
+            "thought": {
+              "$ref": "#/definitions/ThoughtChunk"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_use_start"
+          ],
+          "properties": {
+            "tool_use_start": {
+              "type": "object",
+              "required": [
+                "tool_name",
+                "tool_use_id"
+              ],
+              "properties": {
+                "tool_name": {
+                  "type": "string"
+                },
+                "tool_use_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_use_input_delta"
+          ],
+          "properties": {
+            "tool_use_input_delta": {
+              "type": "object",
+              "required": [
+                "delta",
+                "tool_use_id"
+              ],
+              "properties": {
+                "delta": {
+                  "type": "string"
+                },
+                "tool_use_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "tool_use_end"
+          ],
+          "properties": {
+            "tool_use_end": {
+              "type": "object",
+              "required": [
+                "tool_use_id"
+              ],
+              "properties": {
+                "tool_use_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "DenyReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_denied",
+            "rule_denied",
+            "default_mode_denied",
+            "subagent_blocked",
+            "policy_denied"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "hook_blocked"
+          ],
+          "properties": {
+            "hook_blocked": {
+              "type": "object",
+              "required": [
+                "handler_id"
+              ],
+              "properties": {
+                "handler_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "other"
+          ],
+          "properties": {
+            "other": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ElicitationOutcome": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_declined",
+            "timeout",
+            "no_handler_registered"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provided"
+          ],
+          "properties": {
+            "provided": {
+              "type": "object",
+              "required": [
+                "value_hash"
+              ],
+              "properties": {
+                "value_hash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  },
+                  "maxItems": 32,
+                  "minItems": 32
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "invalid"
+          ],
+          "properties": {
+            "invalid": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ElicitationSchemaSummary": {
+      "type": "object",
+      "required": [
+        "field_count",
+        "has_secret_field",
+        "required_count"
+      ],
+      "properties": {
+        "field_count": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "has_secret_field": {
+          "type": "boolean"
+        },
+        "required_count": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        }
+      }
     },
     "EmbeddedRefusedReason": {
       "type": "string",
@@ -4194,6 +5546,14 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "KillScope": {
+      "type": "string",
+      "enum": [
+        "process",
+        "process_group",
+        "session_leader"
+      ]
+    },
     "LocalIsolationTag": {
       "type": "string",
       "enum": [
@@ -4201,6 +5561,85 @@
         "bubblewrap",
         "seatbelt",
         "job_object"
+      ]
+    },
+    "LongRunningPolicy": {
+      "type": "object",
+      "required": [
+        "hard_timeout",
+        "stall_threshold"
+      ],
+      "properties": {
+        "hard_timeout": {
+          "$ref": "#/definitions/Duration"
+        },
+        "stall_threshold": {
+          "$ref": "#/definitions/Duration"
+        }
+      }
+    },
+    "ManifestOriginRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "cargo_extension"
+          ],
+          "properties": {
+            "cargo_extension": {
+              "type": "object",
+              "required": [
+                "binary"
+              ],
+              "properties": {
+                "binary": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "remote_registry"
+          ],
+          "properties": {
+            "remote_registry": {
+              "type": "object",
+              "required": [
+                "endpoint"
+              ],
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "ManifestValidationFailure": {
@@ -4328,7 +5767,7 @@
         {
           "type": "string",
           "enum": [
-            "server_exited"
+            "shutdown"
           ]
         },
         {
@@ -4363,6 +5802,34 @@
           "properties": {
             "handshake_mismatch": {
               "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "stdio_process_exited"
+          ],
+          "properties": {
+            "stdio_process_exited": {
+              "type": "object",
+              "properties": {
+                "exit_code": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32"
+                },
+                "signal": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32"
+                }
+              }
             }
           },
           "additionalProperties": false
@@ -4408,6 +5875,86 @@
           "type": "string"
         }
       }
+    },
+    "McpResourceUpdateKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "list_changed"
+          ],
+          "properties": {
+            "list_changed": {
+              "type": "object",
+              "required": [
+                "added",
+                "removed"
+              ],
+              "properties": {
+                "added": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "removed": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "resource_updated"
+          ],
+          "properties": {
+            "resource_updated": {
+              "type": "object",
+              "required": [
+                "uri"
+              ],
+              "properties": {
+                "uri": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "prompts_list_changed"
+          ],
+          "properties": {
+            "prompts_list_changed": {
+              "type": "object",
+              "required": [
+                "added",
+                "removed"
+              ],
+              "properties": {
+                "added": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "removed": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "McpServerId": {
       "type": "string"
@@ -4477,6 +6024,32 @@
         }
       ]
     },
+    "MemberLeaveReason": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "goal_achieved",
+            "quota_exceeded",
+            "interrupted",
+            "removed",
+            "stalled_removed"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "error"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "MemdirFileTag": {
       "type": "string",
       "enum": [
@@ -4484,43 +6057,6 @@
         "user",
         "dreams"
       ]
-    },
-    "MemoryActor": {
-      "type": "object",
-      "required": [
-        "tenant_id"
-      ],
-      "properties": {
-        "session_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "team_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        "user_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
     },
     "MemoryKind": {
       "oneOf": [
@@ -4770,25 +6306,6 @@
         }
       ]
     },
-    "MemoryWriteTarget": {
-      "type": "object",
-      "required": [
-        "destination",
-        "kind",
-        "visibility"
-      ],
-      "properties": {
-        "destination": {
-          "$ref": "#/definitions/WriteDestination"
-        },
-        "kind": {
-          "$ref": "#/definitions/MemoryKind"
-        },
-        "visibility": {
-          "$ref": "#/definitions/MemoryVisibility"
-        }
-      }
-    },
     "Message": {
       "type": "object",
       "required": [
@@ -4816,141 +6333,258 @@
         }
       }
     },
+    "MessageContent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "structured"
+          ],
+          "properties": {
+            "structured": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "multimodal"
+          ],
+          "properties": {
+            "multimodal": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/MessagePart"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MessageMetadata": {
+      "type": "object",
+      "required": [
+        "labels"
+      ],
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "MessagePart": {
       "oneOf": [
         {
           "type": "object",
           "required": [
-            "kind",
             "text"
           ],
           "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "text"
-              ]
-            },
             "text": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
           "required": [
-            "blob_ref",
-            "kind",
-            "mime_type"
+            "image"
           ],
           "properties": {
-            "blob_ref": {
-              "$ref": "#/definitions/BlobRef"
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "image"
-              ]
-            },
-            "mime_type": {
-              "type": "string"
+            "image": {
+              "type": "object",
+              "required": [
+                "blob_ref",
+                "mime_type"
+              ],
+              "properties": {
+                "blob_ref": {
+                  "$ref": "#/definitions/BlobRef"
+                },
+                "mime_type": {
+                  "type": "string"
+                }
+              }
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
           "required": [
-            "blob_ref",
-            "kind",
-            "mime_type"
+            "tool_use"
           ],
           "properties": {
-            "blob_ref": {
-              "$ref": "#/definitions/BlobRef"
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "audio"
-              ]
-            },
-            "mime_type": {
-              "type": "string"
+            "tool_use": {
+              "type": "object",
+              "required": [
+                "id",
+                "input",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/definitions/TypedUlid"
+                },
+                "input": true,
+                "name": {
+                  "type": "string"
+                }
+              }
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
           "required": [
-            "blob_ref",
-            "kind",
-            "mime_type",
-            "name"
+            "tool_result"
           ],
           "properties": {
-            "blob_ref": {
-              "$ref": "#/definitions/BlobRef"
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "file"
-              ]
-            },
-            "mime_type": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
+            "tool_result": {
+              "type": "object",
+              "required": [
+                "content",
+                "tool_use_id"
+              ],
+              "properties": {
+                "content": {
+                  "$ref": "#/definitions/ToolResult"
+                },
+                "tool_use_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
           "required": [
-            "kind",
-            "result",
-            "tool_use_id"
+            "thinking"
           ],
           "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "tool_result"
-              ]
-            },
-            "result": {
-              "$ref": "#/definitions/ToolResult"
-            },
-            "tool_use_id": {
-              "$ref": "#/definitions/TypedUlid"
+            "thinking": {
+              "$ref": "#/definitions/ThinkingBlock"
             }
-          }
-        },
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MessagePayload": {
+      "oneOf": [
         {
           "type": "object",
           "required": [
-            "kind",
             "text"
           ],
           "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "thinking"
-              ]
-            },
-            "signature": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "text": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "structured"
+          ],
+          "properties": {
+            "structured": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "request"
+          ],
+          "properties": {
+            "request": {
+              "type": "object",
+              "required": [
+                "reply_to"
+              ],
+              "properties": {
+                "reply_to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "response"
+          ],
+          "properties": {
+            "response": {
+              "type": "object",
+              "required": [
+                "body",
+                "in_reply_to"
+              ],
+              "properties": {
+                "body": true,
+                "in_reply_to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "handoff"
+          ],
+          "properties": {
+            "handoff": {
+              "type": "object",
+              "required": [
+                "summary",
+                "to"
+              ],
+              "properties": {
+                "summary": {
+                  "type": "string"
+                },
+                "to": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -4962,6 +6596,21 @@
         "tool",
         "system"
       ]
+    },
+    "ModelRef": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "provider_id"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string"
+        },
+        "provider_id": {
+          "type": "string"
+        }
+      }
     },
     "NetworkAccess": {
       "oneOf": [
@@ -5028,6 +6677,60 @@
           "minimum": 0.0
         }
       }
+    },
+    "OverflowStrategy": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "section_truncated"
+          ],
+          "properties": {
+            "section_truncated": {
+              "type": "object",
+              "required": [
+                "dropped_sections",
+                "kept_sections"
+              ],
+              "properties": {
+                "dropped_sections": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "kept_sections": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "head_only"
+          ],
+          "properties": {
+            "head_only": {
+              "type": "object",
+              "required": [
+                "kept_chars"
+              ],
+              "properties": {
+                "kept_chars": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "PermissionSubject": {
       "oneOf": [
@@ -5260,27 +6963,114 @@
         "missing_signature"
       ]
     },
+    "PluginCapabilitiesSummary": {
+      "type": "object",
+      "required": [
+        "coordinator",
+        "hooks",
+        "mcp_servers",
+        "memory_provider",
+        "skills",
+        "tools"
+      ],
+      "properties": {
+        "coordinator": {
+          "type": "boolean"
+        },
+        "hooks": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "mcp_servers": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "memory_provider": {
+          "type": "boolean"
+        },
+        "skills": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "tools": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        }
+      }
+    },
     "PluginId": {
       "type": "string"
     },
-    "PluginRejectedReason": {
+    "PluginLifecycleStateDiscriminant": {
+      "type": "string",
+      "enum": [
+        "validated",
+        "activating",
+        "activated",
+        "deactivating",
+        "deactivated",
+        "rejected",
+        "failed"
+      ]
+    },
+    "PricingSnapshotId": {
+      "type": "object",
+      "required": [
+        "pricing_id",
+        "version"
+      ],
+      "properties": {
+        "pricing_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "RecallSkipReason": {
+      "type": "string",
+      "enum": [
+        "no_external_provider",
+        "policy_decided_skip",
+        "deadline_zero",
+        "cancelled"
+      ]
+    },
+    "Recipient": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
-            "trust_policy",
-            "manifest_invalid",
-            "capability_denied",
-            "duplicate"
+            "broadcast",
+            "coordinator"
           ]
         },
         {
           "type": "object",
           "required": [
-            "other"
+            "agent"
           ],
           "properties": {
-            "other": {
+            "agent": {
+              "$ref": "#/definitions/TypedUlid"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "role"
+          ],
+          "properties": {
+            "role": {
               "type": "string"
             }
           },
@@ -5410,6 +7200,260 @@
         }
       ]
     },
+    "RejectionReason": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "signature_invalid"
+          ],
+          "properties": {
+            "signature_invalid": {
+              "type": "object",
+              "required": [
+                "details"
+              ],
+              "properties": {
+                "details": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "unknown_signer"
+          ],
+          "properties": {
+            "unknown_signer": {
+              "type": "object",
+              "required": [
+                "signer"
+              ],
+              "properties": {
+                "signer": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "signer_revoked"
+          ],
+          "properties": {
+            "signer_revoked": {
+              "type": "object",
+              "required": [
+                "revoked_at",
+                "signer"
+              ],
+              "properties": {
+                "revoked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "signer": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "trust_mismatch"
+          ],
+          "properties": {
+            "trust_mismatch": {
+              "type": "object",
+              "required": [
+                "declared",
+                "source"
+              ],
+              "properties": {
+                "declared": {
+                  "$ref": "#/definitions/TrustLevel"
+                },
+                "source": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "namespace_conflict"
+          ],
+          "properties": {
+            "namespace_conflict": {
+              "type": "object",
+              "required": [
+                "details"
+              ],
+              "properties": {
+                "details": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dependency_unsatisfied"
+          ],
+          "properties": {
+            "dependency_unsatisfied": {
+              "type": "object",
+              "required": [
+                "dependency",
+                "requirement"
+              ],
+              "properties": {
+                "dependency": {
+                  "type": "string"
+                },
+                "requirement": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dependency_cycle"
+          ],
+          "properties": {
+            "dependency_cycle": {
+              "type": "object",
+              "required": [
+                "cycle"
+              ],
+              "properties": {
+                "cycle": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "harness_version_incompatible"
+          ],
+          "properties": {
+            "harness_version_incompatible": {
+              "type": "object",
+              "required": [
+                "actual",
+                "required"
+              ],
+              "properties": {
+                "actual": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "slot_occupied"
+          ],
+          "properties": {
+            "slot_occupied": {
+              "type": "object",
+              "required": [
+                "occupant",
+                "slot"
+              ],
+              "properties": {
+                "occupant": {
+                  "type": "string"
+                },
+                "slot": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "admission_denied"
+          ],
+          "properties": {
+            "admission_denied": {
+              "type": "object",
+              "required": [
+                "policy"
+              ],
+              "properties": {
+                "policy": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RemainingBudget": {
+      "type": "object",
+      "required": [
+        "iterations_remaining",
+        "tokens_remaining_in_session"
+      ],
+      "properties": {
+        "iterations_remaining": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "tokens_remaining_in_session": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "wall_clock_deadline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
     "ResourceLimits": {
       "type": "object",
       "properties": {
@@ -5454,13 +7498,141 @@
         }
       }
     },
+    "RoutingPolicyKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "direct",
+            "role",
+            "broadcast",
+            "coordinator"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SamplingBudgetDimension": {
+      "type": "string",
+      "enum": [
+        "per_request_input_tokens",
+        "per_request_output_tokens",
+        "per_request_timeout",
+        "per_request_tool_rounds",
+        "per_server_session_input",
+        "per_server_session_output",
+        "per_session_input",
+        "per_session_output"
+      ]
+    },
+    "SamplingDenyReason": {
+      "type": "string",
+      "enum": [
+        "policy_denied",
+        "approval_denied",
+        "model_not_allowed",
+        "permission_mode_blocked",
+        "inline_user_source_refused"
+      ]
+    },
+    "SamplingOutcome": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "completed",
+            "rate_limited",
+            "cancelled"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "denied"
+          ],
+          "properties": {
+            "denied": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "$ref": "#/definitions/SamplingDenyReason"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "budget_exceeded"
+          ],
+          "properties": {
+            "budget_exceeded": {
+              "type": "object",
+              "required": [
+                "dimension"
+              ],
+              "properties": {
+                "dimension": {
+                  "$ref": "#/definitions/SamplingBudgetDimension"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "upstream_error"
+          ],
+          "properties": {
+            "upstream_error": {
+              "type": "object",
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "SandboxExitStatus": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
             "timeout",
-            "cancelled"
+            "inactivity_timeout",
+            "output_budget_exceeded",
+            "cancelled",
+            "backend_error"
           ]
         },
         {
@@ -5514,6 +7686,47 @@
           "additionalProperties": false
         }
       ]
+    },
+    "SandboxOutputStream": {
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "combined"
+      ]
+    },
+    "SandboxOverflowSummary": {
+      "type": "object",
+      "required": [
+        "effective_limit",
+        "original_bytes",
+        "stream"
+      ],
+      "properties": {
+        "blob_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BlobRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "original_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "stream": {
+          "$ref": "#/definitions/SandboxOutputStream"
+        }
+      }
     },
     "SandboxPolicySummary": {
       "type": "object",
@@ -5671,6 +7884,14 @@
         }
       ]
     },
+    "StalledAction": {
+      "type": "string",
+      "enum": [
+        "reported",
+        "interrupted",
+        "removed"
+      ]
+    },
     "SteeringDropReason": {
       "type": "string",
       "enum": [
@@ -5748,13 +7969,28 @@
       ]
     },
     "StopReason": {
-      "type": "string",
-      "enum": [
-        "tool_use_requested",
-        "assistant_finished",
-        "user_interrupted",
-        "token_budget_exceeded",
-        "max_iterations"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "end_turn",
+            "tool_use",
+            "max_iterations",
+            "interrupt"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "error"
+          ],
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "SubagentStatus": {
@@ -5849,6 +8085,37 @@
         "recently_timed_out"
       ]
     },
+    "TakesEffect": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "current_session",
+            "next_session"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "after_reload_with"
+          ],
+          "properties": {
+            "after_reload_with": {
+              "type": "object",
+              "required": [
+                "session_id"
+              ],
+              "properties": {
+                "session_id": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TeamTerminationReason": {
       "oneOf": [
         {
@@ -5872,6 +8139,54 @@
           "additionalProperties": false
         }
       ]
+    },
+    "ThinkingBlock": {
+      "type": "object",
+      "required": [
+        "provider_id"
+      ],
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_native": true,
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ThoughtChunk": {
+      "type": "object",
+      "required": [
+        "provider_id"
+      ],
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_native": true,
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "ThreatAction": {
       "type": "string",
@@ -5898,6 +8213,50 @@
         "on_write",
         "on_recall"
       ]
+    },
+    "TimeoutPolicy": {
+      "type": "object",
+      "required": [
+        "deadline_ms",
+        "default_on_timeout"
+      ],
+      "properties": {
+        "deadline_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "default_on_timeout": {
+          "$ref": "#/definitions/Decision"
+        },
+        "heartbeat_interval_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ToolErrorPayload": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retriable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retriable": {
+          "type": "boolean"
+        }
+      }
     },
     "ToolOrigin": {
       "oneOf": [
@@ -5957,110 +8316,101 @@
         }
       ]
     },
-    "ToolResult": {
+    "ToolPoolChangeSource": {
       "oneOf": [
         {
-          "type": [
-            "object",
-            "string"
-          ],
-          "required": [
-            "kind"
-          ],
-          "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "text"
-              ]
-            }
-          }
+          "type": "string",
+          "enum": [
+            "initial_classification"
+          ]
         },
         {
           "type": "object",
           "required": [
-            "kind"
+            "mcp_list_changed"
           ],
           "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "structured"
-              ]
+            "mcp_list_changed": {
+              "type": "object",
+              "required": [
+                "server_id"
+              ],
+              "properties": {
+                "server_id": {
+                  "$ref": "#/definitions/McpServerId"
+                }
+              }
             }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "blob_ref",
-            "content_type",
-            "kind"
-          ],
-          "properties": {
-            "blob_ref": {
-              "$ref": "#/definitions/BlobRef"
-            },
-            "content_type": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "blob"
-              ]
-            }
-          }
-        },
-        {
-          "type": [
-            "object",
-            "array"
-          ],
-          "items": {
-            "$ref": "#/definitions/ToolResultPart"
           },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "required": [
-            "kind"
+            "plugin_registration"
           ],
           "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "mixed"
-              ]
+            "plugin_registration": {
+              "type": "object",
+              "required": [
+                "plugin_id"
+              ],
+              "properties": {
+                "plugin_id": {
+                  "type": "string"
+                }
+              }
             }
-          }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skill_hot_reload"
+          ],
+          "properties": {
+            "skill_hot_reload": {
+              "type": "object",
+              "required": [
+                "skill_id"
+              ],
+              "properties": {
+                "skill_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
-    "ToolResultEnvelope": {
+    "ToolProperties": {
       "type": "object",
       "required": [
-        "is_error",
-        "result"
+        "defer_policy",
+        "is_concurrency_safe",
+        "is_destructive",
+        "is_read_only"
       ],
       "properties": {
-        "is_error": {
+        "defer_policy": {
+          "$ref": "#/definitions/DeferPolicy"
+        },
+        "is_concurrency_safe": {
           "type": "boolean"
         },
-        "overflow": {
+        "is_destructive": {
+          "type": "boolean"
+        },
+        "is_read_only": {
+          "type": "boolean"
+        },
+        "long_running": {
           "anyOf": [
             {
-              "$ref": "#/definitions/OverflowMetadata"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "result": {
-          "$ref": "#/definitions/ToolResult"
-        },
-        "usage": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/UsageSnapshot"
+              "$ref": "#/definitions/LongRunningPolicy"
             },
             {
               "type": "null"
@@ -6068,6 +8418,71 @@
           ]
         }
       }
+    },
+    "ToolResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "structured"
+          ],
+          "properties": {
+            "structured": true
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "blob"
+          ],
+          "properties": {
+            "blob": {
+              "type": "object",
+              "required": [
+                "blob_ref",
+                "content_type"
+              ],
+              "properties": {
+                "blob_ref": {
+                  "$ref": "#/definitions/BlobRef"
+                },
+                "content_type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mixed"
+          ],
+          "properties": {
+            "mixed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ToolResultPart"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "ToolResultPart": {
       "oneOf": [
@@ -6292,14 +8707,37 @@
         "keyword"
       ]
     },
+    "ToolUseSummary": {
+      "type": "object",
+      "required": [
+        "tool_name",
+        "tool_use_id"
+      ],
+      "properties": {
+        "tool_name": {
+          "type": "string"
+        },
+        "tool_use_id": {
+          "$ref": "#/definitions/TypedUlid"
+        }
+      }
+    },
+    "ToolsListChangedDisposition": {
+      "type": "string",
+      "enum": [
+        "deferred_applied",
+        "pending_for_reload",
+        "no_change"
+      ]
+    },
     "TopologyKind": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
-            "supervisor",
-            "peer",
-            "pipeline"
+            "coordinator_worker",
+            "peer_to_peer",
+            "role_routed"
           ]
         },
         {
@@ -6395,42 +8833,6 @@
           "minimum": 0.0
         }
       }
-    },
-    "WriteDestination": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "memdir"
-          ],
-          "properties": {
-            "memdir": {
-              "$ref": "#/definitions/MemdirFileTag"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "external"
-          ],
-          "properties": {
-            "external": {
-              "type": "object",
-              "required": [
-                "provider_id"
-              ],
-              "properties": {
-                "provider_id": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
     }
   }
 }

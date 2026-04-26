@@ -8,7 +8,9 @@ use crate::*;
 pub struct UsageAccumulatedEvent {
     pub session_id: SessionId,
     pub run_id: Option<RunId>,
-    pub usage: UsageSnapshot,
+    pub delta: UsageSnapshot,
+    pub model_ref: Option<ModelRef>,
+    pub pricing_snapshot_id: Option<PricingSnapshotId>,
     pub at: DateTime<Utc>,
 }
 

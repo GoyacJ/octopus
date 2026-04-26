@@ -4,22 +4,54 @@
   "type": "object",
   "required": [
     "at",
+    "backend_id",
+    "fingerprint",
     "policy",
-    "tool_use_id"
+    "run_id",
+    "session_id"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "backend_id": {
+      "type": "string"
+    },
+    "fingerprint": {
+      "$ref": "#/definitions/ExecFingerprint"
+    },
     "policy": {
       "$ref": "#/definitions/SandboxPolicySummary"
     },
-    "tool_use_id": {
+    "run_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_use_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
+    "ExecFingerprint": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
     "HostRule": {
       "type": "object",
       "required": [

@@ -3,12 +3,18 @@
   "title": "TeamMemberStalledEvent",
   "type": "object",
   "required": [
+    "action",
     "agent_id",
     "at",
-    "silent_for_ms",
+    "last_activity_at",
+    "session_id",
+    "stalled_for",
     "team_id"
   ],
   "properties": {
+    "action": {
+      "$ref": "#/definitions/StalledAction"
+    },
     "agent_id": {
       "$ref": "#/definitions/TypedUlid"
     },
@@ -16,16 +22,48 @@
       "type": "string",
       "format": "date-time"
     },
-    "silent_for_ms": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+    "last_activity_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "stalled_for": {
+      "$ref": "#/definitions/Duration"
     },
     "team_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },
   "definitions": {
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "StalledAction": {
+      "type": "string",
+      "enum": [
+        "reported",
+        "interrupted",
+        "removed"
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

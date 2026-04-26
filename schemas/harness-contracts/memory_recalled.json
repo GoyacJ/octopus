@@ -3,26 +3,59 @@
   "title": "MemoryRecalledEvent",
   "type": "object",
   "required": [
-    "actor",
     "at",
-    "recalled",
+    "deadline_used_ms",
+    "injected_chars",
+    "kept_count",
+    "kinds_returned",
+    "min_similarity",
+    "provider_id",
+    "query_text_hash",
+    "returned_count",
     "run_id",
     "session_id",
-    "tenant_id"
+    "turn"
   ],
   "properties": {
-    "actor": {
-      "$ref": "#/definitions/MemoryActor"
-    },
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "recalled": {
+    "deadline_used_ms": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "injected_chars": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "kept_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "kinds_returned": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/TypedUlid"
+        "$ref": "#/definitions/MemoryKind"
       }
+    },
+    "min_similarity": {
+      "type": "number",
+      "format": "float"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "query_text_hash": {
+      "$ref": "#/definitions/ContentHash"
+    },
+    "returned_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     },
     "run_id": {
       "$ref": "#/definitions/TypedUlid"
@@ -30,47 +63,48 @@
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "tenant_id": {
-      "$ref": "#/definitions/TypedUlid"
+    "turn": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
     }
   },
   "definitions": {
-    "MemoryActor": {
-      "type": "object",
-      "required": [
-        "tenant_id"
-      ],
-      "properties": {
-        "session_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
+    "ContentHash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
+    },
+    "MemoryKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "user_preference",
+            "feedback",
+            "project_fact",
+            "reference",
+            "agent_self_note"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
             }
-          ]
-        },
-        "team_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        "user_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          },
+          "additionalProperties": false
         }
-      }
+      ]
     },
     "TypedUlid": {
       "type": "string",

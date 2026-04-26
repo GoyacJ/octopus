@@ -3043,8 +3043,10 @@ dependencies = [
 name = "octopus-harness-contracts"
 version = "0.2.5"
 dependencies = [
+ "async-trait",
  "bytes",
  "chrono",
+ "futures",
  "schemars 0.8.22",
  "secrecy",
  "serde",

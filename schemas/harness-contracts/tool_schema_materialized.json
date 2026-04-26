@@ -4,26 +4,71 @@
   "type": "object",
   "required": [
     "at",
-    "schema_hash",
-    "tool_name"
+    "backend",
+    "cache_impact",
+    "coalesced_count",
+    "names",
+    "run_id",
+    "session_id",
+    "tool_use_id",
+    "triggered_session_reload"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "schema_hash": {
+    "backend": {
+      "type": "string"
+    },
+    "cache_impact": {
+      "$ref": "#/definitions/CacheImpact"
+    },
+    "coalesced_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "names": {
       "type": "array",
       "items": {
-        "type": "integer",
-        "format": "uint8",
-        "minimum": 0.0
-      },
-      "maxItems": 32,
-      "minItems": 32
+        "type": "string"
+      }
     },
-    "tool_name": {
-      "type": "string"
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "triggered_session_reload": {
+      "type": "boolean"
+    }
+  },
+  "definitions": {
+    "CacheImpact": {
+      "type": "object",
+      "required": [
+        "prompt_cache_invalidated"
+      ],
+      "properties": {
+        "prompt_cache_invalidated": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

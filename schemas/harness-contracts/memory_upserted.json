@@ -4,39 +4,63 @@
   "type": "object",
   "required": [
     "action",
-    "actor",
     "at",
+    "bytes_written",
     "content_hash",
+    "kind",
     "memory_id",
+    "provider_id",
+    "session_id",
     "source",
-    "target",
-    "tenant_id"
+    "takes_effect",
+    "visibility"
   ],
   "properties": {
     "action": {
       "$ref": "#/definitions/MemoryWriteAction"
     },
-    "actor": {
-      "$ref": "#/definitions/MemoryActor"
-    },
     "at": {
       "type": "string",
       "format": "date-time"
     },
+    "bytes_written": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "content_hash": {
       "$ref": "#/definitions/ContentHash"
     },
+    "kind": {
+      "$ref": "#/definitions/MemoryKind"
+    },
     "memory_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session_id": {
       "$ref": "#/definitions/TypedUlid"
     },
     "source": {
       "$ref": "#/definitions/MemorySource"
     },
-    "target": {
-      "$ref": "#/definitions/MemoryWriteTarget"
+    "takes_effect": {
+      "$ref": "#/definitions/TakesEffect"
     },
-    "tenant_id": {
-      "$ref": "#/definitions/TypedUlid"
+    "visibility": {
+      "$ref": "#/definitions/MemoryVisibility"
     }
   },
   "definitions": {
@@ -49,51 +73,6 @@
       },
       "maxItems": 32,
       "minItems": 32
-    },
-    "MemdirFileTag": {
-      "type": "string",
-      "enum": [
-        "memory",
-        "user",
-        "dreams"
-      ]
-    },
-    "MemoryActor": {
-      "type": "object",
-      "required": [
-        "tenant_id"
-      ],
-      "properties": {
-        "session_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "team_id": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TypedUlid"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tenant_id": {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        "user_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
     },
     "MemoryKind": {
       "oneOf": [
@@ -318,57 +297,29 @@
         }
       ]
     },
-    "MemoryWriteTarget": {
-      "type": "object",
-      "required": [
-        "destination",
-        "kind",
-        "visibility"
-      ],
-      "properties": {
-        "destination": {
-          "$ref": "#/definitions/WriteDestination"
-        },
-        "kind": {
-          "$ref": "#/definitions/MemoryKind"
-        },
-        "visibility": {
-          "$ref": "#/definitions/MemoryVisibility"
-        }
-      }
-    },
-    "TypedUlid": {
-      "type": "string",
-      "format": "ulid"
-    },
-    "WriteDestination": {
+    "TakesEffect": {
       "oneOf": [
         {
-          "type": "object",
-          "required": [
-            "memdir"
-          ],
-          "properties": {
-            "memdir": {
-              "$ref": "#/definitions/MemdirFileTag"
-            }
-          },
-          "additionalProperties": false
+          "type": "string",
+          "enum": [
+            "current_session",
+            "next_session"
+          ]
         },
         {
           "type": "object",
           "required": [
-            "external"
+            "after_reload_with"
           ],
           "properties": {
-            "external": {
+            "after_reload_with": {
               "type": "object",
               "required": [
-                "provider_id"
+                "session_id"
               ],
               "properties": {
-                "provider_id": {
-                  "type": "string"
+                "session_id": {
+                  "$ref": "#/definitions/TypedUlid"
                 }
               }
             }
@@ -376,6 +327,10 @@
           "additionalProperties": false
         }
       ]
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

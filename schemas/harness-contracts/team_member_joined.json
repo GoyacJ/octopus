@@ -4,18 +4,27 @@
   "type": "object",
   "required": [
     "agent_id",
-    "at",
+    "joined_at",
+    "role",
+    "session_id",
     "spec_hash",
     "spec_snapshot_id",
-    "team_id"
+    "team_id",
+    "visibility"
   ],
   "properties": {
     "agent_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "at": {
+    "joined_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "role": {
+      "type": "string"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
     },
     "spec_hash": {
       "type": "array",
@@ -32,6 +41,9 @@
     },
     "team_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "visibility": {
+      "$ref": "#/definitions/ContextVisibility"
     }
   },
   "definitions": {
@@ -68,6 +80,47 @@
           "minimum": 0.0
         }
       }
+    },
+    "ContextVisibility": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "all",
+            "private"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "allowlist"
+          ],
+          "properties": {
+            "allowlist": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TypedUlid"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "allowlist_quote"
+          ],
+          "properties": {
+            "allowlist_quote": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TypedUlid"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "TypedUlid": {
       "type": "string",

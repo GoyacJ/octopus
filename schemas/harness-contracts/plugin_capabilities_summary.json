@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginCapabilitiesSummary",
+  "type": "object",
+  "required": [
+    "coordinator",
+    "hooks",
+    "mcp_servers",
+    "memory_provider",
+    "skills",
+    "tools"
+  ],
+  "properties": {
+    "coordinator": {
+      "type": "boolean"
+    },
+    "hooks": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "mcp_servers": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "memory_provider": {
+      "type": "boolean"
+    },
+    "skills": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "tools": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    }
+  }
+}

@@ -4,6 +4,7 @@
   "type": "object",
   "required": [
     "at",
+    "by",
     "paused",
     "tenant_id"
   ],
@@ -11,6 +12,9 @@
     "at": {
       "type": "string",
       "format": "date-time"
+    },
+    "by": {
+      "type": "string"
     },
     "paused": {
       "type": "boolean"

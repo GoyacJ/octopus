@@ -21,18 +21,22 @@ pub struct CompactionAppliedEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ContextStageTransitionedEvent {
     pub session_id: SessionId,
-    pub run_id: Option<RunId>,
-    pub from: Option<ContextStage>,
-    pub to: ContextStage,
+    pub stage: ContextStageId,
+    pub provider_id: String,
+    pub outcome: ContextStageOutcome,
+    pub before_tokens: u64,
+    pub after_tokens: u64,
+    pub bytes_saved: u64,
+    pub duration_ms: u32,
     pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ContextBudgetExceededEvent {
     pub session_id: SessionId,
-    pub run_id: Option<RunId>,
-    pub budget: BudgetKind,
-    pub current_tokens: u64,
-    pub limit_tokens: u64,
+    pub budget_kind: BudgetKind,
+    pub source: BudgetExceedanceSource,
+    pub requested: u64,
+    pub max: u64,
     pub at: DateTime<Utc>,
 }

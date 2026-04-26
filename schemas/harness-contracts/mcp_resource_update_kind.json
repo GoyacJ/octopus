@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpResourceUpdateKind",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "list_changed"
+      ],
+      "properties": {
+        "list_changed": {
+          "type": "object",
+          "required": [
+            "added",
+            "removed"
+          ],
+          "properties": {
+            "added": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "removed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "resource_updated"
+      ],
+      "properties": {
+        "resource_updated": {
+          "type": "object",
+          "required": [
+            "uri"
+          ],
+          "properties": {
+            "uri": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "prompts_list_changed"
+      ],
+      "properties": {
+        "prompts_list_changed": {
+          "type": "object",
+          "required": [
+            "added",
+            "removed"
+          ],
+          "properties": {
+            "added": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "removed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

@@ -99,32 +99,125 @@
       }
     },
     "CompactOutcome": {
-      "type": "string",
-      "enum": [
-        "applied",
-        "degraded",
-        "reactive_failed"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "degraded_no_aux_provider",
+            "reactive_attempt_failed"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "degraded_aux_failure"
+          ],
+          "properties": {
+            "degraded_aux_failure": {
+              "type": "object",
+              "required": [
+                "failure_count"
+              ],
+              "properties": {
+                "failure_count": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "CompactTrigger": {
-      "type": "string",
-      "enum": [
-        "soft_budget",
-        "hard_budget",
-        "provider_reported",
-        "user_command"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "soft_budget",
+            "hard_budget",
+            "user_command"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_report"
+          ],
+          "properties": {
+            "provider_report": {
+              "type": "object",
+              "required": [
+                "reported_tokens"
+              ],
+              "properties": {
+                "reported_tokens": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "CompactionHandoff": {
       "type": "object",
       "required": [
-        "metadata",
-        "summary_ref"
+        "active_task_ref",
+        "outstanding_permissions",
+        "pending_tool_uses",
+        "remaining_budget"
       ],
       "properties": {
-        "metadata": true,
-        "summary_ref": {
+        "active_task_ref": {
           "$ref": "#/definitions/BlobRef"
+        },
+        "outstanding_permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "pending_tool_uses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TypedUlid"
+          }
+        },
+        "remaining_budget": {
+          "$ref": "#/definitions/RemainingBudget"
+        }
+      }
+    },
+    "RemainingBudget": {
+      "type": "object",
+      "required": [
+        "iterations_remaining",
+        "tokens_remaining_in_session"
+      ],
+      "properties": {
+        "iterations_remaining": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "tokens_remaining_in_session": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "wall_clock_deadline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
         }
       }
     },

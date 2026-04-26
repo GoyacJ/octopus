@@ -3,51 +3,137 @@
   "title": "ContextStageTransitionedEvent",
   "type": "object",
   "required": [
+    "after_tokens",
     "at",
+    "before_tokens",
+    "bytes_saved",
+    "duration_ms",
+    "outcome",
+    "provider_id",
     "session_id",
-    "to"
+    "stage"
   ],
   "properties": {
+    "after_tokens": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "from": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ContextStage"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "before_tokens": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
-    "run_id": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "bytes_saved": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "duration_ms": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "outcome": {
+      "$ref": "#/definitions/ContextStageOutcome"
+    },
+    "provider_id": {
+      "type": "string"
     },
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "to": {
-      "$ref": "#/definitions/ContextStage"
+    "stage": {
+      "$ref": "#/definitions/ContextStageId"
     }
   },
   "definitions": {
-    "ContextStage": {
+    "ContextStageId": {
       "type": "string",
       "enum": [
-        "gather",
-        "rank",
-        "pack",
-        "compact",
-        "finalize"
+        "tool_result_budget",
+        "snip",
+        "microcompact",
+        "collapse",
+        "autocompact"
+      ]
+    },
+    "ContextStageOutcome": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "no_change",
+            "modified",
+            "skipped_no_aux_provider"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "forked"
+          ],
+          "properties": {
+            "forked": {
+              "type": "object",
+              "required": [
+                "child"
+              ],
+              "properties": {
+                "child": {
+                  "$ref": "#/definitions/TypedUlid"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skipped_aux_cooldown"
+          ],
+          "properties": {
+            "skipped_aux_cooldown": {
+              "type": "object",
+              "required": [
+                "until_turn"
+              ],
+              "properties": {
+                "until_turn": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "failed"
+          ],
+          "properties": {
+            "failed": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "TypedUlid": {

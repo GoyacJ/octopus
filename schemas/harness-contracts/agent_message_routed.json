@@ -5,7 +5,8 @@
   "required": [
     "at",
     "message_id",
-    "routed_to",
+    "resolved_recipients",
+    "routing_policy",
     "team_id"
   ],
   "properties": {
@@ -16,17 +17,45 @@
     "message_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "routed_to": {
+    "resolved_recipients": {
       "type": "array",
       "items": {
         "$ref": "#/definitions/TypedUlid"
       }
+    },
+    "routing_policy": {
+      "$ref": "#/definitions/RoutingPolicyKind"
     },
     "team_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },
   "definitions": {
+    "RoutingPolicyKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "direct",
+            "role",
+            "broadcast",
+            "coordinator"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

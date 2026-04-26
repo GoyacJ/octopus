@@ -5,7 +5,12 @@
   "required": [
     "at",
     "blob_ref",
+    "effective_limit",
+    "head_chars",
+    "original_metric",
     "original_size",
+    "run_id",
+    "tail_chars",
     "tool_use_id"
   ],
   "properties": {
@@ -16,9 +21,30 @@
     "blob_ref": {
       "$ref": "#/definitions/BlobRef"
     },
+    "effective_limit": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "head_chars": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "original_metric": {
+      "$ref": "#/definitions/BudgetMetric"
+    },
     "original_size": {
       "type": "integer",
       "format": "uint64",
+      "minimum": 0.0
+    },
+    "run_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tail_chars": {
+      "type": "integer",
+      "format": "uint32",
       "minimum": 0.0
     },
     "tool_use_id": {
@@ -59,6 +85,14 @@
           "minimum": 0.0
         }
       }
+    },
+    "BudgetMetric": {
+      "type": "string",
+      "enum": [
+        "chars",
+        "bytes",
+        "lines"
+      ]
     },
     "TypedUlid": {
       "type": "string",

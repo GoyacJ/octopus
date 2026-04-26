@@ -4,28 +4,58 @@
   "type": "object",
   "required": [
     "at",
-    "canonical_name",
+    "defer_policy",
+    "filtered_out",
     "server_id",
-    "tool_name"
+    "session_id",
+    "tool_name",
+    "upstream_name"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "canonical_name": {
-      "type": "string"
+    "defer_policy": {
+      "$ref": "#/definitions/DeferPolicy"
+    },
+    "filter_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "filtered_out": {
+      "type": "boolean"
     },
     "server_id": {
       "$ref": "#/definitions/McpServerId"
     },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
     "tool_name": {
+      "type": "string"
+    },
+    "upstream_name": {
       "type": "string"
     }
   },
   "definitions": {
+    "DeferPolicy": {
+      "type": "string",
+      "enum": [
+        "always_load",
+        "auto_defer",
+        "force_defer"
+      ]
+    },
     "McpServerId": {
       "type": "string"
+    },
+    "TypedUlid": {
+      "type": "string",
+      "format": "ulid"
     }
   }
 }

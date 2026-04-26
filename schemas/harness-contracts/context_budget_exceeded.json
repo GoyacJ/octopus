@@ -4,44 +4,70 @@
   "type": "object",
   "required": [
     "at",
-    "budget",
-    "current_tokens",
-    "limit_tokens",
-    "session_id"
+    "budget_kind",
+    "max",
+    "requested",
+    "session_id",
+    "source"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "budget": {
+    "budget_kind": {
       "$ref": "#/definitions/BudgetKind"
     },
-    "current_tokens": {
+    "max": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "limit_tokens": {
+    "requested": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
-    },
-    "run_id": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/TypedUlid"
-        },
-        {
-          "type": "null"
-        }
-      ]
     },
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "source": {
+      "$ref": "#/definitions/BudgetExceedanceSource"
     }
   },
   "definitions": {
+    "BudgetExceedanceSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local_estimate"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_report"
+          ],
+          "properties": {
+            "provider_report": {
+              "type": "object",
+              "required": [
+                "reported_tokens"
+              ],
+              "properties": {
+                "reported_tokens": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "BudgetKind": {
       "oneOf": [
         {

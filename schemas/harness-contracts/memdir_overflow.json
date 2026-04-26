@@ -3,32 +3,40 @@
   "title": "MemdirOverflowEvent",
   "type": "object",
   "required": [
-    "actual_bytes",
     "at",
+    "current_chars",
     "file",
-    "limit_bytes",
-    "tenant_id"
+    "session_id",
+    "strategy_applied",
+    "tenant_id",
+    "threshold"
   ],
   "properties": {
-    "actual_bytes": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "at": {
       "type": "string",
       "format": "date-time"
     },
-    "file": {
-      "$ref": "#/definitions/MemdirFileTag"
-    },
-    "limit_bytes": {
+    "current_chars": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
+    "file": {
+      "$ref": "#/definitions/MemdirFileTag"
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "strategy_applied": {
+      "$ref": "#/definitions/OverflowStrategy"
+    },
     "tenant_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "threshold": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "definitions": {
@@ -38,6 +46,60 @@
         "memory",
         "user",
         "dreams"
+      ]
+    },
+    "OverflowStrategy": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "section_truncated"
+          ],
+          "properties": {
+            "section_truncated": {
+              "type": "object",
+              "required": [
+                "dropped_sections",
+                "kept_sections"
+              ],
+              "properties": {
+                "dropped_sections": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                },
+                "kept_sections": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "head_only"
+          ],
+          "properties": {
+            "head_only": {
+              "type": "object",
+              "required": [
+                "kept_chars"
+              ],
+              "properties": {
+                "kept_chars": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
       ]
     },
     "TypedUlid": {

@@ -4,14 +4,29 @@
   "type": "object",
   "required": [
     "at",
+    "backend_id",
+    "content_hash",
     "kind",
     "session_id",
-    "snapshot_id"
+    "size_bytes"
   ],
   "properties": {
     "at": {
       "type": "string",
       "format": "date-time"
+    },
+    "backend_id": {
+      "type": "string"
+    },
+    "content_hash": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "maxItems": 32,
+      "minItems": 32
     },
     "kind": {
       "$ref": "#/definitions/SessionSnapshotKind"
@@ -19,8 +34,10 @@
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
     },
-    "snapshot_id": {
-      "$ref": "#/definitions/TypedUlid"
+    "size_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "definitions": {

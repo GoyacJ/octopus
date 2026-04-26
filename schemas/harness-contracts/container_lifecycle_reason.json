@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContainerLifecycleReason",
+  "type": "string",
+  "enum": [
+    "session_attached",
+    "session_detached",
+    "pool_reused",
+    "pool_evicted",
+    "health_check_failed",
+    "snapshot_restore",
+    "manual"
+  ]
+}

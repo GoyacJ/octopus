@@ -24,6 +24,8 @@ pub mod types;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::{ToolLoadingBackendName, ToolName};
+
 pub use context::*;
 pub use error::*;
 pub use execute_code::*;
@@ -139,23 +141,36 @@ pub enum Event {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ToolDeferredPoolChangedEvent {
-    pub tenant_id: crate::TenantId,
-    pub loaded: usize,
-    pub deferred: usize,
+    pub session_id: crate::SessionId,
+    pub added: Vec<DeferredToolHint>,
+    pub removed: Vec<ToolName>,
+    pub source: ToolPoolChangeSource,
+    pub deferred_total: u32,
     pub at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ToolSearchQueriedEvent {
+    pub session_id: crate::SessionId,
     pub run_id: crate::RunId,
+    pub tool_use_id: crate::ToolUseId,
+    pub query: String,
     pub query_kind: crate::ToolSearchQueryKind,
-    pub matched: usize,
+    pub scored: Vec<(ToolName, u32)>,
+    pub matched: Vec<ToolName>,
+    pub truncated_by_max_results: bool,
     pub at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ToolSchemaMaterializedEvent {
-    pub tool_name: String,
-    pub schema_hash: [u8; 32],
+    pub session_id: crate::SessionId,
+    pub run_id: crate::RunId,
+    pub tool_use_id: crate::ToolUseId,
+    pub names: Vec<ToolName>,
+    pub backend: ToolLoadingBackendName,
+    pub cache_impact: CacheImpact,
+    pub triggered_session_reload: bool,
+    pub coalesced_count: u32,
     pub at: chrono::DateTime<chrono::Utc>,
 }

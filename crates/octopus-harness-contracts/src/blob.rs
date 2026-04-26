@@ -4,6 +4,7 @@
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use futures::stream::BoxStream;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -63,14 +64,30 @@ pub enum BlobError {
     Backend(String),
 }
 
+impl From<std::io::Error> for BlobError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value.to_string())
+    }
+}
+
+#[async_trait::async_trait]
 pub trait BlobStore: Send + Sync + 'static {
     fn store_id(&self) -> &str;
 
-    fn put(&self, tenant: TenantId, bytes: Bytes, meta: BlobMeta) -> Result<BlobRef, BlobError>;
+    async fn put(
+        &self,
+        tenant: TenantId,
+        bytes: Bytes,
+        meta: BlobMeta,
+    ) -> Result<BlobRef, BlobError>;
 
-    fn get(&self, tenant: TenantId, blob: &BlobRef) -> Result<Bytes, BlobError>;
+    async fn get(
+        &self,
+        tenant: TenantId,
+        blob: &BlobRef,
+    ) -> Result<BoxStream<'static, Bytes>, BlobError>;
 
-    fn head(&self, tenant: TenantId, blob: &BlobRef) -> Result<Option<BlobMeta>, BlobError>;
+    async fn head(&self, tenant: TenantId, blob: &BlobRef) -> Result<Option<BlobMeta>, BlobError>;
 
-    fn delete(&self, tenant: TenantId, blob: &BlobRef) -> Result<(), BlobError>;
+    async fn delete(&self, tenant: TenantId, blob: &BlobRef) -> Result<(), BlobError>;
 }

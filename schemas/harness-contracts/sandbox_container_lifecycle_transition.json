@@ -4,7 +4,10 @@
   "type": "object",
   "required": [
     "at",
+    "backend_id",
+    "container_ref",
     "from",
+    "reason",
     "session_id",
     "to"
   ],
@@ -13,17 +16,65 @@
       "type": "string",
       "format": "date-time"
     },
-    "from": {
+    "backend_id": {
       "type": "string"
+    },
+    "container_ref": {
+      "$ref": "#/definitions/ContainerRef"
+    },
+    "from": {
+      "$ref": "#/definitions/ContainerLifecycleState"
+    },
+    "reason": {
+      "$ref": "#/definitions/ContainerLifecycleReason"
     },
     "session_id": {
       "$ref": "#/definitions/TypedUlid"
     },
     "to": {
-      "type": "string"
+      "$ref": "#/definitions/ContainerLifecycleState"
     }
   },
   "definitions": {
+    "ContainerLifecycleReason": {
+      "type": "string",
+      "enum": [
+        "session_attached",
+        "session_detached",
+        "pool_reused",
+        "pool_evicted",
+        "health_check_failed",
+        "snapshot_restore",
+        "manual"
+      ]
+    },
+    "ContainerLifecycleState": {
+      "type": "string",
+      "enum": [
+        "provisioning",
+        "ready",
+        "in_use",
+        "idle",
+        "stopping",
+        "stopped",
+        "failed"
+      ]
+    },
+    "ContainerRef": {
+      "type": "object",
+      "required": [
+        "backend_kind",
+        "container_id"
+      ],
+      "properties": {
+        "backend_kind": {
+          "type": "string"
+        },
+        "container_id": {
+          "type": "string"
+        }
+      }
+    },
     "TypedUlid": {
       "type": "string",
       "format": "ulid"

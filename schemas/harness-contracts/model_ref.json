@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ModelRef",
+  "type": "object",
+  "required": [
+    "model_id",
+    "provider_id"
+  ],
+  "properties": {
+    "model_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    }
+  }
+}

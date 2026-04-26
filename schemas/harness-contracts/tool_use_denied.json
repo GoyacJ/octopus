@@ -4,7 +4,6 @@
   "type": "object",
   "required": [
     "at",
-    "decided_by",
     "reason",
     "tool_use_id"
   ],
@@ -13,73 +12,33 @@
       "type": "string",
       "format": "date-time"
     },
-    "decided_by": {
-      "$ref": "#/definitions/DecidedBy"
-    },
     "reason": {
-      "type": "string"
+      "$ref": "#/definitions/DenyReason"
     },
     "tool_use_id": {
       "$ref": "#/definitions/TypedUlid"
     }
   },
   "definitions": {
-    "DecidedBy": {
+    "DenyReason": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
-            "user",
-            "default_mode"
+            "user_denied",
+            "rule_denied",
+            "default_mode_denied",
+            "subagent_blocked",
+            "policy_denied"
           ]
         },
         {
           "type": "object",
           "required": [
-            "rule"
+            "hook_blocked"
           ],
           "properties": {
-            "rule": {
-              "type": "object",
-              "required": [
-                "rule_id"
-              ],
-              "properties": {
-                "rule_id": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "broker"
-          ],
-          "properties": {
-            "broker": {
-              "type": "object",
-              "required": [
-                "broker_id"
-              ],
-              "properties": {
-                "broker_id": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "hook"
-          ],
-          "properties": {
-            "hook": {
+            "hook_blocked": {
               "type": "object",
               "required": [
                 "handler_id"
@@ -96,60 +55,15 @@
         {
           "type": "object",
           "required": [
-            "timeout"
+            "other"
           ],
           "properties": {
-            "timeout": {
-              "type": "object",
-              "required": [
-                "default"
-              ],
-              "properties": {
-                "default": {
-                  "$ref": "#/definitions/Decision"
-                }
-              }
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "parent_forwarded"
-          ],
-          "properties": {
-            "parent_forwarded": {
-              "type": "object",
-              "required": [
-                "original_decided_by",
-                "parent_session_id"
-              ],
-              "properties": {
-                "original_decided_by": {
-                  "$ref": "#/definitions/DecidedBy"
-                },
-                "parent_session_id": {
-                  "$ref": "#/definitions/TypedUlid"
-                }
-              }
+            "other": {
+              "type": "string"
             }
           },
           "additionalProperties": false
         }
-      ]
-    },
-    "Decision": {
-      "type": "string",
-      "enum": [
-        "allow_once",
-        "allow_session",
-        "allow_permanent",
-        "deny_once",
-        "deny_permanent",
-        "ask_user",
-        "defer",
-        "escalate"
       ]
     },
     "TypedUlid": {

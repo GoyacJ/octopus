@@ -18,7 +18,7 @@
       "$ref": "#/definitions/ManifestValidationFailure"
     },
     "manifest_origin": {
-      "type": "string"
+      "$ref": "#/definitions/ManifestOriginRef"
     },
     "partial_name": {
       "type": [
@@ -47,6 +47,70 @@
     }
   },
   "definitions": {
+    "ManifestOriginRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "cargo_extension"
+          ],
+          "properties": {
+            "cargo_extension": {
+              "type": "object",
+              "required": [
+                "binary"
+              ],
+              "properties": {
+                "binary": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "remote_registry"
+          ],
+          "properties": {
+            "remote_registry": {
+              "type": "object",
+              "required": [
+                "endpoint"
+              ],
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ManifestValidationFailure": {
       "oneOf": [
         {

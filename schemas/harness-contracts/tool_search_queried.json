@@ -5,8 +5,13 @@
   "required": [
     "at",
     "matched",
+    "query",
     "query_kind",
-    "run_id"
+    "run_id",
+    "scored",
+    "session_id",
+    "tool_use_id",
+    "truncated_by_max_results"
   ],
   "properties": {
     "at": {
@@ -14,15 +19,46 @@
       "format": "date-time"
     },
     "matched": {
-      "type": "integer",
-      "format": "uint",
-      "minimum": 0.0
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "query": {
+      "type": "string"
     },
     "query_kind": {
       "$ref": "#/definitions/ToolSearchQueryKind"
     },
     "run_id": {
       "$ref": "#/definitions/TypedUlid"
+    },
+    "scored": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        ],
+        "maxItems": 2,
+        "minItems": 2
+      }
+    },
+    "session_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "tool_use_id": {
+      "$ref": "#/definitions/TypedUlid"
+    },
+    "truncated_by_max_results": {
+      "type": "boolean"
     }
   },
   "definitions": {
