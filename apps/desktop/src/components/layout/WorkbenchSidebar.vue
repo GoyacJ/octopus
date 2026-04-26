@@ -194,35 +194,38 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
     return []
   }
 
-  const items: Array<NavigationItem & { menuId?: string }> = [
+  // Merged global navigation from Rail + Workspace logic
+  return [
     {
       id: 'workspace-overview',
-      menuId: 'menu-workspace-overview',
       label: t('sidebar.navigation.overview'),
       routeNames: ['workspace-overview'],
-      icon: iconMap.dashboard,
+      icon: LayoutDashboard,
       to: createWorkspaceOverviewTarget(workspaceId, currentProjectId.value || undefined),
     },
     {
-      id: 'workspace-console',
-      menuId: 'menu-workspace-console',
-      label: t('sidebar.navigation.console'),
-      routeNames: [
-        'workspace-console',
-        'workspace-console-settings',
-        'workspace-console-projects',
-        'workspace-console-knowledge',
-        'workspace-console-resources',
-        'workspace-console-agents',
-        'workspace-console-models',
-        'workspace-console-tools',
-      ],
-      icon: iconMap.console,
-      to: createWorkspaceConsoleTarget(workspaceId),
+      id: 'workspace-agents',
+      label: t('sidebar.navigation.agents'),
+      routeNames: ['workspace-console-agents'],
+      icon: Bot,
+      to: { name: 'workspace-console-agents', params: { workspaceId } },
+    },
+    {
+      id: 'workspace-models',
+      label: t('sidebar.navigation.models'),
+      routeNames: ['workspace-console-models'],
+      icon: Cpu,
+      to: { name: 'workspace-console-models', params: { workspaceId } },
+    },
+    {
+      id: 'workspace-tools',
+      label: t('sidebar.navigation.tools'),
+      routeNames: ['workspace-console-tools'],
+      icon: Wrench,
+      to: { name: 'workspace-console-tools', params: { workspaceId } },
     },
     {
       id: 'workspace-access-control',
-      menuId: 'menu-workspace-access-control',
       label: t('sidebar.navigation.accessControl'),
       routeNames: [
         'workspace-access-control',
@@ -230,26 +233,27 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
         'workspace-access-control-access',
         'workspace-access-control-governance',
       ],
-      icon: iconMap['access-control'],
+      icon: ShieldCheck,
       to: {
         name: 'workspace-access-control',
         params: { workspaceId },
       },
     },
-  ]
-
-  return items.filter((item) => {
+  ].filter((item) => {
     if (item.id === 'workspace-access-control') {
       return !hasAccessControlAuthorization.value || workspaceAccessControlStore.canShowAccessControlNavigation
     }
-
-    if (!hasAccessControlAuthorization.value) {
-      return true
-    }
-
-    return !item.menuId || workspaceAccessControlStore.currentEffectiveMenuIds.includes(item.menuId)
+    return true
   })
 })
+
+const globalSettingsItem = {
+  id: 'app-settings',
+  label: t('sidebar.navigation.settings'),
+  icon: Settings,
+  to: '/app-settings',
+  active: computed(() => route.name === 'app-settings')
+}
 
 function projectConversationId(projectId: string) {
   const recentConversations = [
@@ -593,35 +597,54 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
 
 <template>
   <aside
-    class="flex h-full w-[260px] shrink-0 flex-col border-r border-border bg-sidebar/50 backdrop-blur-md px-3 py-3"
+    class="flex h-full w-[280px] shrink-0 flex-col bg-sidebar/40 backdrop-blur-xl px-4 py-4 transition-all duration-normal"
     :class="shell.leftSidebarCollapsed ? 'hidden' : 'flex'"
   >
-    <div class="flex items-center justify-between gap-3 pb-3">
-      <div class="px-2 text-[13px] font-bold text-text-primary tracking-tight">
-        {{ t('sidebar.workspace.label') }}
+    <!-- Top Hub: Workspace & Global Controls -->
+    <div class="flex flex-col gap-4 pb-4 border-b border-white/5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3 group cursor-pointer">
+          <div class="h-9 w-9 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)]">
+            <img src="/logo.png" class="h-6 w-6 rounded-md object-cover" alt="Octopus" />
+          </div>
+          <span class="text-sm font-bold tracking-tight text-text-primary group-hover:text-primary transition-colors">Octopus</span>
+        </div>
+        <UiButton
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 text-text-tertiary hover:bg-white/10"
+          @click="shell.toggleLeftSidebar()"
+        >
+          <PanelLeftClose :size="16" />
+        </UiButton>
       </div>
-      <UiButton
-        variant="ghost"
-        size="icon"
-        data-testid="sidebar-collapse"
-        class="h-8 w-8"
-        :aria-label="t('topbar.leftSidebar')"
-        @click="shell.toggleLeftSidebar()"
-      >
-        <PanelLeftClose :size="16" />
-      </UiButton>
+
+      <!-- Compact Global Nav Tiles -->
+      <div class="grid grid-cols-4 gap-2 px-1">
+        <RouterLink
+          v-for="item in workspaceNavigation"
+          :key="item.id"
+          :to="item.to"
+          class="flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-fast border border-transparent"
+          :class="isRouteActive(item.routeNames) ? 'bg-primary/20 border-primary/30 text-primary shadow-sm' : 'text-text-tertiary hover:bg-white/5 hover:text-text-secondary'"
+          v-tooltip="{ content: item.label, placement: 'bottom' }"
+        >
+          <component :is="item.icon" :size="18" />
+        </RouterLink>
+      </div>
     </div>
 
-    <div class="mt-2 min-h-0 flex-1 overflow-y-auto">
-      <div class="flex items-center justify-between gap-2 px-2 pb-2">
-        <div class="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+    <!-- Projects Section -->
+    <div class="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+      <div class="flex items-center justify-between gap-2 px-2 pb-3">
+        <div class="text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary/60">
           {{ t('sidebar.projectTree.title') }}
         </div>
         <UiPopover
           v-model:open="quickCreateOpen"
           align="end"
           side="bottom"
-          class="w-[320px] overflow-hidden p-0"
+          class="w-[320px] overflow-hidden p-0 rounded-2xl border-white/5 shadow-2xl"
         >
           <template #trigger>
             <UiButton
@@ -733,58 +756,46 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           </form>
         </UiPopover>
       </div>
-      <div class="space-y-3">
+      <div class="space-y-2 px-1">
         <div
           v-for="project in activeProjects"
           :key="project.id"
           :data-testid="`sidebar-project-${project.id}`"
           :class="projectGroupClasses(project.id)"
         >
-          <div class="relative flex flex-col">
-            <!-- Active Project Glow Indicator -->
-            <div 
-              v-if="isProjectExpanded(project.id)"
-              class="absolute -left-1 top-3 h-8 w-1 rounded-full bg-primary blur-[2px] opacity-70"
-            />
-            
-            <div class="flex items-center gap-2">
+          <div class="relative flex flex-col p-1">
+            <div class="flex items-center gap-1">
               <button
                 type="button"
                 :data-testid="`sidebar-project-summary-${project.id}`"
                 :class="projectSummaryClasses(project.id)"
                 @click="handleProjectSummaryClick(project.id)"
               >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-m)] bg-subtle text-text-tertiary group-hover:bg-accent group-hover:text-primary transition-colors">
-                  <FolderKanban :size="18" />
+                <div 
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-normal"
+                  :class="isProjectExpanded(project.id) ? 'bg-primary text-primary-foreground shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]' : 'bg-white/5 text-text-tertiary group-hover:bg-white/10 group-hover:text-primary'"
+                >
+                  <FolderKanban :size="20" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <div class="truncate text-[13px] font-bold text-text-primary">{{ project.name }}</div>
-                  <div v-if="!isProjectExpanded(project.id)" class="truncate text-[11px] text-text-tertiary">{{ project.description }}</div>
+                  <div class="truncate text-[13px] font-bold text-text-primary leading-tight">{{ project.name }}</div>
+                  <div class="mt-1 flex items-center gap-1.5">
+                    <!-- Breathing status dot for Agents -->
+                    <div class="h-1.5 w-1.5 rounded-full bg-status-success shadow-[0_0_8px_var(--status-success)] animate-pulse" />
+                    <span class="truncate text-[10px] text-text-tertiary font-medium uppercase tracking-wider">{{ t('sidebar.navigation.agents') }} Active</span>
+                  </div>
                 </div>
               </button>
-
-              <UiButton
-                v-if="!isProjectExpanded(project.id) && canDeleteProjectFromSidebar(project)"
-                :data-testid="`sidebar-project-delete-trigger-${project.id}`"
-                type="button"
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 shrink-0 opacity-0 transition-all duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto mr-2"
-                :aria-label="t('sidebar.projectTree.remove')"
-                @click.stop="openDeleteDialog(project)"
-              >
-                <Trash2 :size="14" />
-              </UiButton>
             </div>
 
-            <div v-if="isProjectExpanded(project.id)" class="mt-1 flex flex-col border-t border-border/50 bg-subtle/30 px-2 py-2">
+            <div v-if="isProjectExpanded(project.id)" class="mt-2 flex flex-col gap-1 px-1 pb-1">
               <RouterLink
                 v-for="item in projectModules(project.id)"
                 :key="item.id"
                 :to="item.to"
                 :data-testid="item.testId"
-                class="group/item flex items-center gap-3 rounded-[var(--radius-s)] px-3 py-2 text-[12px] font-medium transition-all duration-fast"
-                :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-surface text-primary shadow-sm ring-1 ring-border' : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'"
+                class="group/item flex items-center gap-3 rounded-lg px-3 py-2 text-[12px] font-medium transition-all duration-fast"
+                :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-white/10 text-primary shadow-sm ring-1 ring-white/5' : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'"
               >
                 <component 
                   :is="item.icon" 
@@ -799,35 +810,34 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
       </div>
     </div>
 
-    <div class="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-border pt-4">
+    <!-- Bottom Hub: Workspace Switcher & User Profile -->
+    <div class="mt-4 border-t border-white/5 pt-4">
       <UiPopover
         v-model:open="workspaceMenuOpen"
         align="start"
         side="top"
-        class="min-w-0 w-[272px] overflow-hidden p-0"
+        class="min-w-0 w-[272px] overflow-hidden p-0 rounded-2xl border-white/5 shadow-2xl backdrop-blur-2xl bg-sidebar/80"
       >
         <template #trigger>
           <button
             type="button"
             data-testid="sidebar-workspace-menu-trigger"
-            :class="workspaceTriggerClasses()"
+            class="group flex w-full items-center gap-3 rounded-2xl border border-white/5 p-2 text-left transition-all duration-normal hover:bg-white/5 hover:border-white/10"
+            :class="workspaceMenuOpen ? 'bg-white/5 border-white/10 shadow-lg' : ''"
           >
-            <div
-              data-testid="sidebar-workspace-menu-trigger-icon"
-              :class="workspaceTriggerIconClasses()"
-            >
-              <img v-if="workspaceAvatar" :src="workspaceAvatar" alt="" class="h-full w-full rounded-[var(--radius-m)] object-cover">
-              <span v-else class="text-sm font-bold uppercase">{{ workspaceAvatarFallback }}</span>
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 text-primary border border-primary/20 shadow-inner">
+              <img v-if="workspaceAvatar" :src="workspaceAvatar" alt="" class="h-full w-full rounded-xl object-cover">
+              <span v-else class="text-xs font-black">{{ workspaceAvatarFallback }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col">
-              <div class="truncate text-sm font-bold text-text-primary leading-tight">
+              <div class="truncate text-[13px] font-extrabold text-text-primary leading-tight">
                 {{ workspaceLabel }}
               </div>
-              <div class="mt-0.5 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary leading-tight">
-                {{ t('sidebar.workspace.label') }}
+              <div class="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary/60 leading-tight">
+                Workspace
               </div>
             </div>
-            <ChevronsUpDown :size="14" class="shrink-0" :class="workspaceTriggerCaretClasses()" />
+            <ChevronsUpDown :size="14" class="shrink-0 text-text-tertiary group-hover:text-text-secondary" />
           </button>
         </template>
 

@@ -23,6 +23,12 @@ code-runtime = []
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 async-trait = { workspace = true }
+blake3 = "1"
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+regex = "1"
 serde = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "process"] }
+tokio-util = { workspace = true, features = ["io"] }

@@ -33,26 +33,26 @@ onBeforeUnmount(() => {
 <template>
   <div
     data-testid="workbench-shell"
-    class="flex h-screen w-screen overflow-hidden bg-sidebar font-sans text-text-primary antialiased"
+    class="flex h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_at_top_left,var(--sidebar)_0%,#000_100%)] font-sans text-text-primary antialiased p-3 gap-3"
   >
-    <WorkbenchRail />
-    <WorkbenchSidebar class="z-10" />
+    <!-- Unified Sidebar (The Command Column) -->
+    <WorkbenchSidebar class="z-20 rounded-[var(--radius-2xl)] border border-white/5 shadow-2xl" />
 
-    <div v-if="shell.leftSidebarCollapsed" data-testid="sidebar-rail" class="hidden" />
-
-    <!-- Main Content Container with Ambient Occlusion -->
-    <div class="relative flex min-w-0 flex-1 flex-col bg-background transition-all duration-slow ease-apple shadow-[var(--shadow-xl)] lg:shadow-[var(--shadow-lg)]">
+    <!-- Main Content Area: The Floating Canvas -->
+    <div 
+      class="relative flex min-w-0 flex-1 flex-col bg-background rounded-[var(--radius-2xl)] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 overflow-hidden transition-all duration-slow ease-apple"
+    >
       <WorkbenchTopbar />
 
       <main
-        class="min-w-0 flex-1 overflow-hidden bg-[color-mix(in_srgb,var(--background)_97%,var(--sidebar)_3%)]"
+        class="min-w-0 flex-1 overflow-hidden"
         data-testid="workbench-main"
       >
         <div 
           data-testid="workbench-main-canvas" 
-          class="flex h-full min-w-0 flex-col p-4 lg:p-6"
+          class="flex h-full min-w-0 flex-col p-4 lg:p-5"
         >
-          <div class="flex-1 flex flex-col rounded-[var(--radius-xl)] bg-surface shadow-[var(--layer-depth-1)] overflow-hidden">
+          <div class="flex-1 flex flex-col rounded-[var(--radius-xl)] bg-surface/50 backdrop-blur-sm shadow-[var(--layer-depth-1)] overflow-hidden border border-white/5">
             <slot />
           </div>
         </div>
