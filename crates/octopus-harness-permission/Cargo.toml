@@ -14,16 +14,35 @@ workspace = true
 
 [features]
 default = []
+dangerous = ["dep:regex", "dep:strip-ansi-escapes", "dep:unicode-normalization"]
+integrity = ["dep:bytes", "dep:ring", "dep:serde_json", "dep:zeroize"]
 interactive = []
-stream = []
-rule-engine = []
+stream = ["dep:dashmap"]
+rule-engine = ["dangerous", "dep:arc-swap", "dep:notify", "dep:serde_json", "dep:tokio-stream", "dep:toml"]
 mock = []
 auto-mode = ["dep:octopus-harness-model"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-model = { path = "../octopus-harness-model", optional = true }
+arc-swap = { workspace = true, optional = true }
 async-trait = { workspace = true }
+bytes = { workspace = true, optional = true }
+chrono = { workspace = true }
+dashmap = { workspace = true, optional = true }
+futures = { workspace = true }
+notify = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
+ring = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+strip-ansi-escapes = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+unicode-normalization = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

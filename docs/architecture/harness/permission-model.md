@@ -109,15 +109,21 @@ DecisionScope::ExactCommand { command, cwd }
 
 ```rust
 pub struct PermissionRequest {
-    pub request_id: PermissionRequestId,
-    pub session_id: SessionId,
+    pub request_id: RequestId,
     pub tenant_id: TenantId,
+    pub session_id: SessionId,
+    pub tool_use_id: ToolUseId,
+    pub tool_name: String,
     pub subject: PermissionSubject,
-    pub caller: CallerInfo,
+    pub severity: Severity,
+    pub scope_hint: DecisionScope,
     pub created_at: DateTime<Utc>,
 }
 ```
 
+> `PermissionRequestId` 在 L0 事件辅助类型里只是 `RequestId` 的 alias；`harness-permission`
+> 公开 API 字段统一使用 `RequestId`。
+>
 > `PermissionSubject` 定义在 `harness-contracts §3.4.1`，本节只解释语义；调用方按上下文选择最具体的 variant：
 >
 > | Variant | 适用调用方 | 与 `DecisionScope` 的常见配对 |
@@ -139,12 +145,10 @@ pub struct PermissionRequest {
 
 ```rust
 pub struct PermissionContext {
-    pub mode: PermissionMode,
+    pub permission_mode: PermissionMode,
     pub previous_mode: Option<PermissionMode>,   // 进入 Plan 前的原 mode（CC `prePlanMode` 等价）
-    pub rule_snapshot: RuleSnapshot,
-    pub sandbox_state: Option<SandboxState>,
-    pub history: Vec<PriorDecision>,
-    pub hooks: Vec<HandlerId>,
+    pub session_id: SessionId,
+    pub tenant_id: TenantId,
 
     /// 调用上下文是否可阻塞等待用户决策；由调用方（Engine / Subagent Runner /
     /// Cron Driver / Gateway）按上下文设置，Broker 不得猜测。
@@ -156,6 +160,9 @@ pub struct PermissionContext {
     /// 无规则命中且 Broker 也不能给出明确决策时的兜底；
     /// 不显式设置时按 `FallbackPolicy::AskUser`（fail-closed 在 NoInteractive 下降级为 DenyAll）。
     pub fallback_policy: FallbackPolicy,
+
+    pub rule_snapshot: Arc<RuleSnapshot>,
+    pub hook_overrides: Vec<OverrideDecision>,
 }
 ```
 
@@ -269,31 +276,39 @@ impl<F> DirectBroker<F> {
 
 ```rust
 pub struct StreamBasedBroker {
-    emit: mpsc::Sender<PermissionRequest>,
-    resolutions: Arc<DashMap<PermissionRequestId, oneshot::Sender<Decision>>>,
+    requests: mpsc::Sender<PermissionRequest>,
+    pending: Arc<DashMap<RequestId, PendingResolution>>,
     persistence: Arc<dyn DecisionPersistence>,
+    config: StreamBrokerConfig,
 }
 
-pub struct StreamBrokerHandle {
-    resolutions: Arc<DashMap<PermissionRequestId, oneshot::Sender<Decision>>>,
+pub struct StreamBrokerConfig {
+    pub default_timeout: Option<Duration>,
+    pub heartbeat_interval: Option<Duration>,
+    pub max_pending: usize,
 }
 
-impl StreamBrokerHandle {
-    pub async fn resolve(
-        &self,
-        request_id: PermissionRequestId,
-        decision: Decision,
-    ) -> Result<(), PermissionError>;
+pub struct ResolverHandle {
+    pending: Arc<DashMap<RequestId, PendingResolution>>,
+}
+
+impl ResolverHandle {
+    pub async fn resolve(&self, request_id: RequestId, decision: Decision)
+        -> Result<(), PermissionError>;
+    pub async fn cancel(&self, request_id: RequestId, reason: CancelReason)
+        -> Result<(), PermissionError>;
 }
 ```
 
 **场景**：Desktop UI / Web UI / 异步系统
 
 **流程**：
-1. SDK 创建 `(StreamBasedBroker, Receiver<PermissionRequest>, StreamBrokerHandle)`
-2. Engine 调 `broker.decide(req)` → Broker 把 req 发到 Receiver 并等待 `oneshot` 回答
-3. 业务层从 Receiver 拿到 req → 渲染 UI 让用户决策 → `handle.resolve(id, decision)` 回调
+1. SDK 创建 `(StreamBasedBroker, Receiver<PermissionRequest>, ResolverHandle)`
+2. Engine 调 `broker.decide(req, ctx)` → Broker 把 req 发到 Receiver 并等待 `ResolverHandle`
+3. 业务层从 Receiver 拿到 req → 渲染 UI 让用户决策 → `resolver.resolve(id, decision)` 回调
 4. `decide` 返回 Decision
+
+**约束**：`pending` 必须有 `max_pending` 上限；超时由 `PermissionContext::timeout_policy` 优先，其次使用 `StreamBrokerConfig::default_timeout`，两者都缺省时按 fail-closed 拒绝。Session 结束或 UI 关闭时必须通过 `cancel` 清理 pending。
 
 **优点**：UI 完全异步，审批流可跨窗口/会话
 
