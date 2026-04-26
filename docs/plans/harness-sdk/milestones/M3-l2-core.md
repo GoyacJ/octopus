@@ -68,7 +68,7 @@
 
 ### M3-T02 · ToolRegistry + ToolPool + Snapshot 机制
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`f2e46f45`）。
 
 **SPEC 锚点**：
 - `docs/architecture/harness/crates/harness-tool.md` §2.5（ToolRegistry / Snapshot）
@@ -97,7 +97,7 @@
 
 ### M3-T03 · Orchestrator（并发分桶 + 串行执行）
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`6b1fef47`）。
 
 **SPEC 锚点**：
 - `docs/architecture/harness/crates/harness-tool.md` §2.7（ToolOrchestrator / bool 二档分桶）
@@ -146,7 +146,7 @@
 
 ### M3-T04b · 执行类工具集（4 个）
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`17c91dc6`）。
 
 **SPEC 锚点**：
 - `harness-tool.md` §6（内置工具集）
@@ -206,7 +206,7 @@
 
 ### M3-T07 · Hook Dispatcher + Registry + 事务语义
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`81954ad9`）。
 
 **SPEC 锚点**：
 - `harness-hook.md` §3（Dispatcher）+ §2.6.2（Hook 失败的事务语义，v1.8.1 P1-4）
@@ -227,7 +227,9 @@
 
 ### M3-T08 · Hook Transport（in-process）
 
-**SPEC 锚点**：`harness-hook.md` §4.1（in-process transport）
+**状态**：已提交待评审。
+
+**SPEC 锚点**：`harness-hook.md` §3.1（in-process transport）
 
 **预期产物**：
 - `src/transport/in_process.rs`

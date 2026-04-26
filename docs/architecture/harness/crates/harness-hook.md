@@ -553,6 +553,11 @@ impl HookHandler for AuditHook {
 }
 ```
 
+SDK 内置 `InProcessHookTransport` 用于把内嵌 handler 接入统一 transport
+公开面。它包装 `Arc<dyn HookHandler>`，同时实现 `HookTransport` 与
+`HookHandler`，因此可以直接注册进 `HookRegistry` 并复用 dispatcher 的
+failure_mode、panic 捕获和事务语义。
+
 ### 3.2 Exec（对齐 HER-036）
 
 ```rust
@@ -727,7 +732,7 @@ pub enum HookProtocolVersion {
 
 ```toml
 [features]
-default = ["in-process"]
+default = []
 in-process = []
 exec = ["dep:tokio"]
 http = ["dep:reqwest"]

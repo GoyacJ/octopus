@@ -3,7 +3,7 @@
 //! Hook registry, dispatcher, transports, failure modes, and transaction semantics.
 //!
 //! SPEC: docs/architecture/harness/crates/harness-hook.md
-//! Status: M3-T06 public contract surface.
+//! Status: M3-T08 in-process hook transport.
 
 #![forbid(unsafe_code)]
 
@@ -13,6 +13,7 @@ pub mod event;
 pub mod handler;
 pub mod outcome;
 pub mod registry;
+pub mod transport;
 pub mod views;
 
 pub use context::*;
@@ -21,6 +22,7 @@ pub use event::*;
 pub use handler::*;
 pub use outcome::*;
 pub use registry::*;
+pub use transport::*;
 pub use views::*;
 
 pub use harness_contracts::{

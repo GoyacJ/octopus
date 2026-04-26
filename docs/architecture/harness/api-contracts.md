@@ -704,6 +704,13 @@ pub trait HookHandler: Send + Sync + 'static {
 ### 11.2 `HookTransport`
 
 ```rust
+pub struct HookPayload {
+    pub event: HookEvent,
+    pub ctx: HookContext,
+}
+
+pub type HookOutput = Result<HookOutcome, HookError>;
+
 #[async_trait]
 pub trait HookTransport: Send + Sync + 'static {
     async fn invoke(&self, payload: HookPayload) -> HookOutput;
@@ -711,6 +718,7 @@ pub trait HookTransport: Send + Sync + 'static {
 ```
 
 - **内置实现**：`in-process` / `exec` / `http`（详见 `crates/harness-hook.md §3`）
+  - `in-process` 通过 `InProcessHookTransport` 包装 `Arc<dyn HookHandler>`；该 wrapper 同时实现 `HookTransport` 与 `HookHandler`，可直接注册进 `HookRegistry`
   - `exec` 与 `http` 默认仅 `TrustLevel::AdminTrusted` 可安装；UserControlled HTTP hook 要求非空 `HookHttpSecurityPolicy.allowlist` 且 `ssrf_guard` 全部启用
   - 协议版本以 `HookProtocolVersion` 协商（详见 `harness-hook.md §3.4`）
 - **扩展实现**：`HookTransport` 是开放扩展点，可由业务层按需自实现（例如以子 Agent 桥接外部 service 的 `agent-bridge` transport、或 WASM/V8 嵌入式执行器）；新增 transport 必须自行满足 §11 replay 幂等契约
