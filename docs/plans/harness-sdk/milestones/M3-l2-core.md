@@ -706,7 +706,7 @@ cargo test -p octopus-cli run_once_smoke
 - driver 使用 `MockProvider`、`InMemoryEventStore`、`ContextEngine`、`ToolPool` 与 `ListDir` 工具完成最小非交互闭环
 - 旧 positional run、server、desktop、interactive CLI 继续走冻结的旧 `octopus-sdk*` 路径
 
-**下一步**：M3 Gate。
+**Gate 结果**：M3 Gate 已通过，结果记录见 `docs/plans/harness-sdk/audit/M3-mvp-gate.md`。M4 / M5 待 maintainer 放行后启动。
 
 ---
 
