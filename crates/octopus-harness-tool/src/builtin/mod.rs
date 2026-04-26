@@ -1,13 +1,21 @@
+mod bash;
+mod clarify;
 mod grep;
 mod list_dir;
 mod read;
 mod read_blob;
+mod send_message;
+mod web_search;
 mod write;
 
+pub use bash::BashTool;
+pub use clarify::ClarifyTool;
 pub use grep::GrepTool;
 pub use list_dir::ListDirTool;
 pub use read::FileReadTool;
 pub use read_blob::ReadBlobTool;
+pub use send_message::SendMessageTool;
+pub use web_search::{WebSearchBackend, WebSearchRequest, WebSearchResult, WebSearchTool};
 pub use write::FileWriteTool;
 
 use harness_contracts::{

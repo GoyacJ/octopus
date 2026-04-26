@@ -88,6 +88,11 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     );
     insert_schema!(schemas, "manifest_origin_ref", ManifestOriginRef);
     insert_schema!(schemas, "rejection_reason", RejectionReason);
+    insert_schema!(schemas, "clarify_prompt", ClarifyPrompt);
+    insert_schema!(schemas, "clarify_choice", ClarifyChoice);
+    insert_schema!(schemas, "clarify_answer", ClarifyAnswer);
+    insert_schema!(schemas, "outbound_user_message", OutboundUserMessage);
+    insert_schema!(schemas, "user_message_delivery", UserMessageDelivery);
 
     insert_schema!(schemas, "session_created", SessionCreatedEvent);
     insert_schema!(schemas, "session_forked", SessionForkedEvent);

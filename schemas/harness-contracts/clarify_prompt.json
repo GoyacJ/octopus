@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClarifyPrompt",
+  "type": "object",
+  "required": [
+    "choices",
+    "multiple",
+    "prompt"
+  ],
+  "properties": {
+    "choices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ClarifyChoice"
+      }
+    },
+    "multiple": {
+      "type": "boolean"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "ClarifyChoice": {
+      "type": "object",
+      "required": [
+        "id",
+        "label"
+      ],
+      "properties": {
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

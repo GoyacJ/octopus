@@ -67,6 +67,8 @@ fn schema_export_contains_required_surface() {
     assert!(schemas.contains_key("credential_pool_shared_across_tenants"));
     assert!(schemas.contains_key("manifest_validation_failed"));
     assert!(schemas.contains_key("hook_failed"));
+    assert!(schemas.contains_key("clarify_prompt"));
+    assert!(schemas.contains_key("user_message_delivery"));
 }
 
 #[test]

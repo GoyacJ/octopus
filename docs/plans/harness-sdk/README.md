@@ -105,7 +105,7 @@ docs/plans/harness-sdk/
 | M0 Bootstrap | 已完成 | workspace 共存整理 + 旧 SDK 冻结 + 19 crate 空骨架 |
 | M1 L0 Contracts | 已完成 | `harness-contracts` 全量类型 + Redactor trait + NoopRedactor |
 | M2 L1 Primitives | 已完成 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
-| M3 L2 Core | 进行中 | M3-T01 / T02 / T03 / T04a 本地实现待评审 |
+| M3 L2 Core | 进行中 | M3-T01 / T02 / T03 / T04a / T04b 本地实现待评审 |
 | M4 L2 Extensions | 待开始 | tool-search / skill / mcp |
 | M5 L3 Engine | 待开始 | 单 Agent 主循环（DefaultRedactor 替换 Noop）|
 | M6 L3 Agents | 待开始 | Subagent + Team |

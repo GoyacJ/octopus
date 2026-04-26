@@ -611,6 +611,49 @@ pub enum ToolCapability {
 
 > **Capability traits 的位置**：`SubagentRunnerCap` / `TodoStoreCap` / `RunCancellerCap` / `ClarifyChannelCap` / `UserMessengerCap` / `BlobReaderCap` / `EmbeddedToolDispatcherCap` / `CodeRuntimeCap` 等接口 trait 定义在 `harness-contracts::capability` 模块；具体实现由对应 L2/L3 crate 提供。详见 ADR-011 §2.2 / §2.5 与 ADR-0016 §2.7。
 
+`ClarifyChannelCap` 与 `UserMessengerCap` 是内置 `Clarify` / `SendMessage` 工具的最小调用契约：
+
+```rust
+pub trait ClarifyChannelCap: Send + Sync + 'static {
+    fn ask(&self, prompt: ClarifyPrompt) -> BoxFuture<'static, Result<ClarifyAnswer, ToolError>>;
+}
+
+pub struct ClarifyPrompt {
+    pub prompt: String,
+    pub choices: Vec<ClarifyChoice>,
+    pub multiple: bool,
+    pub timeout_seconds: Option<u32>,
+}
+
+pub struct ClarifyChoice {
+    pub id: String,
+    pub label: String,
+    pub hint: Option<String>,
+}
+
+pub struct ClarifyAnswer {
+    pub answer: String,
+    pub chosen_ids: Vec<String>,
+}
+
+pub trait UserMessengerCap: Send + Sync + 'static {
+    fn send(
+        &self,
+        message: OutboundUserMessage,
+    ) -> BoxFuture<'static, Result<UserMessageDelivery, ToolError>>;
+}
+
+pub struct OutboundUserMessage {
+    pub channel: String,
+    pub body: String,
+}
+
+pub struct UserMessageDelivery {
+    pub message_id: String,
+    pub delivered: bool,
+}
+```
+
 ### 3.4.1 `ToolDescriptor`
 
 `ToolDescriptor` 是 provider、tool registry、tool search 共同读取的注册期契约。其权威字段定义在 L0 contracts，避免 L1 `harness-model` 为 `ModelRequest.tools` 反向依赖 L2 `harness-tool`。

@@ -43,6 +43,10 @@ impl ToolRegistryBuilder {
                     registry.register(Box::<crate::builtin::ListDirTool>::default())?;
                     registry.register(Box::<crate::builtin::GrepTool>::default())?;
                     registry.register(Box::<crate::builtin::ReadBlobTool>::default())?;
+                    registry.register(Box::<crate::builtin::BashTool>::default())?;
+                    registry.register(Box::<crate::builtin::WebSearchTool>::default())?;
+                    registry.register(Box::<crate::builtin::ClarifyTool>::default())?;
+                    registry.register(Box::<crate::builtin::SendMessageTool>::default())?;
                 }
             }
             BuiltinToolset::Empty => {}

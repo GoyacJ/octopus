@@ -124,6 +124,8 @@
 
 > **拆分理由**（实施前评估 P1-5）：原标题写"8 个"实际列了 9 个工具（Read/Write/ListDir/Bash/Grep/WebSearch/Clarify/SendMessage/ReadBlob），含测试 ≤ 500 行不现实。按文件 IO / 执行类两组拆 2 子卡。
 
+**状态**：本地已提交，待评审。
+
 **范围**：Read / Write / ListDir / Grep / ReadBlob。
 
 **SPEC 锚点**：
@@ -144,6 +146,8 @@
 
 ### M3-T04b · 执行类工具集（4 个）
 
+**状态**：本地实现待评审。
+
 **SPEC 锚点**：
 - `harness-tool.md` §6（内置工具集）
 
@@ -153,8 +157,9 @@
 
 **关键不变量**：
 - Bash 必须接 SandboxBackend
-- WebSearch 必须接 PermissionBroker（受 NetworkAccess 决策范围）
-- `SendMessage` / `Clarify` 走特殊 ToolResultPart 变体
+- WebSearch 必须接 PermissionBroker（受 NetworkAccess 决策范围）和注入式 `WebSearchBackend`
+- `SendMessage` / `Clarify` 走 `ToolCapability::{UserMessenger, ClarifyChannel}`，返回 `ToolResult::Structured`
+- 不新增 `ToolResultPart` 变体
 
 **Cargo feature**：`builtin-toolset`
 
