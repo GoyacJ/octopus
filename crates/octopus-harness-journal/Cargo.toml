@@ -15,13 +15,22 @@ workspace = true
 [features]
 default = []
 sqlite = ["dep:rusqlite"]
-jsonl = []
+jsonl = ["dep:fs2"]
 in-memory = []
+mock = ["in-memory"]
+blob-file = []
+blob-sqlite = ["sqlite"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 async-trait = { workspace = true }
+blake3 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+fs2 = { workspace = true, optional = true }
 rusqlite = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
