@@ -146,6 +146,34 @@ fn message_and_reference_parts_keep_provider_native_contracts() {
     assert!(value.get("reference_kind").is_some());
 }
 
+#[test]
+fn memory_lifecycle_views_are_public_contracts() {
+    let _user = UserMessageView {
+        text: "remember this preference",
+        turn: 7,
+        at: chrono::Utc::now(),
+    };
+    let _message = MessageView {
+        role: MessageRole::Tool,
+        text_snippet: "tool output",
+        tool_use_id: Some(ToolUseId::new()),
+    };
+    let _summary = SessionSummaryView {
+        end_reason: EndReason::Completed,
+        turn_count: 3,
+        tool_use_count: 1,
+        usage: UsageSnapshot::default(),
+        final_assistant_text: Some("done"),
+    };
+    let _ctx = MemorySessionCtx {
+        tenant_id: TenantId::SINGLE,
+        session_id: SessionId::new(),
+        workspace_id: Some(WorkspaceId::new()),
+        user_id: Some("user-1"),
+        team_id: Some(TeamId::new()),
+    };
+}
+
 struct TestBlobStore;
 
 #[async_trait::async_trait]

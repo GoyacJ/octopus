@@ -364,7 +364,9 @@ pub struct ToolErrorPayload {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryKind {
     UserPreference,
@@ -409,7 +411,9 @@ pub enum MemorySource {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreatCategory {
     PromptInjection,
