@@ -109,15 +109,21 @@ DecisionScope::ExactCommand { command, cwd }
 
 ```rust
 pub struct PermissionRequest {
-    pub request_id: PermissionRequestId,
-    pub session_id: SessionId,
+    pub request_id: RequestId,
     pub tenant_id: TenantId,
+    pub session_id: SessionId,
+    pub tool_use_id: ToolUseId,
+    pub tool_name: String,
     pub subject: PermissionSubject,
-    pub caller: CallerInfo,
+    pub severity: Severity,
+    pub scope_hint: DecisionScope,
     pub created_at: DateTime<Utc>,
 }
 ```
 
+> `PermissionRequestId` 在 L0 事件辅助类型里只是 `RequestId` 的 alias；`harness-permission`
+> 公开 API 字段统一使用 `RequestId`。
+>
 > `PermissionSubject` 定义在 `harness-contracts §3.4.1`，本节只解释语义；调用方按上下文选择最具体的 variant：
 >
 > | Variant | 适用调用方 | 与 `DecisionScope` 的常见配对 |
@@ -139,12 +145,10 @@ pub struct PermissionRequest {
 
 ```rust
 pub struct PermissionContext {
-    pub mode: PermissionMode,
+    pub permission_mode: PermissionMode,
     pub previous_mode: Option<PermissionMode>,   // 进入 Plan 前的原 mode（CC `prePlanMode` 等价）
-    pub rule_snapshot: RuleSnapshot,
-    pub sandbox_state: Option<SandboxState>,
-    pub history: Vec<PriorDecision>,
-    pub hooks: Vec<HandlerId>,
+    pub session_id: SessionId,
+    pub tenant_id: TenantId,
 
     /// 调用上下文是否可阻塞等待用户决策；由调用方（Engine / Subagent Runner /
     /// Cron Driver / Gateway）按上下文设置，Broker 不得猜测。
@@ -156,6 +160,9 @@ pub struct PermissionContext {
     /// 无规则命中且 Broker 也不能给出明确决策时的兜底；
     /// 不显式设置时按 `FallbackPolicy::AskUser`（fail-closed 在 NoInteractive 下降级为 DenyAll）。
     pub fallback_policy: FallbackPolicy,
+
+    pub rule_snapshot: Arc<RuleSnapshot>,
+    pub hook_overrides: Vec<OverrideDecision>,
 }
 ```
 
@@ -270,18 +277,18 @@ impl<F> DirectBroker<F> {
 ```rust
 pub struct StreamBasedBroker {
     emit: mpsc::Sender<PermissionRequest>,
-    resolutions: Arc<DashMap<PermissionRequestId, oneshot::Sender<Decision>>>,
+    resolutions: Arc<DashMap<RequestId, oneshot::Sender<Decision>>>,
     persistence: Arc<dyn DecisionPersistence>,
 }
 
 pub struct StreamBrokerHandle {
-    resolutions: Arc<DashMap<PermissionRequestId, oneshot::Sender<Decision>>>,
+    resolutions: Arc<DashMap<RequestId, oneshot::Sender<Decision>>>,
 }
 
 impl StreamBrokerHandle {
     pub async fn resolve(
         &self,
-        request_id: PermissionRequestId,
+        request_id: RequestId,
         decision: Decision,
     ) -> Result<(), PermissionError>;
 }

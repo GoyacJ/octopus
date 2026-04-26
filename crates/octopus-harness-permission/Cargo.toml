@@ -24,6 +24,8 @@ auto-mode = ["dep:octopus-harness-model"]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-model = { path = "../octopus-harness-model", optional = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
