@@ -75,6 +75,38 @@ pub struct MemoryActor {
     pub session_id: Option<SessionId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+pub struct UserMessageView<'a> {
+    pub text: &'a str,
+    pub turn: u32,
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+pub struct MessageView<'a> {
+    pub role: MessageRole,
+    pub text_snippet: &'a str,
+    pub tool_use_id: Option<ToolUseId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+pub struct SessionSummaryView<'a> {
+    pub end_reason: EndReason,
+    pub turn_count: u32,
+    pub tool_use_count: u32,
+    pub usage: UsageSnapshot,
+    pub final_assistant_text: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+pub struct MemorySessionCtx<'a> {
+    pub tenant_id: TenantId,
+    pub session_id: SessionId,
+    pub workspace_id: Option<WorkspaceId>,
+    pub user_id: Option<&'a str>,
+    pub team_id: Option<TeamId>,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryWriteTarget {
     pub kind: MemoryKind,
