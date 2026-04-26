@@ -1,4 +1,4 @@
-use harness_contracts::{Message, ToolDescriptor};
+use harness_contracts::{Message, SessionId, TenantId, ToolDescriptor};
 use harness_model::{CacheBreakpoint, PromptCacheStyle};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -12,6 +12,14 @@ pub struct AssembledPrompt {
 }
 
 pub trait ContextSessionView: Send + Sync {
+    fn tenant_id(&self) -> TenantId {
+        TenantId::SINGLE
+    }
+
+    fn session_id(&self) -> Option<SessionId> {
+        None
+    }
+
     fn system(&self) -> Option<String>;
     fn messages(&self) -> Vec<Message>;
     fn tools_snapshot(&self) -> Vec<ToolDescriptor>;

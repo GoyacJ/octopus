@@ -495,6 +495,7 @@ impl ContextSanitizer {
 default = []
 anthropic-cache = []
 compact-aux-llm = []
+recall-memory = ["octopus-harness-memory/builtin", "octopus-harness-memory/external-slot"]
 ```
 
 ## 7. 错误类型

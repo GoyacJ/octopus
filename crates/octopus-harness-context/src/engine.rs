@@ -1,6 +1,11 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use harness_contracts::{ContextError, ContextStageId, MessagePart, ToolResultEnvelope, TurnInput};
+use harness_contracts::{
+    ContextError, ContextStageId, MemoryActor, Message, MessagePart, ToolResultEnvelope, TurnInput,
+};
+#[cfg(feature = "recall-memory")]
+use harness_memory::{MemoryKindFilter, MemoryManager, MemoryQuery, MemoryVisibilityFilter};
 use harness_model::AuxModelProvider;
 
 use crate::{
@@ -22,6 +27,9 @@ pub struct ContextEngine {
     providers: Vec<Arc<dyn ContextProvider>>,
     budget: TokenBudget,
     cache_policy: PromptCachePolicy,
+    turn_counter: Arc<AtomicU64>,
+    #[cfg(feature = "recall-memory")]
+    memory_manager: Option<Arc<MemoryManager>>,
 }
 
 impl ContextEngine {
@@ -93,7 +101,10 @@ impl ContextEngine {
         turn_input: &TurnInput,
     ) -> Result<AssembledPrompt, ContextError> {
         let mut messages = session.messages();
-        messages.push(turn_input.message.clone());
+        let mut turn_message = turn_input.message.clone();
+        self.apply_memory_recall(session, turn_input, &mut turn_message)
+            .await;
+        messages.push(turn_message);
 
         let tokens_estimate = estimate_tokens(session.system().as_deref(), &messages);
         let budget_utilization =
@@ -124,6 +135,8 @@ pub struct ContextEngineBuilder {
     aux_provider: Option<Arc<dyn AuxModelProvider>>,
     budget: TokenBudget,
     cache_policy: PromptCachePolicy,
+    #[cfg(feature = "recall-memory")]
+    memory_manager: Option<Arc<MemoryManager>>,
 }
 
 impl ContextEngineBuilder {
@@ -151,6 +164,13 @@ impl ContextEngineBuilder {
         self
     }
 
+    #[cfg(feature = "recall-memory")]
+    #[must_use]
+    pub fn with_memory_manager(mut self, memory_manager: Arc<MemoryManager>) -> Self {
+        self.memory_manager = Some(memory_manager);
+        self
+    }
+
     pub fn build(mut self) -> Result<ContextEngine, ContextError> {
         if let Some(aux_provider) = &self.aux_provider {
             self.providers
@@ -166,7 +186,74 @@ impl ContextEngineBuilder {
             providers: self.providers,
             budget: self.budget,
             cache_policy: self.cache_policy,
+            turn_counter: Arc::new(AtomicU64::new(1)),
+            #[cfg(feature = "recall-memory")]
+            memory_manager: self.memory_manager,
         })
+    }
+}
+
+impl ContextEngine {
+    #[cfg(feature = "recall-memory")]
+    async fn apply_memory_recall(
+        &self,
+        session: &dyn ContextSessionView,
+        turn_input: &TurnInput,
+        turn_message: &mut Message,
+    ) {
+        sanitize_memory_context(turn_message);
+
+        let Some(memory_manager) = &self.memory_manager else {
+            return;
+        };
+
+        let user_text = message_text(turn_message);
+        if user_text.trim().is_empty() {
+            return;
+        }
+
+        let query = MemoryQuery {
+            text: user_text,
+            kind_filter: Some(MemoryKindFilter::Any),
+            visibility_filter: MemoryVisibilityFilter::EffectiveFor(MemoryActor {
+                tenant_id: session.tenant_id(),
+                user_id: None,
+                team_id: None,
+                session_id: session.session_id(),
+            }),
+            max_records: 8,
+            min_similarity: 0.0,
+            tenant_id: session.tenant_id(),
+            session_id: session.session_id(),
+            deadline: None,
+        };
+
+        let records = memory_manager
+            .recall_once_per_turn(self.turn_key(turn_input), query)
+            .await
+            .unwrap_or_default();
+        if records.is_empty() {
+            return;
+        }
+
+        prepend_to_user_message(turn_message, &harness_memory::wrap_memory_context(&records));
+    }
+
+    #[cfg(not(feature = "recall-memory"))]
+    async fn apply_memory_recall(
+        &self,
+        _session: &dyn ContextSessionView,
+        _turn_input: &TurnInput,
+        _turn_message: &mut Message,
+    ) {
+    }
+
+    fn turn_key(&self, turn_input: &TurnInput) -> u64 {
+        turn_input
+            .metadata
+            .get("turn")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(|| self.turn_counter.fetch_add(1, Ordering::SeqCst))
     }
 }
 
@@ -219,4 +306,44 @@ fn budget_utilization(tokens_estimate: u64, max_tokens: u64) -> f32 {
         .unwrap_or_default()
         .min(u64::from(u16::MAX)) as u16;
     f32::from(per_mille) / 1_000.0
+}
+
+fn message_text(message: &Message) -> String {
+    message
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            MessagePart::Text(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn prepend_to_user_message(message: &mut Message, prefix: &str) {
+    if let Some(MessagePart::Text(text)) = message
+        .parts
+        .iter_mut()
+        .find(|part| matches!(part, MessagePart::Text(_)))
+    {
+        *text = format!("{prefix}\n{text}");
+        return;
+    }
+
+    message
+        .parts
+        .insert(0, MessagePart::Text(format!("{prefix}\n")));
+}
+
+fn sanitize_memory_context(message: &mut Message) {
+    for part in &mut message.parts {
+        if let MessagePart::Text(text) = part {
+            #[cfg(feature = "recall-memory")]
+            {
+                *text = harness_memory::sanitize_context(text)
+                    .trim_start()
+                    .to_owned();
+            }
+        }
+    }
 }

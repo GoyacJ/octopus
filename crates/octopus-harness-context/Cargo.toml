@@ -16,6 +16,7 @@ workspace = true
 default = []
 anthropic-cache = []
 compact-aux-llm = []
+recall-memory = ["octopus-harness-memory/builtin", "octopus-harness-memory/external-slot"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
@@ -33,3 +34,4 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+tempfile = { workspace = true }

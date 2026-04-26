@@ -305,7 +305,7 @@
 **SPEC 锚点**：`context-engineering.md` §4-§6（前 3 阶段）
 
 **预期产物**：
-- `src/stages.rs`：ToolResultBudgetProvider / SnipProvider / CollapseProvider
+- `src/stages/{budget,snip,collapse}.rs`：ToolResultBudgetProvider / SnipProvider / CollapseProvider
 - `tests/stages.rs`
 - `ContextBuffer` 持有 `ContextIdentity { tenant_id, session_id }`，供 offload retention 使用
 
@@ -314,6 +314,8 @@
 ---
 
 ### M3-T13 · Microcompact + Autocompact（aux LLM）
+
+**状态**：已提交待评审。
 
 **SPEC 锚点**：
 - `context-engineering.md` §7-§8（compact 双档）
@@ -328,21 +330,27 @@
 
 **预期 diff**：< 400 行
 
+**下一步**：M3-T14 · Recall 编排 + Memdir 注入。
+
 ---
 
 ### M3-T14 · Recall 编排 + Memdir 注入
+
+**状态**：已提交待评审。
 
 **SPEC 锚点**：
 - `context-engineering.md` §11（Recall 编排）
 - `harness-memory.md` §6
 
 **预期产物**：
-- `src/stages/recall.rs`：每轮至多 1 次 recall + fail-safe
-- `src/memdir_inject.rs`：MEMORY.md / USER.md → user message 注入
+- `src/engine.rs`：assemble 阶段每轮至多 1 次 external recall + fail-open 注入
+- `tests/recall_memdir.rs`：recall / sanitize / memdir runtime 不重读覆盖
 
 **关键不变量**：
-- Memdir 注入位置在 user message（不动 system prompt）
+- Memdir snapshot 属于 Session 创建期 frozen/system 面；运行期 external recall 注入 user message
 - `<memory-context>` 栅栏 + 上一轮栅栏剥离
+
+**下一步**：M3-T15 · Context Contract + Prompt Cache Stability。
 
 **预期 diff**：< 300 行
 
@@ -591,7 +599,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 **提交结果**：
 - 8 个失败模式 / replay 场景已由 `spike_replay_idempotent.rs` 覆盖
 - 当前实现无需生产代码修复
-- 已进入 M3-T11；当前下一步以 M3-T12 / M3-T13 顺序推进
+- 已进入 M3-T15；M3-T14 已提交待评审，当前下一步以 M3-T15 / M3-T16 顺序推进
 
 **通过判据**：
 - ✅ 8 个失败场景 / failure_mode 表全部按期望行为
