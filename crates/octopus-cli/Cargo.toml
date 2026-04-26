@@ -9,6 +9,13 @@ publish.workspace = true
 async-trait.workspace = true
 crossterm = "0.28"
 futures = "0.3"
+octopus-harness-context = { path = "../octopus-harness-context" }
+octopus-harness-contracts = { path = "../octopus-harness-contracts" }
+octopus-harness-journal = { path = "../octopus-harness-journal", features = ["in-memory"] }
+octopus-harness-model = { path = "../octopus-harness-model", features = ["mock"] }
+octopus-harness-permission = { path = "../octopus-harness-permission" }
+octopus-harness-session = { path = "../octopus-harness-session" }
+octopus-harness-tool = { path = "../octopus-harness-tool" }
 octopus-sdk = { path = "../octopus-sdk" }
 pulldown-cmark = "0.13"
 reqwest.workspace = true

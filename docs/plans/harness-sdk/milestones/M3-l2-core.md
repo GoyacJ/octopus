@@ -649,7 +649,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 | 字段 | 值 |
 |---|---|
-| **状态** | 待派发 |
+| **状态** | 已提交待评审 |
 | **依赖** | M3-T20 完成（M3 MVP 闭环可用） |
 | **预期 diff** | < 350 行 |
 | **预期工时** | AI 1.5h + 人类评审 30min |
@@ -700,6 +700,13 @@ cargo run -p octopus-cli -- run --once "list current dir"
 # 应见 AssistantDelta 流式输出 + ListDir 工具被调用
 cargo test -p octopus-cli run_once_smoke
 ```
+
+**提交结果**：
+- `run --once <prompt>` 已接入 M3 lower-level driver，使用 `SessionOptions.workspace_root` 从 CLI 当前工作目录派生路径
+- driver 使用 `MockProvider`、`InMemoryEventStore`、`ContextEngine`、`ToolPool` 与 `ListDir` 工具完成最小非交互闭环
+- 旧 positional run、server、desktop、interactive CLI 继续走冻结的旧 `octopus-sdk*` 路径
+
+**下一步**：M3 Gate。
 
 ---
 
