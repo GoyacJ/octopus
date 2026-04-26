@@ -541,7 +541,7 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 
 | 字段 | 值 |
 |---|---|
-| **状态** | 待派发 |
+| **状态** | 已提交待评审 |
 | **依赖** | M3-T20 完成 |
 | **可并行** | × |
 | **预期 diff** | < 200 行 |
@@ -730,6 +730,12 @@ cargo test -p octopus-cli run_once_smoke
 
 **失败处理**：
 - 失败 → ADR-0017 召开架构 review
+
+**提交结果**：
+- `spike_steering.rs` 覆盖长 turn、turn 中 push、capacity 内多次 push、超 capacity、TTL 过期
+- `docs/architecture/harness/audit/M3-spike-steering.md` 已记录结果、边界、剩余风险
+
+**下一步**：M3-T21 · 依赖预注入 chore。
 
 ---
 
