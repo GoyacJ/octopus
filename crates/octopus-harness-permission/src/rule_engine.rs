@@ -5,12 +5,12 @@ use async_trait::async_trait;
 use chrono::Utc;
 use harness_contracts::{
     Decision, DecisionId, DecisionScope, FallbackPolicy, InteractivityLevel, PermissionError,
-    RuleSource, TenantId,
+    PermissionSubject, RuleSource, ShellKind, TenantId,
 };
 
 use crate::{
-    InlineRuleProvider, NoopDecisionPersistence, PermissionBroker, PermissionContext,
-    PermissionRequest, PermissionRule, RuleAction, RuleProvider, RuleSnapshot,
+    DangerousPatternLibrary, InlineRuleProvider, NoopDecisionPersistence, PermissionBroker,
+    PermissionContext, PermissionRequest, PermissionRule, RuleAction, RuleProvider, RuleSnapshot,
 };
 
 pub struct RuleEngineBroker {
@@ -19,12 +19,14 @@ pub struct RuleEngineBroker {
     fallback: FallbackPolicy,
     tenant: TenantId,
     persistence: Arc<dyn crate::DecisionPersistence>,
+    dangerous_patterns: Option<DangerousPatternLibrary>,
 }
 
 pub struct RuleEngineBrokerBuilder {
     tenant: TenantId,
     rule_providers: Vec<Arc<dyn RuleProvider>>,
     fallback: FallbackPolicy,
+    dangerous_patterns: Option<DangerousPatternLibrary>,
 }
 
 impl RuleEngineBroker {
@@ -33,6 +35,7 @@ impl RuleEngineBroker {
             tenant: TenantId::SHARED,
             rule_providers: Vec::new(),
             fallback: FallbackPolicy::AskUser,
+            dangerous_patterns: None,
         }
     }
 
@@ -77,6 +80,18 @@ impl RuleEngineBrokerBuilder {
         self
     }
 
+    #[must_use]
+    pub fn with_dangerous_library(mut self, library: DangerousPatternLibrary) -> Self {
+        self.dangerous_patterns = Some(library);
+        self
+    }
+
+    #[must_use]
+    pub fn with_platform_dangerous_library(mut self, shell_kind: ShellKind) -> Self {
+        self.dangerous_patterns = Some(DangerousPatternLibrary::for_shell_kind(shell_kind));
+        self
+    }
+
     pub async fn build(self) -> Result<RuleEngineBroker, PermissionError> {
         let snapshot = build_snapshot(&self.rule_providers, self.tenant, 1).await?;
         Ok(RuleEngineBroker {
@@ -85,6 +100,7 @@ impl RuleEngineBrokerBuilder {
             fallback: self.fallback,
             tenant: self.tenant,
             persistence: Arc::new(NoopDecisionPersistence),
+            dangerous_patterns: self.dangerous_patterns,
         })
     }
 }
@@ -93,7 +109,22 @@ impl RuleEngineBrokerBuilder {
 impl PermissionBroker for RuleEngineBroker {
     async fn decide(&self, request: PermissionRequest, ctx: PermissionContext) -> Decision {
         let snapshot = self.current_snapshot();
-        let Some(rule) = select_rule(&snapshot.rules, &request.scope_hint) else {
+        let rule = select_rule(&snapshot.rules, &request.scope_hint);
+        if matches!(rule, Some(rule) if rule.source == RuleSource::Policy && matches!(rule.action, RuleAction::Deny))
+        {
+            return Decision::DenyOnce;
+        }
+
+        if self.is_dangerous_command(&request) {
+            return match ctx.interactivity {
+                InteractivityLevel::NoInteractive => Decision::DenyOnce,
+                InteractivityLevel::FullyInteractive
+                | InteractivityLevel::DeferredInteractive
+                | _ => Decision::Escalate,
+            };
+        }
+
+        let Some(rule) = rule else {
             return fallback_decision(self.fallback);
         };
 
@@ -115,6 +146,19 @@ impl PermissionBroker for RuleEngineBroker {
         scope: DecisionScope,
     ) -> Result<(), PermissionError> {
         self.persistence.persist(decision_id, scope).await
+    }
+}
+
+impl RuleEngineBroker {
+    fn is_dangerous_command(&self, request: &PermissionRequest) -> bool {
+        let Some(library) = &self.dangerous_patterns else {
+            return false;
+        };
+        let PermissionSubject::CommandExec { command, .. } = &request.subject else {
+            return false;
+        };
+
+        library.detect(command).is_some()
     }
 }
 

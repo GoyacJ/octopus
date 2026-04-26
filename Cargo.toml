@@ -107,12 +107,15 @@ http = "1.4.0"
 ignore = "0.4.25"
 log = "0.4.29"
 notify = "8.2.0"
+regex = "1.12.3"
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
+ring = "0.17.14"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 schemars = { version = "0.8.22", features = ["chrono", "uuid1"] }
 secrecy = "0.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+strip-ansi-escapes = "0.2.1"
 strum = { version = "0.27.2", features = ["derive"] }
 tauri = "2.10.3"
 tauri-build = "2.5.6"
@@ -127,6 +130,7 @@ tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.6.8", features = ["cors"] }
 tracing = "0.1.44"
 ulid = { version = "1.2.1", features = ["serde"] }
+unicode-normalization = "0.1.25"
 uuid = { version = "1.23.1", features = ["serde", "v4"] }
 zeroize = "1.8.2"
 
