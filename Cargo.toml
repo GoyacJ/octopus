@@ -99,6 +99,7 @@ async-trait = "0.1.89"
 axum = { version = "0.8.9", features = ["http1", "json", "macros", "tokio"] }
 bytes = "1.11.1"
 chrono = { version = "0.4.42", features = ["serde"] }
+dashmap = "6.1.0"
 futures = "0.3.32"
 globset = "0.4.18"
 http = "1.4.0"

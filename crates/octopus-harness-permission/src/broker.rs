@@ -21,6 +21,29 @@ pub trait PermissionBroker: Send + Sync + 'static {
     ) -> Result<(), PermissionError>;
 }
 
+#[async_trait]
+pub trait DecisionPersistence: Send + Sync + 'static {
+    async fn persist(
+        &self,
+        decision_id: DecisionId,
+        scope: DecisionScope,
+    ) -> Result<(), PermissionError>;
+}
+
+#[derive(Debug, Default)]
+pub struct NoopDecisionPersistence;
+
+#[async_trait]
+impl DecisionPersistence for NoopDecisionPersistence {
+    async fn persist(
+        &self,
+        _decision_id: DecisionId,
+        _scope: DecisionScope,
+    ) -> Result<(), PermissionError> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PermissionRequest {
     pub request_id: RequestId,

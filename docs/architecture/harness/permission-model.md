@@ -276,31 +276,39 @@ impl<F> DirectBroker<F> {
 
 ```rust
 pub struct StreamBasedBroker {
-    emit: mpsc::Sender<PermissionRequest>,
-    resolutions: Arc<DashMap<RequestId, oneshot::Sender<Decision>>>,
+    requests: mpsc::Sender<PermissionRequest>,
+    pending: Arc<DashMap<RequestId, PendingResolution>>,
     persistence: Arc<dyn DecisionPersistence>,
+    config: StreamBrokerConfig,
 }
 
-pub struct StreamBrokerHandle {
-    resolutions: Arc<DashMap<RequestId, oneshot::Sender<Decision>>>,
+pub struct StreamBrokerConfig {
+    pub default_timeout: Option<Duration>,
+    pub heartbeat_interval: Option<Duration>,
+    pub max_pending: usize,
 }
 
-impl StreamBrokerHandle {
-    pub async fn resolve(
-        &self,
-        request_id: RequestId,
-        decision: Decision,
-    ) -> Result<(), PermissionError>;
+pub struct ResolverHandle {
+    pending: Arc<DashMap<RequestId, PendingResolution>>,
+}
+
+impl ResolverHandle {
+    pub async fn resolve(&self, request_id: RequestId, decision: Decision)
+        -> Result<(), PermissionError>;
+    pub async fn cancel(&self, request_id: RequestId, reason: CancelReason)
+        -> Result<(), PermissionError>;
 }
 ```
 
 **场景**：Desktop UI / Web UI / 异步系统
 
 **流程**：
-1. SDK 创建 `(StreamBasedBroker, Receiver<PermissionRequest>, StreamBrokerHandle)`
-2. Engine 调 `broker.decide(req)` → Broker 把 req 发到 Receiver 并等待 `oneshot` 回答
-3. 业务层从 Receiver 拿到 req → 渲染 UI 让用户决策 → `handle.resolve(id, decision)` 回调
+1. SDK 创建 `(StreamBasedBroker, Receiver<PermissionRequest>, ResolverHandle)`
+2. Engine 调 `broker.decide(req, ctx)` → Broker 把 req 发到 Receiver 并等待 `ResolverHandle`
+3. 业务层从 Receiver 拿到 req → 渲染 UI 让用户决策 → `resolver.resolve(id, decision)` 回调
 4. `decide` 返回 Decision
+
+**约束**：`pending` 必须有 `max_pending` 上限；超时由 `PermissionContext::timeout_policy` 优先，其次使用 `StreamBrokerConfig::default_timeout`，两者都缺省时按 fail-closed 拒绝。Session 结束或 UI 关闭时必须通过 `cancel` 清理 pending。
 
 **优点**：UI 完全异步，审批流可跨窗口/会话
 

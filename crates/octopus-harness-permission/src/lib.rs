@@ -9,8 +9,16 @@
 
 pub mod broker;
 pub mod decision;
+#[cfg(feature = "interactive")]
+pub mod direct;
 pub mod rule;
+#[cfg(feature = "stream")]
+pub mod stream;
 
 pub use broker::*;
 pub use decision::*;
+#[cfg(feature = "interactive")]
+pub use direct::*;
 pub use rule::*;
+#[cfg(feature = "stream")]
+pub use stream::*;
