@@ -492,6 +492,12 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 
 **预期 diff**：< 300 行
 
+**提交结果**：
+- `SteeringQueue`、`push_steering`、`steering_snapshot`、`drain_and_merge` 已实现
+- 已覆盖 enqueue、dedup、overflow、TTL、merge、SessionEnded 清理、fork 不继承队列
+
+**下一步**：M3-T20 · M3 E2E 临时 Driver + Gate 检查。
+
 ---
 
 ### M3-T20 · M3 E2E 临时 Driver + Gate 检查

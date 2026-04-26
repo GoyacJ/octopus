@@ -9,6 +9,8 @@ use harness_contracts::{
 use harness_journal::EventStore;
 use tokio::sync::{watch, Mutex};
 
+#[cfg(feature = "steering")]
+use crate::SteeringQueue;
 use crate::{SessionBuilder, SessionPaths, SessionProjection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +48,8 @@ pub struct Session {
     event_store: Arc<dyn EventStore>,
     snapshot_tx: watch::Sender<SnapshotId>,
     snapshot_rx: watch::Receiver<SnapshotId>,
+    #[cfg(feature = "steering")]
+    steering: SteeringQueue,
     state: Mutex<SessionState>,
 }
 
@@ -73,6 +77,7 @@ impl Session {
         options: SessionOptions,
         paths: SessionPaths,
         event_store: Arc<dyn EventStore>,
+        #[cfg(feature = "steering")] steering_policy: harness_contracts::SteeringPolicy,
     ) -> Result<Self, SessionError> {
         let projection = SessionProjection::empty(options.tenant_id, options.session_id);
         let (snapshot_tx, snapshot_rx) = watch::channel(projection.snapshot_id);
@@ -82,6 +87,8 @@ impl Session {
             event_store,
             snapshot_tx,
             snapshot_rx,
+            #[cfg(feature = "steering")]
+            steering: SteeringQueue::new(steering_policy),
             state: Mutex::new(SessionState {
                 ended: false,
                 projection,
@@ -104,6 +111,8 @@ impl Session {
             event_store,
             snapshot_tx,
             snapshot_rx,
+            #[cfg(feature = "steering")]
+            steering: SteeringQueue::default(),
             state: Mutex::new(SessionState {
                 ended: projection.end_reason.is_some(),
                 projection,
@@ -129,6 +138,11 @@ impl Session {
 
     pub(crate) fn session_id(&self) -> SessionId {
         self.options.session_id
+    }
+
+    #[cfg(feature = "steering")]
+    pub(crate) fn steering(&self) -> &SteeringQueue {
+        &self.steering
     }
 
     pub async fn run_turn(&self, _prompt: impl Into<String>) -> Result<(), SessionError> {
@@ -158,6 +172,8 @@ impl Session {
             snapshot_id = state.projection.snapshot_id;
         }
         self.snapshot_tx.send_replace(snapshot_id);
+        #[cfg(feature = "steering")]
+        self.drop_steering_for_session_end().await?;
 
         self.event_store
             .append(

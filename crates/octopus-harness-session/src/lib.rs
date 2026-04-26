@@ -16,6 +16,8 @@ pub mod projection;
 pub mod reload;
 pub mod session;
 pub mod snapshot;
+#[cfg(feature = "steering")]
+pub mod steering;
 
 pub use builder::*;
 pub use paths::*;
@@ -23,3 +25,5 @@ pub use projection::*;
 #[cfg(feature = "hot-reload-fork")]
 pub use reload::*;
 pub use session::*;
+#[cfg(feature = "steering")]
+pub use steering::*;

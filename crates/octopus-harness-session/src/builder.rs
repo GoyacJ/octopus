@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use harness_contracts::SessionError;
+#[cfg(feature = "steering")]
+use harness_contracts::SteeringPolicy;
 use harness_journal::EventStore;
 
 use crate::{Session, SessionOptions, SessionPaths};
@@ -9,6 +11,8 @@ use crate::{Session, SessionOptions, SessionPaths};
 pub struct SessionBuilder {
     options: Option<SessionOptions>,
     event_store: Option<Arc<dyn EventStore>>,
+    #[cfg(feature = "steering")]
+    steering_policy: Option<SteeringPolicy>,
 }
 
 impl SessionBuilder {
@@ -21,6 +25,13 @@ impl SessionBuilder {
     #[must_use]
     pub fn with_event_store(mut self, event_store: Arc<dyn EventStore>) -> Self {
         self.event_store = Some(event_store);
+        self
+    }
+
+    #[cfg(feature = "steering")]
+    #[must_use]
+    pub fn with_steering_policy(mut self, policy: SteeringPolicy) -> Self {
+        self.steering_policy = Some(policy);
         self
     }
 
@@ -42,6 +53,19 @@ impl SessionBuilder {
             options.session_id,
         );
 
-        Session::create(options, paths, event_store).await
+        #[cfg(feature = "steering")]
+        {
+            Session::create(
+                options,
+                paths,
+                event_store,
+                self.steering_policy.unwrap_or_default(),
+            )
+            .await
+        }
+        #[cfg(not(feature = "steering"))]
+        {
+            Session::create(options, paths, event_store).await
+        }
     }
 }
