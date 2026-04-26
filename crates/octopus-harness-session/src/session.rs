@@ -7,9 +7,9 @@ use harness_contracts::{
     SnapshotId, TenantId, UsageSnapshot,
 };
 use harness_journal::EventStore;
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 
-use crate::{SessionBuilder, SessionPaths};
+use crate::{SessionBuilder, SessionPaths, SessionProjection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
@@ -40,19 +40,12 @@ impl SessionOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct SessionProjection {
-    pub session_id: SessionId,
-    pub tenant_id: TenantId,
-    pub end_reason: Option<EndReason>,
-    pub snapshot_id: SnapshotId,
-}
-
 pub struct Session {
     options: SessionOptions,
     paths: SessionPaths,
     event_store: Arc<dyn EventStore>,
-    snapshot_id: SnapshotId,
+    snapshot_tx: watch::Sender<SnapshotId>,
+    snapshot_rx: watch::Receiver<SnapshotId>,
     state: Mutex<SessionState>,
 }
 
@@ -81,18 +74,14 @@ impl Session {
         paths: SessionPaths,
         event_store: Arc<dyn EventStore>,
     ) -> Result<Self, SessionError> {
-        let snapshot_id = SnapshotId::new();
-        let projection = SessionProjection {
-            session_id: options.session_id,
-            tenant_id: options.tenant_id,
-            end_reason: None,
-            snapshot_id,
-        };
+        let projection = SessionProjection::empty(options.tenant_id, options.session_id);
+        let (snapshot_tx, snapshot_rx) = watch::channel(projection.snapshot_id);
         let session = Self {
             options,
             paths,
             event_store,
-            snapshot_id,
+            snapshot_tx,
+            snapshot_rx,
             state: Mutex::new(SessionState {
                 ended: false,
                 projection,
@@ -102,8 +91,44 @@ impl Session {
         Ok(session)
     }
 
+    pub(crate) async fn from_projection(
+        options: SessionOptions,
+        paths: SessionPaths,
+        event_store: Arc<dyn EventStore>,
+        projection: SessionProjection,
+    ) -> Result<Self, SessionError> {
+        let (snapshot_tx, snapshot_rx) = watch::channel(projection.snapshot_id);
+        Ok(Self {
+            options,
+            paths,
+            event_store,
+            snapshot_tx,
+            snapshot_rx,
+            state: Mutex::new(SessionState {
+                ended: projection.end_reason.is_some(),
+                projection,
+            }),
+        })
+    }
+
     pub fn paths(&self) -> &SessionPaths {
         &self.paths
+    }
+
+    pub(crate) fn options(&self) -> &SessionOptions {
+        &self.options
+    }
+
+    pub(crate) fn event_store(&self) -> &Arc<dyn EventStore> {
+        &self.event_store
+    }
+
+    pub(crate) fn tenant_id(&self) -> TenantId {
+        self.options.tenant_id
+    }
+
+    pub(crate) fn session_id(&self) -> SessionId {
+        self.options.session_id
     }
 
     pub async fn run_turn(&self, _prompt: impl Into<String>) -> Result<(), SessionError> {
@@ -121,13 +146,18 @@ impl Session {
     }
 
     pub async fn end(&self, reason: EndReason) -> Result<(), SessionError> {
-        let mut state = self.state.lock().await;
-        if state.ended {
-            return Ok(());
+        let snapshot_id;
+        {
+            let mut state = self.state.lock().await;
+            if state.ended {
+                return Ok(());
+            }
+            state.ended = true;
+            state.projection.end_reason = Some(reason.clone());
+            state.projection.refresh_snapshot_id();
+            snapshot_id = state.projection.snapshot_id;
         }
-        state.ended = true;
-        state.projection.end_reason = Some(reason.clone());
-        drop(state);
+        self.snapshot_tx.send_replace(snapshot_id);
 
         self.event_store
             .append(
@@ -151,10 +181,11 @@ impl Session {
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        self.snapshot_id
+        *self.snapshot_rx.borrow()
     }
 
     async fn append_created(&self) -> Result<(), SessionError> {
+        let snapshot_id = self.state.lock().await.projection.snapshot_id;
         self.event_store
             .append(
                 self.options.tenant_id,
@@ -163,7 +194,7 @@ impl Session {
                     session_id: self.options.session_id,
                     tenant_id: self.options.tenant_id,
                     options_hash: [0; 32],
-                    snapshot_id: self.state.lock().await.projection.snapshot_id,
+                    snapshot_id,
                     effective_config_hash: ConfigHash([0; 32]),
                     created_at: harness_contracts::now(),
                 })],

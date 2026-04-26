@@ -47,7 +47,10 @@ async fn create_and_end_write_lifecycle_events() {
         session.projection().await.end_reason,
         Some(EndReason::Completed)
     );
-    assert!(session.snapshot_id().to_string().starts_with("01"));
+    assert_eq!(
+        session.snapshot_id(),
+        session.projection().await.snapshot_id
+    );
 }
 
 #[tokio::test]

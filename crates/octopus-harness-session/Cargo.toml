@@ -32,7 +32,10 @@ async-trait = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+blake3 = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-futures = { workspace = true }
 tempfile = { workspace = true }
+octopus-harness-journal = { path = "../octopus-harness-journal", features = ["in-memory"] }

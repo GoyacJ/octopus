@@ -427,11 +427,13 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 
 **预期 diff**：< 450 行（比原 400 多出的部分用于 paths 模块 + 校验逻辑）
 
-**下一步**：M3-T17 · SessionProjection + Fork + Snapshot。
+**下一步**：M3-T17 已提交待评审；评审通过后执行 M3-T18。
 
 ---
 
 ### M3-T17 · SessionProjection + Fork + Snapshot
+
+**状态**：已提交待评审。
 
 **SPEC 锚点**：`harness-session.md` §3 / §4
 
@@ -441,6 +443,8 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 - `src/snapshot.rs`：snapshot_id() 接口
 
 **预期 diff**：< 350 行
+
+**下一步**：M3-T18 · Hot Reload（reload_with）三档。
 
 ---
 
