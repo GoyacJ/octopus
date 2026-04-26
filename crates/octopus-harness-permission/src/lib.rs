@@ -15,6 +15,8 @@ pub mod decision;
 pub mod direct;
 #[cfg(feature = "integrity")]
 pub mod integrity_signer;
+#[cfg(any(test, feature = "mock"))]
+pub mod mock;
 #[cfg(feature = "rule-engine")]
 pub mod providers;
 pub mod rule;
@@ -31,6 +33,8 @@ pub use decision::*;
 pub use direct::*;
 #[cfg(feature = "integrity")]
 pub use integrity_signer::*;
+#[cfg(any(test, feature = "mock"))]
+pub use mock::*;
 #[cfg(feature = "rule-engine")]
 pub use providers::*;
 pub use rule::*;
