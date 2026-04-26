@@ -3964,6 +3964,7 @@ dependencies = [
  "octopus-harness-contracts",
  "octopus-harness-permission",
  "octopus-harness-sandbox",
+ "parking_lot",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

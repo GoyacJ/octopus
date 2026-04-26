@@ -35,6 +35,8 @@
 
 ### M3-T01 · Tool trait + ToolDescriptor + ToolContext
 
+**状态**：本地已提交，待评审。
+
 **SPEC 锚点**：
 - `docs/architecture/harness/crates/harness-tool.md` §2.1 L27-L103（Tool trait / ToolStream / ToolEvent）
 - `docs/architecture/harness/crates/harness-tool.md` §2.2 L160-L242（ToolDescriptor / ToolProperties / ResultBudget 引用）
@@ -66,8 +68,11 @@
 
 ### M3-T02 · ToolRegistry + ToolPool + Snapshot 机制
 
+**状态**：本地实现待评审。
+
 **SPEC 锚点**：
-- `harness-tool.md` §3（Registry）+ §4（Pool）
+- `docs/architecture/harness/crates/harness-tool.md` §2.5（ToolRegistry / Snapshot）
+- `docs/architecture/harness/crates/harness-tool.md` §2.6（ToolPool / ToolPoolModelProfile）
 
 **预期产物**：
 - `src/registry.rs`：ToolRegistry + ToolRegistryBuilder
@@ -75,8 +80,16 @@
 - `src/builder.rs`：BuiltinToolset 枚举（Default / Empty / Custom）
 
 **关键不变量**：
-- snapshot 不可变（`Arc<ToolPoolSnapshot>`）
+- snapshot 不可变（`ToolRegistrySnapshot` 持有 `Arc<BTreeMap<...>>`）
+- registry 内部按 `BTreeMap` 保存工具，保证稳定排序
+- 同名注册按 built-in wins / trust / duplicate 规则裁决，遮蔽事件进入 `shadowed()`
 - 固定集按名字字典序，追加集按加入序
+- `octopus-harness-tool` 不依赖 `octopus-harness-model`
+- Pool 过滤使用本 crate 内 `ToolPoolModelProfile`：
+  - `provider: harness_contracts::ModelProvider`
+  - `supports_tool_reference: bool`
+  - `max_context_tokens: Option<u32>`
+- `harness-session` / `harness-sdk` 后续负责从真实 `harness-model::ModelCapabilities` 映射到 `ToolPoolModelProfile`
 
 **预期 diff**：< 350 行
 

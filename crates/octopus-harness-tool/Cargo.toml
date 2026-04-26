@@ -24,6 +24,7 @@ octopus-harness-sandbox = { path = "../octopus-harness-sandbox" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+parking_lot = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -1,6 +1,6 @@
 # `octopus-harness-tool` · L2 复合能力 · Tool System SPEC
 
-> 层级：L2 · 状态：Accepted · 修订：v1.3（2026-04-25）
+> 层级：L2 · 状态：Accepted · 修订：v1.4（2026-04-26）
 > 依赖：`harness-contracts` + `harness-permission` + `harness-sandbox`
 > 关联 ADR：ADR-002（Tool 无 UI）/ ADR-003（Prompt Cache 锁定）/ ADR-006（插件信任域）/ ADR-009（Deferred Tool Loading）/ ADR-010（结果预算与溢出落盘）/ ADR-011（Tool Capability Handle）
 
@@ -259,7 +259,9 @@ impl Default for ProviderRestriction {
 }
 ```
 
-`ToolPool::assemble` 在装配时基于 `ModelCapabilities.provider` 过滤，避免如 "Anthropic 原生 ToolSearch" 在不支持 `tool_reference` 的 provider 下被装入。
+`ToolPool::assemble` 在装配时基于 `ToolPoolModelProfile.provider` 过滤，避免如 "Anthropic 原生 ToolSearch" 在不支持 `tool_reference` 的 provider 下被装入。
+
+`octopus-harness-tool` 不依赖 `octopus-harness-model`。Pool 过滤只消费本 crate 定义的最小模型画像；`harness-session` / `harness-sdk` 负责从真实 `harness-model::ModelCapabilities` 映射到该画像。
 
 ### 2.4 `ToolContext`（执行期上下文）
 
@@ -401,7 +403,7 @@ impl ToolPool {
         snapshot: &ToolRegistrySnapshot,
         filter: &ToolPoolFilter,
         search_mode: &ToolSearchMode,
-        model_caps: &ModelCapabilities,
+        model_profile: &ToolPoolModelProfile,
         schema_resolver_ctx: &SchemaResolverContext,
     ) -> Result<Self, ToolError>;
 
@@ -412,8 +414,13 @@ impl ToolPool {
     pub fn iter(&self) -> impl Iterator<Item = &Arc<dyn Tool>>;
 }
 
+pub struct ToolPoolModelProfile {
+    pub provider: ModelProvider,
+    pub supports_tool_reference: bool,
+    pub max_context_tokens: Option<u32>,
+}
+
 pub struct ToolPoolFilter {
-    pub builtin_order: BTreeSet<String>,
     pub allowlist: Option<HashSet<String>>,
     pub denylist: HashSet<String>,
     pub mcp_included: bool,
@@ -427,17 +434,17 @@ pub struct ToolPoolFilter {
 **装配步骤**（按序）：
 
 1. 应用 `ToolPoolFilter`（origin / group / 黑白名单）；
-2. 应用 `ProviderRestriction`（按 `model_caps.provider` 过滤）；
+2. 应用 `ProviderRestriction`（按 `model_profile.provider` 过滤）；
 3. 对 `dynamic_schema = true` 的工具调用 `resolve_schema`；
 4. 按 `DeferPolicy` × `ToolSearchMode` 决定分区（沿用 ADR-009 §2.6 的状态机）；
-5. 同 group 内按字母序排序，`origin = Builtin` 的工具排在前；
+5. 固定分区按工具名稳定排序；
 6. 输出 `ToolPool`。
 
 **分区规则**（保 Prompt Cache 长期稳定性）：
 
 | 分区 | 触发条件 | 排序 | 说明 |
 |---|---|---|---|
-| **1 · AlwaysLoad** | `DeferPolicy::AlwaysLoad` / `AutoDefer` + `ToolSearchMode::Disabled` / `AutoDefer` 未达阈值 | 字母序 + origin 前置 | 进入 system prompt 的 `<functions>` |
+| **1 · AlwaysLoad** | `DeferPolicy::AlwaysLoad` / `AutoDefer` + `ToolSearchMode::Disabled` / `AutoDefer` 未达阈值 | 工具名字典序 | 进入 system prompt 的 `<functions>` |
 | **2 · Deferred** | `DeferPolicy::ForceDefer` / `AutoDefer` 达阈值 | 字母序 | 不进 system prompt；作为 `DeferredToolsDelta` attachment 宣告（只名字） |
 | **3 · RuntimeAppended** | `Session::reload_with(add_tools=..)` | 加入顺序 | 不重排；一次 `AppliedInPlace + OneShotInvalidation` 只破坏分区 3 一次 |
 
@@ -1056,7 +1063,7 @@ let pool = ToolPool::assemble(
         ..Default::default()
     },
     &ToolSearchMode::Auto,
-    &model_caps,
+    &tool_pool_model_profile,
     &schema_resolver_ctx,
 ).await?;
 ```

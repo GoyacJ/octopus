@@ -1,0 +1,217 @@
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
+
+use harness_contracts::{
+    DeferPolicy, ModelProvider, ProviderRestriction, ToolDescriptor, ToolError, ToolGroup,
+    ToolOrigin,
+};
+
+use crate::{SchemaResolverContext, Tool, ToolRegistrySnapshot};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolPoolModelProfile {
+    pub provider: ModelProvider,
+    pub supports_tool_reference: bool,
+    pub max_context_tokens: Option<u32>,
+}
+
+impl Default for ToolPoolModelProfile {
+    fn default() -> Self {
+        Self {
+            provider: ModelProvider("unknown".to_owned()),
+            supports_tool_reference: false,
+            max_context_tokens: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolSearchMode {
+    Always,
+    Auto {
+        ratio: f32,
+        min_absolute_tokens: u32,
+    },
+    Disabled,
+}
+
+impl Default for ToolSearchMode {
+    fn default() -> Self {
+        Self::Auto {
+            ratio: 0.10,
+            min_absolute_tokens: 4_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolPoolFilter {
+    pub allowlist: Option<HashSet<String>>,
+    pub denylist: HashSet<String>,
+    pub mcp_included: bool,
+    pub plugin_included: bool,
+    pub group_allowlist: Option<HashSet<ToolGroup>>,
+    pub group_denylist: HashSet<ToolGroup>,
+}
+
+impl Default for ToolPoolFilter {
+    fn default() -> Self {
+        Self {
+            allowlist: None,
+            denylist: HashSet::new(),
+            mcp_included: true,
+            plugin_included: true,
+            group_allowlist: None,
+            group_denylist: HashSet::new(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct ToolPool {
+    always_loaded: Vec<Arc<dyn Tool>>,
+    deferred: Vec<Arc<dyn Tool>>,
+    runtime_appended: Vec<Arc<dyn Tool>>,
+    descriptors: BTreeMap<String, Arc<ToolDescriptor>>,
+}
+
+impl ToolPool {
+    pub async fn assemble(
+        snapshot: &ToolRegistrySnapshot,
+        filter: &ToolPoolFilter,
+        search_mode: &ToolSearchMode,
+        model_profile: &ToolPoolModelProfile,
+        schema_resolver_ctx: &SchemaResolverContext,
+    ) -> Result<Self, ToolError> {
+        let mut pool = Self::default();
+
+        for (name, tool) in snapshot.iter_sorted() {
+            let Some(snapshot_descriptor) = snapshot.descriptor(name) else {
+                continue;
+            };
+
+            if !filter_allows(filter, snapshot_descriptor, model_profile) {
+                continue;
+            }
+
+            let mut descriptor = snapshot_descriptor.as_ref().clone();
+            if descriptor.dynamic_schema {
+                descriptor.input_schema = tool.resolve_schema(schema_resolver_ctx).await?;
+            }
+
+            let partition = partition_for(&descriptor, search_mode, model_profile)?;
+            pool.descriptors
+                .insert(descriptor.name.clone(), Arc::new(descriptor));
+
+            match partition {
+                ToolPoolPartition::AlwaysLoaded => pool.always_loaded.push(Arc::clone(tool)),
+                ToolPoolPartition::Deferred => pool.deferred.push(Arc::clone(tool)),
+            }
+        }
+
+        Ok(pool)
+    }
+
+    pub fn always_loaded(&self) -> &[Arc<dyn Tool>] {
+        &self.always_loaded
+    }
+
+    pub fn deferred(&self) -> &[Arc<dyn Tool>] {
+        &self.deferred
+    }
+
+    pub fn runtime_appended(&self) -> &[Arc<dyn Tool>] {
+        &self.runtime_appended
+    }
+
+    pub fn append_runtime_tool(&mut self, tool: Arc<dyn Tool>) {
+        let descriptor = tool.descriptor().clone();
+        self.descriptors
+            .insert(descriptor.name.clone(), Arc::new(descriptor));
+        self.runtime_appended.push(tool);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Arc<dyn Tool>> {
+        self.always_loaded
+            .iter()
+            .chain(self.deferred.iter())
+            .chain(self.runtime_appended.iter())
+    }
+
+    pub fn descriptor(&self, name: &str) -> Option<&ToolDescriptor> {
+        self.descriptors.get(name).map(std::convert::AsRef::as_ref)
+    }
+}
+
+enum ToolPoolPartition {
+    AlwaysLoaded,
+    Deferred,
+}
+
+fn filter_allows(
+    filter: &ToolPoolFilter,
+    descriptor: &ToolDescriptor,
+    model_profile: &ToolPoolModelProfile,
+) -> bool {
+    if let Some(allowlist) = &filter.allowlist {
+        if !allowlist.contains(&descriptor.name) {
+            return false;
+        }
+    }
+
+    if filter.denylist.contains(&descriptor.name) {
+        return false;
+    }
+
+    if let Some(group_allowlist) = &filter.group_allowlist {
+        if !group_allowlist.contains(&descriptor.group) {
+            return false;
+        }
+    }
+
+    if filter.group_denylist.contains(&descriptor.group) {
+        return false;
+    }
+
+    match &descriptor.origin {
+        ToolOrigin::Mcp(_) if !filter.mcp_included => return false,
+        ToolOrigin::Plugin { .. } if !filter.plugin_included => return false,
+        _ => {}
+    }
+
+    provider_allows(&descriptor.provider_restriction, &model_profile.provider)
+}
+
+fn provider_allows(restriction: &ProviderRestriction, provider: &ModelProvider) -> bool {
+    match restriction {
+        ProviderRestriction::Allowlist(providers) => providers.contains(provider),
+        ProviderRestriction::Denylist(providers) => !providers.contains(provider),
+        _ => true,
+    }
+}
+
+fn partition_for(
+    descriptor: &ToolDescriptor,
+    search_mode: &ToolSearchMode,
+    model_profile: &ToolPoolModelProfile,
+) -> Result<ToolPoolPartition, ToolError> {
+    match descriptor.properties.defer_policy {
+        DeferPolicy::AutoDefer => match search_mode {
+            ToolSearchMode::Always => Ok(ToolPoolPartition::Deferred),
+            ToolSearchMode::Auto { .. } if model_profile.supports_tool_reference => {
+                Ok(ToolPoolPartition::Deferred)
+            }
+            ToolSearchMode::Disabled | ToolSearchMode::Auto { .. } => {
+                Ok(ToolPoolPartition::AlwaysLoaded)
+            }
+        },
+        DeferPolicy::ForceDefer => match search_mode {
+            ToolSearchMode::Disabled => Err(ToolError::SchemaResolution(format!(
+                "deferral required but tool search is disabled: {}",
+                descriptor.name
+            ))),
+            ToolSearchMode::Always | ToolSearchMode::Auto { .. } => Ok(ToolPoolPartition::Deferred),
+        },
+        _ => Ok(ToolPoolPartition::AlwaysLoaded),
+    }
+}
