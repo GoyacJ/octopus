@@ -23,8 +23,39 @@ macro_rules! define_error_family {
     };
 }
 
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema, thiserror::Error,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelError {
+    #[error("{0}")]
+    Message(String),
+    #[error("rate limited: {0}")]
+    RateLimited(String),
+    #[error("context too long: tokens={tokens}, max={max}")]
+    ContextTooLong { tokens: usize, max: usize },
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
+    #[error("all credentials banned")]
+    AllCredentialsBanned,
+    #[error("aux model not configured")]
+    AuxModelNotConfigured,
+    #[error("auth expired: {0}")]
+    AuthExpired(String),
+    #[error("provider unavailable: {0}")]
+    ProviderUnavailable(String),
+    #[error("unexpected response: {0}")]
+    UnexpectedResponse(String),
+    #[error("cancelled by caller")]
+    Cancelled,
+    #[error("deadline exceeded after {0:?}")]
+    DeadlineExceeded(std::time::Duration),
+    #[error("io: {0}")]
+    Io(String),
+}
+
 define_error_family! {
-    ModelError,
     JournalError,
     SandboxError,
     PermissionError,

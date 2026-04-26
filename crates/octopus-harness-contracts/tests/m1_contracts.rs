@@ -61,10 +61,69 @@ fn schema_export_contains_required_surface() {
 
     assert!(schemas.len() >= 60);
     assert!(schemas.contains_key("event"));
+    assert!(schemas.contains_key("tool_descriptor"));
     assert!(schemas.contains_key("tool_use_requested"));
     assert!(schemas.contains_key("credential_pool_shared_across_tenants"));
     assert!(schemas.contains_key("manifest_validation_failed"));
     assert!(schemas.contains_key("hook_failed"));
+}
+
+#[test]
+fn tool_descriptor_is_contract_surface() {
+    let descriptor = ToolDescriptor {
+        name: "read_file".to_owned(),
+        display_name: "Read file".to_owned(),
+        description: "Read a workspace file".to_owned(),
+        category: "filesystem".to_owned(),
+        group: ToolGroup::FileSystem,
+        version: "1.0.0".to_owned(),
+        input_schema: json!({ "type": "object" }),
+        output_schema: None,
+        dynamic_schema: false,
+        properties: ToolProperties {
+            is_concurrency_safe: true,
+            is_read_only: true,
+            is_destructive: false,
+            long_running: None,
+            defer_policy: DeferPolicy::AlwaysLoad,
+        },
+        trust_level: TrustLevel::AdminTrusted,
+        required_capabilities: vec![ToolCapability::BlobReader],
+        budget: ResultBudget {
+            metric: BudgetMetric::Chars,
+            limit: 8192,
+            on_overflow: OverflowAction::Offload,
+            preview_head_chars: 1024,
+            preview_tail_chars: 1024,
+        },
+        provider_restriction: ProviderRestriction::All,
+        origin: ToolOrigin::Builtin,
+        search_hint: Some("read file path".to_owned()),
+    };
+
+    let value = serde_json::to_value(&descriptor).unwrap();
+    assert_eq!(value["name"], "read_file");
+
+    let roundtrip: ToolDescriptor = serde_json::from_value(value).unwrap();
+    assert_eq!(roundtrip, descriptor);
+}
+
+#[test]
+fn model_error_variants_are_contract_surface() {
+    let error = ModelError::ContextTooLong {
+        tokens: 200_000,
+        max: 128_000,
+    };
+
+    let value = serde_json::to_value(&error).unwrap();
+    assert_eq!(value["context_too_long"]["tokens"], 200_000);
+
+    let roundtrip: ModelError = serde_json::from_value(value).unwrap();
+    assert_eq!(roundtrip, error);
+    assert_eq!(
+        ModelError::AuxModelNotConfigured.to_string(),
+        "aux model not configured"
+    );
 }
 
 #[test]

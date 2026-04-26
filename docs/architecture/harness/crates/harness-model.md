@@ -324,6 +324,7 @@ pub enum ContentDelta {
     /// - 业务层做 Replay 时可原样回灌，避免缓存错位与 "thinking not persisted" 问题
     /// - 对齐 HER-004（Hermes 将 provider-native reasoning 字段完整入库）
     Thinking(ThinkingDelta),
+    ToolUseStart { id: String, name: String },
     ToolUseInputJson(String),  // 部分 JSON fragment
     ToolUseComplete { id: ToolUseId, name: String, input: Value },
 }
@@ -370,9 +371,10 @@ pub enum AggregatedEvent {
 **契约**（对齐 HER-049）：
 
 1. `ContentBlockStart { content_type: ToolUse }` → 打开一个 ToolCall 缓冲
-2. `ContentBlockDelta { ToolUseInputJson(s) }` → 追加到缓冲，不立即触发
-3. `ContentBlockStop { index }` → 尝试 `serde_json::from_str` 解析整块；失败则作为 `StreamError { class: Fatal }` 上抛
-4. 只有成功解析后才产出 `AggregatedEvent::ToolCallReady`，供 Engine 走权限 / 执行流程
+2. `ContentBlockDelta { ToolUseStart { id, name } }` → 记录 tool call 元数据
+3. `ContentBlockDelta { ToolUseInputJson(s) }` → 追加到缓冲，不立即触发
+4. `ContentBlockStop { index }` → 尝试 `serde_json::from_str` 解析整块；失败则作为 `StreamError { class: Fatal }` 上抛
+5. 只有成功解析后才产出 `AggregatedEvent::ToolCallReady`，供 Engine 走权限 / 执行流程
 
 违反此契约（Provider 自己半成品 JSON 冒头）属于反模式（见 §13）。
 

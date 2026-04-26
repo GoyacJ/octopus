@@ -145,6 +145,8 @@ Engine: ToolOrchestrator::run(...)
 
 ### 2.2 `ToolDescriptor`（注册期单一权威 · P0-3）
 
+`ToolDescriptor` 定义在 `harness-contracts`。本 crate 只消费该类型，并负责实现注册、快照、动态 schema 解析和执行期校验。
+
 ```rust
 pub struct ToolDescriptor {
     /* —— 身份 —— */

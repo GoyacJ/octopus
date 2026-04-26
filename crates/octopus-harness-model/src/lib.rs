@@ -6,3 +6,77 @@
 //! Status: M0 empty skeleton; concrete implementation lands in M2.
 
 #![forbid(unsafe_code)]
+
+#[cfg(feature = "anthropic")]
+pub mod anthropic;
+pub mod aux;
+#[cfg(feature = "bedrock")]
+pub mod bedrock;
+#[cfg(feature = "codex")]
+pub mod codex;
+pub mod cost;
+pub mod credential;
+pub mod credential_pool;
+#[cfg(feature = "deepseek")]
+pub mod deepseek;
+#[cfg(feature = "doubao")]
+pub mod doubao;
+#[cfg(feature = "gemini")]
+pub mod gemini;
+#[cfg(feature = "km")]
+pub mod km;
+#[cfg(feature = "local-llama")]
+pub mod local_llama;
+pub mod middleware;
+#[cfg(feature = "minimax")]
+pub mod minimax;
+#[cfg(any(test, feature = "mock"))]
+pub mod mock;
+#[cfg(feature = "openai")]
+pub mod openai;
+#[cfg(feature = "openai-compatible")]
+pub(crate) mod openai_compatible;
+#[cfg(feature = "openrouter")]
+pub mod openrouter;
+pub mod provider;
+#[cfg(feature = "qwen")]
+pub mod qwen;
+pub mod token_counter;
+#[cfg(feature = "zhipu")]
+pub mod zhipu;
+
+#[cfg(feature = "anthropic")]
+pub use anthropic::*;
+pub use aux::*;
+#[cfg(feature = "bedrock")]
+pub use bedrock::*;
+#[cfg(feature = "codex")]
+pub use codex::*;
+pub use cost::*;
+pub use credential::*;
+pub use credential_pool::*;
+#[cfg(feature = "deepseek")]
+pub use deepseek::*;
+#[cfg(feature = "doubao")]
+pub use doubao::*;
+#[cfg(feature = "gemini")]
+pub use gemini::*;
+#[cfg(feature = "km")]
+pub use km::*;
+#[cfg(feature = "local-llama")]
+pub use local_llama::*;
+pub use middleware::*;
+#[cfg(feature = "minimax")]
+pub use minimax::*;
+#[cfg(any(test, feature = "mock"))]
+pub use mock::*;
+#[cfg(feature = "openai")]
+pub use openai::*;
+#[cfg(feature = "openrouter")]
+pub use openrouter::*;
+pub use provider::*;
+#[cfg(feature = "qwen")]
+pub use qwen::*;
+pub use token_counter::*;
+#[cfg(feature = "zhipu")]
+pub use zhipu::*;
