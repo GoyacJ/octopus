@@ -3661,7 +3661,10 @@ name = "octopus-harness-context"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "blake3",
+ "bytes",
  "chrono",
+ "futures",
  "octopus-harness-contracts",
  "octopus-harness-journal",
  "octopus-harness-memory",

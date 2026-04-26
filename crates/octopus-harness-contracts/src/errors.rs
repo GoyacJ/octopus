@@ -66,7 +66,20 @@ define_error_family! {
     EngineError,
     PluginError,
     McpError,
-    ContextError,
+}
+
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema, thiserror::Error,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextError {
+    #[error("{0}")]
+    Message(String),
+    #[error("offload failed: {0}")]
+    OffloadFailed(String),
+    #[error("internal: {0}")]
+    Internal(String),
 }
 
 #[non_exhaustive]

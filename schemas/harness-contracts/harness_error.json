@@ -282,6 +282,30 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "offload_failed"
+          ],
+          "properties": {
+            "offload_failed": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "internal"
+          ],
+          "properties": {
+            "internal": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },

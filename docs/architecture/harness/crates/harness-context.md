@@ -190,9 +190,13 @@ ContextEngine 与 `MemoryManager` 的调用顺序约束：
 
 ```rust
 pub struct ContextBuffer {
+    /// Session 身份投影。Context 只用它做 BlobStore retention / tenant 路由；
+    /// 不得借此回调 session 内部状态。
+    pub identity: ContextIdentity,
+
     /// 冻结面：Session 创建期锁定（ADR-003 §2.1）。
     /// Compact 管线的任何阶段 **不得** 修改本字段；试图修改者必须返回
-    /// `ContextError::Provider("frozen face violation")` 并中止该阶段。
+    /// `ContextError::Internal("context provider mutated frozen context")` 并中止该阶段。
     pub frozen: FrozenContext,
 
     /// 活跃面：Compact 管线可修改；删除消息时必须以 ToolUsePair 为最小边界（§2.7.3）。
@@ -209,6 +213,11 @@ pub struct ContextBuffer {
 
     /// 记账域：不参与 prompt 体本身，仅供 budget / metrics / replay 使用。
     pub bookkeeping: ContextBookkeeping,
+}
+
+pub struct ContextIdentity {
+    pub tenant_id: TenantId,
+    pub session_id: SessionId,
 }
 ```
 
@@ -422,6 +431,9 @@ pub mod providers {
     }
 }
 ```
+
+M3-T12 默认实现已覆盖 `ToolResultBudgetProvider` / `SnipProvider` /
+`CollapseProvider`。`MicrocompactProvider` / `AutocompactProvider` 留给 M3-T13。
 
 ## 4. Bootstrap 文件注入
 

@@ -278,7 +278,7 @@
 
 ### M3-T11 · ContextEngine 5 阶段管线骨架
 
-**状态**：已提交待评审。
+**状态**：已提交待评审（`656893ec`）。
 
 **SPEC 锚点**：
 - `context-engineering.md` §3（5 阶段固定顺序：tool-result-budget → snip → microcompact → collapse → autocompact）
@@ -300,13 +300,14 @@
 
 ### M3-T12 · 5 阶段实现（tool-result-budget / snip / collapse）
 
+**状态**：已提交待评审。
+
 **SPEC 锚点**：`context-engineering.md` §4-§6（前 3 阶段）
 
 **预期产物**：
-- `src/stages/budget.rs`：ToolResultBudgetStage
-- `src/stages/snip.rs`：SnipStage（截断）
-- `src/stages/collapse.rs`：CollapseStage（折叠）
+- `src/stages.rs`：ToolResultBudgetProvider / SnipProvider / CollapseProvider
 - `tests/stages.rs`
+- `ContextBuffer` 持有 `ContextIdentity { tenant_id, session_id }`，供 offload retention 使用
 
 **预期 diff**：< 350 行
 
@@ -590,7 +591,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 **提交结果**：
 - 8 个失败模式 / replay 场景已由 `spike_replay_idempotent.rs` 覆盖
 - 当前实现无需生产代码修复
-- 评审通过后进入 M3-T11
+- 已进入 M3-T11；当前下一步以 M3-T12 / M3-T13 顺序推进
 
 **通过判据**：
 - ✅ 8 个失败场景 / failure_mode 表全部按期望行为
