@@ -16,17 +16,25 @@ workspace = true
 default = []
 interactive = []
 stream = ["dep:dashmap"]
-rule-engine = []
+rule-engine = ["dep:arc-swap", "dep:notify", "dep:serde_json", "dep:tokio-stream", "dep:toml"]
 mock = []
 auto-mode = ["dep:octopus-harness-model"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-model = { path = "../octopus-harness-model", optional = true }
+arc-swap = { workspace = true, optional = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true, optional = true }
 futures = { workspace = true }
+notify = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
