@@ -183,7 +183,7 @@
 
 ### M3-T06 · HookHandler trait + 20 类事件 + HookContext
 
-**状态**：本地实现待评审。
+**状态**：已提交待评审（`25064b4d`）。
 
 **SPEC 锚点**：
 - `harness-hook.md` §2（HookHandler / HookEvent / HookContext / HookSessionView）
@@ -206,17 +206,20 @@
 
 ### M3-T07 · Hook Dispatcher + Registry + 事务语义
 
+**状态**：本地实现待评审。
+
 **SPEC 锚点**：
 - `harness-hook.md` §3（Dispatcher）+ §2.6.2（Hook 失败的事务语义，v1.8.1 P1-4）
 
 **预期产物**：
 - `src/dispatcher.rs`：HookDispatcher（按 kind 路由）
 - `src/registry.rs`：HookRegistry + HookRegistryBuilder
-- `tests/dispatcher.rs / transaction.rs`
+- `tests/registry_dispatcher.rs`
 
 **关键不变量**：
 - PreToolUse 链是 all-or-nothing（v1.8.1 P1-4 修订）
 - failure_mode = FailClosed → 失败拒绝主流程；FailOpen → 失败放过 + 发 HookFailedEvent
+- `octopus-harness-hook` 不依赖 `harness-observability / harness-journal`；T07 只返回 `DispatchResult`，上层后续负责落 Journal 事件
 
 **预期 diff**：< 350 行
 

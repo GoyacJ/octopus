@@ -338,7 +338,6 @@ pub struct HookRegistrySnapshot {
 ```rust
 pub struct HookDispatcher {
     snapshot: HookRegistrySnapshot,
-    observer: Arc<Observer>,
 }
 
 impl HookDispatcher {
@@ -398,6 +397,10 @@ pub enum InconsistentReason {
     ContextPatchTooLarge { limit_bytes: u64, actual_bytes: u64 },
 }
 ```
+
+`harness-hook` 不直接依赖 `harness-observability` / `harness-journal`。
+Dispatcher 只返回 `DispatchResult`；`harness-session` / `harness-engine`
+负责把 `trail` 与 `failures` 转换为 `HookTriggered` / `HookFailed` 等 Journal 事件。
 
 **串联规则**（对齐 HER-036 `emit_collect`）：
 

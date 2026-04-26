@@ -254,6 +254,7 @@ fn hook_crate_stays_inside_allowed_dependency_boundary() {
     assert!(!manifest.contains("octopus-harness-engine"));
     assert!(!manifest.contains("octopus-harness-journal"));
     assert!(!manifest.contains("octopus-harness-tool"));
+    assert!(!manifest.contains("octopus-harness-observability"));
 }
 
 struct NoopHook {
