@@ -595,6 +595,13 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 
 **PR 描述模板要点**：列出每个新增 dep 对应的 M4/M5 任务卡 ID，作为后续审计追溯依据。
 
+**提交结果**：
+- 根 `Cargo.toml [workspace.dependencies]` 已补齐 M4 / M5 / M6 预声明依赖
+- 未修改任何 crate 的 `[dependencies]`
+- 未运行 `cargo update`，`Cargo.lock` 未改动
+
+**下一步**：M3-T22 · CLI 最简入口先行接入 M3 lower-level harness driver。
+
 ---
 
 ### M3-S01 · Spike-2 · Hook 三 transport 失败模式 + replay 幂等（前置 POC）
