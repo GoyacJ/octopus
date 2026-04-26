@@ -16,9 +16,9 @@ use harness_permission::{
     PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest, RuleSnapshot,
 };
 use harness_tool::{
-    default_result_budget, BuiltinToolset, InterruptToken, OrchestratorContext, Tool, ToolCall,
-    ToolContext, ToolEvent, ToolOrchestrator, ToolPool, ToolPoolFilter, ToolPoolModelProfile,
-    ToolRegistry, ToolSearchMode, ValidationError,
+    default_result_budget, BuiltinToolset, InterruptToken, NoopToolEventEmitter,
+    OrchestratorContext, Tool, ToolCall, ToolContext, ToolEvent, ToolOrchestrator, ToolPool,
+    ToolPoolFilter, ToolPoolModelProfile, ToolRegistry, ToolSearchMode, ValidationError,
 };
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -537,6 +537,8 @@ fn orchestrator_ctx_with_interrupt(
             }),
             hook_overrides: vec![],
         },
+        blob_store: None,
+        event_emitter: Arc::new(NoopToolEventEmitter),
     }
 }
 

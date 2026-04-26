@@ -461,8 +461,18 @@ pub struct ToolPoolFilter {
 pub struct ToolOrchestrator {
     concurrency_limit: usize,
     dispatch_semaphore: Arc<Semaphore>,
-    blob_store: Arc<dyn BlobStore>,
-    event_emitter: Arc<dyn EventEmitter>,
+}
+
+pub struct OrchestratorContext {
+    pool: ToolPool,
+    tool_context: ToolContext,
+    permission_context: PermissionContext,
+    blob_store: Option<Arc<dyn BlobStore>>,
+    event_emitter: Arc<dyn ToolEventEmitter>,
+}
+
+pub trait ToolEventEmitter: Send + Sync + 'static {
+    fn emit(&self, event: Event);
 }
 
 impl ToolOrchestrator {

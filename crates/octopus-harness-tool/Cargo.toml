@@ -22,6 +22,8 @@ octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-permission = { path = "../octopus-harness-permission" }
 octopus-harness-sandbox = { path = "../octopus-harness-sandbox" }
 async-trait = { workspace = true }
+blake3 = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
 parking_lot = "0.12"
@@ -31,5 +33,4 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-bytes = { workspace = true }
 tempfile = { workspace = true }

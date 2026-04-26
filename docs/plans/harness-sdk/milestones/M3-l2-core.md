@@ -169,6 +169,8 @@
 
 ### M3-T05 · Tool Contract Test + ResultBudget E2E
 
+**状态**：本地实现待评审。
+
 **预期产物**：
 - `tests/contract.rs`
 - `tests/result_budget.rs`：超限场景三档动作

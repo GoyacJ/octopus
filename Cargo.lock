@@ -3959,6 +3959,7 @@ name = "octopus-harness-tool"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "blake3",
  "bytes",
  "chrono",
  "futures",
