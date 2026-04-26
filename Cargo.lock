@@ -3233,6 +3233,7 @@ dependencies = [
  "chrono",
  "futures",
  "octopus-harness-contracts",
+ "parking_lot",
  "regex",
  "serde",
  "thiserror 2.0.18",

@@ -10,9 +10,9 @@ use harness_sandbox::{
 };
 
 #[derive(Default)]
-struct RecordingSink;
+struct NullSink;
 
-impl EventSink for RecordingSink {
+impl EventSink for NullSink {
     fn emit(&self, _event: Event) -> Result<(), SandboxError> {
         Ok(())
     }
@@ -91,7 +91,7 @@ async fn sandbox_backend_is_object_safe_and_has_noop_hooks() {
         id: "test".to_owned(),
     });
     let spec = ExecSpec::default();
-    let ctx = ExecContext::for_test(Arc::new(RecordingSink));
+    let ctx = ExecContext::for_test(Arc::new(NullSink));
 
     backend.before_execute(&spec, &ctx).await.unwrap();
     let handle = backend.execute(spec, ctx.clone()).await.unwrap();

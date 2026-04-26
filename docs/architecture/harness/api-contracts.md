@@ -332,6 +332,8 @@ pub trait CodeSandbox: Send + Sync + 'static {
 - **实现者**：`both`（内置 mini-lua runtime；业务侧可实现受限解释器）
 - **对象安全**：是
 
+`harness-sandbox` crate 内由 `code-runtime` feature 门控；门面层 `programmatic-tool-calling` feature 组合启用 `harness-tool/programmatic-tool-calling` 与 `harness-sandbox/code-runtime`。
+
 ### 4.6 `UsageMeter`
 
 ```rust

@@ -1,19 +1,19 @@
 //! Testing sandbox backend that records and rejects exec requests.
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use harness_contracts::SandboxError;
+use parking_lot::Mutex;
 
 use crate::{
     ExecContext, ExecSpec, ProcessHandle, SandboxBackend, SandboxCapabilities, SessionSnapshotFile,
     SnapshotSpec,
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct NoopSandbox {
-    recorded_execs: Arc<Mutex<Vec<ExecSpec>>>,
+    recorded_execs: Mutex<Vec<ExecSpec>>,
     delay: Duration,
 }
 
@@ -24,16 +24,13 @@ impl NoopSandbox {
 
     pub fn with_delay(delay: Duration) -> Self {
         Self {
+            recorded_execs: Mutex::new(Vec::new()),
             delay,
-            ..Self::default()
         }
     }
 
     pub fn recorded_execs(&self) -> Vec<ExecSpec> {
-        self.recorded_execs
-            .lock()
-            .expect("noop sandbox recorded execs lock should work")
-            .clone()
+        self.recorded_execs.lock().clone()
     }
 }
 
@@ -52,10 +49,7 @@ impl SandboxBackend for NoopSandbox {
         spec: ExecSpec,
         _ctx: ExecContext,
     ) -> Result<ProcessHandle, SandboxError> {
-        self.recorded_execs
-            .lock()
-            .expect("noop sandbox recorded execs lock should work")
-            .push(spec);
+        self.recorded_execs.lock().push(spec);
         if !self.delay.is_zero() {
             tokio::time::sleep(self.delay).await;
         }

@@ -6,9 +6,9 @@ use harness_contracts::{Event, SandboxError};
 use harness_sandbox::{EventSink, ExecContext, ExecSpec, NoopSandbox, SandboxBackend};
 
 #[derive(Default)]
-struct RecordingSink;
+struct NullSink;
 
-impl EventSink for RecordingSink {
+impl EventSink for NullSink {
     fn emit(&self, _event: Event) -> Result<(), SandboxError> {
         Ok(())
     }
@@ -25,7 +25,7 @@ async fn noop_sandbox_rejects_exec_and_records_spec() {
     };
 
     let error = match backend
-        .execute(spec.clone(), ExecContext::for_test(Arc::new(RecordingSink)))
+        .execute(spec.clone(), ExecContext::for_test(Arc::new(NullSink)))
         .await
     {
         Ok(_) => panic!("noop execute should reject"),

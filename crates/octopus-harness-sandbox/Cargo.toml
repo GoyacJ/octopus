@@ -27,6 +27,7 @@ blake3 = "1"
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+parking_lot = "0.12"
 regex = "1"
 serde = { workspace = true }
 thiserror = { workspace = true }

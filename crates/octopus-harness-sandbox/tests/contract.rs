@@ -1,7 +1,7 @@
 #![cfg(all(feature = "local", feature = "noop", unix))]
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
@@ -11,26 +11,31 @@ use harness_sandbox::{
     EventSink, ExecContext, ExecOutcome, ExecSpec, LocalSandbox, NoopSandbox, SandboxBackend,
     SessionSnapshotFile, SnapshotSpec, StdioSpec,
 };
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-#[derive(Default)]
 struct RecordingSink {
-    events: Mutex<Vec<Event>>,
-}
-
-impl RecordingSink {
-    fn events(&self) -> Vec<Event> {
-        self.events.lock().expect("events lock should work").clone()
-    }
+    tx: UnboundedSender<Event>,
 }
 
 impl EventSink for RecordingSink {
     fn emit(&self, event: Event) -> Result<(), SandboxError> {
-        self.events
-            .lock()
-            .expect("events lock should work")
-            .push(event);
-        Ok(())
+        self.tx
+            .send(event)
+            .map_err(|error| SandboxError::Message(error.to_string()))
     }
+}
+
+fn recording_sink() -> (Arc<RecordingSink>, UnboundedReceiver<Event>) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    (Arc::new(RecordingSink { tx }), rx)
+}
+
+fn drain_events(rx: &mut UnboundedReceiver<Event>) -> Vec<Event> {
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+    events
 }
 
 fn temp_root(name: &str) -> PathBuf {
@@ -100,7 +105,8 @@ async fn contract_lifecycle_hooks_and_shutdown_are_safe() {
         Arc::new(NoopSandbox::new()),
     ];
     let spec = shell_spec("printf ignored");
-    let ctx = ExecContext::for_test(Arc::new(RecordingSink::default()));
+    let (sink, _) = recording_sink();
+    let ctx = ExecContext::for_test(sink);
     let outcome = ExecOutcome::default();
     let snapshot_spec = SnapshotSpec::default();
     let snapshot_file = SessionSnapshotFile::default();
@@ -132,13 +138,10 @@ async fn contract_lifecycle_hooks_and_shutdown_are_safe() {
 
 #[tokio::test]
 async fn contract_execute_semantics_are_deterministic() {
-    let sink = Arc::new(RecordingSink::default());
+    let (sink, mut rx) = recording_sink();
     let local: Arc<dyn SandboxBackend> = Arc::new(LocalSandbox::new(temp_root("execute-local")));
     let mut handle = local
-        .execute(
-            shell_spec("printf contract"),
-            ExecContext::for_test(sink.clone()),
-        )
+        .execute(shell_spec("printf contract"), ExecContext::for_test(sink))
         .await
         .expect("local execute should spawn process");
     let stdout = handle.stdout.take().expect("stdout should be piped");
@@ -148,7 +151,7 @@ async fn contract_execute_semantics_are_deterministic() {
     assert_eq!(output, "contract");
     assert_eq!(outcome.exit_status, SandboxExitStatus::Code(0));
 
-    let events = sink.events();
+    let events = drain_events(&mut rx);
     assert!(events.iter().any(|event| matches!(
         event,
         Event::SandboxExecutionStarted(started) if started.backend_id == "local"
@@ -163,12 +166,10 @@ async fn contract_execute_semantics_are_deterministic() {
     let noop = Arc::new(NoopSandbox::new());
     let noop_backend: Arc<dyn SandboxBackend> = noop.clone();
     let spec = shell_spec("printf contract");
+    let (sink, _) = recording_sink();
     let error = expect_execute_error(
         noop_backend
-            .execute(
-                spec.clone(),
-                ExecContext::for_test(Arc::new(RecordingSink::default())),
-            )
+            .execute(spec.clone(), ExecContext::for_test(sink))
             .await,
         "noop execute should reject",
     );
@@ -183,24 +184,20 @@ async fn contract_rejects_or_records_workspace_escape_consistently() {
     spec.cwd = Some(PathBuf::from("../"));
 
     let local = LocalSandbox::new(temp_root("escape-local"));
+    let (sink, _) = recording_sink();
     let local_error = expect_execute_error(
         local
-            .execute(
-                spec.clone(),
-                ExecContext::for_test(Arc::new(RecordingSink::default())),
-            )
+            .execute(spec.clone(), ExecContext::for_test(sink))
             .await,
         "local should reject workspace escape",
     );
     assert!(local_error.to_string().contains("workspace path denied"));
 
     let noop = NoopSandbox::new();
+    let (sink, _) = recording_sink();
     let noop_error = expect_execute_error(
-        noop.execute(
-            spec.clone(),
-            ExecContext::for_test(Arc::new(RecordingSink::default())),
-        )
-        .await,
+        noop.execute(spec.clone(), ExecContext::for_test(sink))
+            .await,
         "noop execute should reject",
     );
 

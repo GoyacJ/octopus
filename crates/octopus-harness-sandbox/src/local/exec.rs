@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 use std::future::Future;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -22,12 +22,13 @@ use tokio_util::io::ReaderStream;
 
 use super::LocalSandbox;
 use crate::{
-    ActivityHandle, ExecContext, ExecOutcome, ExecSpec, OutputStream, ProcessHandle,
-    ResourceLimitSupport, SandboxBackend, SandboxCapabilities, SessionSnapshotFile, Signal,
-    SnapshotSpec, StdioSpec,
+    backend::lexical_normalize_path, ActivityHandle, ExecContext, ExecOutcome, ExecSpec,
+    OutputStream, ProcessHandle, ResourceLimitSupport, SandboxBackend, SandboxCapabilities,
+    SessionSnapshotFile, Signal, SnapshotSpec, StdioSpec,
 };
 
 const BACKEND_ID: &str = "local";
+const NO_CACHED_SIGNAL: i32 = i32::MIN;
 
 #[async_trait]
 impl SandboxBackend for LocalSandbox {
@@ -140,28 +141,27 @@ pub struct LocalActivity {
     started_at: chrono::DateTime<Utc>,
     started_instant: Instant,
     fingerprint: ExecFingerprint,
-    last_activity: Mutex<Instant>,
+    last_activity_ms: AtomicU64,
     stdout_bytes: AtomicU64,
     stderr_bytes: AtomicU64,
     outcome: AsyncMutex<Option<ExecOutcome>>,
-    killed_signal: Mutex<Option<Signal>>,
+    killed_signal: AtomicI32,
 }
 
 impl LocalActivity {
     fn new(child: Child, spec: ExecSpec, ctx: ExecContext, fingerprint: ExecFingerprint) -> Self {
-        let now = Instant::now();
         Self {
             child: AsyncMutex::new(Some(child)),
             spec,
             ctx,
             started_at: Utc::now(),
-            started_instant: now,
+            started_instant: Instant::now(),
             fingerprint,
-            last_activity: Mutex::new(now),
+            last_activity_ms: AtomicU64::new(0),
             stdout_bytes: AtomicU64::new(0),
             stderr_bytes: AtomicU64::new(0),
             outcome: AsyncMutex::new(None),
-            killed_signal: Mutex::new(None),
+            killed_signal: AtomicI32::new(NO_CACHED_SIGNAL),
         }
     }
 
@@ -179,10 +179,14 @@ impl LocalActivity {
     }
 
     fn cached_signal(&self) -> Option<Signal> {
-        *self
-            .killed_signal
-            .lock()
-            .expect("killed signal lock should work")
+        match self.killed_signal.load(Ordering::Relaxed) {
+            NO_CACHED_SIGNAL => None,
+            signal => Some(signal),
+        }
+    }
+
+    fn elapsed_since_start_ms(&self) -> u64 {
+        self.started_instant.elapsed().as_millis() as u64
     }
 }
 
@@ -237,11 +241,7 @@ impl ActivityHandle for LocalActivity {
             )));
         }
 
-        *self
-            .killed_signal
-            .lock()
-            .expect("killed signal lock should work") = Some(signal);
-
+        self.killed_signal.store(signal, Ordering::Relaxed);
         if let Some(child) = self.child.lock().await.as_mut() {
             child.start_kill().map_err(sandbox_error)?;
         }
@@ -249,33 +249,24 @@ impl ActivityHandle for LocalActivity {
     }
 
     fn touch(&self) {
-        let previous = {
-            let mut last_activity = self
-                .last_activity
-                .lock()
-                .expect("last activity lock should work");
-            let previous = *last_activity;
-            *last_activity = Instant::now();
-            previous
-        };
-
+        let previous = self
+            .last_activity_ms
+            .swap(self.elapsed_since_start_ms(), Ordering::Relaxed);
         let _ = self.ctx.event_sink.emit(Event::SandboxActivityHeartbeat(
             SandboxActivityHeartbeatEvent {
                 session_id: self.ctx.session_id,
                 run_id: self.ctx.run_id,
                 tool_use_id: self.ctx.tool_use_id,
                 backend_id: BACKEND_ID.to_owned(),
-                since_last_io_ms: previous.elapsed().as_millis() as u64,
+                since_last_io_ms: self.elapsed_since_start_ms().saturating_sub(previous),
                 at: Utc::now(),
             },
         ));
     }
 
     fn last_activity(&self) -> Instant {
-        *self
-            .last_activity
-            .lock()
-            .expect("last activity lock should work")
+        let elapsed = Duration::from_millis(self.last_activity_ms.load(Ordering::Relaxed));
+        self.started_instant + elapsed
     }
 }
 
@@ -314,22 +305,17 @@ impl LocalActivity {
                     WaitInterrupt::InactivityTimeout => {
                         child.start_kill().map_err(sandbox_error)?;
                         let _ = child.wait().await;
-                        self.ctx
-                            .event_sink
-                            .emit(Event::SandboxActivityTimeoutFired(
-                                SandboxActivityTimeoutFiredEvent {
-                                    session_id: self.ctx.session_id,
-                                    run_id: self.ctx.run_id,
-                                    tool_use_id: self.ctx.tool_use_id,
-                                    backend_id: BACKEND_ID.to_owned(),
-                                    configured_timeout: self
-                                        .spec
-                                        .activity_timeout
-                                        .expect("activity timeout branch requires configured timeout"),
-                                    kill_scope: KillScope::Process,
-                                    at: Utc::now(),
-                                },
-                            ))?;
+                        self.ctx.event_sink.emit(Event::SandboxActivityTimeoutFired(
+                            SandboxActivityTimeoutFiredEvent {
+                                session_id: self.ctx.session_id,
+                                run_id: self.ctx.run_id,
+                                tool_use_id: self.ctx.tool_use_id,
+                                backend_id: BACKEND_ID.to_owned(),
+                                configured_timeout: self.spec.activity_timeout.unwrap_or_default(),
+                                kill_scope: KillScope::Process,
+                                at: Utc::now(),
+                            },
+                        ))?;
                         Ok(SandboxExitStatus::InactivityTimeout)
                     }
                     WaitInterrupt::Timeout => unreachable!("activity timeout future cannot return timeout"),
@@ -339,14 +325,20 @@ impl LocalActivity {
     }
 }
 
+enum WaitInterrupt {
+    Timeout,
+    InactivityTimeout,
+}
+
 fn timeout_future(
     timeout: Option<Duration>,
     started: Instant,
 ) -> Pin<Box<dyn Future<Output = WaitInterrupt> + Send>> {
     Box::pin(async move {
         match timeout {
-            Some(duration) => {
-                tokio::time::sleep_until((started + duration).into()).await;
+            Some(timeout) => {
+                let deadline = started + timeout;
+                tokio::time::sleep_until(deadline.into()).await;
                 WaitInterrupt::Timeout
             }
             None => std::future::pending().await,
@@ -354,37 +346,29 @@ fn timeout_future(
     })
 }
 
-fn activity_timeout_future<'a>(
+fn activity_timeout_future(
     timeout: Option<Duration>,
-    activity: &'a LocalActivity,
-) -> Pin<Box<dyn Future<Output = WaitInterrupt> + Send + 'a>> {
+    activity: &LocalActivity,
+) -> Pin<Box<dyn Future<Output = WaitInterrupt> + Send + '_>> {
     Box::pin(async move {
         match timeout {
-            Some(duration) => loop {
+            Some(timeout) => loop {
                 let elapsed = activity.last_activity().elapsed();
-                if elapsed >= duration {
+                if elapsed >= timeout {
                     break WaitInterrupt::InactivityTimeout;
                 }
-                tokio::time::sleep(duration.saturating_sub(elapsed)).await;
+                tokio::time::sleep(timeout.saturating_sub(elapsed)).await;
             },
             None => std::future::pending().await,
         }
     })
 }
 
-enum WaitInterrupt {
-    Timeout,
-    InactivityTimeout,
-}
-
-fn child_stream<R>(
-    reader: Option<R>,
+fn child_stream(
+    reader: Option<impl tokio::io::AsyncRead + Send + 'static>,
     activity: Arc<LocalActivity>,
     stream: OutputStream,
-) -> Option<futures::stream::BoxStream<'static, Bytes>>
-where
-    R: tokio::io::AsyncRead + Send + 'static,
-{
+) -> Option<futures::stream::BoxStream<'static, Bytes>> {
     reader.map(|reader| {
         ReaderStream::new(reader)
             .filter_map(move |chunk| {
@@ -403,67 +387,36 @@ where
     })
 }
 
+fn filtered_env<'a>(
+    allowed: &'a BTreeSet<String>,
+    spec: &'a ExecSpec,
+) -> impl Iterator<Item = (&'a String, &'a String)> + 'a {
+    spec.env
+        .iter()
+        .filter(|(key, _)| allowed.contains(key.as_str()))
+}
+
 fn stdio(spec: &StdioSpec) -> Result<Stdio, SandboxError> {
     match spec {
         StdioSpec::Null => Ok(Stdio::null()),
         StdioSpec::Piped => Ok(Stdio::piped()),
         StdioSpec::Inherit => Ok(Stdio::inherit()),
-        StdioSpec::File(path) => Err(SandboxError::Message(format!(
-            "stdio file endpoint is not implemented in M2-T12: {}",
-            path.display()
-        ))),
-    }
-}
-
-fn filtered_env(
-    allowed_keys: &BTreeSet<String>,
-    spec: &ExecSpec,
-) -> impl Iterator<Item = (String, String)> {
-    let mut env = std::env::vars()
-        .filter(|(key, _)| allowed_keys.contains(key))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    for (key, value) in &spec.env {
-        if allowed_keys.contains(key) {
-            env.insert(key.clone(), value.clone());
+        StdioSpec::File(path) => {
+            let file = std::fs::File::create(path).map_err(sandbox_error)?;
+            Ok(Stdio::from(file))
         }
     }
-    env.into_iter()
 }
 
 fn resolve_cwd(root: &Path, cwd: Option<&Path>) -> Result<PathBuf, SandboxError> {
-    let root = lexical_normalize(root);
-    let joined = match cwd {
-        Some(cwd) if cwd.is_absolute() => lexical_normalize(cwd),
-        Some(cwd) => lexical_normalize(&root.join(cwd)),
-        None => root.clone(),
-    };
-
-    if joined == root || joined.starts_with(&root) {
-        Ok(joined)
-    } else {
-        Err(SandboxError::Message(format!(
+    let relative = cwd.map_or_else(PathBuf::new, lexical_normalize_path);
+    if relative.is_absolute() || relative.starts_with("..") {
+        return Err(SandboxError::Message(format!(
             "workspace path denied: {}",
-            joined.display()
-        )))
+            relative.display()
+        )));
     }
-}
-
-fn lexical_normalize(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !normalized.pop() {
-                    normalized.push("..");
-                }
-            }
-            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            Component::RootDir => normalized.push(component.as_os_str()),
-            Component::Normal(part) => normalized.push(part),
-        }
-    }
-    normalized
+    Ok(root.join(relative))
 }
 
 fn sandbox_error(error: std::io::Error) -> SandboxError {

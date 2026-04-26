@@ -405,7 +405,7 @@ fn write_workspace_access(hasher: &mut blake3::Hasher, access: &WorkspaceAccess)
     }
 }
 
-fn lexical_normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn lexical_normalize_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
 
     for component in path.components() {
