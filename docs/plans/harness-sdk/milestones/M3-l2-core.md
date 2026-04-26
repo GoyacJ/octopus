@@ -264,6 +264,8 @@
 
 ### M3-T10 · Hook Contract Test + Replay 幂等测试
 
+**状态**：已提交待评审。
+
 **预期产物**：
 - `tests/contract.rs`
 - `tests/replay_idempotent.rs`

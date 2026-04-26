@@ -3,7 +3,7 @@
 //! Hook registry, dispatcher, transports, failure modes, and transaction semantics.
 //!
 //! SPEC: docs/architecture/harness/crates/harness-hook.md
-//! Status: M3-T09 exec and HTTP hook transports.
+//! Status: M3-T10 hook contract and replay coverage.
 
 #![forbid(unsafe_code)]
 
