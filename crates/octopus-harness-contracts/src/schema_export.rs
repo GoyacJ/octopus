@@ -43,6 +43,7 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     insert_schema!(schemas, "delta_chunk", DeltaChunk);
     insert_schema!(schemas, "thought_chunk", ThoughtChunk);
     insert_schema!(schemas, "tool_properties", ToolProperties);
+    insert_schema!(schemas, "tool_descriptor", ToolDescriptor);
     insert_schema!(schemas, "deny_reason", DenyReason);
     insert_schema!(schemas, "tool_error_payload", ToolErrorPayload);
     insert_schema!(schemas, "pricing_snapshot_id", PricingSnapshotId);

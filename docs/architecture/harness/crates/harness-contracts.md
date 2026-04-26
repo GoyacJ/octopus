@@ -611,6 +611,31 @@ pub enum ToolCapability {
 
 > **Capability traits 的位置**：`SubagentRunnerCap` / `TodoStoreCap` / `RunCancellerCap` / `ClarifyChannelCap` / `UserMessengerCap` / `BlobReaderCap` / `EmbeddedToolDispatcherCap` / `CodeRuntimeCap` 等接口 trait 定义在 `harness-contracts::capability` 模块；具体实现由对应 L2/L3 crate 提供。详见 ADR-011 §2.2 / §2.5 与 ADR-0016 §2.7。
 
+### 3.4.1 `ToolDescriptor`
+
+`ToolDescriptor` 是 provider、tool registry、tool search 共同读取的注册期契约。其权威字段定义在 L0 contracts，避免 L1 `harness-model` 为 `ModelRequest.tools` 反向依赖 L2 `harness-tool`。
+
+```rust
+pub struct ToolDescriptor {
+    pub name: ToolName,
+    pub display_name: String,
+    pub description: String,
+    pub category: String,
+    pub group: ToolGroup,
+    pub version: SemverString,
+    pub input_schema: Value,
+    pub output_schema: Option<Value>,
+    pub dynamic_schema: bool,
+    pub properties: ToolProperties,
+    pub trust_level: TrustLevel,
+    pub required_capabilities: Vec<ToolCapability>,
+    pub budget: ResultBudget,
+    pub provider_restriction: ProviderRestriction,
+    pub origin: ToolOrigin,
+    pub search_hint: Option<String>,
+}
+```
+
 ```rust
 /// 记忆条目的语义类型（对齐 CC-31）。
 /// 与 `MemoryVisibility` 是正交维度：`MemoryKind` 描述「这是什么记忆」，
@@ -1471,7 +1496,7 @@ pub enum HarnessError {
 }
 ```
 
-子 crate 定义各自的 `XxxError`，但必须 `impl From<XxxError> for HarnessError`。
+`ModelError` 是跨 L1/L2 流转的共享错误，定义在 contracts，包含 `RateLimited` / `ContextTooLong` / `InvalidRequest` / `AllCredentialsBanned` / `AuxModelNotConfigured` / `AuthExpired` / `ProviderUnavailable` / `UnexpectedResponse` / `Cancelled` / `DeadlineExceeded` / `Io` 等语义变体。其他子 crate 定义各自的 `XxxError`，但必须 `impl From<XxxError> for HarnessError`。
 
 ### 3.8.1 `BudgetKind`（共享于错误与事件）
 

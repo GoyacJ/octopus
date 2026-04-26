@@ -136,7 +136,7 @@ testing = [
 | Crate | 提供的 features |
 |---|---|
 | `harness-contracts` | — |
-| `harness-model` | `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / deepseek / minimax / qwen / doubao / zhipu / km / all-providers / mock` |
+| `harness-model` | `http-client`（内部传输底座）/ `openai-compatible`（OpenAI-compatible Provider 共享底座）/ `openai / anthropic / gemini / openrouter / bedrock / codex / local-llama / deepseek / minimax / qwen / doubao / zhipu / km / all-providers / mock` |
 | `harness-journal` | `sqlite / jsonl / in-memory` |
 | `harness-sandbox` | `local / docker / ssh / noop / code-runtime`（ADR-0016） |
 | `harness-permission` | `interactive / stream / rule-engine / auto-mode / mock` |

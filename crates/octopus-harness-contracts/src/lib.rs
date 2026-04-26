@@ -15,6 +15,7 @@ pub mod ids;
 pub mod messages;
 pub mod redactor;
 pub mod schema_export;
+pub mod tool;
 
 pub use blob::*;
 pub use capability::*;
@@ -25,3 +26,4 @@ pub use ids::*;
 pub use messages::*;
 pub use redactor::*;
 pub use schema_export::*;
+pub use tool::*;
