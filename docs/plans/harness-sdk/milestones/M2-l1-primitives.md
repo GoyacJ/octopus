@@ -34,13 +34,16 @@
 ### M2-T01 · ModelProvider trait + 类型骨架
 
 **SPEC 锚点**：
-- `harness-model.md` §2.1（ModelProvider trait + InferContext）
-- `api-contracts.md` §2.1
-- `harness-contracts.md` §3.5（ModelRequest / ModelStreamEvent / ModelDescriptor）
+- `docs/architecture/harness/crates/harness-model.md` §2.1-§2.1.1（ModelProvider / InferContext / ModelDescriptor / ModelCapabilities，L20-L215）
+- `docs/architecture/harness/crates/harness-model.md` §2.2-§2.3（ModelRequest / ModelStreamEvent / PromptCacheStyle，L258-L390）
+- `docs/architecture/harness/crates/harness-model.md` §2.4-§2.6（CredentialSource / CredentialKey / TokenCounter / InferMiddleware，L410-L545）
+- `docs/architecture/harness/crates/harness-model.md` §5.1-§5.2（AuxModelProvider / AuxOptions / AuxTask / HealthStatus，L733-L806）
+- `docs/architecture/harness/api-contracts.md` §2.1-§2.6（model trait 总表，L18-L132）
+- `docs/architecture/harness/crates/harness-contracts.md` §3.1（TenantId / RequestId，L32-L84）+ §3.5（Message / MessagePart，L1130-L1315）
 
 **预期产物**：
 - `src/lib.rs` 主结构
-- `src/provider.rs`（ModelProvider trait + ModelRequest / ModelResponse / ModelStreamEvent / ModelDescriptor / ModelCapabilities / PromptCacheStyle / HealthStatus）
+- `src/provider.rs`（ModelProvider trait + ModelRequest / ModelStreamEvent / ModelDescriptor / ModelCapabilities / PromptCacheStyle / HealthStatus）
 - `src/credential.rs`（CredentialSource trait + CredentialKey + CredentialValue + CredentialError）
 - `src/token_counter.rs`（TokenCounter trait）
 - `src/aux.rs`（AuxModelProvider trait + AuxOptions + AuxTask）
@@ -330,10 +333,13 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 ### M2-T06 · EventStore trait + 接口骨架（Redactor 装配点契约）
 
 **SPEC 锚点**：
-- `harness-journal.md` §2.1（EventStore trait + Redactor 必经管道契约 v1.8.1）
-- `api-contracts.md` §5（EventStore trait）
-- `api-contracts.md` §18.2（Redactor 单 method 签名 `fn redact(&str, &RedactRules) -> String`）
-- `harness-observability.md` §2.5.0（Redactor 6 行挂钩点表 = **装配点（call site）契约**，不是 trait 多 method）
+- `docs/architecture/harness/crates/harness-journal.md` §2.1（EventStore trait + Redactor 必经管道契约 v1.8.1，L28-L80）
+- `docs/architecture/harness/api-contracts.md` §3.1（EventStore trait 总表，L137-L192）
+- `docs/architecture/harness/api-contracts.md` §18.2（Redactor 单 method 签名 `fn redact(&str, &RedactRules) -> String`，L946-L1002）
+- `docs/architecture/harness/crates/harness-observability.md` §2.5（Redactor 挂钩点表 = **装配点（call site）契约**，不是 trait 多 method，L230-L247）
+- `docs/architecture/harness/crates/harness-journal.md` §2.3-§2.4（Projection / Snapshot，L125-L160）
+- `docs/architecture/harness/crates/harness-journal.md` §4.4 / §6.1-§6.3（VersionedEventStore / SessionProjection / replay 确定性，L688-L730，L745-L808）
+- `docs/architecture/harness/crates/harness-contracts.md` §3.7（BlobStore trait，L1364-L1435）
 
 **ADR 锚点**：
 - ADR-001（event-sourcing）
@@ -461,11 +467,16 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 
 ### M2-T11 · SandboxBackend trait + 类型骨架
 
-**SPEC 锚点**：`harness-sandbox.md` §2.1 / `api-contracts.md` §7
+**SPEC 锚点**：
+- `docs/architecture/harness/crates/harness-sandbox.md` §2.1（SandboxBackend trait，L30-L76）
+- `docs/architecture/harness/api-contracts.md` §4.1-§4.2（SandboxBackend / ProcessHandle 总表，L231-L269）
+- `docs/architecture/harness/crates/harness-sandbox.md` §2.3（SandboxPolicy / SandboxMode，L129-L177）
+- `docs/architecture/harness/crates/harness-sandbox.md` §3.5.1（CodeSandbox trait，L418-L469）
+- `docs/architecture/harness/crates/harness-sandbox.md` §4.1 / §5 / §8（CWD marker / heartbeat / permission orthogonality，L545-L583，L646-L660）
 
 **预期产物**：
 - `src/lib.rs`
-- `src/backend.rs`（SandboxBackend trait + ExecRequest / ExecResponse / SandboxEvent / Heartbeat）
+- `src/backend.rs`（SandboxBackend trait + ExecSpec / ExecContext / ProcessHandle / ExecOutcome / ActivityHeartbeat）
 - `src/policy.rs`（SandboxPolicy + SandboxMode 枚举）
 - `src/cwd.rs`（CWD marker FD 协议）
 - `src/code_sandbox.rs`（CodeSandbox trait，预留 ADR-0016）
@@ -533,14 +544,17 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 ### M2-T16 · PermissionBroker trait + 类型骨架
 
 **SPEC 锚点**：
-- `harness-permission.md` §3（PermissionBroker / PermissionContext / PermissionRequest）
-- `api-contracts.md` §8
-- `permission-model.md` §5.1（v1.8.1 P0-2 修订带 PermissionContext）
+- `docs/architecture/harness/crates/harness-permission.md` §2.1-§2.2（PermissionBroker / PermissionRequest / PermissionContext / PermissionCheck，L20-L102）
+- `docs/architecture/harness/api-contracts.md` §5.1-§5.2（PermissionBroker / RuleProvider 总表，L273-L310）
+- `docs/architecture/harness/permission-model.md` §3.1-§3.2（PermissionRequest / PermissionContext 语义，L106-L170）
+- `docs/architecture/harness/permission-model.md` §5.1（PermissionContext 必传，L242-L266）
+- `docs/architecture/harness/crates/harness-permission.md` §3.4-§3.4.1（PermissionRule / RuleProvider，L239-L307）
+- `docs/architecture/harness/crates/harness-permission.md` §3.7（FallbackPolicy fail-closed，L421-L457）
 
 **预期产物**：
 - `src/lib.rs`
 - `src/broker.rs`（PermissionBroker trait + PermissionRequest + PermissionContext）
-- `src/decision.rs`（Decision / DecidedBy）
+- `src/decision.rs`（复用 / re-export `harness_contracts` 的 Decision / DecidedBy；不得重复声明 L0 类型）
 - `src/rule.rs`（PermissionRule / RuleProvider trait）
 
 **关键不变量**：
@@ -619,14 +633,16 @@ cargo check -p octopus-harness-model --all-features  # 不能有冲突
 ### M2-T21 · MemoryStore + MemoryLifecycle 二分 trait
 
 **SPEC 锚点**：
-- `harness-memory.md` §2（MemoryStore + MemoryLifecycle 二分，v1.4 拆分）
-- `api-contracts.md` §6
+- `docs/architecture/harness/crates/harness-memory.md` §2.1（MemoryStore / MemoryLifecycle / MemoryProvider blanket，L30-L125）
+- `docs/architecture/harness/crates/harness-memory.md` §2.2-§2.4（MemoryQuery / MemoryRecord / MemorySummary / MemoryKind / MemoryVisibility / MemoryMetadata，L127-L272）
+- `docs/architecture/harness/api-contracts.md` §6.1（MemoryStore / MemoryLifecycle 总表，L329-L369）
+- `docs/architecture/harness/crates/harness-memory.md` §3.1（Memdir tenant directory contract，L298-L315）
 
 **预期产物**：
 - `src/lib.rs`
 - `src/store.rs`（MemoryStore trait：recall / upsert / forget / list）
-- `src/lifecycle.rs`（MemoryLifecycle trait：on_session_start / on_pre_compress / on_delegation / on_session_end / 7 个 hook）
-- `src/types.rs`（MemoryEntry + MemoryMetadata + MemoryKind + MemoryVisibility）
+- `src/lifecycle.rs`（MemoryLifecycle trait：initialize / on_turn_start / on_pre_compress / on_memory_write / on_delegation / on_session_end / shutdown）
+- `src/types.rs`（MemoryQuery / MemoryRecord / MemorySummary / MemoryMetadata / MemoryKind / MemoryVisibility）
 
 **关键不变量**：
 - MemoryStore 实现必须支持租户隔离

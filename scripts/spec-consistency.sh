@@ -41,4 +41,31 @@ if find crates -path 'crates/octopus-harness-*' -type f -name '*.rs' \
   fail "custom error families must come from SPEC-defined contracts"
 fi
 
+line_required_cards='M1-T07|M2-T01|M2-T06|M2-T11|M2-T16|M2-T21|M2-S01|M3-S01|M3-S02'
+while IFS= read -r milestone; do
+  awk -v cards="$line_required_cards" '
+    /^### / {
+      in_card = ($0 ~ cards)
+      in_spec = 0
+    }
+    in_card && /^\*\*SPEC 锚点\*\*/ {
+      in_spec = 1
+      next
+    }
+    in_spec && (/^---/ || /^### / || /^\*\*/) {
+      in_spec = 0
+    }
+    in_card && in_spec && /^- `/ {
+      if ($0 !~ /^- `docs\/architecture\/harness\//) {
+        print FILENAME ":" FNR ": SPEC anchor must use canonical docs/architecture/harness path: " $0
+        failed = 1
+      } else if ($0 !~ /L[0-9]+/) {
+        print FILENAME ":" FNR ": missing line range: " $0
+        failed = 1
+      }
+    }
+    END { exit failed }
+  ' "$milestone" || fail "line-numbered SPEC anchor check failed"
+done < <(find docs/plans/harness-sdk/milestones -type f -name '*.md' | sort)
+
 echo "spec consistency ok"

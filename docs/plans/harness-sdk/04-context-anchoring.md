@@ -78,7 +78,7 @@ AI 在以下场景容易"幻觉"（生成与 SPEC 不一致的代码）：
 ```bash
 failed=0
 # Maintainer 在任务卡进入派发窗口前，把对应 ID 加入本列表。
-line_required_cards='M1-T07|M2-S01|M3-S01|M3-S02'
+line_required_cards='M1-T07|M2-T01|M2-T06|M2-T11|M2-T16|M2-T21|M2-S01|M3-S01|M3-S02'
 
 for f in docs/plans/harness-sdk/milestones/*.md; do
   awk -v cards="$line_required_cards" '
