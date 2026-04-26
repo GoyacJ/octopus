@@ -358,11 +358,15 @@
 
 ### M3-T15 · Context Contract Test + Prompt Cache 稳定性
 
+**状态**：已提交待评审。
+
 **预期产物**：
 - `tests/contract.rs`
 - `tests/cache_stability.rs`：连续 5 轮调用，验证 prompt prefix 不变
 
 **预期 diff**：< 200 行
+
+**下一步**：M3-T16 · Session 生命周期 + SessionOptions + SessionBuilder。
 
 ---
 
@@ -599,7 +603,7 @@ grep -E '^(openidconnect|opentelemetry|tracing-opentelemetry|prometheus|fs2|blak
 **提交结果**：
 - 8 个失败模式 / replay 场景已由 `spike_replay_idempotent.rs` 覆盖
 - 当前实现无需生产代码修复
-- 已进入 M3-T15；M3-T14 已提交待评审，当前下一步以 M3-T15 / M3-T16 顺序推进
+- 已进入 M3-T16；M3-T15 已提交待评审，当前下一步以 M3-T16 / M3-T17 顺序推进
 
 **通过判据**：
 - ✅ 8 个失败场景 / failure_mode 表全部按期望行为
