@@ -374,6 +374,8 @@
 
 ### M3-T16 · Session 生命周期 + SessionOptions + SessionBuilder（含 workspace_root 注入）
 
+**状态**：已提交待评审。
+
 **SPEC 锚点**：
 - `harness-session.md` §2（生命周期）
 - `harness-sdk.md` §8.2（Session 不走 type-state，运行时 Result 校验，v1.8.1 P2-4）
@@ -424,6 +426,8 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 ```
 
 **预期 diff**：< 450 行（比原 400 多出的部分用于 paths 模块 + 校验逻辑）
+
+**下一步**：M3-T17 · SessionProjection + Fork + Snapshot。
 
 ---
 

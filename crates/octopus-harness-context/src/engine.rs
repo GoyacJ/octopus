@@ -1,8 +1,11 @@
+#[cfg(feature = "recall-memory")]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+#[cfg(feature = "recall-memory")]
+use harness_contracts::MemoryActor;
 use harness_contracts::{
-    ContextError, ContextStageId, MemoryActor, Message, MessagePart, ToolResultEnvelope, TurnInput,
+    ContextError, ContextStageId, Message, MessagePart, ToolResultEnvelope, TurnInput,
 };
 #[cfg(feature = "recall-memory")]
 use harness_memory::{MemoryKindFilter, MemoryManager, MemoryQuery, MemoryVisibilityFilter};
@@ -27,6 +30,7 @@ pub struct ContextEngine {
     providers: Vec<Arc<dyn ContextProvider>>,
     budget: TokenBudget,
     cache_policy: PromptCachePolicy,
+    #[cfg(feature = "recall-memory")]
     turn_counter: Arc<AtomicU64>,
     #[cfg(feature = "recall-memory")]
     memory_manager: Option<Arc<MemoryManager>>,
@@ -186,6 +190,7 @@ impl ContextEngineBuilder {
             providers: self.providers,
             budget: self.budget,
             cache_policy: self.cache_policy,
+            #[cfg(feature = "recall-memory")]
             turn_counter: Arc::new(AtomicU64::new(1)),
             #[cfg(feature = "recall-memory")]
             memory_manager: self.memory_manager,
@@ -248,6 +253,7 @@ impl ContextEngine {
     ) {
     }
 
+    #[cfg(feature = "recall-memory")]
     fn turn_key(&self, turn_input: &TurnInput) -> u64 {
         turn_input
             .metadata
@@ -308,6 +314,7 @@ fn budget_utilization(tokens_estimate: u64, max_tokens: u64) -> f32 {
     f32::from(per_mille) / 1_000.0
 }
 
+#[cfg(feature = "recall-memory")]
 fn message_text(message: &Message) -> String {
     message
         .parts
@@ -320,6 +327,7 @@ fn message_text(message: &Message) -> String {
         .join("\n")
 }
 
+#[cfg(feature = "recall-memory")]
 fn prepend_to_user_message(message: &mut Message, prefix: &str) {
     if let Some(MessagePart::Text(text)) = message
         .parts
@@ -335,15 +343,13 @@ fn prepend_to_user_message(message: &mut Message, prefix: &str) {
         .insert(0, MessagePart::Text(format!("{prefix}\n")));
 }
 
+#[cfg(feature = "recall-memory")]
 fn sanitize_memory_context(message: &mut Message) {
     for part in &mut message.parts {
         if let MessagePart::Text(text) = part {
-            #[cfg(feature = "recall-memory")]
-            {
-                *text = harness_memory::sanitize_context(text)
-                    .trim_start()
-                    .to_owned();
-            }
+            *text = harness_memory::sanitize_context(text)
+                .trim_start()
+                .to_owned();
         }
     }
 }

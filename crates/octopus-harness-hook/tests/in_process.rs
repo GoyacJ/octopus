@@ -1,3 +1,5 @@
+#![cfg(feature = "in-process")]
+
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

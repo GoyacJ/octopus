@@ -1,5 +1,6 @@
 #[cfg(feature = "in-process")]
 mod in_process;
+#[cfg(any(feature = "exec", feature = "http"))]
 mod protocol;
 
 #[cfg(feature = "exec")]

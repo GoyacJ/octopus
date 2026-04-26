@@ -6,3 +6,12 @@
 //! Status: M0 empty skeleton; concrete implementation lands in M3.
 
 #![forbid(unsafe_code)]
+
+pub mod builder;
+pub mod lifecycle;
+pub mod paths;
+pub mod session;
+
+pub use builder::*;
+pub use paths::*;
+pub use session::*;
