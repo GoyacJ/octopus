@@ -22,6 +22,9 @@ octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-permission = { path = "../octopus-harness-permission" }
 octopus-harness-sandbox = { path = "../octopus-harness-sandbox" }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -1,6 +1,6 @@
 # M3 · L2 Core · 核心闭环（最小可运行 SDK）
 
-> 状态：待启动 · 依赖：M2 完成 · 阻塞：M4 / M5 / M6 / M7
+> 状态：进行中 · 依赖：M2 完成 · 阻塞：M4 / M5 / M6 / M7
 > 关键交付：tool / hook / context / session 四 crate 完整 + 临时 driver 跑通 E2E
 > 预计任务卡：25 张 · 累计工时：AI 25 小时（串行）+ 人类评审 10 小时
 > 并行度：1（强制串行 4 步：tool → hook → context → session）
@@ -36,18 +36,29 @@
 ### M3-T01 · Tool trait + ToolDescriptor + ToolContext
 
 **SPEC 锚点**：
-- `harness-tool.md` §2（Tool trait）
-- `api-contracts.md` §9
-- ADR-002（Tool 不含 UI）/ ADR-0011（Capability Handle）
+- `docs/architecture/harness/crates/harness-tool.md` §2.1 L27-L103（Tool trait / ToolStream / ToolEvent）
+- `docs/architecture/harness/crates/harness-tool.md` §2.2 L160-L242（ToolDescriptor / ToolProperties / ResultBudget 引用）
+- `docs/architecture/harness/crates/harness-tool.md` §2.4 L264-L306（ToolContext / CapabilityRegistry）
+- `docs/architecture/harness/crates/harness-tool.md` §7 L960-L1045（ToolError / RegistrationError）
+- `docs/architecture/harness/api-contracts.md` §7.1 L473-L506（Tool API 契约）
+- ADR-002（Tool 不含 UI）
+- ADR-010（Tool 结果预算）
+- ADR-011（Capability Handle）
+- ADR-018（Loop-intercepted tools 反向决议）
 
 **预期产物**：
-- `src/tool.rs`：`Tool` trait + `ToolDescriptor` + `ToolContext` + `ToolProperties`（含 `defer_policy / search_hint`）+ `ToolResult` + `ToolStream`
-- `src/result_budget.rs`：ResultBudget 三档（Truncate / Offload / Reject）
+- `src/tool.rs`：`Tool` trait + `ToolStream` + `ToolEvent` + `ToolProgress`
+- `src/context.rs`：`ToolContext` + `SchemaResolverContext` + `InterruptToken`
+- `src/result_budget.rs`：ADR-010 默认 `ResultBudget`
+- `harness-contracts`：`CapabilityRegistry` + 扩展后的 `ToolError` 变体
+- 复用 `harness-contracts::{ToolDescriptor, ToolProperties, ToolResult, ResultBudget}`，不在 tool crate 重定义
 
 **关键不变量**：
 - Tool trait 是 `dyn-safe + Send + Sync`
 - `ToolProperties.is_concurrency_safe: bool`（v1.8.1 P2-6 强调 bool 二档非三桶）
-- ToolContext 提供 `permission_cap / sandbox_cap / model_cap / memory_cap / capability_registry` 但不提供 UI
+- ToolContext 只直接持有 M3-T01 允许的依赖：`SandboxBackend`、`PermissionBroker`、`CapabilityRegistry`、`InterruptToken`
+- ToolContext 不暴露 UI，不直接依赖 `harness-model / harness-memory / harness-hook / harness-observability`
+- ToolError 继续复用 `harness-contracts::ToolError`，不得另起一套错误族
 
 **预期 diff**：< 400 行
 

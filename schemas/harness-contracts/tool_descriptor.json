@@ -1,0 +1,531 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolDescriptor",
+  "type": "object",
+  "required": [
+    "budget",
+    "category",
+    "description",
+    "display_name",
+    "dynamic_schema",
+    "group",
+    "input_schema",
+    "name",
+    "origin",
+    "properties",
+    "provider_restriction",
+    "required_capabilities",
+    "trust_level",
+    "version"
+  ],
+  "properties": {
+    "budget": {
+      "$ref": "#/definitions/ResultBudget"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "dynamic_schema": {
+      "type": "boolean"
+    },
+    "group": {
+      "$ref": "#/definitions/ToolGroup"
+    },
+    "input_schema": true,
+    "name": {
+      "type": "string"
+    },
+    "origin": {
+      "$ref": "#/definitions/ToolOrigin"
+    },
+    "output_schema": true,
+    "properties": {
+      "$ref": "#/definitions/ToolProperties"
+    },
+    "provider_restriction": {
+      "$ref": "#/definitions/ProviderRestriction"
+    },
+    "required_capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ToolCapability"
+      }
+    },
+    "search_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trust_level": {
+      "$ref": "#/definitions/TrustLevel"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "BudgetMetric": {
+      "type": "string",
+      "enum": [
+        "chars",
+        "bytes",
+        "lines"
+      ]
+    },
+    "DeferPolicy": {
+      "type": "string",
+      "enum": [
+        "always_load",
+        "auto_defer",
+        "force_defer"
+      ]
+    },
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "LongRunningPolicy": {
+      "type": "object",
+      "required": [
+        "hard_timeout",
+        "stall_threshold"
+      ],
+      "properties": {
+        "hard_timeout": {
+          "$ref": "#/definitions/Duration"
+        },
+        "stall_threshold": {
+          "$ref": "#/definitions/Duration"
+        }
+      }
+    },
+    "McpOrigin": {
+      "type": "object",
+      "required": [
+        "server_id",
+        "server_meta",
+        "server_source",
+        "server_trust",
+        "upstream_name"
+      ],
+      "properties": {
+        "server_id": {
+          "$ref": "#/definitions/McpServerId"
+        },
+        "server_meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "server_source": {
+          "$ref": "#/definitions/McpServerSource"
+        },
+        "server_trust": {
+          "$ref": "#/definitions/TrustLevel"
+        },
+        "upstream_name": {
+          "type": "string"
+        }
+      }
+    },
+    "McpServerId": {
+      "type": "string"
+    },
+    "McpServerSource": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "user",
+            "project",
+            "policy"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "$ref": "#/definitions/PluginId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dynamic"
+          ],
+          "properties": {
+            "dynamic": {
+              "type": "object",
+              "required": [
+                "registered_by"
+              ],
+              "properties": {
+                "registered_by": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "managed"
+          ],
+          "properties": {
+            "managed": {
+              "type": "object",
+              "required": [
+                "registry_url"
+              ],
+              "properties": {
+                "registry_url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ModelProvider": {
+      "type": "string"
+    },
+    "OverflowAction": {
+      "type": "string",
+      "enum": [
+        "truncate",
+        "offload",
+        "reject"
+      ]
+    },
+    "PluginId": {
+      "type": "string"
+    },
+    "ProviderRestriction": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "all"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "allowlist"
+          ],
+          "properties": {
+            "allowlist": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ModelProvider"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "denylist"
+          ],
+          "properties": {
+            "denylist": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ModelProvider"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ResultBudget": {
+      "type": "object",
+      "required": [
+        "limit",
+        "metric",
+        "on_overflow",
+        "preview_head_chars",
+        "preview_tail_chars"
+      ],
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "metric": {
+          "$ref": "#/definitions/BudgetMetric"
+        },
+        "on_overflow": {
+          "$ref": "#/definitions/OverflowAction"
+        },
+        "preview_head_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "preview_tail_chars": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SkillId": {
+      "type": "string"
+    },
+    "SkillOrigin": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "skill_name",
+        "source_kind",
+        "trust"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/SkillId"
+        },
+        "skill_name": {
+          "type": "string"
+        },
+        "source_kind": {
+          "$ref": "#/definitions/SkillSourceKind"
+        },
+        "trust": {
+          "$ref": "#/definitions/TrustLevel"
+        }
+      }
+    },
+    "SkillSourceKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "bundled",
+            "workspace",
+            "user"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "$ref": "#/definitions/PluginId"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp"
+          ],
+          "properties": {
+            "mcp": {
+              "$ref": "#/definitions/McpServerId"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolCapability": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "subagent_runner",
+            "todo_store",
+            "run_canceller",
+            "clarify_channel",
+            "user_messenger",
+            "blob_reader",
+            "hook_emitter",
+            "skill_registry",
+            "embedded_tool_dispatcher",
+            "code_runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolGroup": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "file_system",
+            "search",
+            "network",
+            "shell",
+            "agent",
+            "coordinator",
+            "memory",
+            "clarification",
+            "meta"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolOrigin": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "builtin"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "plugin"
+          ],
+          "properties": {
+            "plugin": {
+              "type": "object",
+              "required": [
+                "plugin_id",
+                "trust"
+              ],
+              "properties": {
+                "plugin_id": {
+                  "$ref": "#/definitions/PluginId"
+                },
+                "trust": {
+                  "$ref": "#/definitions/TrustLevel"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mcp"
+          ],
+          "properties": {
+            "mcp": {
+              "$ref": "#/definitions/McpOrigin"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "skill"
+          ],
+          "properties": {
+            "skill": {
+              "$ref": "#/definitions/SkillOrigin"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ToolProperties": {
+      "type": "object",
+      "required": [
+        "defer_policy",
+        "is_concurrency_safe",
+        "is_destructive",
+        "is_read_only"
+      ],
+      "properties": {
+        "defer_policy": {
+          "$ref": "#/definitions/DeferPolicy"
+        },
+        "is_concurrency_safe": {
+          "type": "boolean"
+        },
+        "is_destructive": {
+          "type": "boolean"
+        },
+        "is_read_only": {
+          "type": "boolean"
+        },
+        "long_running": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LongRunningPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TrustLevel": {
+      "type": "string",
+      "enum": [
+        "admin_trusted",
+        "user_controlled"
+      ]
+    }
+  }
+}

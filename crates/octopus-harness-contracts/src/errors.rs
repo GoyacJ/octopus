@@ -5,7 +5,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{BudgetKind, TenantId};
+use crate::{BudgetKind, BudgetMetric, TenantId, ToolCapability};
 
 pub type Result<T, E = HarnessError> = std::result::Result<T, E>;
 
@@ -60,13 +60,46 @@ define_error_family! {
     SandboxError,
     PermissionError,
     MemoryError,
-    ToolError,
     SessionError,
     EngineError,
     PluginError,
     McpError,
     HookError,
     ContextError,
+}
+
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema, thiserror::Error,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolError {
+    #[error("{0}")]
+    Message(String),
+    #[error("validation: {0}")]
+    Validation(String),
+    #[error("permission denied: {0}")]
+    PermissionDenied(String),
+    #[error("sandbox: {0}")]
+    Sandbox(SandboxError),
+    #[error("timeout")]
+    Timeout,
+    #[error("interrupted")]
+    Interrupted,
+    #[error("result too large: {original} {metric:?} > {limit} {metric:?}")]
+    ResultTooLarge {
+        original: u64,
+        limit: u64,
+        metric: BudgetMetric,
+    },
+    #[error("offload failed: {0}")]
+    OffloadFailed(String),
+    #[error("required capability missing: {0}")]
+    CapabilityMissing(ToolCapability),
+    #[error("dynamic schema resolution failed: {0}")]
+    SchemaResolution(String),
+    #[error("internal: {0}")]
+    Internal(String),
 }
 
 #[non_exhaustive]

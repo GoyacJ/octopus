@@ -100,7 +100,7 @@ docs/architecture/harness/
 
 ## 3. 工程遗产迁移提示
 
-本 SDK 采用**全部重建策略**。现 `crates/octopus-sdk*` 系列（14 个）**全部删除**，见 `crates/harness-sdk.md` §6 与 ADR-008。
+本 SDK 采用**全部重建策略**。现 `crates/octopus-sdk*` 系列（14 个）是最终删除目标；M0~M7 期间冻结保留，供现有业务入口继续运行；M8 业务全切后删除，见 `crates/harness-sdk.md` §6 与 ADR-008。
 
 保留的业务基础设施 crate（不在 SDK 范畴）：`octopus-core / octopus-persistence / octopus-platform / octopus-infra / octopus-server / octopus-desktop / octopus-cli`。
 

@@ -1067,6 +1067,29 @@
       "type": "object",
       "required": [
         "at",
+        "request_id",
+        "type"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "request_id": {
+          "$ref": "#/definitions/TypedUlid"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "permission_awaiting_heartbeat"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "at",
         "credential_key_hash",
         "provider_id",
         "tenant_id",

@@ -2,6 +2,7 @@ use bytes::Bytes;
 use futures::stream::BoxStream;
 use harness_contracts::*;
 use serde_json::json;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[test]
@@ -124,6 +125,46 @@ fn model_error_variants_are_contract_surface() {
         ModelError::AuxModelNotConfigured.to_string(),
         "aux model not configured"
     );
+}
+
+struct TestBlobReaderCap;
+
+impl BlobReaderCap for TestBlobReaderCap {}
+
+#[test]
+fn capability_registry_stores_and_recovers_dyn_capabilities() {
+    let mut registry = CapabilityRegistry::default();
+    let cap: Arc<dyn BlobReaderCap> = Arc::new(TestBlobReaderCap);
+
+    registry.install(ToolCapability::BlobReader, Arc::clone(&cap));
+
+    let recovered = registry
+        .get::<dyn BlobReaderCap>(&ToolCapability::BlobReader)
+        .expect("installed capability is available");
+
+    assert!(Arc::ptr_eq(&cap, &recovered));
+    assert!(registry
+        .get::<dyn BlobReaderCap>(&ToolCapability::SubagentRunner)
+        .is_none());
+}
+
+#[test]
+fn tool_error_variants_cover_m3_tool_surface() {
+    let missing = ToolError::CapabilityMissing(ToolCapability::BlobReader);
+    assert_eq!(
+        missing.to_string(),
+        "required capability missing: blob_reader"
+    );
+
+    let too_large = ToolError::ResultTooLarge {
+        original: 4096,
+        limit: 1024,
+        metric: BudgetMetric::Bytes,
+    };
+    let value = serde_json::to_value(&too_large).unwrap();
+
+    assert_eq!(value["result_too_large"]["original"], 4096);
+    assert_eq!(value["result_too_large"]["metric"], "bytes");
 }
 
 #[test]

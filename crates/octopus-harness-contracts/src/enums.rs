@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -188,6 +189,24 @@ pub enum ToolCapability {
     EmbeddedToolDispatcher,
     CodeRuntime,
     Custom(String),
+}
+
+impl fmt::Display for ToolCapability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SubagentRunner => f.write_str("subagent_runner"),
+            Self::TodoStore => f.write_str("todo_store"),
+            Self::RunCanceller => f.write_str("run_canceller"),
+            Self::ClarifyChannel => f.write_str("clarify_channel"),
+            Self::UserMessenger => f.write_str("user_messenger"),
+            Self::BlobReader => f.write_str("blob_reader"),
+            Self::HookEmitter => f.write_str("hook_emitter"),
+            Self::SkillRegistry => f.write_str("skill_registry"),
+            Self::EmbeddedToolDispatcher => f.write_str("embedded_tool_dispatcher"),
+            Self::CodeRuntime => f.write_str("code_runtime"),
+            Self::Custom(value) => write!(f, "custom:{value}"),
+        }
+    }
 }
 
 #[non_exhaustive]

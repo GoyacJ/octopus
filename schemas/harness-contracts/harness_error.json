@@ -261,6 +261,14 @@
         }
       ]
     },
+    "BudgetMetric": {
+      "type": "string",
+      "enum": [
+        "chars",
+        "bytes",
+        "lines"
+      ]
+    },
     "ContextError": {
       "oneOf": [
         {
@@ -276,6 +284,25 @@
           "additionalProperties": false
         }
       ]
+    },
+    "Duration": {
+      "type": "object",
+      "required": [
+        "nanos",
+        "secs"
+      ],
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
     },
     "EngineError": {
       "oneOf": [
@@ -360,12 +387,132 @@
     "ModelError": {
       "oneOf": [
         {
+          "type": "string",
+          "enum": [
+            "all_credentials_banned",
+            "aux_model_not_configured",
+            "cancelled"
+          ]
+        },
+        {
           "type": "object",
           "required": [
             "message"
           ],
           "properties": {
             "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rate_limited"
+          ],
+          "properties": {
+            "rate_limited": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "context_too_long"
+          ],
+          "properties": {
+            "context_too_long": {
+              "type": "object",
+              "required": [
+                "max",
+                "tokens"
+              ],
+              "properties": {
+                "max": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                },
+                "tokens": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "invalid_request"
+          ],
+          "properties": {
+            "invalid_request": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "auth_expired"
+          ],
+          "properties": {
+            "auth_expired": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "provider_unavailable"
+          ],
+          "properties": {
+            "provider_unavailable": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "unexpected_response"
+          ],
+          "properties": {
+            "unexpected_response": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "deadline_exceeded"
+          ],
+          "properties": {
+            "deadline_exceeded": {
+              "$ref": "#/definitions/Duration"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "io"
+          ],
+          "properties": {
+            "io": {
               "type": "string"
             }
           },
@@ -437,8 +584,46 @@
         }
       ]
     },
+    "ToolCapability": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "subagent_runner",
+            "todo_store",
+            "run_canceller",
+            "clarify_channel",
+            "user_messenger",
+            "blob_reader",
+            "hook_emitter",
+            "skill_registry",
+            "embedded_tool_dispatcher",
+            "code_runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "custom"
+          ],
+          "properties": {
+            "custom": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ToolError": {
       "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "timeout",
+            "interrupted"
+          ]
+        },
         {
           "type": "object",
           "required": [
@@ -446,6 +631,122 @@
           ],
           "properties": {
             "message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "validation"
+          ],
+          "properties": {
+            "validation": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "permission_denied"
+          ],
+          "properties": {
+            "permission_denied": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "sandbox"
+          ],
+          "properties": {
+            "sandbox": {
+              "$ref": "#/definitions/SandboxError"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "result_too_large"
+          ],
+          "properties": {
+            "result_too_large": {
+              "type": "object",
+              "required": [
+                "limit",
+                "metric",
+                "original"
+              ],
+              "properties": {
+                "limit": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                },
+                "metric": {
+                  "$ref": "#/definitions/BudgetMetric"
+                },
+                "original": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "offload_failed"
+          ],
+          "properties": {
+            "offload_failed": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "capability_missing"
+          ],
+          "properties": {
+            "capability_missing": {
+              "$ref": "#/definitions/ToolCapability"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "schema_resolution"
+          ],
+          "properties": {
+            "schema_resolution": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "internal"
+          ],
+          "properties": {
+            "internal": {
               "type": "string"
             }
           },

@@ -2,7 +2,7 @@
 
 > 版本：1.0（首发）
 > 状态：**Active · 执行中**
-> 上次更新：2026-04-25
+> 上次更新：2026-04-26
 > 架构基线：[`docs/architecture/harness/`](../../architecture/harness/) v1.8.1
 > 开发模式：**Vibecoding（Codex AI 主导 + 人类把关）**
 
@@ -102,10 +102,10 @@ docs/plans/harness-sdk/
 
 | 里程碑 | 状态 | 关键交付 |
 |---|---|---|
-| M0 Bootstrap | 待开始 | workspace 共存整理 + 旧 SDK 冻结 + 19 crate 空骨架 |
-| M1 L0 Contracts | 待开始 | `harness-contracts` 全量类型 + Redactor trait + NoopRedactor |
-| M2 L1 Primitives | 待开始 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
-| M3 L2 Core | 待开始 | 最小可运行 SDK 闭环 + dep 预注入 |
+| M0 Bootstrap | 已完成 | workspace 共存整理 + 旧 SDK 冻结 + 19 crate 空骨架 |
+| M1 L0 Contracts | 已完成 | `harness-contracts` 全量类型 + Redactor trait + NoopRedactor |
+| M2 L1 Primitives | 已完成 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
+| M3 L2 Core | 进行中 | M3-P0 入口对齐 → M3-T01 Tool trait + ToolContext |
 | M4 L2 Extensions | 待开始 | tool-search / skill / mcp |
 | M5 L3 Engine | 待开始 | 单 Agent 主循环（DefaultRedactor 替换 Noop）|
 | M6 L3 Agents | 待开始 | Subagent + Team |
