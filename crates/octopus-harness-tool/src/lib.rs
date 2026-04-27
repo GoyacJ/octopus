@@ -23,6 +23,7 @@ pub use builder::*;
 pub use builtin::*;
 pub use context::*;
 pub use error::*;
+pub use harness_permission::PermissionCheck;
 pub use orchestrator::*;
 pub use pool::*;
 pub use registry::*;

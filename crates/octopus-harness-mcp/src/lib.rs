@@ -6,3 +6,19 @@
 //! Status: M0 empty skeleton; concrete implementation lands in M4.
 
 #![forbid(unsafe_code)]
+
+pub mod client;
+pub mod error;
+pub mod jsonrpc;
+pub mod registry;
+pub mod transport;
+pub mod types;
+pub mod wrapper;
+
+pub use client::*;
+pub use error::*;
+pub use jsonrpc::*;
+pub use registry::*;
+pub use transport::*;
+pub use types::*;
+pub use wrapper::*;
