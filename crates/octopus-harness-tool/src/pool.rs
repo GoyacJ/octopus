@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use harness_contracts::{
     DeferPolicy, ModelProvider, ProviderRestriction, ToolDescriptor, ToolError, ToolGroup,
-    ToolOrigin,
+    ToolOrigin, ToolSearchMode,
 };
 
 use crate::{SchemaResolverContext, Tool, ToolRegistrySnapshot};
@@ -21,25 +21,6 @@ impl Default for ToolPoolModelProfile {
             provider: ModelProvider("unknown".to_owned()),
             supports_tool_reference: false,
             max_context_tokens: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ToolSearchMode {
-    Always,
-    Auto {
-        ratio: f32,
-        min_absolute_tokens: u32,
-    },
-    Disabled,
-}
-
-impl Default for ToolSearchMode {
-    fn default() -> Self {
-        Self::Auto {
-            ratio: 0.10,
-            min_absolute_tokens: 4_000,
         }
     }
 }
@@ -210,6 +191,7 @@ fn partition_for(
             ToolSearchMode::Disabled | ToolSearchMode::Auto { .. } => {
                 Ok(ToolPoolPartition::AlwaysLoaded)
             }
+            _ => Ok(ToolPoolPartition::AlwaysLoaded),
         },
         DeferPolicy::ForceDefer => match search_mode {
             ToolSearchMode::Disabled => Err(ToolError::SchemaResolution(format!(
@@ -217,6 +199,10 @@ fn partition_for(
                 descriptor.name
             ))),
             ToolSearchMode::Always | ToolSearchMode::Auto { .. } => Ok(ToolPoolPartition::Deferred),
+            _ => Err(ToolError::SchemaResolution(format!(
+                "deferral required but tool search mode is unsupported: {}",
+                descriptor.name
+            ))),
         },
         _ => Ok(ToolPoolPartition::AlwaysLoaded),
     }

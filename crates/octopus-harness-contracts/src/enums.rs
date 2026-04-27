@@ -102,6 +102,40 @@ pub enum DeferPolicy {
 }
 
 #[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSearchMode {
+    Always,
+    Auto {
+        ratio: f32,
+        min_absolute_tokens: u32,
+    },
+    Disabled,
+}
+
+impl ToolSearchMode {
+    #[must_use]
+    pub fn min_absolute_tokens(&self) -> u32 {
+        match self {
+            Self::Auto {
+                min_absolute_tokens,
+                ..
+            } => *min_absolute_tokens,
+            Self::Always | Self::Disabled => 0,
+        }
+    }
+}
+
+impl Default for ToolSearchMode {
+    fn default() -> Self {
+        Self::Auto {
+            ratio: 0.10,
+            min_absolute_tokens: 4_000,
+        }
+    }
+}
+
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolSearchQueryKind {
