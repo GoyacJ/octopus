@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -379,7 +379,55 @@ fn tool_search_descriptor() -> ToolDescriptor {
         output_schema: Some(json!({
             "type": "object",
             "required": ["matches", "query", "total_deferred_tools", "materialization"],
-            "properties": BTreeMap::<String, Value>::new()
+            "properties": {
+                "matches": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "query": { "type": "string" },
+                "total_deferred_tools": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "pending_mcp_servers": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "materialization": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "required": ["kind", "tool_names"],
+                            "properties": {
+                                "kind": { "const": "tool_reference" },
+                                "tool_names": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                }
+                            }
+                        },
+                        {
+                            "type": "object",
+                            "required": ["kind", "tool_names", "cache_impact"],
+                            "properties": {
+                                "kind": { "const": "inline_reinjected" },
+                                "tool_names": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                },
+                                "cache_impact": { "type": "object" }
+                            }
+                        },
+                        {
+                            "type": "object",
+                            "required": ["kind"],
+                            "properties": {
+                                "kind": { "const": "no_match" }
+                            }
+                        }
+                    ]
+                }
+            }
         })),
         dynamic_schema: false,
         properties: ToolProperties {

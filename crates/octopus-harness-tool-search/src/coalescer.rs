@@ -10,7 +10,6 @@ use crate::ReloadHandle;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct CoalesceKey {
     session_id: SessionId,
-    run_id: RunId,
 }
 
 pub struct MaterializationCoalescer {
@@ -43,11 +42,11 @@ impl MaterializationCoalescer {
     pub async fn submit(
         self: &Arc<Self>,
         session_id: SessionId,
-        run_id: RunId,
+        _run_id: RunId,
         tools: Vec<ToolName>,
         handle: Arc<dyn ReloadHandle>,
     ) -> Result<CacheImpact, HarnessError> {
-        let key = CoalesceKey { session_id, run_id };
+        let key = CoalesceKey { session_id };
         let (tx, rx) = oneshot::channel();
         let should_flush_now = {
             let mut state = self.inner.lock().await;

@@ -29,6 +29,37 @@ async fn descriptor_is_always_loaded_meta_tool() {
     assert_eq!(descriptor.trust_level, TrustLevel::AdminTrusted);
     assert_eq!(descriptor.properties.defer_policy, DeferPolicy::AlwaysLoad);
     assert!(descriptor.required_capabilities.is_empty());
+
+    let output_schema = descriptor.output_schema.as_ref().unwrap();
+    let properties = output_schema["properties"].as_object().unwrap();
+    for field in [
+        "matches",
+        "query",
+        "total_deferred_tools",
+        "pending_mcp_servers",
+        "materialization",
+    ] {
+        assert!(properties.contains_key(field), "missing {field}");
+    }
+    let variants = output_schema["properties"]["materialization"]["oneOf"]
+        .as_array()
+        .unwrap();
+    let kinds = variants
+        .iter()
+        .filter_map(|variant| {
+            variant["properties"]["kind"]["const"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        kinds,
+        BTreeSet::from([
+            "tool_reference".to_owned(),
+            "inline_reinjected".to_owned(),
+            "no_match".to_owned()
+        ])
+    );
 }
 
 #[tokio::test]

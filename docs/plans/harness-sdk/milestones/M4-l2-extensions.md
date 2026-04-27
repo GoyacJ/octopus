@@ -126,14 +126,15 @@
 
 | 字段 | 值 |
 |---|---|
+| **状态** | 已完成 |
 | **依赖** | M4-T05 + M5 完成 |
 | **预期 diff** | < 100 行 |
-| **文件锁声明** | 独占修改 `crates/octopus-harness-session/src/options.rs` + `src/projection.rs`；冲突卡：M4-T08 / M4-T18 / 任何修改 session crate 的 PR |
+| **文件锁声明** | 独占修改 `crates/octopus-harness-session/src/session.rs` + `src/projection.rs`；冲突卡：M4-T08 / M4-T18 / 任何修改 session crate 的 PR |
 
 **预期产物**：
-- `octopus-harness-session/src/options.rs`：增加 `pub tool_search: ToolSearchMode` 字段
+- `octopus-harness-session/src/session.rs`：增加 `pub tool_search: ToolSearchMode` 字段
 - `octopus-harness-session/src/projection.rs`：增加 `pub discovered_tools: DiscoveredToolProjection`
-- `tests/session_with_tool_search.rs`：联接 M4 tool-search 输出
+- `tests/lifecycle.rs` / `tests/reload.rs`：覆盖创建时 tool_search 配置与 reload 拒绝
 
 **关键不变量**：
 - 本卡是 single-writer 卡，必须等 M4-T05 / M5 全部合并后才能派发，避免 session crate 冲突

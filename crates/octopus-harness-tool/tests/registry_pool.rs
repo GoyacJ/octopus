@@ -357,6 +357,77 @@ async fn pool_resolves_dynamic_schema_once_during_assembly() {
     );
 }
 
+#[tokio::test]
+async fn auto_mode_defers_auto_defer_tools_when_threshold_is_met_without_tool_reference() {
+    let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
+        .with_tool(Box::new(tool_with_input_schema(
+            "large_auto",
+            DeferPolicy::AutoDefer,
+            json!({
+                "type": "object",
+                "description": "x".repeat(30_000)
+            }),
+        )))
+        .build()
+        .unwrap();
+
+    let pool = ToolPool::assemble(
+        &registry.snapshot(),
+        &ToolPoolFilter::default(),
+        &ToolSearchMode::Auto {
+            ratio: 0.10,
+            min_absolute_tokens: 100,
+        },
+        &ToolPoolModelProfile {
+            provider: ModelProvider("local".to_owned()),
+            supports_tool_reference: false,
+            max_context_tokens: Some(1_000),
+        },
+        &schema_ctx(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(names(pool.always_loaded()), Vec::<&str>::new());
+    assert_eq!(names(pool.deferred()), ["large_auto"]);
+}
+
+#[tokio::test]
+async fn auto_mode_keeps_auto_defer_tools_loaded_when_threshold_is_not_met() {
+    let registry = ToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Empty)
+        .with_tool(Box::new(tool_with(
+            "small_auto",
+            DeferPolicy::AutoDefer,
+            ToolGroup::FileSystem,
+            ProviderRestriction::All,
+            false,
+        )))
+        .build()
+        .unwrap();
+
+    let pool = ToolPool::assemble(
+        &registry.snapshot(),
+        &ToolPoolFilter::default(),
+        &ToolSearchMode::Auto {
+            ratio: 0.10,
+            min_absolute_tokens: 4_000,
+        },
+        &ToolPoolModelProfile {
+            provider: ModelProvider("anthropic".to_owned()),
+            supports_tool_reference: true,
+            max_context_tokens: Some(200_000),
+        },
+        &schema_ctx(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(names(pool.always_loaded()), ["small_auto"]);
+    assert_eq!(names(pool.deferred()), Vec::<&str>::new());
+}
+
 #[test]
 fn registry_rejects_user_controlled_tools_requesting_admin_only_capability() {
     let registry = ToolRegistry::builder()
@@ -469,6 +540,24 @@ fn dynamic_tool(resolve_count: Arc<AtomicUsize>) -> TestTool {
         ),
         resolved_schema: Some(json!({ "type": "object", "title": "resolved" })),
         resolve_count: Some(resolve_count),
+    }
+}
+
+fn tool_with_input_schema(name: &str, defer_policy: DeferPolicy, input_schema: Value) -> TestTool {
+    let mut descriptor = descriptor(
+        name,
+        defer_policy,
+        ToolGroup::FileSystem,
+        ProviderRestriction::All,
+        ToolOrigin::Builtin,
+        TrustLevel::AdminTrusted,
+        false,
+    );
+    descriptor.input_schema = input_schema;
+    TestTool {
+        descriptor,
+        resolved_schema: None,
+        resolve_count: None,
     }
 }
 

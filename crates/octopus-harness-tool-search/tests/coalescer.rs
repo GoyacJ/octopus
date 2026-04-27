@@ -44,14 +44,49 @@ async fn coalesces_same_session_and_run_until_window_expires() {
 }
 
 #[tokio::test]
-async fn coalescer_isolates_different_runs() {
-    let coalescer = MaterializationCoalescer::new(Duration::ZERO, 32);
+async fn coalescer_coalesces_different_runs_in_same_session() {
+    let coalescer = MaterializationCoalescer::new(Duration::from_millis(20), 32);
     let handle = Arc::new(RecordingReload::default());
     let session_id = SessionId::new();
 
+    let first = {
+        let coalescer = coalescer.clone();
+        let handle = handle.clone();
+        tokio::spawn(async move {
+            coalescer
+                .submit(session_id, RunId::new(), vec!["Read".to_owned()], handle)
+                .await
+                .unwrap()
+        })
+    };
+    let second = {
+        let coalescer = coalescer.clone();
+        let handle = handle.clone();
+        tokio::spawn(async move {
+            coalescer
+                .submit(session_id, RunId::new(), vec!["Write".to_owned()], handle)
+                .await
+                .unwrap()
+        })
+    };
+
+    first.await.unwrap();
+    second.await.unwrap();
+
+    assert_eq!(
+        handle.calls().await,
+        vec![vec!["Read".to_owned(), "Write".to_owned()]]
+    );
+}
+
+#[tokio::test]
+async fn coalescer_isolates_different_sessions() {
+    let coalescer = MaterializationCoalescer::new(Duration::ZERO, 32);
+    let handle = Arc::new(RecordingReload::default());
+
     coalescer
         .submit(
-            session_id,
+            SessionId::new(),
             RunId::new(),
             vec!["Read".to_owned()],
             handle.clone(),
@@ -60,7 +95,7 @@ async fn coalescer_isolates_different_runs() {
         .unwrap();
     coalescer
         .submit(
-            session_id,
+            SessionId::new(),
             RunId::new(),
             vec!["Write".to_owned()],
             handle.clone(),

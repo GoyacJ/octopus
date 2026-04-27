@@ -65,6 +65,7 @@ impl ToolPool {
         schema_resolver_ctx: &SchemaResolverContext,
     ) -> Result<Self, ToolError> {
         let mut pool = Self::default();
+        let mut prepared = Vec::new();
 
         for (name, tool) in snapshot.iter_sorted() {
             let Some(snapshot_descriptor) = snapshot.descriptor(name) else {
@@ -80,13 +81,26 @@ impl ToolPool {
                 descriptor.input_schema = tool.resolve_schema(schema_resolver_ctx).await?;
             }
 
-            let partition = partition_for(&descriptor, search_mode, model_profile)?;
+            prepared.push(PreparedTool {
+                tool: Arc::clone(tool),
+                descriptor,
+            });
+        }
+
+        let auto_defer_enabled = auto_defer_enabled(
+            search_mode,
+            model_profile,
+            prepared.iter().map(|entry| &entry.descriptor),
+        );
+
+        for PreparedTool { tool, descriptor } in prepared {
+            let partition = partition_for(&descriptor, search_mode, auto_defer_enabled)?;
             pool.descriptors
                 .insert(descriptor.name.clone(), Arc::new(descriptor));
 
             match partition {
-                ToolPoolPartition::AlwaysLoaded => pool.always_loaded.push(Arc::clone(tool)),
-                ToolPoolPartition::Deferred => pool.deferred.push(Arc::clone(tool)),
+                ToolPoolPartition::AlwaysLoaded => pool.always_loaded.push(tool),
+                ToolPoolPartition::Deferred => pool.deferred.push(tool),
             }
         }
 
@@ -135,6 +149,11 @@ enum ToolPoolPartition {
     Deferred,
 }
 
+struct PreparedTool {
+    tool: Arc<dyn Tool>,
+    descriptor: ToolDescriptor,
+}
+
 fn filter_allows(
     filter: &ToolPoolFilter,
     descriptor: &ToolDescriptor,
@@ -180,14 +199,12 @@ fn provider_allows(restriction: &ProviderRestriction, provider: &ModelProvider) 
 fn partition_for(
     descriptor: &ToolDescriptor,
     search_mode: &ToolSearchMode,
-    model_profile: &ToolPoolModelProfile,
+    auto_defer_enabled: bool,
 ) -> Result<ToolPoolPartition, ToolError> {
     match descriptor.properties.defer_policy {
         DeferPolicy::AutoDefer => match search_mode {
             ToolSearchMode::Always => Ok(ToolPoolPartition::Deferred),
-            ToolSearchMode::Auto { .. } if model_profile.supports_tool_reference => {
-                Ok(ToolPoolPartition::Deferred)
-            }
+            ToolSearchMode::Auto { .. } if auto_defer_enabled => Ok(ToolPoolPartition::Deferred),
             ToolSearchMode::Disabled | ToolSearchMode::Auto { .. } => {
                 Ok(ToolPoolPartition::AlwaysLoaded)
             }
@@ -206,4 +223,45 @@ fn partition_for(
         },
         _ => Ok(ToolPoolPartition::AlwaysLoaded),
     }
+}
+
+fn auto_defer_enabled<'a>(
+    search_mode: &ToolSearchMode,
+    model_profile: &ToolPoolModelProfile,
+    descriptors: impl Iterator<Item = &'a ToolDescriptor>,
+) -> bool {
+    match search_mode {
+        ToolSearchMode::Always => true,
+        ToolSearchMode::Disabled => false,
+        ToolSearchMode::Auto {
+            ratio,
+            min_absolute_tokens,
+        } => {
+            let Some(max_context_tokens) = model_profile.max_context_tokens else {
+                return false;
+            };
+            let schema_chars: usize = descriptors
+                .filter(|descriptor| descriptor.properties.defer_policy == DeferPolicy::AutoDefer)
+                .map(auto_defer_schema_chars)
+                .sum();
+            let estimated_tokens = (schema_chars as f64 / 2.5).ceil() as u64;
+            let threshold_tokens =
+                (f64::from(max_context_tokens) * f64::from(*ratio)).ceil() as u64;
+            estimated_tokens >= threshold_tokens.max(u64::from(*min_absolute_tokens))
+        }
+        _ => false,
+    }
+}
+
+fn auto_defer_schema_chars(descriptor: &ToolDescriptor) -> usize {
+    descriptor.name.len()
+        + descriptor.display_name.len()
+        + descriptor.description.len()
+        + descriptor.search_hint.as_ref().map_or(0, String::len)
+        + serde_json::to_string(&descriptor.input_schema).map_or(0, |schema| schema.len())
+        + descriptor
+            .output_schema
+            .as_ref()
+            .and_then(|schema| serde_json::to_string(schema).ok())
+            .map_or(0, |schema| schema.len())
 }
