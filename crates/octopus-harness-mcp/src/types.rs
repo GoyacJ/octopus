@@ -333,7 +333,7 @@ pub struct McpToolDescriptor {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct McpToolResult {
     pub content: Vec<McpContent>,
-    #[serde(rename = "isError")]
+    #[serde(rename = "isError", default)]
     pub is_error: bool,
 }
 

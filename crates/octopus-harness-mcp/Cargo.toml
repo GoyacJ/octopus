@@ -14,9 +14,9 @@ workspace = true
 
 [features]
 default = []
-stdio = []
-http = []
-websocket = []
+stdio = ["tokio/io-util", "tokio/process"]
+http = ["dep:reqwest"]
+websocket = ["dep:tokio-tungstenite", "tokio/net"]
 sse = []
 in-process = []
 server-adapter = []
@@ -31,6 +31,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+reqwest = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
 
 [dev-dependencies]
 octopus-harness-permission = { path = "../octopus-harness-permission" }
+wiremock = "0.6"

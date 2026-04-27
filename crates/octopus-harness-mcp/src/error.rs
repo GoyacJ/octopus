@@ -5,6 +5,8 @@ use harness_tool::RegistrationError;
 pub enum McpError {
     #[error("transport: {0}")]
     Transport(String),
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("protocol: {0}")]
     Protocol(String),
     #[error("invalid response: {0}")]
