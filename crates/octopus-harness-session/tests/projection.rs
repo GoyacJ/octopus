@@ -6,7 +6,7 @@ use harness_contracts::{
     CompactionAppliedEvent, DecidedBy, Decision, DecisionScope, DeferPolicy, DeferredToolHint,
     EndReason, Event, EventId, MessageContent, MessageId, MessageMetadata, NoopRedactor,
     PermissionRequestedEvent, PermissionResolvedEvent, PermissionSubject, RequestId, RunEndedEvent,
-    RunId, SessionCreatedEvent, SessionId, Severity, StopReason, TenantId,
+    RunId, SessionCreatedEvent, SessionEndedEvent, SessionId, Severity, StopReason, TenantId,
     ToolDeferredPoolChangedEvent, ToolPoolChangeSource, ToolProperties, ToolResult,
     ToolSchemaMaterializedEvent, ToolUseCompletedEvent, ToolUseId, ToolUseRequestedEvent,
     UsageSnapshot,
@@ -120,7 +120,31 @@ async fn projection_replay_is_idempotent() {
     assert_eq!(first.permission_log.len(), 1);
     assert_eq!(first.allowlist.len(), 1);
     assert_eq!(first.usage.output_tokens, 7);
-    assert_eq!(first.end_reason, Some(EndReason::Completed));
+    assert_eq!(first.end_reason, None);
+}
+
+#[tokio::test]
+async fn session_ended_sets_projection_end_reason() {
+    let tenant = TenantId::SINGLE;
+    let session = SessionId::new();
+    let envelopes = envelopes(
+        tenant,
+        session,
+        vec![Event::SessionEnded(SessionEndedEvent {
+            session_id: session,
+            tenant_id: tenant,
+            reason: EndReason::Completed,
+            final_usage: usage(3, 4),
+            at: harness_contracts::now(),
+        })],
+    )
+    .await;
+
+    let projection = SessionProjection::replay(envelopes).unwrap();
+
+    assert_eq!(projection.end_reason, Some(EndReason::Completed));
+    assert_eq!(projection.usage.input_tokens, 3);
+    assert_eq!(projection.usage.output_tokens, 4);
 }
 
 #[tokio::test]

@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use harness_context::{
-    CompactHint, ContextBuffer, ContextEngine, ContextOutcome, ContextProvider, ContextSessionView,
+    BreakpointStrategy, CompactHint, ContextBuffer, ContextEngine, ContextOutcome, ContextProvider,
+    ContextSessionView, PromptCachePolicy,
 };
 use harness_contracts::{
     ContextError, ContextStageId, Message, MessageId, MessagePart, MessageRole, SessionId,
     ToolDescriptor, TurnInput,
 };
+use harness_model::{AnthropicCacheMode, BreakpointReason, PromptCacheStyle};
 use serde_json::json;
 use tokio::sync::Mutex;
 
@@ -193,6 +195,177 @@ async fn assemble_uses_read_only_session_projection() {
     assert!(prompt.cache_breakpoints.is_empty());
     assert!(prompt.tokens_estimate > 0);
     assert!(prompt.budget_utilization >= 0.0);
+}
+
+#[tokio::test]
+async fn system_only_cache_policy_emits_no_message_breakpoints() {
+    let engine = ContextEngine::builder()
+        .with_cache_policy(PromptCachePolicy {
+            style: PromptCacheStyle::Anthropic {
+                mode: AnthropicCacheMode::SystemAnd3,
+            },
+            max_breakpoints: 4,
+            breakpoint_strategy: BreakpointStrategy::SystemOnly,
+        })
+        .build()
+        .unwrap();
+    let session = TestSession {
+        system: Some("system header".to_owned()),
+        history: vec![message(MessageRole::User, "history")],
+        tools: Vec::new(),
+    };
+
+    let prompt = engine
+        .assemble(
+            &session,
+            &TurnInput {
+                message: message(MessageRole::User, "next"),
+                metadata: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(prompt.cache_breakpoints.is_empty());
+}
+
+#[tokio::test]
+async fn system_and3_cache_policy_selects_recent_three_non_system_messages() {
+    let engine = ContextEngine::builder()
+        .with_cache_policy(PromptCachePolicy {
+            style: PromptCacheStyle::Anthropic {
+                mode: AnthropicCacheMode::SystemAnd3,
+            },
+            max_breakpoints: 4,
+            breakpoint_strategy: BreakpointStrategy::SystemAnd3,
+        })
+        .build()
+        .unwrap();
+    let history = vec![
+        message(
+            MessageRole::System,
+            "do not use this as a message breakpoint",
+        ),
+        message(MessageRole::User, "one"),
+        message(MessageRole::Assistant, "two"),
+        message(MessageRole::User, "three"),
+        message(MessageRole::Assistant, "four"),
+    ];
+    let current = message(MessageRole::User, "current");
+    let expected = vec![history[3].id, history[4].id, current.id];
+    let session = TestSession {
+        system: Some("system header".to_owned()),
+        history,
+        tools: Vec::new(),
+    };
+
+    let prompt = engine
+        .assemble(
+            &session,
+            &TurnInput {
+                message: current,
+                metadata: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+
+    let ids = prompt
+        .cache_breakpoints
+        .iter()
+        .map(|breakpoint| breakpoint.after_message_id)
+        .collect::<Vec<_>>();
+    assert_eq!(ids, expected);
+    assert!(prompt
+        .cache_breakpoints
+        .iter()
+        .all(|breakpoint| breakpoint.reason == BreakpointReason::RecentMessage));
+}
+
+#[tokio::test]
+async fn every_n_cache_policy_is_stable_deduped_and_capped() {
+    let engine = ContextEngine::builder()
+        .with_cache_policy(PromptCachePolicy {
+            style: PromptCacheStyle::Anthropic {
+                mode: AnthropicCacheMode::SystemAnd3,
+            },
+            max_breakpoints: 2,
+            breakpoint_strategy: BreakpointStrategy::EveryN(2),
+        })
+        .build()
+        .unwrap();
+    let history = vec![
+        message(MessageRole::User, "one"),
+        message(MessageRole::Assistant, "two"),
+        message(MessageRole::System, "system"),
+        message(MessageRole::User, "three"),
+        message(MessageRole::Assistant, "four"),
+    ];
+    let expected = vec![history[1].id, history[4].id];
+    let session = TestSession {
+        system: None,
+        history,
+        tools: Vec::new(),
+    };
+
+    let prompt = engine
+        .assemble(
+            &session,
+            &TurnInput {
+                message: message(MessageRole::User, "current"),
+                metadata: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+
+    let ids = prompt
+        .cache_breakpoints
+        .iter()
+        .map(|breakpoint| breakpoint.after_message_id)
+        .collect::<Vec<_>>();
+    assert_eq!(ids, expected);
+}
+
+#[tokio::test]
+async fn repeated_assemble_produces_identical_cache_breakpoints() {
+    let engine = ContextEngine::builder()
+        .with_cache_policy(PromptCachePolicy {
+            style: PromptCacheStyle::Anthropic {
+                mode: AnthropicCacheMode::SystemAnd3,
+            },
+            max_breakpoints: 2,
+            breakpoint_strategy: BreakpointStrategy::EveryN(2),
+        })
+        .build()
+        .unwrap();
+    let session = TestSession {
+        system: None,
+        history: vec![
+            message(MessageRole::User, "one"),
+            message(MessageRole::Assistant, "two"),
+            message(MessageRole::User, "three"),
+            message(MessageRole::Assistant, "four"),
+        ],
+        tools: Vec::new(),
+    };
+    let mut breakpoints = Vec::new();
+
+    for turn in 0..5 {
+        let prompt = engine
+            .assemble(
+                &session,
+                &TurnInput {
+                    message: message(MessageRole::User, &format!("current-{turn}")),
+                    metadata: json!({ "turn": turn }),
+                },
+            )
+            .await
+            .unwrap();
+        breakpoints.push(prompt.cache_breakpoints);
+    }
+
+    assert!(breakpoints.windows(2).all(|pair| pair[0] == pair[1]));
 }
 
 #[test]

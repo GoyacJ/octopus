@@ -79,7 +79,9 @@ digraph octopus_harness {
   session -> journal;
   session -> mcp;
   session -> memory;
+  session -> model;
   session -> permission;
+  session -> sandbox;
   session -> skill;
   session -> tool;
   skill -> contracts;

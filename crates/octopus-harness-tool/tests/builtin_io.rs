@@ -204,6 +204,7 @@ fn tool_ctx(cap_registry: CapabilityRegistry) -> ToolContext {
         run_id: harness_contracts::RunId::new(),
         session_id: harness_contracts::SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        workspace_root: std::env::temp_dir(),
         sandbox: None,
         permission_broker: Arc::new(AllowBroker),
         cap_registry: Arc::new(cap_registry),

@@ -88,7 +88,8 @@ async fn destructive_delta_forks_new_session_with_full_reset() {
     };
     assert_ne!(parent, child);
     assert_eq!(outcome.cache_impact, CacheImpact::FullReset);
-    assert!(outcome.new_session.unwrap().run_turn("next").await.is_ok());
+    let child_session = outcome.new_session.unwrap();
+    assert_eq!(child_session.projection().await.session_id, child);
 }
 
 #[tokio::test]

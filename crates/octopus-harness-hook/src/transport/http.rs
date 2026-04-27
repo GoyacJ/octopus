@@ -1,4 +1,5 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -107,14 +108,20 @@ pub struct MtlsConfig {
 #[derive(Clone)]
 pub struct HttpHookTransport {
     spec: HookHttpSpec,
-    client: Client,
+    resolver: Arc<dyn HookHttpDnsResolver>,
 }
 
 impl HttpHookTransport {
     pub fn new(spec: HookHttpSpec) -> Result<Self, HookError> {
+        Self::with_resolver(spec, Arc::new(TokioHookHttpDnsResolver))
+    }
+
+    pub fn with_resolver(
+        spec: HookHttpSpec,
+        resolver: Arc<dyn HookHttpDnsResolver>,
+    ) -> Result<Self, HookError> {
         validate_spec(&spec)?;
-        let client = build_client(&spec)?;
-        Ok(Self { spec, client })
+        Ok(Self { spec, resolver })
     }
 
     pub fn spec(&self) -> &HookHttpSpec {
@@ -133,11 +140,11 @@ impl HttpHookTransport {
 #[async_trait]
 impl HookTransport for HttpHookTransport {
     async fn invoke(&self, payload: HookPayload) -> HookOutput {
-        enforce_url_security(&self.spec)?;
+        let resolved = enforce_url_security(&self.spec, self.resolver.as_ref()).await?;
+        let client = build_client(&self.spec, Some((&resolved.host, &resolved.addrs)))?;
 
         let request = encode_request(&payload, self.spec.protocol_version);
-        let mut builder = self
-            .client
+        let mut builder = client
             .post(self.spec.url.clone())
             .timeout(self.spec.timeout)
             .json(&request);
@@ -206,6 +213,11 @@ fn validate_spec(spec: &HookHttpSpec) -> Result<(), HookError> {
             "user-controlled http hooks require allowlist and strict ssrf guard".to_owned(),
         ));
     }
+    if spec.security.ssrf_guard.is_strict() && spec.security.max_redirects > 0 {
+        return Err(HookError::Unauthorized(
+            "http hook redirects require per-hop SSRF validation and are disabled in M3".to_owned(),
+        ));
+    }
     if let Some(mtls) = &spec.security.mtls {
         reqwest::Identity::from_pem(&mtls.identity_pem).map_err(|error| HookError::Transport {
             kind: TransportFailureKind::NetworkError,
@@ -215,7 +227,10 @@ fn validate_spec(spec: &HookHttpSpec) -> Result<(), HookError> {
     Ok(())
 }
 
-fn build_client(spec: &HookHttpSpec) -> Result<Client, HookError> {
+fn build_client(
+    spec: &HookHttpSpec,
+    resolved: Option<(&str, &[SocketAddr])>,
+) -> Result<Client, HookError> {
     let redirect_policy = if spec.security.max_redirects == 0 {
         redirect::Policy::none()
     } else {
@@ -237,10 +252,17 @@ fn build_client(spec: &HookHttpSpec) -> Result<Client, HookError> {
         builder = builder.identity(identity);
     }
 
+    if let Some((host, addrs)) = resolved {
+        builder = builder.resolve_to_addrs(host, addrs);
+    }
+
     builder.build().map_err(network_error)
 }
 
-fn enforce_url_security(spec: &HookHttpSpec) -> Result<(), HookError> {
+async fn enforce_url_security(
+    spec: &HookHttpSpec,
+    resolver: &dyn HookHttpDnsResolver,
+) -> Result<ResolvedHookTarget, HookError> {
     let host = spec.url.host_str().ok_or_else(|| HookError::Transport {
         kind: TransportFailureKind::AllowlistMiss,
         detail: "hook http url has no host".to_owned(),
@@ -260,7 +282,59 @@ fn enforce_url_security(spec: &HookHttpSpec) -> Result<(), HookError> {
         });
     }
 
-    Ok(())
+    let port = spec
+        .url
+        .port_or_known_default()
+        .ok_or_else(|| HookError::Transport {
+            kind: TransportFailureKind::NetworkError,
+            detail: "hook http url has no known port".to_owned(),
+        })?;
+    let addrs = resolver.resolve(host, port).await?;
+    if addrs.is_empty() {
+        return Err(HookError::Transport {
+            kind: TransportFailureKind::NetworkError,
+            detail: format!("host {host} resolved to no addresses"),
+        });
+    }
+    for addr in &addrs {
+        if spec.security.ssrf_guard.blocks_ip(addr.ip()) {
+            return Err(HookError::Transport {
+                kind: TransportFailureKind::SsrfBlocked,
+                detail: format!("host {host} resolved to blocked address {}", addr.ip()),
+            });
+        }
+    }
+
+    Ok(ResolvedHookTarget {
+        host: host.to_owned(),
+        addrs,
+    })
+}
+
+struct ResolvedHookTarget {
+    host: String,
+    addrs: Vec<SocketAddr>,
+}
+
+#[async_trait]
+pub trait HookHttpDnsResolver: Send + Sync + 'static {
+    async fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, HookError>;
+}
+
+#[derive(Debug, Default)]
+pub struct TokioHookHttpDnsResolver;
+
+#[async_trait]
+impl HookHttpDnsResolver for TokioHookHttpDnsResolver {
+    async fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, HookError> {
+        tokio::net::lookup_host((host, port))
+            .await
+            .map(|addrs| addrs.collect())
+            .map_err(|error| HookError::Transport {
+                kind: TransportFailureKind::NetworkError,
+                detail: format!("dns resolution failed for {host}: {error}"),
+            })
+    }
 }
 
 impl SsrfGuardPolicy {
@@ -276,6 +350,10 @@ impl SsrfGuardPolicy {
             return false;
         };
 
+        self.blocks_ip(ip)
+    }
+
+    fn blocks_ip(&self, ip: IpAddr) -> bool {
         (self.deny_loopback && ip.is_loopback())
             || (self.deny_private && is_private(ip))
             || (self.deny_link_local && is_link_local(ip))

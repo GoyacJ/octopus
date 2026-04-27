@@ -107,7 +107,6 @@ impl Projection for SessionProjection {
                 add_usage(&mut state.usage, &event.usage);
             }
             Event::RunEnded(event) => {
-                state.end_reason = Some(event.reason.clone());
                 if let Some(usage) = &event.usage {
                     add_usage(&mut state.usage, usage);
                 }

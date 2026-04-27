@@ -1,7 +1,7 @@
 #![cfg(feature = "http")]
 
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::path::Path;
 use std::sync::Arc;
 use std::thread;
@@ -12,10 +12,10 @@ use harness_contracts::{
     TenantId, ToolUseId, TransportFailureKind, TrustLevel,
 };
 use harness_hook::{
-    HookContext, HookDispatcher, HookEvent, HookFailureCause, HookHttpAuth, HookHttpSecurityPolicy,
-    HookHttpSpec, HookMessageView, HookOutcome, HookPayload, HookProtocolVersion, HookRegistry,
-    HookSessionView, HookTransport, HostAllowlist, HttpHookTransport, MtlsConfig, ReplayMode,
-    SsrfGuardPolicy, ToolDescriptorView,
+    HookContext, HookDispatcher, HookEvent, HookFailureCause, HookHttpAuth, HookHttpDnsResolver,
+    HookHttpSecurityPolicy, HookHttpSpec, HookMessageView, HookOutcome, HookPayload,
+    HookProtocolVersion, HookRegistry, HookSessionView, HookTransport, HostAllowlist,
+    HttpHookTransport, MtlsConfig, ReplayMode, SsrfGuardPolicy, ToolDescriptorView,
 };
 use parking_lot::Mutex;
 use serde_json::json;
@@ -201,6 +201,114 @@ fn http_rejects_user_controlled_without_required_security_and_invalid_mtls() {
     assert!(HttpHookTransport::new(invalid_mtls).is_err());
 }
 
+#[tokio::test]
+async fn http_strict_ssrf_blocks_hostname_resolving_to_loopback() {
+    let transport = HttpHookTransport::with_resolver(
+        http_spec(
+            "http-dns-loopback",
+            reqwest::Url::parse("http://allowed.example/hook").unwrap(),
+            strict_security(["allowed.example"]),
+        ),
+        Arc::new(StaticResolver::new([addr("127.0.0.1", 80)])),
+    )
+    .unwrap();
+
+    let error = transport
+        .invoke(HookPayload {
+            event: sample_pre_tool_use(),
+            ctx: sample_context(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        harness_contracts::HookError::Transport {
+            kind: TransportFailureKind::SsrfBlocked,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn http_strict_ssrf_blocks_private_link_local_and_metadata_dns_results() {
+    for ip in ["10.0.0.5", "169.254.1.1", "169.254.169.254"] {
+        let transport = HttpHookTransport::with_resolver(
+            http_spec(
+                "http-dns-private",
+                reqwest::Url::parse("http://allowed.example/hook").unwrap(),
+                strict_security(["allowed.example"]),
+            ),
+            Arc::new(StaticResolver::new([addr(ip, 80)])),
+        )
+        .unwrap();
+
+        let error = transport
+            .invoke(HookPayload {
+                event: sample_pre_tool_use(),
+                ctx: sample_context(),
+            })
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            harness_contracts::HookError::Transport {
+                kind: TransportFailureKind::SsrfBlocked,
+                ..
+            }
+        ));
+    }
+}
+
+#[tokio::test]
+async fn http_allowlisted_public_dns_result_reaches_network_layer() {
+    let mut spec = http_spec(
+        "http-dns-public",
+        reqwest::Url::parse("http://allowed.example/hook").unwrap(),
+        strict_security(["allowed.example"]),
+    );
+    spec.timeout = Duration::from_millis(25);
+    let transport = HttpHookTransport::with_resolver(
+        spec,
+        Arc::new(StaticResolver::new([addr("93.184.216.34", 80)])),
+    )
+    .unwrap();
+
+    let error = transport
+        .invoke(HookPayload {
+            event: sample_pre_tool_use(),
+            ctx: sample_context(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        harness_contracts::HookError::Transport {
+            kind: TransportFailureKind::NetworkError,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn http_strict_ssrf_rejects_redirects_until_per_hop_validation_exists() {
+    let mut security = strict_security(["allowed.example"]);
+    security.max_redirects = 1;
+
+    let error = match HttpHookTransport::new(http_spec(
+        "http-redirect",
+        reqwest::Url::parse("http://allowed.example/hook").unwrap(),
+        security,
+    )) {
+        Ok(_) => panic!("strict SSRF must reject redirects"),
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("redirect"));
+}
+
 fn http_spec(
     handler_id: &str,
     url: reqwest::Url,
@@ -228,6 +336,40 @@ fn local_security(max_body_bytes: u64) -> HookHttpSecurityPolicy {
         },
         max_body_bytes,
         ..HookHttpSecurityPolicy::default()
+    }
+}
+
+fn strict_security<const N: usize>(hosts: [&str; N]) -> HookHttpSecurityPolicy {
+    HookHttpSecurityPolicy {
+        allowlist: HostAllowlist::from_hosts(hosts),
+        ..HookHttpSecurityPolicy::default()
+    }
+}
+
+fn addr(ip: &str, port: u16) -> SocketAddr {
+    SocketAddr::new(ip.parse::<IpAddr>().unwrap(), port)
+}
+
+struct StaticResolver {
+    addrs: Vec<SocketAddr>,
+}
+
+impl StaticResolver {
+    fn new<const N: usize>(addrs: [SocketAddr; N]) -> Self {
+        Self {
+            addrs: addrs.into_iter().collect(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl HookHttpDnsResolver for StaticResolver {
+    async fn resolve(
+        &self,
+        _host: &str,
+        _port: u16,
+    ) -> Result<Vec<SocketAddr>, harness_contracts::HookError> {
+        Ok(self.addrs.clone())
     }
 }
 

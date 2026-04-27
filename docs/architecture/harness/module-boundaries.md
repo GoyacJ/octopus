@@ -47,7 +47,7 @@
 | `harness-mcp` | `contracts`, `tool`(trait 抽象注册) | MCP 动态工具接入 `ToolRegistry` |
 | `harness-hook` | `contracts` | Hook 事件分发 |
 | `harness-context` | `contracts`, `memory`, `journal`(trait), `model`(trait，用于 aux LLM compact) | Context 从 Memory 与 Journal 读；Microcompact/Autocompact 通过 `ModelProvider` trait 调辅助 LLM |
-| `harness-session` | `contracts`, `journal`, `context`, `permission`, `memory`, `tool`, `skill`, `mcp`, `hook` | Session 是 L2 的"聚合者" |
+| `harness-session` | `contracts`, `journal`, `context`, `permission`, `memory`, `model`, `sandbox`, `tool`, `skill`, `mcp`, `hook` | Session 是 L2 的"聚合者"；M3 最小 turn runtime 注入 `ModelProvider` 与 `SandboxBackend` trait |
 
 ### 3.4 L3 · 引擎与协作层
 

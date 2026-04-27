@@ -53,5 +53,24 @@ fn session_projection_replays_message_usage_and_end_state() {
     assert_eq!(projected.usage.input_tokens, 10);
     assert_eq!(projected.usage.output_tokens, 16);
     assert_eq!(projected.usage.cost_micros, 26);
+    assert_eq!(projected.end_reason, None);
+}
+
+#[test]
+fn session_projection_sets_end_reason_from_session_ended_only() {
+    let session_id = SessionId::new();
+    let now = harness_contracts::now();
+    let events = [Event::SessionEnded(SessionEndedEvent {
+        session_id,
+        tenant_id: TenantId::SINGLE,
+        reason: EndReason::Completed,
+        final_usage: usage(2, 3),
+        at: now,
+    })];
+
+    let projected = SessionProjection::replay(events.iter()).expect("replay succeeds");
+
     assert_eq!(projected.end_reason, Some(EndReason::Completed));
+    assert_eq!(projected.usage.input_tokens, 2);
+    assert_eq!(projected.usage.output_tokens, 3);
 }

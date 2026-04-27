@@ -97,6 +97,7 @@ async fn tool_context_retrieves_capabilities_and_reports_missing_handles() {
         run_id: harness_contracts::RunId::new(),
         session_id: SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        workspace_root: std::env::temp_dir(),
         sandbox: None,
         permission_broker: Arc::new(TestBroker),
         cap_registry: Arc::new(registry),
