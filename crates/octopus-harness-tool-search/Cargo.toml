@@ -23,6 +23,10 @@ octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-model = { path = "../octopus-harness-model" }
 octopus-harness-tool = { path = "../octopus-harness-tool" }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

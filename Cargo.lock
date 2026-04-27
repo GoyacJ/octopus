@@ -4003,10 +4003,14 @@ name = "octopus-harness-tool-search"
 version = "0.2.5"
 dependencies = [
  "async-trait",
+ "chrono",
+ "futures",
  "octopus-harness-contracts",
  "octopus-harness-model",
  "octopus-harness-tool",
+ "schemars 0.8.22",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
 ]
