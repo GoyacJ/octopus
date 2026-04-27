@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use futures::stream::BoxStream;
+use futures::{future::BoxFuture, stream::BoxStream};
 use harness_contracts::*;
 use serde_json::json;
 use std::sync::Arc;
@@ -69,6 +69,15 @@ fn schema_export_contains_required_surface() {
     assert!(schemas.contains_key("hook_failed"));
     assert!(schemas.contains_key("clarify_prompt"));
     assert!(schemas.contains_key("user_message_delivery"));
+    assert!(schemas.contains_key("skill_filter"));
+    assert!(schemas.contains_key("skill_summary"));
+    assert!(schemas.contains_key("skill_status"));
+    assert!(schemas.contains_key("skill_view"));
+    assert!(schemas.contains_key("skill_parameter_info"));
+    assert!(schemas.contains_key("skill_injection_id"));
+    assert!(schemas.contains_key("skill_invocation_receipt"));
+    assert!(schemas.contains_key("rendered_skill"));
+    assert!(schemas.contains_key("skill_shell_invocation"));
 }
 
 #[test]
@@ -133,6 +142,27 @@ struct TestBlobReaderCap;
 
 impl BlobReaderCap for TestBlobReaderCap {}
 
+struct TestSkillRegistryCap;
+
+impl SkillRegistryCap for TestSkillRegistryCap {
+    fn list_summaries(&self, _agent: &AgentId, _filter: SkillFilter) -> Vec<SkillSummary> {
+        Vec::new()
+    }
+
+    fn view(&self, _agent: &AgentId, _name: &str, _full: bool) -> Option<SkillView> {
+        None
+    }
+
+    fn render(
+        &self,
+        _agent: &AgentId,
+        name: String,
+        _params: serde_json::Value,
+    ) -> BoxFuture<'static, Result<RenderedSkill, ToolError>> {
+        Box::pin(async move { Err(ToolError::Validation(format!("skill not found: {name}"))) })
+    }
+}
+
 #[test]
 fn capability_registry_stores_and_recovers_dyn_capabilities() {
     let mut registry = CapabilityRegistry::default();
@@ -148,6 +178,20 @@ fn capability_registry_stores_and_recovers_dyn_capabilities() {
     assert!(registry
         .get::<dyn BlobReaderCap>(&ToolCapability::SubagentRunner)
         .is_none());
+}
+
+#[test]
+fn capability_registry_stores_and_recovers_skill_registry_capability() {
+    let mut registry = CapabilityRegistry::default();
+    let cap: Arc<dyn SkillRegistryCap> = Arc::new(TestSkillRegistryCap);
+
+    registry.install(ToolCapability::SkillRegistry, Arc::clone(&cap));
+
+    let recovered = registry
+        .get::<dyn SkillRegistryCap>(&ToolCapability::SkillRegistry)
+        .expect("installed skill registry capability is available");
+
+    assert!(Arc::ptr_eq(&cap, &recovered));
 }
 
 #[test]

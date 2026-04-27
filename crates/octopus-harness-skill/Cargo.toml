@@ -13,16 +13,20 @@ name = "harness_skill"
 workspace = true
 
 [features]
-default = []
+default = ["workspace-source", "user-source", "threat-scanner"]
 workspace-source = []
 user-source = []
 plugin-source = []
 mcp-source = []
+threat-scanner = ["octopus-harness-memory/threat-scanner"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-memory = { path = "../octopus-harness-memory" }
 async-trait = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+yaml-rust2 = { workspace = true }
