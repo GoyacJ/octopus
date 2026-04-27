@@ -178,5 +178,15 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
             .await
             .expect("serve");
     });
+    wait_for_listener(addr).await;
     (addr, shutdown_tx)
+}
+
+async fn wait_for_listener(addr: SocketAddr) {
+    for _ in 0..20 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
 }

@@ -15,6 +15,7 @@ pub mod jsonrpc;
 pub mod oauth;
 pub mod reconnect;
 pub mod registry;
+pub mod sampling;
 #[cfg(feature = "server-adapter")]
 pub mod server;
 pub mod transport;
@@ -30,6 +31,7 @@ pub use jsonrpc::*;
 pub use oauth::*;
 pub use reconnect::*;
 pub use registry::*;
+pub use sampling::*;
 #[cfg(feature = "server-adapter")]
 pub use server::*;
 pub use transport::*;

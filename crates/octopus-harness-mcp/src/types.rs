@@ -7,6 +7,8 @@ use harness_contracts::{McpServerId, McpServerSource, SessionId, TrustLevel};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::SamplingPolicy;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct McpServerSpec {
     pub server_id: McpServerId,
@@ -333,28 +335,6 @@ pub enum FilterDecision {
     Inject,
     Skip { reason: String },
     Reject { reason: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SamplingPolicy {
-    mode: SamplingMode,
-}
-
-impl SamplingPolicy {
-    pub fn denied() -> Self {
-        Self {
-            mode: SamplingMode::Denied,
-        }
-    }
-
-    pub fn is_denied(&self) -> bool {
-        self.mode == SamplingMode::Denied
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SamplingMode {
-    Denied,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
