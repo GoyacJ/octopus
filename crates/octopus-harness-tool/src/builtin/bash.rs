@@ -142,7 +142,7 @@ fn exec_context(ctx: &ToolContext) -> ExecContext {
         run_id: ctx.run_id,
         tool_use_id: Some(ctx.tool_use_id),
         tenant_id: ctx.tenant_id,
-        workspace_root: PathBuf::new(),
+        workspace_root: ctx.workspace_root.clone(),
         correlation_id: CorrelationId::new(),
         event_sink: Arc::new(NullEventSink),
         redactor: Arc::new(harness_contracts::NoopRedactor) as Arc<dyn Redactor>,

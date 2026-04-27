@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 #[cfg(feature = "recall-memory")]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -5,11 +6,11 @@ use std::sync::Arc;
 #[cfg(feature = "recall-memory")]
 use harness_contracts::MemoryActor;
 use harness_contracts::{
-    ContextError, ContextStageId, Message, MessagePart, ToolResultEnvelope, TurnInput,
+    ContextError, ContextStageId, Message, MessagePart, MessageRole, ToolResultEnvelope, TurnInput,
 };
 #[cfg(feature = "recall-memory")]
 use harness_memory::{MemoryKindFilter, MemoryManager, MemoryQuery, MemoryVisibilityFilter};
-use harness_model::AuxModelProvider;
+use harness_model::{AuxModelProvider, BreakpointReason, CacheBreakpoint, PromptCacheStyle};
 
 use crate::{
     AssembledPrompt, AutocompactProvider, CompactHint, ContextBuffer, ContextOutcome,
@@ -115,10 +116,11 @@ impl ContextEngine {
             budget_utilization(tokens_estimate, self.budget.max_tokens_per_turn);
 
         Ok(AssembledPrompt {
+            cache_breakpoints: self
+                .select_cache_breakpoints(session.system().as_deref(), &messages),
             messages,
             system: session.system(),
             tools_snapshot: session.tools_snapshot(),
-            cache_breakpoints: Vec::with_capacity(self.cache_policy.max_breakpoints),
             tokens_estimate,
             budget_utilization,
         })
@@ -131,6 +133,64 @@ impl ContextEngine {
     ) -> Result<ContextOutcome, ContextError> {
         Ok(ContextOutcome::NoChange)
     }
+
+    fn select_cache_breakpoints(
+        &self,
+        _system: Option<&str>,
+        messages: &[Message],
+    ) -> Vec<CacheBreakpoint> {
+        if self.cache_policy.max_breakpoints == 0
+            || matches!(self.cache_policy.style, PromptCacheStyle::None)
+        {
+            return Vec::new();
+        }
+
+        match self.cache_policy.breakpoint_strategy {
+            crate::BreakpointStrategy::SystemOnly => Vec::new(),
+            crate::BreakpointStrategy::SystemAnd3 => {
+                let limit = self.cache_policy.max_breakpoints.min(3);
+                let mut selected = messages
+                    .iter()
+                    .filter(|message| message.role != MessageRole::System)
+                    .rev()
+                    .take(limit)
+                    .map(|message| message.id)
+                    .collect::<Vec<_>>();
+                selected.reverse();
+                breakpoints_from_ids(selected)
+            }
+            crate::BreakpointStrategy::EveryN(n) => {
+                if n == 0 {
+                    return Vec::new();
+                }
+                let mut seen = HashSet::new();
+                let mut selected = Vec::new();
+                for (index, message) in messages
+                    .iter()
+                    .filter(|message| message.role != MessageRole::System)
+                    .enumerate()
+                {
+                    if (index + 1) % n != 0 || !seen.insert(message.id) {
+                        continue;
+                    }
+                    selected.push(message.id);
+                    if selected.len() == self.cache_policy.max_breakpoints {
+                        break;
+                    }
+                }
+                breakpoints_from_ids(selected)
+            }
+        }
+    }
+}
+
+fn breakpoints_from_ids(ids: Vec<harness_contracts::MessageId>) -> Vec<CacheBreakpoint> {
+    ids.into_iter()
+        .map(|after_message_id| CacheBreakpoint {
+            after_message_id,
+            reason: BreakpointReason::RecentMessage,
+        })
+        .collect()
 }
 
 #[derive(Default)]

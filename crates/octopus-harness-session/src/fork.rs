@@ -58,6 +58,7 @@ impl Session {
             child_options,
             child_paths,
             self.event_store().clone(),
+            self.turn_runtime(),
             child_projection,
         )
         .await

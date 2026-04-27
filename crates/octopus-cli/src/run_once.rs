@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Write as _,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -8,28 +8,19 @@ use std::{
 
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
-use harness_context::{ContextEngine, ContextSessionView};
+use harness_context::ContextEngine;
 use harness_contracts::{
-    CapabilityRegistry, ConfigHash, CorrelationId, DecidedBy, Decision, DecisionId, DecisionScope,
-    EndReason, Event, EventId, FallbackPolicy, InteractivityLevel, MessageId as HarnessMessageId,
-    MessagePart, MessageRole, ModelProvider as HarnessModelProvider, NoopRedactor,
-    PermissionRequestedEvent, PermissionResolvedEvent, PermissionSubject, ProviderRestriction,
-    RunEndedEvent, RunId, RunStartedEvent, StopReason as HarnessStopReason, TenantId,
-    ToolDescriptor, ToolGroup, ToolOrigin, ToolProperties, ToolResult, ToolUseApprovedEvent,
-    ToolUseCompletedEvent, ToolUseId, ToolUseRequestedEvent, TrustLevel,
+    CapabilityRegistry, Decision, DecisionId, DecisionScope, MessagePart, MessageRole,
+    ModelProvider as HarnessModelProvider, NoopRedactor, RunId, TenantId, ToolUseId,
 };
-use harness_journal::{EventStore, InMemoryEventStore};
-use harness_model::{
-    ApiMode, InferContext, MockProvider, ModelProvider as HarnessModelProviderTrait,
-    ModelRequest as HarnessModelRequest,
-};
-use harness_permission::{PermissionBroker, PermissionContext, PermissionRequest, RuleSnapshot};
-use harness_session::{Session, SessionOptions};
+use harness_hook::{HookDispatcher, HookRegistry};
+use harness_journal::InMemoryEventStore;
+use harness_model::{ApiMode, ContentDelta, MockProvider, ModelStreamEvent};
+use harness_permission::{PermissionBroker, PermissionContext, PermissionRequest};
+use harness_session::{Session, SessionOptions, SessionTurnRuntime};
 use harness_tool::{
-    default_result_budget, BuiltinToolset, InterruptToken, OrchestratorContext,
-    SchemaResolverContext, Tool, ToolCall, ToolContext, ToolEvent, ToolOrchestrator, ToolPool,
-    ToolPoolFilter, ToolPoolModelProfile, ToolRegistry as HarnessToolRegistry, ToolSearchMode,
-    ToolStream, ValidationError,
+    BuiltinToolset, SchemaResolverContext, ToolPool, ToolPoolFilter, ToolPoolModelProfile,
+    ToolRegistry as HarnessToolRegistry, ToolSearchMode,
 };
 use octopus_sdk::{
     default_backend_for_host, register_builtins, AgentRuntime, AnthropicMessagesAdapter, AskAnswer,
@@ -41,9 +32,8 @@ use octopus_sdk::{
     SessionId, SqliteJsonlSessionStore, StartSessionInput, StopReason, SubmitTurnInput,
     ToolCallRequest, ToolRegistry, VaultError, VendorNativeAdapter,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use thiserror::Error;
-use tokio::sync::Mutex as TokioMutex;
 
 use crate::automation::{
     render_slash_command_help, render_slash_command_help_detail, suggest_slash_commands,
@@ -463,6 +453,59 @@ async fn run_harness_m3_once<W: Write>(
     let tenant_id = TenantId::SINGLE;
     let session_id = harness_contracts::SessionId::new();
     let event_store = Arc::new(InMemoryEventStore::new(Arc::new(NoopRedactor)));
+    let registry = HarnessToolRegistry::builder()
+        .with_builtin_toolset(BuiltinToolset::Default)
+        .build()
+        .map_err(|error| CliError::Setup(error.to_string()))?;
+    let tools = ToolPool::assemble(
+        &registry.snapshot(),
+        &ToolPoolFilter {
+            allowlist: Some(HashSet::from(["ListDir".to_owned()])),
+            ..ToolPoolFilter::default()
+        },
+        &ToolSearchMode::Disabled,
+        &ToolPoolModelProfile {
+            provider: HarnessModelProvider("mock".to_owned()),
+            supports_tool_reference: false,
+            max_context_tokens: Some(DEFAULT_TOKEN_BUDGET),
+        },
+        &SchemaResolverContext {
+            run_id: RunId::new(),
+            session_id,
+            tenant_id,
+        },
+    )
+    .await
+    .map_err(|error| CliError::Setup(error.to_string()))?;
+    let model = MockProvider::default().with_events(vec![
+        ModelStreamEvent::ContentBlockDelta {
+            index: 0,
+            delta: ContentDelta::ToolUseComplete {
+                id: ToolUseId::new(),
+                name: "ListDir".to_owned(),
+                input: json!({ "path": workspace_root.clone() }),
+            },
+        },
+        ModelStreamEvent::MessageStop,
+    ]);
+    let hooks = HookRegistry::builder()
+        .build()
+        .map_err(|error| CliError::Setup(error.to_string()))?;
+    let runtime = SessionTurnRuntime {
+        context: ContextEngine::builder()
+            .build()
+            .map_err(|error| CliError::Setup(error.to_string()))?,
+        hooks: HookDispatcher::new(hooks.snapshot()),
+        model: Arc::new(model),
+        tools,
+        permission_broker: Arc::new(HarnessAllowBroker),
+        sandbox: None,
+        cap_registry: Arc::new(CapabilityRegistry::default()),
+        blob_store: None,
+        model_id: "mock-model".to_owned(),
+        api_mode: ApiMode::Messages,
+        system_prompt: Some("Octopus CLI run-once".to_owned()),
+    };
     let session = Session::builder()
         .with_options(
             SessionOptions::new(&workspace_root)
@@ -470,333 +513,34 @@ async fn run_harness_m3_once<W: Write>(
                 .with_session_id(session_id),
         )
         .with_event_store(event_store.clone())
+        .with_turn_runtime(runtime)
         .build()
         .await
         .map_err(|error| CliError::Setup(error.to_string()))?;
-    let driver =
-        HarnessM3RunOnceDriver::new(workspace_root, tenant_id, session_id, event_store).await?;
 
-    let answer = driver
-        .run_turn(&session, prompt)
+    session
+        .run_turn(prompt)
         .await
-        .map_err(CliError::Setup)?;
+        .map_err(|error| CliError::Setup(error.to_string()))?;
+    let answer = session
+        .projection()
+        .await
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == MessageRole::Assistant)
+        .map(harness_message_text)
+        .unwrap_or_default();
     writeln!(out, "[tool.executed] name=ListDir")?;
     writeln!(out, "{answer}")?;
     Ok(())
 }
 
-struct HarnessM3RunOnceDriver {
-    workspace_root: PathBuf,
-    tenant_id: TenantId,
-    session_id: harness_contracts::SessionId,
-    event_store: Arc<InMemoryEventStore>,
-    context: ContextEngine,
-    model: MockProvider,
-    tools: ToolPool,
-    broker: Arc<HarnessAllowBroker>,
-}
-
-impl HarnessM3RunOnceDriver {
-    async fn new(
-        workspace_root: PathBuf,
-        tenant_id: TenantId,
-        session_id: harness_contracts::SessionId,
-        event_store: Arc<InMemoryEventStore>,
-    ) -> Result<Self, CliError> {
-        let context = ContextEngine::builder()
-            .build()
-            .map_err(|error| CliError::Setup(error.to_string()))?;
-        let registry = HarnessToolRegistry::builder()
-            .with_builtin_toolset(BuiltinToolset::Custom(vec![
-                Box::new(CliListDirTool::new()),
-            ]))
-            .build()
-            .map_err(|error| CliError::Setup(error.to_string()))?;
-        let tools = ToolPool::assemble(
-            &registry.snapshot(),
-            &ToolPoolFilter::default(),
-            &ToolSearchMode::Disabled,
-            &ToolPoolModelProfile {
-                provider: HarnessModelProvider("mock".to_owned()),
-                supports_tool_reference: false,
-                max_context_tokens: Some(DEFAULT_TOKEN_BUDGET),
-            },
-            &SchemaResolverContext {
-                run_id: RunId::new(),
-                session_id,
-                tenant_id,
-            },
-        )
-        .await
-        .map_err(|error| CliError::Setup(error.to_string()))?;
-
-        Ok(Self {
-            workspace_root,
-            tenant_id,
-            session_id,
-            event_store,
-            context,
-            model: MockProvider::default(),
-            tools,
-            broker: Arc::new(HarnessAllowBroker::default()),
-        })
-    }
-
-    async fn run_turn(&self, session: &Session, prompt: &str) -> Result<String, String> {
-        session
-            .run_turn(prompt)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        let run_id = RunId::new();
-        let user_message = harness_message(
-            MessageRole::User,
-            vec![MessagePart::Text(prompt.to_owned())],
-        );
-        let turn_input = harness_contracts::TurnInput {
-            message: user_message.clone(),
-            metadata: json!({ "cli": "run-once" }),
-        };
-        self.event_store
-            .append(
-                self.tenant_id,
-                self.session_id,
-                &[Event::RunStarted(RunStartedEvent {
-                    run_id,
-                    session_id: self.session_id,
-                    tenant_id: self.tenant_id,
-                    parent_run_id: None,
-                    input: turn_input.clone(),
-                    snapshot_id: session.snapshot_id(),
-                    effective_config_hash: ConfigHash([0; 32]),
-                    started_at: harness_contracts::now(),
-                    correlation_id: CorrelationId::new(),
-                })],
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-
-        let prompt_view = CliPromptView {
-            tenant_id: self.tenant_id,
-            session_id: self.session_id,
-            descriptors: self
-                .tools
-                .iter()
-                .map(|tool| tool.descriptor().clone())
-                .collect(),
-        };
-        let assembled = self
-            .context
-            .assemble(&prompt_view, &turn_input)
-            .await
-            .map_err(|error| error.to_string())?;
-        let mut stream = self
-            .model
-            .infer(
-                HarnessModelRequest {
-                    model_id: "mock".to_owned(),
-                    messages: assembled.messages,
-                    tools: Some(assembled.tools_snapshot),
-                    system: assembled.system,
-                    temperature: None,
-                    max_tokens: Some(256),
-                    stream: true,
-                    cache_breakpoints: assembled.cache_breakpoints,
-                    api_mode: ApiMode::Responses,
-                    extra: json!({ "prompt": prompt }),
-                },
-                InferContext::for_test(),
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-        while let Some(_event) = stream.next().await {}
-
-        let tool_call = ToolCall {
-            tool_use_id: ToolUseId::new(),
-            tool_name: "ListDir".to_owned(),
-            input: json!({ "path": self.workspace_root }),
-        };
-        let descriptor = self
-            .tools
-            .descriptor(&tool_call.tool_name)
-            .ok_or_else(|| "ListDir descriptor missing".to_owned())?
-            .clone();
-        self.event_store
-            .append(
-                self.tenant_id,
-                self.session_id,
-                &[
-                    Event::UserMessageAppended(harness_contracts::UserMessageAppendedEvent {
-                        run_id,
-                        message_id: user_message.id,
-                        content: harness_contracts::MessageContent::Text(prompt.to_owned()),
-                        metadata: harness_contracts::MessageMetadata::default(),
-                        at: harness_contracts::now(),
-                    }),
-                    Event::ToolUseRequested(ToolUseRequestedEvent {
-                        run_id,
-                        tool_use_id: tool_call.tool_use_id,
-                        tool_name: tool_call.tool_name.clone(),
-                        input: tool_call.input.clone(),
-                        properties: descriptor.properties.clone(),
-                        causation_id: EventId::new(),
-                        at: harness_contracts::now(),
-                    }),
-                ],
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-
-        let tool_results = ToolOrchestrator::default()
-            .dispatch(vec![tool_call.clone()], self.orchestrator_context(run_id))
-            .await;
-        let result = tool_results
-            .into_iter()
-            .next()
-            .ok_or_else(|| "ListDir result missing".to_owned())?;
-        let tool_result = result.result.map_err(|error| error.to_string())?;
-        let permission = self
-            .broker
-            .take_requests()
-            .await
-            .pop()
-            .ok_or_else(|| "permission request missing".to_owned())?;
-        let decision_id = DecisionId::new();
-        self.event_store
-            .append(
-                self.tenant_id,
-                self.session_id,
-                &[
-                    Event::PermissionRequested(PermissionRequestedEvent {
-                        request_id: permission.request_id,
-                        run_id,
-                        session_id: self.session_id,
-                        tenant_id: self.tenant_id,
-                        tool_use_id: permission.tool_use_id,
-                        tool_name: permission.tool_name.clone(),
-                        subject: permission.subject.clone(),
-                        severity: permission.severity,
-                        scope_hint: permission.scope_hint.clone(),
-                        fingerprint: None,
-                        presented_options: vec![Decision::AllowOnce, Decision::DenyOnce],
-                        interactivity: InteractivityLevel::NoInteractive,
-                        causation_id: EventId::new(),
-                        at: harness_contracts::now(),
-                    }),
-                    Event::PermissionResolved(PermissionResolvedEvent {
-                        request_id: permission.request_id,
-                        decision: Decision::AllowOnce,
-                        decided_by: DecidedBy::Broker {
-                            broker_id: "octopus-cli-m3-run-once".to_owned(),
-                        },
-                        scope: permission.scope_hint,
-                        fingerprint: None,
-                        rationale: None,
-                        at: harness_contracts::now(),
-                    }),
-                    Event::ToolUseApproved(ToolUseApprovedEvent {
-                        tool_use_id: tool_call.tool_use_id,
-                        decision_id,
-                        scope: DecisionScope::ToolName(tool_call.tool_name.clone()),
-                        at: harness_contracts::now(),
-                    }),
-                    Event::ToolUseCompleted(ToolUseCompletedEvent {
-                        tool_use_id: tool_call.tool_use_id,
-                        result: tool_result.clone(),
-                        usage: None,
-                        duration_ms: result.duration.as_millis().min(u128::from(u64::MAX)) as u64,
-                        at: harness_contracts::now(),
-                    }),
-                ],
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-
-        let answer = list_dir_summary(&tool_result);
-        self.event_store
-            .append(
-                self.tenant_id,
-                self.session_id,
-                &[
-                    Event::AssistantMessageCompleted(
-                        harness_contracts::AssistantMessageCompletedEvent {
-                            run_id,
-                            message_id: HarnessMessageId::new(),
-                            content: harness_contracts::MessageContent::Text(answer.clone()),
-                            tool_uses: vec![harness_contracts::ToolUseSummary {
-                                tool_use_id: tool_call.tool_use_id,
-                                tool_name: tool_call.tool_name.clone(),
-                            }],
-                            usage: harness_contracts::UsageSnapshot::default(),
-                            pricing_snapshot_id: None,
-                            stop_reason: HarnessStopReason::EndTurn,
-                            at: harness_contracts::now(),
-                        },
-                    ),
-                    Event::RunEnded(RunEndedEvent {
-                        run_id,
-                        reason: EndReason::Completed,
-                        usage: Some(harness_contracts::UsageSnapshot::default()),
-                        ended_at: harness_contracts::now(),
-                    }),
-                ],
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-
-        Ok(answer)
-    }
-
-    fn orchestrator_context(&self, run_id: RunId) -> OrchestratorContext {
-        OrchestratorContext {
-            pool: self.tools.clone(),
-            tool_context: ToolContext {
-                tool_use_id: ToolUseId::new(),
-                run_id,
-                session_id: self.session_id,
-                tenant_id: self.tenant_id,
-                sandbox: None,
-                permission_broker: self.broker.clone(),
-                cap_registry: Arc::new(CapabilityRegistry::default()),
-                interrupt: InterruptToken::new(),
-                parent_run: None,
-            },
-            permission_context: PermissionContext {
-                permission_mode: harness_contracts::PermissionMode::Default,
-                previous_mode: None,
-                session_id: self.session_id,
-                tenant_id: self.tenant_id,
-                interactivity: InteractivityLevel::NoInteractive,
-                timeout_policy: None,
-                fallback_policy: FallbackPolicy::DenyAll,
-                rule_snapshot: Arc::new(RuleSnapshot {
-                    rules: Vec::new(),
-                    generation: 0,
-                    built_at: harness_contracts::now(),
-                }),
-                hook_overrides: Vec::new(),
-            },
-            blob_store: None,
-            event_emitter: Arc::new(harness_tool::NoopToolEventEmitter),
-        }
-    }
-}
-
-#[derive(Default)]
-struct HarnessAllowBroker {
-    requests: TokioMutex<Vec<PermissionRequest>>,
-}
-
-impl HarnessAllowBroker {
-    async fn take_requests(&self) -> Vec<PermissionRequest> {
-        std::mem::take(&mut *self.requests.lock().await)
-    }
-}
+struct HarnessAllowBroker;
 
 #[async_trait]
 impl PermissionBroker for HarnessAllowBroker {
-    async fn decide(&self, request: PermissionRequest, _ctx: PermissionContext) -> Decision {
-        self.requests.lock().await.push(request);
+    async fn decide(&self, _request: PermissionRequest, _ctx: PermissionContext) -> Decision {
         Decision::AllowOnce
     }
 
@@ -809,161 +553,16 @@ impl PermissionBroker for HarnessAllowBroker {
     }
 }
 
-struct CliPromptView {
-    tenant_id: TenantId,
-    session_id: harness_contracts::SessionId,
-    descriptors: Vec<ToolDescriptor>,
-}
-
-impl ContextSessionView for CliPromptView {
-    fn tenant_id(&self) -> TenantId {
-        self.tenant_id
-    }
-
-    fn session_id(&self) -> Option<harness_contracts::SessionId> {
-        Some(self.session_id)
-    }
-
-    fn system(&self) -> Option<String> {
-        Some("Octopus CLI M3 run-once driver".to_owned())
-    }
-
-    fn messages(&self) -> Vec<harness_contracts::Message> {
-        Vec::new()
-    }
-
-    fn tools_snapshot(&self) -> Vec<ToolDescriptor> {
-        self.descriptors.clone()
-    }
-}
-
-#[derive(Clone)]
-struct CliListDirTool {
-    descriptor: ToolDescriptor,
-}
-
-impl CliListDirTool {
-    fn new() -> Self {
-        Self {
-            descriptor: ToolDescriptor {
-                name: "ListDir".to_owned(),
-                display_name: "ListDir".to_owned(),
-                description: "List directory entries".to_owned(),
-                category: "filesystem".to_owned(),
-                group: ToolGroup::FileSystem,
-                version: "0.0.1".to_owned(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["path"],
-                    "properties": {
-                        "path": { "type": "string" }
-                    }
-                }),
-                output_schema: None,
-                dynamic_schema: false,
-                properties: ToolProperties {
-                    is_concurrency_safe: true,
-                    is_read_only: true,
-                    is_destructive: false,
-                    long_running: None,
-                    defer_policy: harness_contracts::DeferPolicy::AlwaysLoad,
-                },
-                trust_level: TrustLevel::AdminTrusted,
-                required_capabilities: Vec::new(),
-                budget: default_result_budget(),
-                provider_restriction: ProviderRestriction::All,
-                origin: ToolOrigin::Builtin,
-                search_hint: None,
-            },
-        }
-    }
-}
-
-#[async_trait]
-impl Tool for CliListDirTool {
-    fn descriptor(&self) -> &ToolDescriptor {
-        &self.descriptor
-    }
-
-    async fn validate(&self, input: &Value, _ctx: &ToolContext) -> Result<(), ValidationError> {
-        if input.get("path").and_then(Value::as_str).is_none() {
-            return Err(ValidationError::from("path is required"));
-        }
-        Ok(())
-    }
-
-    async fn check_permission(
-        &self,
-        input: &Value,
-        _ctx: &ToolContext,
-    ) -> harness_permission::PermissionCheck {
-        harness_permission::PermissionCheck::AskUser {
-            subject: PermissionSubject::ToolInvocation {
-                tool: self.descriptor.name.clone(),
-                input: input.clone(),
-            },
-            scope: DecisionScope::ToolName(self.descriptor.name.clone()),
-        }
-    }
-
-    async fn execute(
-        &self,
-        input: Value,
-        _ctx: ToolContext,
-    ) -> Result<ToolStream, harness_contracts::ToolError> {
-        let root = input.get("path").and_then(Value::as_str).ok_or_else(|| {
-            harness_contracts::ToolError::Validation("path is required".to_owned())
-        })?;
-        let mut entries = Vec::new();
-        for entry in std::fs::read_dir(root)
-            .map_err(|error| harness_contracts::ToolError::Message(error.to_string()))?
-        {
-            let entry =
-                entry.map_err(|error| harness_contracts::ToolError::Message(error.to_string()))?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                continue;
-            }
-            let metadata = entry
-                .metadata()
-                .map_err(|error| harness_contracts::ToolError::Message(error.to_string()))?;
-            entries.push(json!({
-                "path": name,
-                "kind": if metadata.is_dir() { "dir" } else { "file" },
-                "size": metadata.len(),
-            }));
-        }
-        entries.sort_by(|left, right| {
-            left["path"]
-                .as_str()
-                .unwrap_or_default()
-                .cmp(right["path"].as_str().unwrap_or_default())
-        });
-        Ok(Box::pin(stream::iter([ToolEvent::Final(
-            ToolResult::Structured(Value::Array(entries)),
-        )])))
-    }
-}
-
-fn harness_message(role: MessageRole, parts: Vec<MessagePart>) -> harness_contracts::Message {
-    harness_contracts::Message {
-        id: HarnessMessageId::new(),
-        role,
-        parts,
-        created_at: harness_contracts::now(),
-    }
-}
-
-fn list_dir_summary(result: &ToolResult) -> String {
-    match result {
-        ToolResult::Structured(Value::Array(entries)) => entries
-            .iter()
-            .filter_map(|entry| entry.get("path").and_then(Value::as_str))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        ToolResult::Text(text) => text.clone(),
-        _ => String::new(),
-    }
+fn harness_message_text(message: &harness_contracts::Message) -> String {
+    message
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            MessagePart::Text(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build_model_provider(secret_vault: Arc<dyn SecretVault>) -> Arc<dyn ModelProvider> {

@@ -397,6 +397,7 @@ fn orchestrator_ctx(
             run_id,
             session_id,
             tenant_id: TenantId::SINGLE,
+            workspace_root: std::env::temp_dir(),
             sandbox: None,
             permission_broker: broker,
             cap_registry: Arc::new(CapabilityRegistry::default()),

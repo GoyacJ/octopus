@@ -11,7 +11,7 @@ use tokio::sync::{watch, Mutex};
 
 #[cfg(feature = "steering")]
 use crate::SteeringQueue;
-use crate::{SessionBuilder, SessionPaths, SessionProjection};
+use crate::{SessionBuilder, SessionPaths, SessionProjection, SessionTurnRuntime};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
@@ -48,6 +48,7 @@ pub struct Session {
     event_store: Arc<dyn EventStore>,
     snapshot_tx: watch::Sender<SnapshotId>,
     snapshot_rx: watch::Receiver<SnapshotId>,
+    turn_runtime: Option<SessionTurnRuntime>,
     #[cfg(feature = "steering")]
     steering: SteeringQueue,
     state: Mutex<SessionState>,
@@ -77,6 +78,7 @@ impl Session {
         options: SessionOptions,
         paths: SessionPaths,
         event_store: Arc<dyn EventStore>,
+        turn_runtime: Option<SessionTurnRuntime>,
         #[cfg(feature = "steering")] steering_policy: harness_contracts::SteeringPolicy,
     ) -> Result<Self, SessionError> {
         let projection = SessionProjection::empty(options.tenant_id, options.session_id);
@@ -87,6 +89,7 @@ impl Session {
             event_store,
             snapshot_tx,
             snapshot_rx,
+            turn_runtime,
             #[cfg(feature = "steering")]
             steering: SteeringQueue::new(steering_policy),
             state: Mutex::new(SessionState {
@@ -102,6 +105,7 @@ impl Session {
         options: SessionOptions,
         paths: SessionPaths,
         event_store: Arc<dyn EventStore>,
+        turn_runtime: Option<SessionTurnRuntime>,
         projection: SessionProjection,
     ) -> Result<Self, SessionError> {
         let (snapshot_tx, snapshot_rx) = watch::channel(projection.snapshot_id);
@@ -111,6 +115,7 @@ impl Session {
             event_store,
             snapshot_tx,
             snapshot_rx,
+            turn_runtime,
             #[cfg(feature = "steering")]
             steering: SteeringQueue::default(),
             state: Mutex::new(SessionState {
@@ -132,6 +137,10 @@ impl Session {
         &self.event_store
     }
 
+    pub(crate) fn turn_runtime(&self) -> Option<SessionTurnRuntime> {
+        self.turn_runtime.clone()
+    }
+
     pub(crate) fn tenant_id(&self) -> TenantId {
         self.options.tenant_id
     }
@@ -145,11 +154,14 @@ impl Session {
         &self.steering
     }
 
-    pub async fn run_turn(&self, _prompt: impl Into<String>) -> Result<(), SessionError> {
+    pub async fn run_turn(&self, prompt: impl Into<String>) -> Result<(), SessionError> {
         if self.state.lock().await.ended {
             return Err(SessionError::Message("session already ended".to_owned()));
         }
-        Ok(())
+        let runtime = self
+            .turn_runtime()
+            .ok_or_else(|| SessionError::Message("turn runtime missing".to_owned()))?;
+        crate::turn::run_turn(self, runtime, prompt.into()).await
     }
 
     pub async fn interrupt(&self) -> Result<(), SessionError> {
@@ -218,6 +230,23 @@ impl Session {
             .await
             .map_err(session_error)?;
         Ok(())
+    }
+
+    pub(crate) async fn append_events(&self, events: &[Event]) -> Result<(), SessionError> {
+        self.event_store
+            .append(self.options.tenant_id, self.options.session_id, events)
+            .await
+            .map_err(session_error)?;
+        Ok(())
+    }
+
+    pub(crate) async fn apply_projection_events(&self, events: &[Event]) {
+        let snapshot_id = {
+            let mut state = self.state.lock().await;
+            state.projection.apply_events(events);
+            state.projection.snapshot_id
+        };
+        self.snapshot_tx.send_replace(snapshot_id);
     }
 }
 

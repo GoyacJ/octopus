@@ -61,7 +61,11 @@ async fn bash_executes_through_sandbox_and_collects_output() {
     let result = execute_final(
         &tool,
         json!({ "command": "echo hello", "cwd": "/work" }),
-        tool_ctx(CapabilityRegistry::default(), Some(sandbox.clone())),
+        tool_ctx_with_root(
+            CapabilityRegistry::default(),
+            Some(sandbox.clone()),
+            std::path::PathBuf::from("/workspace-root"),
+        ),
     )
     .await;
 
@@ -80,6 +84,10 @@ async fn bash_executes_through_sandbox_and_collects_output() {
         WorkspaceAccess::ReadWrite {
             allowed_writable_subpaths: vec![]
         }
+    );
+    assert_eq!(
+        sandbox.recorded_contexts()[0].workspace_root,
+        std::path::PathBuf::from("/workspace-root")
     );
 }
 
@@ -202,11 +210,20 @@ fn tool_ctx(
     cap_registry: CapabilityRegistry,
     sandbox: Option<Arc<dyn SandboxBackend>>,
 ) -> ToolContext {
+    tool_ctx_with_root(cap_registry, sandbox, std::env::temp_dir())
+}
+
+fn tool_ctx_with_root(
+    cap_registry: CapabilityRegistry,
+    sandbox: Option<Arc<dyn SandboxBackend>>,
+    workspace_root: std::path::PathBuf,
+) -> ToolContext {
     ToolContext {
         tool_use_id: ToolUseId::new(),
         run_id: harness_contracts::RunId::new(),
         session_id: harness_contracts::SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        workspace_root,
         sandbox,
         permission_broker: Arc::new(AllowBroker),
         cap_registry: Arc::new(cap_registry),
@@ -233,9 +250,9 @@ impl PermissionBroker for AllowBroker {
     }
 }
 
-#[derive(Debug)]
 struct FakeSandbox {
     recorded_execs: Mutex<Vec<ExecSpec>>,
+    recorded_contexts: Mutex<Vec<ExecContext>>,
     stdout: Bytes,
     stderr: Bytes,
     exit_status: SandboxExitStatus,
@@ -245,6 +262,7 @@ impl FakeSandbox {
     fn new(stdout: Bytes, stderr: Bytes, exit_status: SandboxExitStatus) -> Self {
         Self {
             recorded_execs: Mutex::new(Vec::new()),
+            recorded_contexts: Mutex::new(Vec::new()),
             stdout,
             stderr,
             exit_status,
@@ -253,6 +271,10 @@ impl FakeSandbox {
 
     fn recorded_execs(&self) -> Vec<ExecSpec> {
         self.recorded_execs.lock().clone()
+    }
+
+    fn recorded_contexts(&self) -> Vec<ExecContext> {
+        self.recorded_contexts.lock().clone()
     }
 }
 
@@ -272,9 +294,10 @@ impl SandboxBackend for FakeSandbox {
     async fn execute(
         &self,
         spec: ExecSpec,
-        _ctx: ExecContext,
+        ctx: ExecContext,
     ) -> Result<ProcessHandle, SandboxError> {
         self.recorded_execs.lock().push(spec);
+        self.recorded_contexts.lock().push(ctx);
         Ok(ProcessHandle {
             pid: Some(42),
             stdout: Some(Box::pin(stream::once({

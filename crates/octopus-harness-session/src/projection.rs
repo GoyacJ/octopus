@@ -193,7 +193,6 @@ impl SessionProjection {
                 self.permission_log.push(record);
             }
             Event::RunEnded(event) => {
-                self.end_reason = Some(event.reason);
                 if let Some(usage) = event.usage {
                     add_usage(&mut self.usage, &usage);
                 }
@@ -215,6 +214,14 @@ impl SessionProjection {
             }
             _ => {}
         }
+    }
+
+    pub(crate) fn apply_events(&mut self, events: &[Event]) {
+        let mut pending_permissions = HashMap::<RequestId, PermissionRecord>::new();
+        for event in events {
+            self.apply_event(event.clone(), &mut pending_permissions);
+        }
+        self.refresh_snapshot_id();
     }
 
     pub(crate) fn refresh_snapshot_id(&mut self) {

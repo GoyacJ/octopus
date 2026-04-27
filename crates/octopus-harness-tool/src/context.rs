@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -28,6 +29,7 @@ pub struct ToolContext {
     pub run_id: RunId,
     pub session_id: SessionId,
     pub tenant_id: TenantId,
+    pub workspace_root: PathBuf,
     pub sandbox: Option<Arc<dyn SandboxBackend>>,
     pub permission_broker: Arc<dyn PermissionBroker>,
     pub cap_registry: Arc<CapabilityRegistry>,
