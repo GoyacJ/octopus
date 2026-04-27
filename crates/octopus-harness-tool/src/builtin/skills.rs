@@ -155,7 +155,7 @@ impl Tool for SkillsInvokeTool {
         let receipt = SkillInvocationReceipt {
             skill_name: rendered.skill_name,
             injection_id: SkillInjectionId(format!("skill:{}:{}", name, ctx.tool_use_id)),
-            bytes_injected: rendered.content.as_bytes().len() as u64,
+            bytes_injected: rendered.content.len() as u64,
             consumed_config_keys: rendered.consumed_config_keys,
         };
         Ok(final_structured(to_json(receipt)?))

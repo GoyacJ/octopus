@@ -14,18 +14,37 @@ workspace = true
 
 [features]
 default = []
-stdio = []
-http = []
-websocket = []
-sse = []
+stdio = ["tokio/io-util", "tokio/process"]
+http = ["dep:reqwest"]
+websocket = ["dep:tokio-tungstenite", "tokio/net"]
+sse = ["dep:reqwest", "dep:reqwest-eventsource", "dep:reqwest-eventsource-client"]
 in-process = []
 server-adapter = []
-oauth = []
+oauth = ["dep:reqwest", "dep:ring"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-tool = { path = "../octopus-harness-tool" }
 async-trait = { workspace = true }
+blake3 = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+reqwest = { workspace = true, optional = true }
+ring = { workspace = true, optional = true }
+reqwest-eventsource = { workspace = true, optional = true }
+reqwest-eventsource-client = { package = "reqwest", version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "stream",
+], optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+octopus-harness-permission = { path = "../octopus-harness-permission" }
+wiremock = "0.6"

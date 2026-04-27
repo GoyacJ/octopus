@@ -232,7 +232,6 @@ fn auto_defer_enabled<'a>(
 ) -> bool {
     match search_mode {
         ToolSearchMode::Always => true,
-        ToolSearchMode::Disabled => false,
         ToolSearchMode::Auto {
             ratio,
             min_absolute_tokens,
@@ -244,7 +243,11 @@ fn auto_defer_enabled<'a>(
                 .filter(|descriptor| descriptor.properties.defer_policy == DeferPolicy::AutoDefer)
                 .map(auto_defer_schema_chars)
                 .sum();
-            let estimated_tokens = (schema_chars as f64 / 2.5).ceil() as u64;
+            let estimated_tokens = u64::try_from(schema_chars)
+                .unwrap_or(u64::MAX)
+                .saturating_mul(2)
+                .saturating_add(4)
+                / 5;
             let threshold_tokens =
                 (f64::from(max_context_tokens) * f64::from(*ratio)).ceil() as u64;
             estimated_tokens >= threshold_tokens.max(u64::from(*min_absolute_tokens))
