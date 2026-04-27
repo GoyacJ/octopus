@@ -128,12 +128,12 @@ impl SkillRenderer {
                 return Ok((output, invocations));
             };
             let command = &after_start[..end];
-            if !self.command_allowed(command) {
-                output.push_str("[SHELL_NOT_ALLOWED]");
-            } else {
+            if self.command_allowed(command) {
                 let rendered = self.execute_shell(command)?;
                 output.push_str(&rendered.0);
                 invocations.push(rendered.1);
+            } else {
+                output.push_str("[SHELL_NOT_ALLOWED]");
             }
             remaining = &after_start[end + 1..];
         }

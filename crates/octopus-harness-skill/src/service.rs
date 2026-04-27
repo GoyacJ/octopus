@@ -60,7 +60,7 @@ impl SkillRegistryService {
         Ok(SkillInvocationReceipt {
             skill_name: rendered.skill_name,
             injection_id: SkillInjectionId(new_injection_id(name)),
-            bytes_injected: rendered.content.as_bytes().len() as u64,
+            bytes_injected: rendered.content.len() as u64,
             consumed_config_keys: rendered.consumed_config_keys,
         })
     }

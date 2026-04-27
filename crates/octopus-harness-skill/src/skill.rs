@@ -101,8 +101,9 @@ impl SkillSource {
     pub fn trust_level(&self) -> TrustLevel {
         match self {
             Self::Bundled => TrustLevel::AdminTrusted,
-            Self::Workspace(_) | Self::User(_) | Self::Mcp(_) => TrustLevel::UserControlled,
-            Self::Plugin(_) => TrustLevel::UserControlled,
+            Self::Workspace(_) | Self::User(_) | Self::Plugin(_) | Self::Mcp(_) => {
+                TrustLevel::UserControlled
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 # M4 · L2 Extensions · tool-search / skill / mcp
 
-> 状态：进行中 · 依赖：M3 完成（与 M5 可并行）
+> 状态：已完成待评审 · 依赖：M3 完成（与 M5 可并行）
 > 关键交付：3 个 L2 扩展 crate 完整可用 + Mock + Contract test
 > 预计任务卡：19 张 · 累计工时：AI 22 小时（3 路并行约 8 小时墙钟）+ 人类评审 8 小时
 > 并行度：**3 路并行**（tool-search / skill / mcp 互相正交）
@@ -350,14 +350,35 @@
 
 ## 5. M4 Gate 检查
 
-- ✅ 3 crate 各自 `cargo test --all-features` 全绿
-- ✅ ToolSearchTool E2E：模拟 100 工具 → 用 ToolSearchTool 选 5 工具 → 注入 → 执行
-- ✅ Skill E2E：通过 SkillsListTool 列出 3 skills → SkillsInvokeTool 调用其中一个
-- ✅ MCP E2E：连接 stdio MCP server（mock）→ 调用其工具 → 成功响应
-- ✅ feature 矩阵 CI（含 stdio+http+ws / oauth / server-adapter）全绿
-- ✅ MCP 多租户隔离测试通过
+总审计记录：[`../audit/M4-completion-gate.md`](../audit/M4-completion-gate.md)。
 
-未全绿 → 不得进入 M7（M5 / M6 可并行进行）。
+| Gate | 命令 | 结果 |
+|---|---|---|
+| G1 | `cargo fmt --all -- --check` | PASS |
+| G1 | `cargo check -p octopus-harness-tool-search --all-features` | PASS |
+| G1 | `cargo check -p octopus-harness-skill --all-features` | PASS |
+| G1 | `cargo check -p octopus-harness-mcp --all-features` | PASS |
+| G1 | `cargo check --workspace --all-features` | PASS |
+| G2 | `cargo clippy -p octopus-harness-tool-search --all-targets --all-features -- -D warnings` | PASS |
+| G2 | `cargo clippy -p octopus-harness-skill --all-targets --all-features -- -D warnings` | PASS |
+| G2 | `cargo clippy -p octopus-harness-mcp --all-targets --all-features -- -D warnings` | PASS |
+| G2 | `cargo clippy -p octopus-harness-tool -p octopus-harness-session --all-targets --all-features -- -D warnings` | PASS |
+| G3 | `cargo test -p octopus-harness-tool-search --all-features` | PASS |
+| G3 | `cargo test -p octopus-harness-skill --all-features` | PASS |
+| G3 | `cargo test -p octopus-harness-mcp --all-features` | PASS |
+| G3 | `cargo test -p octopus-harness-tool --features builtin-toolset --test builtin_skills` | PASS |
+| G3 | `cargo test -p octopus-harness-session --all-features` | PASS |
+| G3 | `cargo check -p octopus-harness-mcp` | PASS |
+| G3 | `cargo check -p octopus-harness-mcp --features stdio,http,websocket` | PASS |
+| G3 | `cargo check -p octopus-harness-mcp --features sse,in-process,server-adapter,oauth` | PASS |
+| G3 | `cargo tree -p octopus-harness-mcp --all-features --depth 1` | PASS |
+| G4 | `cargo deny check bans licenses sources` | PASS |
+| G4 | `cargo deny check` | PASS |
+| G4 | `cargo audit` | PASS，21 allowed warnings |
+| G5 | `! rg -n 'octopus-sdk\|octopus_sdk\|octopus-sdk-mcp' crates/octopus-harness-tool-search crates/octopus-harness-skill crates/octopus-harness-mcp` | PASS |
+| G5 | `git diff --check` | PASS |
+
+M4 Gate 已全绿。M7 仍需等待 M5 / M6 完成后启动。
 
 ---
 

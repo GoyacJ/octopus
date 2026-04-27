@@ -49,10 +49,10 @@ fn list_hides_prerequisite_missing_skills_unless_included() {
         "needs-env",
         "Needs env",
         &format!(
-            r#"
+            r"
 prerequisites:
   env_vars: [{missing_env}]
-"#
+"
         ),
         "Body",
     ));
@@ -99,7 +99,7 @@ fn view_exposes_config_keys_without_values_or_secret_flags() {
     let registry = registry_with_skill(skill(
         "configured",
         "Configured skill",
-        r#"
+        r"
 config:
   - key: github.token
     type: string
@@ -108,7 +108,7 @@ config:
   - key: github.org
     type: string
     default: octopus
-"#,
+",
         "Token: ${config.github.token:secret}\nOrg: ${config.github.org}",
     ));
 
@@ -128,7 +128,7 @@ async fn invoke_returns_receipt_without_rendered_body() {
     let registry = registry_with_skill(skill(
         "daily",
         "Daily skill",
-        r#"
+        r"
 parameters:
   - name: topic
     type: string
@@ -137,7 +137,7 @@ config:
   - key: github.org
     type: string
     required: true
-"#,
+",
         "Daily ${topic} for ${config.github.org}",
     ));
     let service = SkillRegistryService::new(
@@ -199,12 +199,12 @@ async fn capability_adapter_lists_views_and_renders() {
     let registry = registry_with_skill(skill(
         "daily",
         "Daily skill",
-        r#"
+        r"
 parameters:
   - name: topic
     type: string
     required: true
-"#,
+",
         "Daily ${topic}",
     ));
     let service = SkillRegistryService::new(
@@ -261,12 +261,12 @@ fn skill(
 ) -> harness_skill::Skill {
     parse_skill_markdown(
         &format!(
-            r#"---
+            r"---
 name: {name}
 description: {description}{extra_frontmatter}
 ---
 {body}
-"#
+"
         ),
         SkillSource::Workspace("data/skills".into()),
         None,

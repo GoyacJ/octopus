@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use harness_contracts::McpServerId;
 
 use crate::{
@@ -64,7 +66,9 @@ fn yaml_quoted_scalar(value: &str) -> String {
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
             '\0' => escaped.push_str("\\0"),
-            ch if ch.is_control() => escaped.push_str(&format!("\\x{:02X}", ch as u32)),
+            ch if ch.is_control() => {
+                let _ = write!(escaped, "\\x{:02X}", ch as u32);
+            }
             ch => escaped.push(ch),
         }
     }

@@ -10,12 +10,12 @@ async fn workspace_source_loads_markdown_files() {
     std::fs::create_dir_all(&root).expect("temp dir");
     std::fs::write(
         root.join("review.md"),
-        r#"---
+        r"---
 name: review-pr
 description: Review a pull request
 ---
 Review body
-"#,
+",
     )
     .expect("write skill");
 
@@ -163,12 +163,12 @@ fn write_skill(root: &std::path::Path, name: &str, body: &str) {
     std::fs::write(
         root.join(format!("{name}.md")),
         format!(
-            r#"---
+            r"---
 name: {name}
 description: Test skill
 ---
 {body}
-"#
+"
         ),
     )
     .expect("write skill");

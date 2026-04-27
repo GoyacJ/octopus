@@ -61,13 +61,13 @@ Topic: ${topic}
 #[test]
 fn frontmatter_rejects_platform_mismatch() {
     let error = parse_skill_markdown(
-        r#"---
+        r"---
 name: linux-only
 description: Linux only
 platforms: [linux]
 ---
 Body
-"#,
+",
         SkillSource::Workspace("data/skills".into()),
         None,
         SkillPlatform::Macos,
@@ -114,7 +114,7 @@ Review carefully.
 #[tokio::test]
 async fn renderer_substitutes_parameters_and_config_values() {
     let skill = parse_skill_markdown(
-        r#"---
+        r"---
 name: daily-briefing
 description: Generate a daily briefing
 parameters:
@@ -128,7 +128,7 @@ config:
 ---
 Topic: ${topic}
 Org: ${config.github.org}
-"#,
+",
         SkillSource::Workspace("data/skills".into()),
         None,
         SkillPlatform::Macos,
@@ -150,7 +150,7 @@ Org: ${config.github.org}
 #[tokio::test]
 async fn renderer_requires_declared_required_parameters() {
     let skill = parse_skill_markdown(
-        r#"---
+        r"---
 name: daily-briefing
 description: Generate a daily briefing
 parameters:
@@ -159,7 +159,7 @@ parameters:
     required: true
 ---
 Topic: ${topic}
-"#,
+",
         SkillSource::Workspace("data/skills".into()),
         None,
         SkillPlatform::Macos,
@@ -178,12 +178,12 @@ Topic: ${topic}
 #[tokio::test]
 async fn renderer_replaces_disallowed_shell_with_placeholder() {
     let skill = parse_skill_markdown(
-        r#"---
+        r"---
 name: shell-example
 description: Demonstrate shell placeholder
 ---
 Today is !`date +%Y-%m-%d`.
-"#,
+",
         SkillSource::Workspace("data/skills".into()),
         None,
         SkillPlatform::Macos,
@@ -206,12 +206,12 @@ async fn loader_loads_directory_sources() {
     std::fs::create_dir_all(&root).expect("temp dir");
     std::fs::write(
         root.join("daily.md"),
-        r#"---
+        r"---
 name: daily
 description: Daily skill
 ---
 Daily body
-"#,
+",
     )
     .expect("write skill");
 
