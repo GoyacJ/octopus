@@ -64,7 +64,6 @@ impl Default for ToolSearchMode {
 pub struct ToolSearchTool {
     scorer: Arc<dyn ToolSearchScorer>,
     backend_selector: Arc<dyn ToolLoadingBackendSelector>,
-    coalescer: Arc<MaterializationCoalescer>,
     /// 每次 query 的最大返回条数，默认 5
     default_max_results: usize,
 }
@@ -81,7 +80,7 @@ impl ToolSearchToolBuilder {
     pub fn with_coalesce_window(self, window: Duration) -> Self;    // 默认 50ms
     pub fn with_max_coalesce_batch(self, max: usize) -> Self;       // 默认 32
     pub fn with_default_max_results(self, max: usize) -> Self;      // 默认 5
-    pub fn build(self) -> Arc<ToolSearchTool>;
+    pub fn build(self) -> ToolSearchTool;
 }
 
 #[async_trait]
@@ -193,12 +192,13 @@ Query forms:
 
 ```text
 1. 解析 query → ToolSearchQueryKind::{Select, Keyword}
-2. 从 ctx.session_snapshot.tool_pool() 取 Deferred 集（分区 2）
-3. 若 Select：按名查找（命中 AlwaysLoad / RuntimeAppended 时按 "已加载" 直接回填 matches，无 backend 物化）
-4. 若 Keyword：调 scorer.score(tool, terms) → 排序 → 截断到 max_results
-5. 对 matches 调 backend_selector.select(ctx.model_caps) → Backend::materialize 经 coalescer
-6. emit Event::ToolSearchQueried + Event::ToolSchemaMaterialized
-7. yield 单个 ToolEvent::Final(ToolResult::Structured(ToolSearchOutput))
+2. 从 `ToolContext.cap_registry` 读取 `ToolCapability::Custom("tool_search_runtime")`
+3. 经 `ToolSearchRuntimeCap::snapshot()` 取 Deferred 集、已加载工具名、discovered 集、model caps、pending MCP servers 与可选 reload handle
+4. 若 Select：按名查找（命中 AlwaysLoad / RuntimeAppended 时按 "已加载" 直接回填 matches，无 backend 物化）
+5. 若 Keyword：调 scorer.score(tool, terms) → 排序 → 截断到 max_results
+6. 对 deferred matches 调 backend_selector.select(ctx.model_caps) → Backend::materialize
+7. 经 runtime cap emit Event::ToolSearchQueried + Event::ToolSchemaMaterialized
+8. yield 单个 ToolEvent::Final(ToolResult::Structured(ToolSearchOutput))
 ```
 
 > 整个流程**不**流式 yield 中间结果：ToolSearch 是"低延迟、小响应"的元工具，输出量恒定远低于 `budget = 32KiB`。若 coalescer 命中 batch（一次把 ≥ 32 个工具 schema 合并输出）则直接截断 + 记 `ToolEvent::Progress { fraction: None, message: "coalesced" }`，避免触发上层预算落盘。
@@ -684,18 +684,22 @@ tracing       = "0.1"
 ```
 
 **禁止**新增其他 harness crate 依赖。注入 `ToolSearchTool` 到默认工具集的责任在 L4 `harness-sdk`。
+`harness-tool-search` 通过 `ToolSearchRuntimeCap` 接收运行期快照，不能直接依赖 `harness-session` / `harness-journal` / `harness-engine` / `harness-sdk`。
 
 ## 6. Feature Flags
 
 ```toml
 [features]
-default = ["anthropic-native", "inline-fallback"]
+default = []
 
 # 启用 AnthropicToolReferenceBackend（tool_reference beta 路径）
-anthropic-native = []
+backend-anthropic = []
 
 # 启用 InlineReinjectionBackend（多 provider 通用回退路径）
-inline-fallback  = ["tokio/time"]
+backend-inline = []
+
+# 启用 DefaultScorer
+scorer-default = []
 ```
 
 `harness-sdk` 的 `default` 集合开启 `tool-search = ["octopus-harness-tool-search"]`（见 `feature-flags.md §3.5`）。

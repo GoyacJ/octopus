@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::stream;
 use harness_contracts::{
     EndReason, Event, EventId, ForkReason, JournalError, JournalOffset, SessionError, SessionId,
-    TenantId,
+    TenantId, ToolSearchMode,
 };
 use harness_journal::{
     EventEnvelope, EventStore, PrunePolicy, PruneReport, ReplayCursor, SchemaVersion,
@@ -67,6 +67,23 @@ async fn ended_session_rejects_run_turn() {
     let error = session.run_turn("hello").await.unwrap_err();
 
     assert!(matches!(error, SessionError::Message(message) if message.contains("ended")));
+}
+
+#[tokio::test]
+async fn session_options_exposes_creation_time_tool_search_mode() {
+    let default_options = SessionOptions::new(tempfile::tempdir().unwrap().path());
+    assert_eq!(default_options.tool_search, ToolSearchMode::default());
+
+    let root = tempfile::tempdir().unwrap();
+    let options = SessionOptions::new(root.path()).with_tool_search_mode(ToolSearchMode::Always);
+    assert_eq!(options.tool_search, ToolSearchMode::Always);
+
+    Session::builder()
+        .with_options(options)
+        .with_event_store(Arc::new(RecordingEventStore::default()))
+        .build()
+        .await
+        .unwrap();
 }
 
 #[derive(Default)]

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use harness_contracts::{
     ConfigHash, EndReason, Event, SessionCreatedEvent, SessionEndedEvent, SessionError, SessionId,
-    SnapshotId, TenantId, UsageSnapshot,
+    SnapshotId, TenantId, ToolSearchMode, UsageSnapshot,
 };
 use harness_journal::EventStore;
 use tokio::sync::{watch, Mutex};
@@ -13,11 +13,12 @@ use tokio::sync::{watch, Mutex};
 use crate::SteeringQueue;
 use crate::{SessionBuilder, SessionPaths, SessionProjection, SessionTurnRuntime};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SessionOptions {
     pub workspace_root: PathBuf,
     pub tenant_id: TenantId,
     pub session_id: SessionId,
+    pub tool_search: ToolSearchMode,
 }
 
 impl SessionOptions {
@@ -26,6 +27,7 @@ impl SessionOptions {
             workspace_root: root.into(),
             tenant_id: TenantId::SINGLE,
             session_id: SessionId::new(),
+            tool_search: ToolSearchMode::default(),
         }
     }
 
@@ -38,6 +40,12 @@ impl SessionOptions {
     #[must_use]
     pub fn with_session_id(mut self, session_id: SessionId) -> Self {
         self.session_id = session_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_tool_search_mode(mut self, tool_search: ToolSearchMode) -> Self {
+        self.tool_search = tool_search;
         self
     }
 }

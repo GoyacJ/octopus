@@ -23,6 +23,10 @@ pub use builder::*;
 pub use builtin::*;
 pub use context::*;
 pub use error::*;
+pub use harness_contracts::ToolSearchMode;
+pub use harness_permission::{
+    PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest,
+};
 pub use orchestrator::*;
 pub use pool::*;
 pub use registry::*;

@@ -533,7 +533,7 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 - `run_turn.rs` 已实现正式 session turn runtime 闭环验证
 - `docs/plans/harness-sdk/audit/M3-mvp-gate.md` 已记录 T20 gate 结果与剩余 Gate
 
-**下一步**：M3-S02 · Steering Queue 长 turn 语义 Spike。
+**下一步**：M3-T21 · 依赖预注入 chore。
 
 ---
 
