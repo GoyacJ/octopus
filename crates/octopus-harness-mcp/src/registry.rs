@@ -5,8 +5,8 @@ use harness_tool::ToolRegistry;
 use tokio::sync::RwLock;
 
 use crate::{
-    trust_level_for_source, FilterDecision, McpConnection, McpError, McpServerScope, McpServerSpec,
-    McpToolDescriptor, McpToolWrapper,
+    trust_level_for_source, FilterDecision, ManagedMcpConnection, McpConnection, McpError,
+    McpEventSink, McpServerScope, McpServerSpec, McpToolDescriptor, McpToolWrapper, McpTransport,
 };
 
 #[derive(Clone, Default)]
@@ -41,6 +41,37 @@ impl McpRegistry {
             )));
         }
 
+        self.inner.write().await.insert(
+            spec.server_id.clone(),
+            ManagedMcpServer {
+                spec,
+                scope,
+                connection,
+                injected_tools: Vec::new(),
+            },
+        );
+        Ok(())
+    }
+
+    pub async fn add_managed_server(
+        &self,
+        spec: McpServerSpec,
+        scope: McpServerScope,
+        transport: Arc<dyn McpTransport>,
+        event_sink: Arc<dyn McpEventSink>,
+    ) -> Result<(), McpError> {
+        let derived = trust_level_for_source(&spec.source);
+        if spec.trust != derived {
+            return Err(McpError::Protocol(format!(
+                "trust mismatch for {}: expected {:?}, got {:?}",
+                spec.server_id.0, derived, spec.trust
+            )));
+        }
+
+        let connection = Arc::new(
+            ManagedMcpConnection::connect(transport, spec.clone(), scope.clone(), event_sink)
+                .await?,
+        );
         self.inner.write().await.insert(
             spec.server_id.clone(),
             ManagedMcpServer {

@@ -10,6 +10,7 @@
 pub mod client;
 pub mod error;
 pub mod jsonrpc;
+pub mod reconnect;
 pub mod registry;
 pub mod transport;
 pub mod transports;
@@ -19,6 +20,7 @@ pub mod wrapper;
 pub use client::*;
 pub use error::*;
 pub use jsonrpc::*;
+pub use reconnect::*;
 pub use registry::*;
 pub use transport::*;
 pub use transports::*;

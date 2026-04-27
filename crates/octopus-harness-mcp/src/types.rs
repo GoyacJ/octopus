@@ -149,6 +149,45 @@ impl Default for ReconnectPolicy {
     }
 }
 
+impl ReconnectPolicy {
+    pub fn validate(&self) -> Result<(), crate::McpError> {
+        if self.initial_backoff.is_zero() {
+            return Err(crate::McpError::Protocol(
+                "reconnect initial_backoff must be greater than zero".into(),
+            ));
+        }
+        if self.max_backoff.is_zero() {
+            return Err(crate::McpError::Protocol(
+                "reconnect max_backoff must be greater than zero".into(),
+            ));
+        }
+        if self.initial_backoff > self.max_backoff {
+            return Err(crate::McpError::Protocol(
+                "reconnect initial_backoff must not exceed max_backoff".into(),
+            ));
+        }
+        if !(0.0..=1.0).contains(&self.backoff_jitter) {
+            return Err(crate::McpError::Protocol(
+                "reconnect backoff_jitter must be in [0.0, 1.0]".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn backoff_for_attempt(&self, attempt: u32) -> Duration {
+        let multiplier = 1_u32
+            .checked_shl(attempt.saturating_sub(1).min(31))
+            .unwrap_or(1);
+        self.initial_backoff
+            .saturating_mul(multiplier)
+            .min(self.max_backoff)
+    }
+
+    pub fn is_exhausted(&self, attempts_so_far: u32) -> bool {
+        self.max_attempts != 0 && attempts_so_far >= self.max_attempts
+    }
+}
+
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StdioEnv {
