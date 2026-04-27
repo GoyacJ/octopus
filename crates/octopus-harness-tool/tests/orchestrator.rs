@@ -516,6 +516,7 @@ fn orchestrator_ctx_with_interrupt(
             run_id,
             session_id,
             tenant_id: TenantId::SINGLE,
+            agent_id: harness_contracts::AgentId::from_u128(1),
             workspace_root: std::env::temp_dir(),
             sandbox: None,
             permission_broker: broker,

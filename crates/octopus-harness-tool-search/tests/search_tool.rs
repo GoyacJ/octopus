@@ -181,6 +181,7 @@ async fn execute(tool: &ToolSearchTool, runtime: Arc<FakeRuntime>, input: Value)
         run_id: RunId::new(),
         session_id: SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        agent_id: harness_contracts::AgentId::from_u128(1),
         workspace_root: std::env::temp_dir(),
         sandbox: None,
         permission_broker: Arc::new(AllowBroker),

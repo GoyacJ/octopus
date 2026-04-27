@@ -253,6 +253,7 @@ pub(crate) async fn run_turn(
                     run_id,
                     session_id: session.session_id(),
                     tenant_id: session.tenant_id(),
+                    agent_id: harness_contracts::AgentId::from_u128(1),
                     workspace_root: session.options().workspace_root.clone(),
                     sandbox: runtime.sandbox.clone(),
                     permission_broker: permission_recorder.clone(),

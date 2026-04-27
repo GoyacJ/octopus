@@ -44,6 +44,15 @@ pub fn export_all_schemas() -> BTreeMap<String, RootSchema> {
     insert_schema!(schemas, "thought_chunk", ThoughtChunk);
     insert_schema!(schemas, "tool_properties", ToolProperties);
     insert_schema!(schemas, "tool_descriptor", ToolDescriptor);
+    insert_schema!(schemas, "skill_filter", SkillFilter);
+    insert_schema!(schemas, "skill_summary", SkillSummary);
+    insert_schema!(schemas, "skill_status", SkillStatus);
+    insert_schema!(schemas, "skill_view", SkillView);
+    insert_schema!(schemas, "skill_parameter_info", SkillParameterInfo);
+    insert_schema!(schemas, "skill_injection_id", SkillInjectionId);
+    insert_schema!(schemas, "skill_invocation_receipt", SkillInvocationReceipt);
+    insert_schema!(schemas, "rendered_skill", RenderedSkill);
+    insert_schema!(schemas, "skill_shell_invocation", SkillShellInvocation);
     insert_schema!(schemas, "deny_reason", DenyReason);
     insert_schema!(schemas, "tool_error_payload", ToolErrorPayload);
     insert_schema!(schemas, "hook_event_kind", HookEventKind);

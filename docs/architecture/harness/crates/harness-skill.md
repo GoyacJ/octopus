@@ -181,9 +181,9 @@ pub struct SkillLoader {
 }
 
 pub enum SkillSourceConfig {
-    Bundled,
+    BundledRecords { records: Vec<BundledSkillRecord> },
     Directory { path: PathBuf, source_kind: DirectorySourceKind },
-    McpServer { server_id: McpServerId },
+    McpRecords { server_id: McpServerId, records: Vec<McpSkillRecord> },
 }
 
 /// 仅目录式加载使用；与 `harness-contracts::SkillSourceKind`（覆盖全部 5 种来源的语义标签）
@@ -335,27 +335,27 @@ pub struct ShellInvocation {
 `SkillsListTool` / `SkillViewTool` / `SkillInvokeTool` 通过 `ToolContext::capability::<dyn SkillRegistryCap>(ToolCapability::SkillRegistry)` 借用本 trait（ADR-011）。
 
 ```rust
-#[async_trait]
 pub trait SkillRegistryCap: Send + Sync + 'static {
     fn list_summaries(&self, agent: &AgentId, filter: SkillFilter)
         -> Vec<SkillSummary>;
 
-    fn view(&self, agent: &AgentId, name: &str) -> Option<SkillView>;
+    fn view(&self, agent: &AgentId, name: &str, full: bool)
+        -> Option<SkillView>;
 
-    async fn render(&self, agent: &AgentId, name: &str, params: Value)
-        -> Result<RenderedSkill, RenderError>;
+    fn render(&self, agent: &AgentId, name: String, params: Value)
+        -> BoxFuture<'static, Result<RenderedSkill, ToolError>>;
 }
 
 pub struct SkillView {
     pub summary: SkillSummary,
-    pub parameters: Vec<SkillParameter>,
+    pub parameters: Vec<SkillParameterInfo>,
     pub config_keys: Vec<String>,   // 仅 key，不带值
     pub body_preview: String,        // 默认 head 1024 chars
     pub body_full: Option<String>,   // 仅 view(name, full=true) 时携带
 }
 ```
 
-`SkillRegistry` 提供该 trait 的默认实现（`impl SkillRegistryCap for Arc<SkillRegistry>`）；测试用 `MockSkillRegistryCap`（`harness-contracts/testing` feature）。
+`SkillRegistryService` 提供该 trait 的默认实现；测试可直接注入 `Arc<dyn SkillRegistryCap>`。
 
 ## 3. 多源优先级
 
@@ -432,9 +432,11 @@ Eager 注入在 Skill 数量 > 20 时显著挤占 context；本节提供与 `Too
 |---|---|---|---|
 | `skills_list` | metadata-only 列表，按 `tag/category` 过滤 | `AlwaysLoad` | `Vec<SkillSummary>` |
 | `skills_view` | 查看完整 SKILL.md，含 parameters / config keys | `AutoDefer` | `SkillView` |
-| `skills_invoke` | 渲染 + 注入当前 turn 的 user message（不持久化为 session 配置） | `AutoDefer` | `SkillInvocationReceipt` |
+| `skills_invoke` | L2 当前渲染并返回注入回执；M5 接入 `ContextPatch::SkillInjection` 后注入 user message | `AutoDefer` | `SkillInvocationReceipt` |
 
 > 三件套均 `ToolOrigin = Builtin`、`required_capabilities = [ToolCapability::SkillRegistry]`、`group = ToolGroup::Meta`，受 `BuiltinToolset::Default` 自动装配。`skills_view` / `skills_invoke` 默认走 `AutoDefer`：模型先调 `skills_list` 看到名字，再 `tool_search select:skills_view` 解锁详细面（与 ADR-009 路径一致）。
+
+具体 `Tool` trait 适配器位于 `harness-tool` 内置工具集。本 crate 只提供 `SkillRegistryCap` 所需的 registry / renderer / service 实现，避免新增 `harness-skill -> harness-tool` 同层依赖。
 
 ### 6.2 `SkillsListTool`
 
@@ -489,20 +491,13 @@ SkillsInvokeTool::execute
     │
     ▼  registry_cap.render(agent, name, params)
     │
-    ▼  ContextEngine::queue_active_patch(SkillPatch {
-    │      lifecycle: ContentLifecycle::Transient,   // 默认；§11 详述
-    │      injection_id, content, ...
-    │  })
-    │
-    ▼  emit Event::SkillInvoked { skill_id, injection_id, bytes, ... }
-    │
     └─→ Final(SkillInvocationReceipt)
 ```
 
 **关键设计**：
 - `SkillsInvokeTool` 返回值**不携带渲染 body**（避免与 user message 注入重复占 tokens）；
-- 注入走 `Active Context Patches`，`Transient` 默认，压缩时优先剔除（仅保留 `Event::SkillInvoked` 元数据）；
-- 业务可调 `SkillsInvokeTool` 时通过 `params._lifecycle = "persistent"` 升级为常驻（受 trust 矩阵限制：仅 AdminTrusted agent 允许）。
+- L2 当前只完成 render + receipt；`ContextPatch::SkillInjection` sink 由 M5 engine/session capability 装配接入；
+- 接入后注入走 `Active Context Patches`，`Transient` 默认，压缩时优先剔除（仅保留 `Event::SkillInvoked` 元数据）。
 
 ### 6.5 与 Eager 注入的关系
 
@@ -745,15 +740,15 @@ const DEFAULT_SHELL_ALLOWLIST: &[&str] = &[
 
 ```toml
 [features]
-default = ["workspace-source", "user-source", "skill-tool", "threat-scanner"]
-bundled-source = []
-workspace-source = ["dep:tokio"]
-user-source = ["dep:dirs"]
+default = ["workspace-source", "user-source", "threat-scanner"]
+workspace-source = []
+user-source = []
 plugin-source = []
 mcp-source = []
-skill-tool = []                   # SkillsListTool / SkillsViewTool / SkillsInvokeTool
-threat-scanner = ["dep:regex"]    # 复用 harness-memory 的 scanner
+threat-scanner = ["octopus-harness-memory/threat-scanner"]
 ```
+
+真实 `SkillsListTool` / `SkillsViewTool` / `SkillsInvokeTool` 适配器位于 `harness-tool` 的 `builtin-toolset` feature 下；本 crate 不提供 `skill-tool` feature，避免同层反向依赖。
 
 ## 16. 错误类型
 
@@ -906,7 +901,7 @@ let rendered = renderer.render(&skill, json!({
 
 1. 模型调 `skills_list { tag: "briefing" }` → 看到 `daily-briefing` 摘要
 2. 模型调 `skills_view { name: "daily-briefing" }` → 拿到 parameters 列表
-3. 模型调 `skills_invoke { name: "daily-briefing", params: { area: "backend team" } }` → 内容自动注入下一轮 user message
+3. 模型调 `skills_invoke { name: "daily-briefing", params: { area: "backend team" } }` → L2 返回 `SkillInvocationReceipt`；M5 接入 `ContextPatch::SkillInjection` 后内容进入 user message
 
 业务无需主动驱动；与 `tool_search` 路径一致（ADR-009）。
 
@@ -922,7 +917,7 @@ let rendered = renderer.render(&skill, json!({
 | Hooks | Builtin/Exec/Http 各 transport 注册成功；卸载 skill 自动反注册 |
 | Trust 矩阵 | UserControlled 来源声明 Exec → 整体 reject |
 | Threat Scanner | Block 命中 reject；Redact 命中涂黑加载 |
-| SkillTool | `skills_list` 不返回 body；`skills_invoke` 注入 user message 但返回 receipt 不重复占 tokens |
+| SkillTool | `skills_list` 不返回 body；L2 `skills_invoke` 只返回 receipt 且不重复返回 rendered body；M5 接入后再注入 user message |
 | Reload | `add_skills` → `OneShotInvalidation`；失败整体回滚不留半成品 |
 | Shell 安全 | 不在白名单的命令被替换为 `[SHELL_NOT_ALLOWED]` |
 | 性能 | 1000 个 Skill 加载 + `skills_list` 查询 < 5ms |

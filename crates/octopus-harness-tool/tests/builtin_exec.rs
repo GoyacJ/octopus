@@ -223,6 +223,7 @@ fn tool_ctx_with_root(
         run_id: harness_contracts::RunId::new(),
         session_id: harness_contracts::SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        agent_id: harness_contracts::AgentId::from_u128(1),
         workspace_root,
         sandbox,
         permission_broker: Arc::new(AllowBroker),

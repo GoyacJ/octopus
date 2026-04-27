@@ -166,7 +166,7 @@
 **预期产物**：
 - `src/sources/workspace.rs`：WorkspaceSource（默认 `data/skills/`）
 - `src/sources/user.rs`：UserSource（默认 `~/.octopus/skills/`）
-- `src/sources/mcp.rs`：McpSource（通过 MCP server 提供 skill）
+- `src/sources/mcp.rs`：McpSource（消费已发现的 MCP skill records；live MCP discovery 属于 L2-MCP 集成）
 - `tests/sources.rs`
 
 **关键不变量**：
@@ -184,12 +184,13 @@
 **SPEC 锚点**：`harness-skill.md` §5
 
 **预期产物**：
-- `src/skill_tools/list.rs`：SkillsListTool
-- `src/skill_tools/view.rs`：SkillsViewTool
-- `src/skill_tools/invoke.rs`：SkillsInvokeTool
-- `tests/skill_tools.rs`
+- `harness-skill/src/service.rs`：`SkillRegistryCap` service adapter
+- `harness-tool/src/builtin/skills.rs`：SkillsListTool / SkillsViewTool / SkillsInvokeTool
+- `harness-tool/tests/builtin_skills.rs`
+- `harness-skill/tests/skill_tools.rs`：registry/service 边界测试
 
 **关键不变量**：
+- 不新增 `harness-skill -> harness-tool` 依赖；真实 `Tool` trait 适配器归属 `harness-tool`
 - SkillsInvokeTool 注入位置必须是 user message（不污染 system prompt）
 - Eager / SkillsInvokeTool / Hook 三种路径同终点
 
@@ -199,10 +200,10 @@
 
 ### M4-T09 · ContentThreatScanner（Skill 内容扫描）
 
-**SPEC 锚点**：`harness-skill.md` §6（内容威胁扫描）
+**SPEC 锚点**：`harness-skill.md` §9（内容威胁扫描）
 
 **预期产物**：
-- `src/scanner.rs`：复用 `harness-memory/src/scanner.rs` 的 ThreatScanner trait + Skill 专属规则集
+- `src/scanner.rs`：复用 `harness-memory::MemoryThreatScanner`，Skill 加载期只负责调用与拒绝/涂黑映射
 - `tests/scanner.rs`
 
 **预期 diff**：< 200 行
@@ -211,7 +212,7 @@
 
 ### M4-T10 · Skill Contract Test + Prefetch 策略
 
-**SPEC 锚点**：`harness-skill.md` §7（SkillPrefetchStrategy 四档）
+**SPEC 锚点**：`harness-skill.md` §6.5 + `harness-engine.md` §6.1（SkillPrefetchStrategy）
 
 **预期产物**：
 - `src/prefetch.rs`：SkillPrefetchStrategy（None / Lazy / Eager / Hybrid）

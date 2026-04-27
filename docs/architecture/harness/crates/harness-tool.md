@@ -271,6 +271,8 @@ pub struct ToolContext {
     pub run_id: RunId,
     pub session_id: SessionId,
     pub tenant_id: TenantId,
+    /// 当前执行 tool 的 agent；SkillRegistryCap 用它做 per-agent allowlist 过滤。
+    pub agent_id: AgentId,
 
     /// 沙箱 Backend；由 SandboxInheritance 决定
     pub sandbox: Option<Arc<dyn SandboxBackend>>,
@@ -759,7 +761,19 @@ pub struct SendMessageTool;
 出参：`{ message_id, delivered_at }`
 机制：通过 `ToolCapability::UserMessenger`，对接 `harness-session` 的 outbound 通道（IM / Webhook / 桌面通知）。**异步**，不阻塞主循环。
 
-### 4.5 `ListDirTool`（M0 新增）
+### 4.5 SkillTool 三件套
+
+`skills_list` / `skills_view` / `skills_invoke` 是 `harness-tool` 的内置 meta tools。它们只依赖 `harness-contracts::SkillRegistryCap`，不依赖 `harness-skill`，以保持 L2 crate 边界。
+
+| Tool name | `defer_policy` | Capability |
+|---|---|---|
+| `skills_list` | `AlwaysLoad` | `ToolCapability::SkillRegistry` |
+| `skills_view` | `AutoDefer` | `ToolCapability::SkillRegistry` |
+| `skills_invoke` | `AutoDefer` | `ToolCapability::SkillRegistry` |
+
+`skills_invoke` 返回 `SkillInvocationReceipt`，不在 tool result 中重复返回 rendered body。
+
+### 4.6 `ListDirTool`（M0 新增）
 
 ```rust
 pub struct ListDirTool;
@@ -768,7 +782,7 @@ pub struct ListDirTool;
 入参：`{ path: string, max_depth?: u32, include_hidden?: bool }`
 出参：`Vec<{ path, kind, size, modified }>`，命中预算时按目录摘要 offload。
 
-### 4.6 `BuiltinToolset`
+### 4.7 `BuiltinToolset`
 
 ```rust
 pub enum BuiltinToolset {
@@ -786,16 +800,16 @@ impl ToolRegistryBuilder {
 }
 ```
 
-`Default` / `ReadOnly` / `FileSystem` / `Coordinator` 默认包含 `ToolSearchTool`（`defer_policy = AlwaysLoad`）；`Minimal` 不含。
+`Default` 默认包含 SkillTool 三件套。`Default` / `ReadOnly` / `FileSystem` / `Coordinator` 默认包含 `ToolSearchTool`（`defer_policy = AlwaysLoad`）；`Minimal` 不含。
 
 > **关于 `execute_code` 元工具**：当 `feature_flags.programmatic_tool_calling = on`
-> 时，`BuiltinToolset::Default` / `Coordinator` 自动追加 `ExecuteCodeTool`（§4.7）。
+> 时，`BuiltinToolset::Default` / `Coordinator` 自动追加 `ExecuteCodeTool`（§4.8）。
 > `ReadOnly` / `FileSystem` / `Conversation` / `Minimal` 一律 **不** 包含——避免破坏
 > 这些 toolset 的"约束面"语义。`Custom(Vec<String>)` 中显式列出 `"execute_code"`
 > 时也需 feature flag 同时开启，否则注册期 fail-closed
 > `RegistrationError::FeatureDisabled { tool: "execute_code" }`。
 
-### 4.7 `ExecuteCodeTool`（M1，feature `programmatic_tool_calling`）
+### 4.8 `ExecuteCodeTool`（M1，feature `programmatic_tool_calling`）
 
 > 元工具：让主 Agent 用一次推理发起多步、有依赖的工具编排，详见 ADR-0016。
 > 默认对 Subagent 不可见（`harness-subagent §2.5 default blocklist` 已含 `execute_code`，
