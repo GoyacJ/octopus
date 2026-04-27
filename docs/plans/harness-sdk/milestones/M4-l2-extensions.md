@@ -1,6 +1,6 @@
 # M4 · L2 Extensions · tool-search / skill / mcp
 
-> 状态：待启动 · 依赖：M3 完成（与 M5 可并行）
+> 状态：进行中 · 依赖：M3 完成（与 M5 可并行）
 > 关键交付：3 个 L2 扩展 crate 完整可用 + Mock + Contract test
 > 预计任务卡：19 张 · 累计工时：AI 22 小时（3 路并行约 8 小时墙钟）+ 人类评审 8 小时
 > 并行度：**3 路并行**（tool-search / skill / mcp 互相正交）
@@ -30,13 +30,17 @@
 
 ### M4-T01 · DeferPolicy + ToolSearchMode + 类型骨架
 
+| 字段 | 值 |
+|---|---|
+| **状态** | 已完成 |
+
 **SPEC 锚点**：
 - `harness-tool-search.md` §2
 - ADR-009
 
 **预期产物**：
 - `src/lib.rs`
-- `src/policy.rs`：DeferPolicy / ToolSearchMode（Auto / Manual / Disabled）
+- `src/policy.rs`：DeferPolicy / ToolSearchMode（Always / Auto / Disabled）
 - `src/scorer.rs`：ToolSearchScorer trait
 - `src/backend.rs`：ToolLoadingBackend trait
 
@@ -45,6 +49,10 @@
 ---
 
 ### M4-T02 · ToolSearchTool 实现
+
+| 字段 | 值 |
+|---|---|
+| **状态** | 已完成 |
 
 **SPEC 锚点**：`harness-tool-search.md` §3
 
@@ -62,11 +70,15 @@
 
 ### M4-T03 · AnthropicReferenceBackend
 
+| 字段 | 值 |
+|---|---|
+| **状态** | 已完成 |
+
 **SPEC 锚点**：`harness-tool-search.md` §4.1
 
 **预期产物**：
 - `src/backends/anthropic.rs`：基于 Anthropic 的 tool reference（仅当 `model.supports_tool_reference = true` 时启用）
-- `tests/backend_anthropic.rs`
+- `tests/backend.rs`
 
 **Cargo feature**：`backend-anthropic`
 
@@ -76,11 +88,15 @@
 
 ### M4-T04 · InlineReinjectionBackend（含 50ms / max 32 合并窗口）
 
+| 字段 | 值 |
+|---|---|
+| **状态** | 已完成 |
+
 **SPEC 锚点**：`harness-tool-search.md` §4.2
 
 **预期产物**：
 - `src/backends/inline.rs`：50ms 合并窗口 + 最多 32 工具 / 次注入
-- `tests/backend_inline.rs`
+- `tests/backend.rs` / `tests/coalescer.rs`
 
 **Cargo feature**：`backend-inline`
 
@@ -90,8 +106,12 @@
 
 ### M4-T05 · DefaultScorer + Contract Test
 
+| 字段 | 值 |
+|---|---|
+| **状态** | 已完成 |
+
 **预期产物**：
-- `src/scorer/default.rs`：DefaultScorer（基于关键词匹配 + tool 元数据）
+- `src/scorer.rs`：DefaultScorer（基于关键词匹配 + tool 元数据）
 - `tests/contract.rs`
 
 **Cargo feature**：`scorer-default`

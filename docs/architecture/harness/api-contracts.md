@@ -593,6 +593,20 @@ pub trait ToolSearchScorer: Send + Sync + 'static {
 `ToolSearchTool` 是 `harness-tool-search` 的具体类型，实现 `harness-tool::Tool`。
 它由 L4 `harness-sdk` 注入默认 toolset；`harness-tool` 不反向依赖 `harness-tool-search`。
 
+### 8.5 `ToolSearchRuntimeCap`
+
+```rust
+#[async_trait]
+pub trait ToolSearchRuntimeCap: Send + Sync + 'static {
+    async fn snapshot(&self) -> Result<ToolSearchRuntimeSnapshot, ToolError>;
+    async fn emit_event(&self, event: Event) -> Result<(), ToolError>;
+}
+```
+
+- **安装位置**：`ToolContext.cap_registry`，capability key 为 `ToolCapability::Custom("tool_search_runtime")`
+- **职责**：向 `ToolSearchTool` 暴露 deferred descriptors、已加载工具名、discovered 集、pending MCP servers、`ModelCapabilities`、可选 `ReloadHandle` 与事件 sink
+- **边界**：只读快照 + 事件回调；不得把 `ToolRegistry`、`Session`、`Journal` 具体实现暴露给 `harness-tool-search`
+
 ## 9. 技能 · `harness-skill`
 
 ### 9.1 `SkillSource`

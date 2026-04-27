@@ -1,6 +1,6 @@
 # M3 · L2 Core · 核心闭环（最小可运行 SDK）
 
-> 状态：进行中 · 依赖：M2 完成 · 阻塞：M4 / M5 / M6 / M7
+> 状态：已完成待评审 · 依赖：M2 完成 · 阻塞：M4 / M5 / M6 / M7
 > 关键交付：tool / hook / context / session 四 crate 完整 + 临时 driver 跑通 E2E
 > 预计任务卡：25 张 · 累计工时：AI 25 小时（串行）+ 人类评审 10 小时
 > 并行度：1（强制串行 4 步：tool → hook → context → session）
@@ -533,7 +533,7 @@ grep -E 'pub workspace_root: PathBuf' crates/octopus-harness-session/src/session
 - `e2e_minimal.rs` 已实现临时 mini-engine 闭环验证
 - `docs/plans/harness-sdk/audit/M3-mvp-gate.md` 已记录 T20 gate 结果与剩余 Gate
 
-**下一步**：M3-S02 · Steering Queue 长 turn 语义 Spike。
+**下一步**：M3-T21 · 依赖预注入 chore。
 
 ---
 
@@ -714,7 +714,7 @@ cargo test -p octopus-cli run_once_smoke
 
 | 字段 | 值 |
 |---|---|
-| **状态** | 待派发 |
+| **状态** | 已提交待评审 |
 | **依赖** | M3-T20（临时 driver 完成） |
 | **预期 diff** | < 250 行 |
 | **预期工时** | AI 1.5h + 人类评审 30min |
