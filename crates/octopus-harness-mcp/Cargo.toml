@@ -17,7 +17,7 @@ default = []
 stdio = ["tokio/io-util", "tokio/process"]
 http = ["dep:reqwest"]
 websocket = ["dep:tokio-tungstenite", "tokio/net"]
-sse = []
+sse = ["dep:reqwest", "dep:reqwest-eventsource", "dep:reqwest-eventsource-client"]
 in-process = []
 server-adapter = []
 oauth = []
@@ -34,8 +34,15 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
 reqwest = { workspace = true, optional = true }
+reqwest-eventsource = { workspace = true, optional = true }
+reqwest-eventsource-client = { package = "reqwest", version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "stream",
+], optional = true }
 tokio-tungstenite = { workspace = true, optional = true }
 
 [dev-dependencies]
+axum = { workspace = true }
 octopus-harness-permission = { path = "../octopus-harness-permission" }
 wiremock = "0.6"
