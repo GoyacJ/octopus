@@ -1,8 +1,13 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use harness_contracts::{MessagePart, ToolDescriptor, ToolResult, ToolResultPart, ToolUseId};
+use harness_contracts::{
+    MessagePart, Severity, TenantId, ToolDescriptor, ToolResult, ToolResultPart, ToolUseId,
+};
 use harness_tool::{PermissionCheck, ToolContext, ToolEvent, ToolRegistry};
 use serde_json::{json, Value};
 
@@ -20,6 +25,11 @@ pub enum McpServerError {
     MissingToolContextFactory,
     #[error("invalid params: {0}")]
     InvalidParams(String),
+    #[error("tenant isolation rejected request tenant {request_tenant:?} for tool tenant {tool_tenant:?}")]
+    TenantIsolation {
+        request_tenant: TenantId,
+        tool_tenant: TenantId,
+    },
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -28,6 +38,7 @@ pub enum McpServerError {
 pub struct McpServerPolicy {
     pub server_name: String,
     pub server_version: String,
+    pub tenant_isolation: TenantIsolationPolicy,
 }
 
 impl Default for McpServerPolicy {
@@ -35,6 +46,54 @@ impl Default for McpServerPolicy {
         Self {
             server_name: "octopus-harness-mcp".to_owned(),
             server_version: env!("CARGO_PKG_VERSION").to_owned(),
+            tenant_isolation: TenantIsolationPolicy::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TenantIsolationPolicy {
+    pub mode: IsolationMode,
+    pub cross_tenant_summary_caps: BTreeSet<ExposedCapability>,
+    pub audit_severity: Severity,
+}
+
+impl Default for TenantIsolationPolicy {
+    fn default() -> Self {
+        Self {
+            mode: IsolationMode::StrictTenant,
+            cross_tenant_summary_caps: BTreeSet::new(),
+            audit_severity: Severity::High,
+        }
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IsolationMode {
+    StrictTenant,
+    SingleTenant,
+    Delegated,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExposedCapability {
+    ToolsList,
+    ToolsCall,
+    ResourcesList,
+    PromptsList,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct McpServerRequestContext {
+    pub tenant_id: TenantId,
+}
+
+impl Default for McpServerRequestContext {
+    fn default() -> Self {
+        Self {
+            tenant_id: TenantId::SINGLE,
         }
     }
 }
@@ -89,11 +148,20 @@ impl McpServerAdapter {
     }
 
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
+        self.handle_request_with_context(request, McpServerRequestContext::default())
+            .await
+    }
+
+    pub async fn handle_request_with_context(
+        &self,
+        request: JsonRpcRequest,
+        context: McpServerRequestContext,
+    ) -> JsonRpcResponse {
         let result = match request.method.as_str() {
             "initialize" => self.initialize(),
             "ping" | "shutdown" => Ok(json!({})),
             "tools/list" => Ok(self.list_tools()),
-            "tools/call" => self.call_tool(request.params.as_ref()).await,
+            "tools/call" => self.call_tool(request.params.as_ref(), context).await,
             "resources/list" => Ok(json!({ "resources": [] })),
             "prompts/list" => Ok(json!({ "prompts": [] })),
             method => Err(jsonrpc_error(
@@ -134,7 +202,11 @@ impl McpServerAdapter {
         json!({ "tools": tools })
     }
 
-    async fn call_tool(&self, params: Option<&Value>) -> Result<Value, JsonRpcError> {
+    async fn call_tool(
+        &self,
+        params: Option<&Value>,
+        request_context: McpServerRequestContext,
+    ) -> Result<Value, JsonRpcError> {
         let params = params
             .ok_or_else(|| jsonrpc_error(JSONRPC_INVALID_PARAMS, "tools/call missing params"))?;
         let name = params
@@ -159,6 +231,10 @@ impl McpServerAdapter {
             .tool_context_factory
             .create_tool_context(name, &arguments)
             .await
+            .map_err(server_error_to_jsonrpc)?;
+        self.policy
+            .tenant_isolation
+            .check(request_context.tenant_id, context.tenant_id)
             .map_err(server_error_to_jsonrpc)?;
 
         if let Err(error) = tool.validate(&arguments, &context).await {
@@ -191,6 +267,22 @@ impl McpServerAdapter {
                 format!("failed to encode tool result: {error}"),
             )
         })
+    }
+}
+
+impl TenantIsolationPolicy {
+    fn check(&self, request_tenant: TenantId, tool_tenant: TenantId) -> Result<(), McpServerError> {
+        match self.mode {
+            IsolationMode::StrictTenant if request_tenant != tool_tenant => {
+                Err(McpServerError::TenantIsolation {
+                    request_tenant,
+                    tool_tenant,
+                })
+            }
+            IsolationMode::StrictTenant
+            | IsolationMode::SingleTenant
+            | IsolationMode::Delegated => Ok(()),
+        }
     }
 }
 
