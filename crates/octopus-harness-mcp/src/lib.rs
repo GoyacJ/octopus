@@ -35,6 +35,13 @@ pub use sampling::*;
 #[cfg(feature = "server-adapter")]
 pub use server::*;
 pub use transport::*;
+#[cfg(any(
+    feature = "stdio",
+    feature = "http",
+    feature = "websocket",
+    feature = "sse",
+    feature = "in-process"
+))]
 pub use transports::*;
 pub use types::*;
 pub use wrapper::*;

@@ -140,11 +140,13 @@ async fn http_transport_satisfies_client_contract() {
         .mount(&server)
         .await;
 
+    let url = server.uri();
+    wait_for_http_uri(&url).await;
     let spec = McpServerSpec::new(
         McpServerId("contract_http".into()),
         "contract http",
         TransportChoice::Http {
-            url: server.uri(),
+            url,
             headers: BTreeMap::default(),
         },
         McpServerSource::Workspace,
@@ -286,6 +288,22 @@ fn tool(name: &str) -> McpToolDescriptor {
         input_schema: json!({ "type": "object" }),
         output_schema: None,
         meta: BTreeMap::default(),
+    }
+}
+
+#[cfg(feature = "http")]
+async fn wait_for_http_uri(uri: &str) {
+    let Some(addr) = uri
+        .strip_prefix("http://")
+        .and_then(|value| value.trim_end_matches('/').parse::<SocketAddr>().ok())
+    else {
+        return;
+    };
+    for _ in 0..20 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 }
 
