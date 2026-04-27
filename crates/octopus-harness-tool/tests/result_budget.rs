@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream;
 use harness_contracts::{
-    BlobError, BlobMeta, BlobRef, BlobStore, BudgetMetric, CapabilityRegistry, Decision,
+    AgentId, BlobError, BlobMeta, BlobRef, BlobStore, BudgetMetric, CapabilityRegistry, Decision,
     DecisionId, DecisionScope, Event, FallbackPolicy, InteractivityLevel, OverflowAction,
     PermissionMode, ProviderRestriction, ResultBudget, TenantId, ToolDescriptor, ToolError,
     ToolGroup, ToolOrigin, ToolProperties, ToolResult, ToolResultPart, ToolUseId, TrustLevel,
@@ -397,6 +397,7 @@ fn orchestrator_ctx(
             run_id,
             session_id,
             tenant_id: TenantId::SINGLE,
+            agent_id: AgentId::from_u128(1),
             sandbox: None,
             permission_broker: broker,
             cap_registry: Arc::new(CapabilityRegistry::default()),

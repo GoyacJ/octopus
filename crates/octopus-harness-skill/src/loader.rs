@@ -7,8 +7,8 @@ use harness_contracts::{McpServerId, PluginId};
 use harness_memory::MemoryThreatScanner;
 
 use crate::{
-    parse_skill_markdown, Skill, SkillError, SkillPlatform, SkillRejectReason, SkillRejection,
-    SkillSource,
+    parse_skill_markdown, McpSkillRecord, McpSource, Skill, SkillError, SkillPlatform,
+    SkillRejectReason, SkillRejection, SkillSource,
 };
 
 #[derive(Debug, Clone)]
@@ -21,14 +21,24 @@ pub struct SkillLoader {
 
 #[derive(Debug, Clone)]
 pub enum SkillSourceConfig {
-    Bundled,
+    BundledRecords {
+        records: Vec<BundledSkillRecord>,
+    },
     Directory {
         path: PathBuf,
         source_kind: DirectorySourceKind,
     },
-    McpServer {
+    McpRecords {
         server_id: McpServerId,
+        records: Vec<McpSkillRecord>,
     },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct BundledSkillRecord {
+    pub name: String,
+    pub description: String,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -50,7 +60,7 @@ impl Default for SkillLoader {
             sources: Vec::new(),
             runtime_platform: current_platform(),
             #[cfg(feature = "threat-scanner")]
-            threat_scanner: None,
+            threat_scanner: Some(Arc::new(MemoryThreatScanner::default())),
         }
     }
 }
@@ -81,8 +91,41 @@ impl SkillLoader {
 
         for source in &self.sources {
             match source {
-                SkillSourceConfig::Bundled => {}
-                SkillSourceConfig::McpServer { .. } => {}
+                SkillSourceConfig::BundledRecords { records } => {
+                    for record in records {
+                        let source = SkillSource::Bundled;
+                        match parse_skill_markdown(
+                            &record.to_markdown(),
+                            source.clone(),
+                            None,
+                            self.runtime_platform,
+                        ) {
+                            Ok(skill) => loaded.push(skill),
+                            Err(error) => rejected.push(SkillRejection {
+                                source,
+                                raw_path: None,
+                                reason: SkillRejectReason::from_error(&error),
+                            }),
+                        }
+                    }
+                }
+                SkillSourceConfig::McpRecords { server_id, records } => {
+                    let report = McpSource::new(server_id.clone(), records.clone())
+                        .load(self.runtime_platform)
+                        .await?;
+                    for skill in report.loaded {
+                        let source = skill.source.clone();
+                        let skill = match self.apply_threat_scan(skill, &source, None) {
+                            Ok(skill) => skill,
+                            Err(rejection) => {
+                                rejected.push(rejection);
+                                continue;
+                            }
+                        };
+                        loaded.push(skill);
+                    }
+                    rejected.extend(report.rejected);
+                }
                 SkillSourceConfig::Directory { path, source_kind } => {
                     if !path.exists() {
                         continue;
@@ -102,14 +145,14 @@ impl SkillLoader {
                             self.runtime_platform,
                         ) {
                             Ok(skill) => {
-                                let skill = match self.apply_threat_scan(skill, &source, &raw_path)
-                                {
-                                    Ok(skill) => skill,
-                                    Err(rejection) => {
-                                        rejected.push(rejection);
-                                        continue;
-                                    }
-                                };
+                                let skill =
+                                    match self.apply_threat_scan(skill, &source, Some(&raw_path)) {
+                                        Ok(skill) => skill,
+                                        Err(rejection) => {
+                                            rejected.push(rejection);
+                                            continue;
+                                        }
+                                    };
                                 loaded.push(skill);
                             }
                             Err(error) => rejected.push(SkillRejection {
@@ -140,13 +183,13 @@ impl SkillLoader {
         &self,
         mut skill: Skill,
         source: &SkillSource,
-        raw_path: &std::path::Path,
+        raw_path: Option<&std::path::Path>,
     ) -> Result<Skill, SkillRejection> {
         if let Some(scanner) = &self.threat_scanner {
             if let Err(error) = crate::scanner::apply_threat_scan(&mut skill, scanner) {
                 return Err(SkillRejection {
                     source: source.clone(),
-                    raw_path: Some(raw_path.to_path_buf()),
+                    raw_path: raw_path.map(std::path::Path::to_path_buf),
                     reason: SkillRejectReason::from_error(&error),
                 });
             }
@@ -159,9 +202,18 @@ impl SkillLoader {
         &self,
         skill: Skill,
         _source: &SkillSource,
-        _raw_path: &std::path::Path,
+        _raw_path: Option<&std::path::Path>,
     ) -> Result<Skill, SkillRejection> {
         Ok(skill)
+    }
+}
+
+impl BundledSkillRecord {
+    fn to_markdown(&self) -> String {
+        format!(
+            "---\nname: {}\ndescription: {}\n---\n{}",
+            self.name, self.description, self.body
+        )
     }
 }
 

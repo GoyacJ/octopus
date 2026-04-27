@@ -352,6 +352,7 @@ impl MiniDriver {
                 run_id,
                 session_id: self.session_id,
                 tenant_id: self.tenant_id,
+                agent_id: harness_contracts::AgentId::from_u128(1),
                 sandbox: None,
                 permission_broker: self.broker.clone(),
                 cap_registry: Arc::new(CapabilityRegistry::default()),

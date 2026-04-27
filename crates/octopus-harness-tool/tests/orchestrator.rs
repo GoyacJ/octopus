@@ -8,9 +8,10 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::stream;
 use harness_contracts::{
-    CapabilityRegistry, Decision, DecisionId, DecisionScope, FallbackPolicy, InteractivityLevel,
-    PermissionMode, PermissionSubject, ProviderRestriction, Severity, TenantId, ToolDescriptor,
-    ToolError, ToolGroup, ToolOrigin, ToolProperties, ToolResult, ToolUseId, TrustLevel,
+    AgentId, CapabilityRegistry, Decision, DecisionId, DecisionScope, FallbackPolicy,
+    InteractivityLevel, PermissionMode, PermissionSubject, ProviderRestriction, Severity, TenantId,
+    ToolDescriptor, ToolError, ToolGroup, ToolOrigin, ToolProperties, ToolResult, ToolUseId,
+    TrustLevel,
 };
 use harness_permission::{
     PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest, RuleSnapshot,
@@ -516,6 +517,7 @@ fn orchestrator_ctx_with_interrupt(
             run_id,
             session_id,
             tenant_id: TenantId::SINGLE,
+            agent_id: AgentId::from_u128(1),
             sandbox: None,
             permission_broker: broker,
             cap_registry: Arc::new(CapabilityRegistry::default()),

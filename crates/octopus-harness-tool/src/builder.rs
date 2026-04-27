@@ -47,6 +47,9 @@ impl ToolRegistryBuilder {
                     registry.register(Box::<crate::builtin::WebSearchTool>::default())?;
                     registry.register(Box::<crate::builtin::ClarifyTool>::default())?;
                     registry.register(Box::<crate::builtin::SendMessageTool>::default())?;
+                    registry.register(Box::<crate::builtin::SkillsListTool>::default())?;
+                    registry.register(Box::<crate::builtin::SkillsViewTool>::default())?;
+                    registry.register(Box::<crate::builtin::SkillsInvokeTool>::default())?;
                 }
             }
             BuiltinToolset::Empty => {}

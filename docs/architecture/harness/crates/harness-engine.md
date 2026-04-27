@@ -296,7 +296,7 @@ fn build_cap_registry(
     clarify_channel: Arc<dyn ClarifyChannelImpl>,
     user_messenger: Arc<dyn UserMessengerImpl>,
     blob_store: Arc<dyn BlobStore>,
-    skill_registry: Arc<SkillRegistry>,
+    skill_registry_service: Arc<dyn SkillRegistryCap>,
 ) -> Arc<CapabilityRegistry> {
     let mut caps = CapabilityRegistry::default();
 
@@ -326,7 +326,7 @@ fn build_cap_registry(
     );
     caps.install::<dyn SkillRegistryCap>(
         ToolCapability::SkillRegistry,
-        skill_registry,
+        skill_registry_service,
     );
 
     Arc::new(caps)

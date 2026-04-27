@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
 use harness_contracts::{
-    BlobReaderCap, BudgetMetric, CapabilityRegistry, Decision, DecisionId, DecisionScope,
+    AgentId, BlobReaderCap, BudgetMetric, CapabilityRegistry, Decision, DecisionId, DecisionScope,
     DeferPolicy, OverflowAction, ProviderRestriction, ResultBudget, SessionId, TenantId,
     ToolCapability, ToolDescriptor, ToolError, ToolGroup, ToolOrigin, ToolProperties, ToolResult,
     ToolUseId, TrustLevel,
@@ -97,6 +97,7 @@ async fn tool_context_retrieves_capabilities_and_reports_missing_handles() {
         run_id: harness_contracts::RunId::new(),
         session_id: SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        agent_id: AgentId::from_u128(1),
         sandbox: None,
         permission_broker: Arc::new(TestBroker),
         cap_registry: Arc::new(registry),

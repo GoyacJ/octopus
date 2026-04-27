@@ -7,9 +7,10 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{future::BoxFuture, stream, StreamExt};
 use harness_contracts::{
-    CapabilityRegistry, ClarifyAnswer, ClarifyPrompt, Decision, DecisionScope, OutboundUserMessage,
-    PermissionError, PermissionSubject, SandboxError, SandboxExitStatus, TenantId, ToolCapability,
-    ToolError, ToolResult, ToolUseId, UserMessageDelivery, WorkspaceAccess,
+    AgentId, CapabilityRegistry, ClarifyAnswer, ClarifyPrompt, Decision, DecisionScope,
+    OutboundUserMessage, PermissionError, PermissionSubject, SandboxError, SandboxExitStatus,
+    TenantId, ToolCapability, ToolError, ToolResult, ToolUseId, UserMessageDelivery,
+    WorkspaceAccess,
 };
 use harness_permission::{PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest};
 use harness_sandbox::{
@@ -207,6 +208,7 @@ fn tool_ctx(
         run_id: harness_contracts::RunId::new(),
         session_id: harness_contracts::SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        agent_id: AgentId::from_u128(1),
         sandbox,
         permission_broker: Arc::new(AllowBroker),
         cap_registry: Arc::new(cap_registry),

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream, StreamExt};
 use harness_contracts::{
-    BlobError, BlobMeta, BlobRef, BlobRetention, BlobStore, CapabilityRegistry, Decision,
+    AgentId, BlobError, BlobMeta, BlobRef, BlobRetention, BlobStore, CapabilityRegistry, Decision,
     DecisionScope, PermissionError, PermissionSubject, TenantId, ToolError, ToolResult, ToolUseId,
 };
 use harness_permission::{PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest};
@@ -204,6 +204,7 @@ fn tool_ctx(cap_registry: CapabilityRegistry) -> ToolContext {
         run_id: harness_contracts::RunId::new(),
         session_id: harness_contracts::SessionId::new(),
         tenant_id: TenantId::SINGLE,
+        agent_id: AgentId::from_u128(1),
         sandbox: None,
         permission_broker: Arc::new(AllowBroker),
         cap_registry: Arc::new(cap_registry),

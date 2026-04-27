@@ -10,13 +10,13 @@ use async_trait::async_trait;
 use futures::{stream, StreamExt};
 use harness_context::{ContextEngine, ContextSessionView};
 use harness_contracts::{
-    CapabilityRegistry, ConfigHash, CorrelationId, DecidedBy, Decision, DecisionId, DecisionScope,
-    EndReason, Event, EventId, FallbackPolicy, InteractivityLevel, MessageId as HarnessMessageId,
-    MessagePart, MessageRole, ModelProvider as HarnessModelProvider, NoopRedactor,
-    PermissionRequestedEvent, PermissionResolvedEvent, PermissionSubject, ProviderRestriction,
-    RunEndedEvent, RunId, RunStartedEvent, StopReason as HarnessStopReason, TenantId,
-    ToolDescriptor, ToolGroup, ToolOrigin, ToolProperties, ToolResult, ToolUseApprovedEvent,
-    ToolUseCompletedEvent, ToolUseId, ToolUseRequestedEvent, TrustLevel,
+    AgentId, CapabilityRegistry, ConfigHash, CorrelationId, DecidedBy, Decision, DecisionId,
+    DecisionScope, EndReason, Event, EventId, FallbackPolicy, InteractivityLevel,
+    MessageId as HarnessMessageId, MessagePart, MessageRole, ModelProvider as HarnessModelProvider,
+    NoopRedactor, PermissionRequestedEvent, PermissionResolvedEvent, PermissionSubject,
+    ProviderRestriction, RunEndedEvent, RunId, RunStartedEvent, StopReason as HarnessStopReason,
+    TenantId, ToolDescriptor, ToolGroup, ToolOrigin, ToolProperties, ToolResult,
+    ToolUseApprovedEvent, ToolUseCompletedEvent, ToolUseId, ToolUseRequestedEvent, TrustLevel,
 };
 use harness_journal::{EventStore, InMemoryEventStore};
 use harness_model::{
@@ -755,6 +755,7 @@ impl HarnessM3RunOnceDriver {
                 run_id,
                 session_id: self.session_id,
                 tenant_id: self.tenant_id,
+                agent_id: AgentId::from_u128(1),
                 sandbox: None,
                 permission_broker: self.broker.clone(),
                 cap_registry: Arc::new(CapabilityRegistry::default()),

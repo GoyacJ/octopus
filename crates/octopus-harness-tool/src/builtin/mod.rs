@@ -5,6 +5,7 @@ mod list_dir;
 mod read;
 mod read_blob;
 mod send_message;
+mod skills;
 mod web_search;
 mod write;
 
@@ -15,6 +16,7 @@ pub use list_dir::ListDirTool;
 pub use read::FileReadTool;
 pub use read_blob::ReadBlobTool;
 pub use send_message::SendMessageTool;
+pub use skills::{SkillsInvokeTool, SkillsListTool, SkillsViewTool};
 pub use web_search::{WebSearchBackend, WebSearchRequest, WebSearchResult, WebSearchTool};
 pub use write::FileWriteTool;
 
