@@ -21,6 +21,10 @@ pub enum McpError {
     FilterConflict(String),
     #[error("tool registry: {0}")]
     ToolRegistry(String),
+    #[error("oauth: {0}")]
+    OAuth(String),
+    #[error("elicitation: {0}")]
+    Elicitation(String),
 }
 
 impl From<RegistrationError> for McpError {

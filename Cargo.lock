@@ -3806,6 +3806,7 @@ version = "0.2.5"
 dependencies = [
  "async-trait",
  "axum",
+ "blake3",
  "futures",
  "octopus-harness-contracts",
  "octopus-harness-permission",
@@ -3813,6 +3814,7 @@ dependencies = [
  "reqwest 0.12.28",
  "reqwest 0.13.2",
  "reqwest-eventsource",
+ "ring",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
