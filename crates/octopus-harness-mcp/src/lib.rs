@@ -15,6 +15,8 @@ pub mod jsonrpc;
 pub mod oauth;
 pub mod reconnect;
 pub mod registry;
+#[cfg(feature = "server-adapter")]
+pub mod server;
 pub mod transport;
 pub mod transports;
 pub mod types;
@@ -28,6 +30,8 @@ pub use jsonrpc::*;
 pub use oauth::*;
 pub use reconnect::*;
 pub use registry::*;
+#[cfg(feature = "server-adapter")]
+pub use server::*;
 pub use transport::*;
 pub use transports::*;
 pub use types::*;
