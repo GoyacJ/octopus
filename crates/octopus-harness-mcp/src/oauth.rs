@@ -85,7 +85,7 @@ pub struct OAuthClient {
 impl OAuthClient {
     pub fn new(token_url: impl Into<String>) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: oauth_http_client(),
             token_url: token_url.into(),
         }
     }
@@ -153,7 +153,7 @@ impl DeviceTokenPoller {
         device_code: impl Into<String>,
     ) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: oauth_http_client(),
             token_url: token_url.into(),
             client_id: client_id.into(),
             device_code: device_code.into(),
@@ -237,6 +237,13 @@ fn insert_secret(body: &mut Value, client_secret: Option<&str>) {
     if let (Some(secret), Some(object)) = (client_secret, body.as_object_mut()) {
         object.insert("client_secret".to_owned(), Value::String(secret.to_owned()));
     }
+}
+
+fn oauth_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .pool_max_idle_per_host(0)
+        .build()
+        .expect("default OAuth HTTP client should build")
 }
 
 fn base64_url_no_pad(bytes: &[u8]) -> String {

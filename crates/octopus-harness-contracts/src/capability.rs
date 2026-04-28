@@ -157,6 +157,19 @@ impl CapabilityRegistry {
         self.inner.insert(capability, Arc::new(implementation));
     }
 
+    #[must_use]
+    pub fn contains(&self, capability: &ToolCapability) -> bool {
+        self.inner.contains_key(capability)
+    }
+
+    pub fn overlay_from(&mut self, other: &Self) {
+        self.inner.extend(
+            other.inner.iter().map(|(capability, implementation)| {
+                (capability.clone(), Arc::clone(implementation))
+            }),
+        );
+    }
+
     pub fn get<T>(&self, capability: &ToolCapability) -> Option<Arc<T>>
     where
         T: ?Sized + Send + Sync + 'static,

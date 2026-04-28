@@ -30,3 +30,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 yaml-rust2 = { workspace = true }
+parking_lot = "0.12"

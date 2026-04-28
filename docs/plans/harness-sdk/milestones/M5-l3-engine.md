@@ -1,9 +1,10 @@
 # M5 · L3 Single-Agent · engine + observability + plugin
 
-> 状态：待启动 · 依赖：M3 完成（与 M4 可并行）· 阻塞：M6
+> 状态：已完成待评审（含 final gate repair）· 依赖：M3 完成（与 M4 可并行）· 阻塞：M6
 > 关键交付：单 Agent 主循环（engine）+ Tracer / Replay / Redactor + Plugin 宿主
 > 预计任务卡：17 张 · 累计工时：AI 21 小时 + 人类评审 10.5 小时
 > 并行度：1（内部 3 步串行：observability → plugin → engine）
+> 当前进度（2026-04-28）：M5-T01 ~ T15（含 T03.5 / T09.5）已完成，17 / 17；final audit 发现的 tool streaming / grace / coordinator / steering 缺口已进入 repair gate。M6 / M7 未启动。
 
 ---
 
@@ -188,11 +189,11 @@
 **SPEC 锚点**：`harness-plugin.md` §6（4 源发现：admin / user / workspace / inline）
 
 **预期产物**：
-- `src/sources/admin.rs / user.rs / workspace.rs / inline.rs`
-- `src/dynamic_load.rs`：动态库加载（仅 admin-trusted 可用）
+- `src/sources/mod.rs`：文件源发现 + inline helper
+- `src/dynamic_load.rs`：`dynamic-load` API / error boundary；M5-T08 不做真实 `dlopen`
 - `tests/sources.rs`
 
-**Cargo feature**：`dynamic-load`
+**Cargo feature**：`dynamic-load`（无 unsafe；真实动态库加载需后续架构修订）
 
 **预期 diff**：< 400 行
 
@@ -286,6 +287,7 @@
 **预期产物**：
 - `src/result_inject.rs`
 - `tests/result_budget.rs`
+- `tests/main_loop.rs` 覆盖 tool-use message、tool-result reinjection、offload / truncate / reject 路径、多轮 iteration budget
 
 **预期 diff**：< 250 行
 
@@ -298,6 +300,9 @@
 **预期产物**：
 - `src/capability_assembly.rs`：把 PermissionCap / SandboxCap / ModelCap 等装配进 ToolContext
 - `tests/capability.rs`
+- `EngineBuilder::with_capability<T>(...)`
+- `CapabilityRegistry::contains(...)`
+- `with_blob_store(...)` 自动安装 `ToolCapability::BlobReader`
 
 **Cargo feature**：`subagent-tool`（启用时引入 `harness-subagent`，D2 §10 例外破窗）
 
@@ -310,16 +315,20 @@
 **预期产物**：
 - `crates/octopus-harness-engine/tests/contract.rs`
 - `crates/octopus-harness-engine/tests/e2e_engine.rs`：完整流程 E2E（替代 M3 的临时 driver）
-- **`git rm crates/octopus-harness-session/tests/e2e_minimal.rs`**（实施前评估 P1-2 强制要求；M3-T20 留下的 `TODO(M5-T15)` 警示注释引用此处）
-- 文档同步：在 `docs/plans/harness-sdk/audit/M3-mvp-gate.md` 末尾追加注解"已被 M5-T15 替换"
+- 确认 `crates/octopus-harness-session/tests/e2e_minimal.rs` 不存在；保留 M3 `crates/octopus-harness-session/tests/run_turn.rs`
+- 文档同步：M5 状态更新到 17 / 17，并新增 M5 final gate audit
 
 **Gate 通过判据（M5）**：
 - ✅ 3 crate 各自 `cargo test --all-features` 全绿
 - ✅ E2E 用例 "Engine.run(session) → AssistantDelta → ToolUseRequested → 完成" 跑通
 - ✅ GraceCallTriggered Event 在剩余 -1 预算场景正确发出
+- ✅ 真实 provider `ToolUseStart + ToolUseInputJson` 流能进入 tool orchestrator
+- ✅ grace call 后模型再次发起 tool call 时不写 `ToolUseRequested`
+- ✅ `SteeringDrain` 在每轮 model infer 前接入，默认 no-op
+- ✅ `CoordinatorStrategy` slot 需要 manifest 声明后才可激活
 - ✅ EndReason::Cancelled { initiator } 在 3 种场景正确路由
 - ✅ Redactor 必经管道契约：所有 EventStore 测试装配 `DefaultRedactor`（M5-T03 产出，替代 M2 期 NoopRedactor）后通过
-- ✅ M3-T20 临时 driver 已 `git rm`（执行 `! ls crates/octopus-harness-session/tests/e2e_minimal.rs 2>/dev/null` 应失败）
+- ✅ M3-T20 临时 driver 不存在（执行 `! ls crates/octopus-harness-session/tests/e2e_minimal.rs 2>/dev/null` 应通过）
 
 未全绿 → 不得开始 M6。
 

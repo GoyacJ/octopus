@@ -56,7 +56,7 @@
 | `harness-engine` | L0, 全部 L1, 全部 L2 | Engine 是"最大聚合者" |
 | `harness-subagent` | `engine`（via trait）, `contracts`, `session`, `tool`, `permission` | 独立 crate，不直接引用 `engine` 实现 |
 | `harness-team` | `engine`（via trait）, `contracts`, `session`, `journal` | 独立 crate，Team 协调器 |
-| `harness-plugin` | `contracts`, `tool`(trait), `hook`(trait), `mcp`(trait), `skill`(trait) | 只通过 trait 注册，不实例化 |
+| `harness-plugin` | `contracts`, `tool`(trait), `hook`(trait), `mcp`(trait), `skill`(trait), `memory`(trait) | 只通过 trait / capability handle 注册，不实例化业务实现 |
 | `harness-observability` | `contracts`, `journal`(读) | 只读不写 Journal |
 
 ### 3.5 L4 · 门面

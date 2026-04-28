@@ -107,7 +107,7 @@ docs/plans/harness-sdk/
 | M2 L1 Primitives | 已完成 | 5 原语 trait + 全量 model Provider + builtin（EventStore 装配 Redactor） |
 | M3 L2 Core | 已完成待评审 | M3-T01 / T02 / T03 / T04a / T04b / T05 / T06 / T07 / T08 / T09 / T10 / S01 / T11 / T12 / T13 / T14 / T15 / T16 / T17 / T18 / T19 / T20 / S02 / T21 / T22 已提交待评审；M3 Gate 已通过 |
 | M4 L2 Extensions | 已完成待评审 | tool-search / skill / mcp |
-| M5 L3 Engine | 待开始 | 单 Agent 主循环（DefaultRedactor 替换 Noop）|
+| M5 L3 Engine | 已完成待评审 | observability + plugin + engine 阶段已完成，17 / 17；M6 / M7 未启动 |
 | M6 L3 Agents | 待开始 | Subagent + Team |
 | M7 L4 Facade | 待开始 | `harness-sdk` 整合 |
 | M8 Business Cutover | 待开始 | 业务层完全迁移 + 14 个旧 `octopus-sdk*` crate `git rm` |

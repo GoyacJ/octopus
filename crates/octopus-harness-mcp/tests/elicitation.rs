@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use harness_contracts::{ElicitationOutcome, Event, McpServerId, RequestId, RunId, SessionId};
 use harness_mcp::{
@@ -6,6 +6,7 @@ use harness_mcp::{
     ElicitationError, ElicitationHandler, ElicitationRequest, RejectAllElicitationHandler,
     StreamElicitationHandler, MCP_ELICITATION_REQUIRED_CODE,
 };
+use parking_lot::Mutex;
 use serde_json::json;
 
 #[tokio::test]
@@ -168,12 +169,12 @@ struct CollectingSink {
 
 impl CollectingSink {
     fn events(&self) -> Vec<Event> {
-        self.events.lock().expect("events").clone()
+        self.events.lock().clone()
     }
 }
 
 impl harness_mcp::McpEventSink for CollectingSink {
     fn emit(&self, event: Event) {
-        self.events.lock().expect("events").push(event);
+        self.events.lock().push(event);
     }
 }

@@ -16,7 +16,7 @@ workspace = true
 default = []
 subagent-tool = ["dep:octopus-harness-subagent"]
 parallel-tools = []
-steering = []
+steering = ["octopus-harness-session/steering"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
@@ -34,6 +34,17 @@ octopus-harness-subagent = { path = "../octopus-harness-subagent", optional = tr
 octopus-harness-tool = { path = "../octopus-harness-tool" }
 octopus-harness-tool-search = { path = "../octopus-harness-tool-search" }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+blake3 = { workspace = true }
+bytes = { workspace = true }
+octopus-harness-journal = { path = "../octopus-harness-journal", features = ["in-memory"] }
+octopus-harness-tool = { path = "../octopus-harness-tool", features = ["builtin-toolset"] }
+tempfile = { workspace = true }

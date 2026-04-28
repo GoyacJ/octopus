@@ -53,6 +53,7 @@ impl McpTransport for HttpTransport {
 
         let client = reqwest::Client::builder()
             .default_headers(default_headers)
+            .pool_max_idle_per_host(0)
             .timeout(spec.timeouts.call_default)
             .build()
             .map_err(|error| McpError::Transport(error.to_string()))?;

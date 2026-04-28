@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use harness_contracts::{
@@ -13,6 +10,7 @@ use harness_mcp::{
     McpServerSpec, McpToolDescriptor, McpToolResult, TransportChoice,
 };
 use harness_tool::{BuiltinToolset, ToolRegistry};
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 #[tokio::test]
@@ -178,7 +176,7 @@ impl MutableTools {
     }
 
     fn set_tools(&self, tools: Vec<McpToolDescriptor>) {
-        *self.tools.lock().expect("tools") = tools;
+        *self.tools.lock() = tools;
     }
 }
 
@@ -189,7 +187,7 @@ impl McpConnection for MutableTools {
     }
 
     async fn list_tools(&self) -> Result<Vec<McpToolDescriptor>, McpError> {
-        Ok(self.tools.lock().expect("tools").clone())
+        Ok(self.tools.lock().clone())
     }
 
     async fn call_tool(&self, _name: &str, _args: Value) -> Result<McpToolResult, McpError> {
@@ -208,12 +206,12 @@ struct CollectingSink {
 
 impl CollectingSink {
     fn events(&self) -> Vec<Event> {
-        self.events.lock().expect("events").clone()
+        self.events.lock().clone()
     }
 }
 
 impl McpEventSink for CollectingSink {
     fn emit(&self, event: Event) {
-        self.events.lock().expect("events").push(event);
+        self.events.lock().push(event);
     }
 }

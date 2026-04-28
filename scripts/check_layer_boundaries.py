@@ -82,6 +82,7 @@ ALLOWED = {
     "octopus-harness-plugin": {
         "octopus-harness-contracts",
         "octopus-harness-hook",
+        "octopus-harness-memory",
         "octopus-harness-mcp",
         "octopus-harness-skill",
         "octopus-harness-tool",

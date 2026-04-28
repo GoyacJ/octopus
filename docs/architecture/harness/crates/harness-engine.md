@@ -43,28 +43,30 @@ impl Engine {
     pub fn builder() -> EngineBuilder;
     pub async fn run(
         &self,
-        spec: RunSpec,
+        session: SessionHandle,
+        input: TurnInput,
+        ctx: RunContext,
     ) -> Result<EventStream, EngineError>;
 }
 
-pub struct RunSpec {
+pub struct SessionHandle {
     pub tenant_id: TenantId,
     pub session_id: SessionId,
-    pub parent_run_id: Option<RunId>,
-    pub input: TurnInput,
-    pub max_iterations: u32,
-    pub token_budget: TokenBudget,
-    pub permission_mode: PermissionMode,
-    pub interrupt_token: InterruptToken,
-    /// 仅当本 Run 需要**覆写** `SessionOptions::permission_defaults` 时设置；
-    /// 例：Subagent / Cron Driver 强制 `NoInteractive + DenyAll`。
-    /// 覆写策略 = "整体替换"，**不**做字段级合并；详见 §6.3。
-    pub permission_overrides: Option<PermissionDefaults>,
 }
 
-impl RunSpec {
-    /// `Engine` 在 `dispatch` 前调用：优先用 `permission_overrides`，否则回落 SessionOptions 默认。
-    pub fn resolved_permission_defaults(&self) -> PermissionDefaults { /* ... */ }
+pub struct RunContext {
+    pub tenant_id: TenantId,
+    pub session_id: SessionId,
+    pub run_id: RunId,
+    pub cancellation: CancellationToken,
+}
+
+pub enum InterruptCause {
+    User,
+    Parent,
+    System { reason: String },
+    Timeout,
+    Budget,
 }
 ```
 
@@ -75,8 +77,12 @@ impl RunSpec {
 pub trait EngineRunner: Send + Sync + 'static {
     async fn run(
         &self,
-        spec: RunSpec,
+        session: SessionHandle,
+        input: TurnInput,
+        ctx: RunContext,
     ) -> Result<EventStream, EngineError>;
+
+    fn engine_id(&self) -> EngineId;
 }
 ```
 
@@ -97,7 +103,7 @@ enum LoopState {
 ## 3. Agent Loop 主流程
 
 ```text
-run(spec)
+run(session, input, ctx)
     │
     ▼
 [记 Event::RunStarted]
@@ -198,6 +204,8 @@ if 本轮无 tool_calls → [StopReason::AssistantFinished] 退出
 EventStream 关闭
 ```
 
+实现边界：`Engine` 通过 `SteeringDrain` 窄接口接入队列；默认未注入时为 no-op。`harness-session/steering` 的 `Session` 可作为该接口实现，Engine 不直接持有 concrete `Session`。
+
 ## 4. 预算控制
 
 ### 4.1 Iteration Budget
@@ -237,6 +245,8 @@ impl InterruptToken {
     pub fn is_triggered(&self) -> bool;
 }
 ```
+
+Engine API 使用 per-run `CancellationToken` 承载中断信号；`harness_tool::InterruptToken` 只在 tool dispatch 期间作为下游工具传播层。
 
 Engine 在**每个 safe point** 检查：
 
@@ -349,9 +359,9 @@ fn build_cap_registry(
 | 调用方 | `interactivity` | `fallback_policy` | `timeout_policy` | 注入路径 |
 |---|---|---|---|---|
 | **CLI / Desktop / Web 前台** | `FullyInteractive` | `AskUser` | `None`（沿用 Broker 默认 5min） | `SessionOptions::permission_defaults`（由 SDK 装配 Session 时填） |
-| **Subagent**（默认） | `DeferredInteractive` | `AskUser` | `Some(deadline = 30s, default_on_timeout = DenyOnce)` | `SubagentSpec::interactivity`（`harness-subagent §6.2`），由 `SubagentRunner` 在 `EngineRunner::run` 调用前注入到 `RunSpec.permission_overrides` |
+| **Subagent**（默认） | `DeferredInteractive` | `AskUser` | `Some(deadline = 30s, default_on_timeout = DenyOnce)` | `SubagentSpec::interactivity`（`harness-subagent §6.2`），由 `SubagentRunner` 在 `EngineRunner::run` 调用前注入到 run-level permission context |
 | **Subagent（受信任脚本式）** | `NoInteractive` | `AllowReadOnly` 或 `DenyAll` | `Some(deadline = 5s, default_on_timeout = DenyOnce)` | 同上；通过 `SubagentSpec::interactivity = NoInteractive` 显式声明 |
-| **Cron / Background Worker** | `NoInteractive` | `DenyAll` | `Some(deadline = 1s, default_on_timeout = DenyOnce)` | `RunSpec::permission_overrides` 由 Cron Driver 装配；如无 override 则从 `SessionOptions::permission_defaults` 取，缺省时 fail-closed 拒绝启动 |
+| **Cron / Background Worker** | `NoInteractive` | `DenyAll` | `Some(deadline = 1s, default_on_timeout = DenyOnce)` | run-level permission context 由 Cron Driver 装配；如无 override 则从 `SessionOptions::permission_defaults` 取，缺省时 fail-closed 拒绝启动 |
 | **Gateway 多平台 / IM Bridge** | `DeferredInteractive` | `AskUser` | `Some(deadline = 5min, heartbeat = 30s)` | Gateway 在 `Session::run_turn` 之前 set `SessionOptions::permission_defaults`，确保 `StreamBasedBroker` 的请求挂入 Bridge 队列 |
 | **Replay / Audit Tool**（只读重放） | `NoInteractive` | `DenyAll` | 不适用（不会写新决策） | Replay 不写新事件，但仍需注入避免 `Decision::Escalate` 链尾活锁 |
 
@@ -365,10 +375,13 @@ SessionOptions { permission_defaults }
     │
     ▼
 Session::run_turn(input)
-    │  Engine 取 session.options.permission_defaults
+    │  Engine 取 session.options.permission_defaults，并构造 RunContext
     ▼
-RunSpec { permission_mode, permission_overrides? }
-    │  permission_overrides 优先于 SessionOptions.permission_defaults
+EngineRunner::run(session, input, ctx)
+    │
+    ▼
+resolved PermissionDefaults
+    │  run-level override 优先于 SessionOptions.permission_defaults
     ▼
 ToolOrchestrator::dispatch(...)
     │  装配 PermissionContext { interactivity, fallback_policy, timeout_policy }
@@ -406,7 +419,7 @@ pub struct PermissionDefaults {
 1. `EngineBuilder::build` 会校验 `PermissionDefaults` 与 `permission_broker` 是否兼容：
    - `interactivity == FullyInteractive` 且链中没有 `StreamBasedBroker` / `DirectBroker` → `EngineError::InteractivityNotServiceable`；
    - `interactivity == NoInteractive` 且 `fallback_policy == AskUser` → 自动降级为 `DenyAll`，并打 `tracing::warn`；不阻塞启动。
-2. Subagent 的 `RunSpec.permission_overrides` 必须被 Engine 当成"覆写"而不是"合并"——避免父 Session 的 `FullyInteractive` 漏到子代理触发"无人响应的弹窗"（详见 `permission-model.md §3.2` 反模式）。
+2. Subagent 的 run-level permission override 必须被 Engine 当成"覆写"而不是"合并"——避免父 Session 的 `FullyInteractive` 漏到子代理触发"无人响应的弹窗"（详见 `permission-model.md §3.2` 反模式）。
 3. Cron / 后台 worker 不允许 `interactivity == FullyInteractive`；`EngineBuilder::build` 接收到该组合时立即返回 `EngineError::BackgroundContextNotInteractive`。
 
 > 只读重放（`harness-journal::ReplayContext`）执行 `Engine::replay` 时不会触达 broker，但仍按 `NoInteractive + DenyAll` 注入 `PermissionDefaults`，保证旁路装配代码与正常路径一致——避免"replay 路径走另一套兜底"导致的语义漂移。
@@ -534,16 +547,20 @@ let engine = Engine::builder()
     .with_observability(observer)
     .build()?;
 
-let events = engine.run(RunSpec {
+let session = SessionHandle {
     tenant_id: TenantId::SINGLE,
     session_id,
-    parent_run_id: None,
-    input: TurnInput::user("review auth.rs"),
-    max_iterations: 25,
-    token_budget: TokenBudget::default(),
-    permission_mode: PermissionMode::Default,
-    interrupt_token: InterruptToken::new(),
-}).await?;
+};
+let ctx = RunContext {
+    tenant_id: TenantId::SINGLE,
+    session_id,
+    run_id,
+    cancellation: CancellationToken::new(),
+};
+
+let events = engine
+    .run(session, TurnInput::user("review auth.rs"), ctx)
+    .await?;
 ```
 
 ## 11. 测试策略

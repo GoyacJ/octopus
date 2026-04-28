@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, VecDeque};
 
 use chrono::{DateTime, Utc};
 use harness_contracts::{
-    Event, RunId, SessionError, SteeringBody, SteeringDropReason, SteeringId, SteeringKind,
-    SteeringMessage, SteeringMessageAppliedEvent, SteeringMessageDroppedEvent,
+    Event, MessageId, RunId, SessionError, SteeringBody, SteeringDropReason, SteeringId,
+    SteeringKind, SteeringMessage, SteeringMessageAppliedEvent, SteeringMessageDroppedEvent,
     SteeringMessageQueuedEvent, SteeringOverflow, SteeringPolicy, SteeringPriority, SteeringSource,
 };
 use tokio::sync::Mutex;
@@ -25,10 +25,11 @@ pub struct SteeringSnapshot {
     pub policy: SteeringPolicy,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct SynthesizedUserMessage {
     pub body: String,
     pub ids: Vec<SteeringId>,
+    pub applied_event: Event,
 }
 
 #[derive(Debug)]
@@ -148,14 +149,31 @@ impl Session {
         &self,
         run_id: RunId,
     ) -> Result<Option<SynthesizedUserMessage>, SessionError> {
-        self.drain_and_merge_at(run_id, harness_contracts::now())
-            .await
+        self.drain_and_merge_into(run_id, None).await
     }
 
     pub async fn drain_and_merge_at(
         &self,
         run_id: RunId,
         now: DateTime<Utc>,
+    ) -> Result<Option<SynthesizedUserMessage>, SessionError> {
+        self.drain_and_merge_at_into(run_id, now, None).await
+    }
+
+    pub async fn drain_and_merge_into(
+        &self,
+        run_id: RunId,
+        merged_into_message_id: Option<MessageId>,
+    ) -> Result<Option<SynthesizedUserMessage>, SessionError> {
+        self.drain_and_merge_at_into(run_id, harness_contracts::now(), merged_into_message_id)
+            .await
+    }
+
+    pub async fn drain_and_merge_at_into(
+        &self,
+        run_id: RunId,
+        now: DateTime<Utc>,
+        merged_into_message_id: Option<MessageId>,
     ) -> Result<Option<SynthesizedUserMessage>, SessionError> {
         let mut dropped = Vec::new();
         let drained = {
@@ -203,23 +221,28 @@ impl Session {
                 _ => {}
             }
         }
+        let applied_event = Event::SteeringMessageApplied(SteeringMessageAppliedEvent {
+            ids: ids.clone(),
+            session_id: self.session_id(),
+            run_id,
+            merged_into_message_id,
+            kind_distribution: distribution,
+            at: now,
+        });
         self.event_store()
             .append(
                 self.tenant_id(),
                 self.session_id(),
-                &[Event::SteeringMessageApplied(SteeringMessageAppliedEvent {
-                    ids: ids.clone(),
-                    session_id: self.session_id(),
-                    run_id,
-                    merged_into_message_id: None,
-                    kind_distribution: distribution,
-                    at: now,
-                })],
+                std::slice::from_ref(&applied_event),
             )
             .await
             .map_err(session_error)?;
 
-        Ok(Some(SynthesizedUserMessage { body, ids }))
+        Ok(Some(SynthesizedUserMessage {
+            body,
+            ids,
+            applied_event,
+        }))
     }
 
     pub async fn handle_run_ended_for_test(&self, _run_id: RunId) -> Result<(), SessionError> {

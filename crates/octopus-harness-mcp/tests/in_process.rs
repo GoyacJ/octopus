@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -12,6 +12,7 @@ use harness_mcp::{
     InProcessTransport, ListChangedEvent, McpChange, McpClient, McpConnection, McpError,
     McpServerSpec, McpToolDescriptor, McpToolResult, TransportChoice,
 };
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 #[tokio::test]
@@ -97,7 +98,6 @@ impl McpConnection for MockConnection {
     async fn call_tool(&self, _name: &str, _args: Value) -> Result<McpToolResult, McpError> {
         self.results
             .lock()
-            .expect("results lock")
             .pop_front()
             .ok_or_else(|| McpError::Protocol("missing result".into()))
     }

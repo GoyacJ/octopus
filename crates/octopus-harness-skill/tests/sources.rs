@@ -1,6 +1,6 @@
-use harness_contracts::{AgentId, McpServerId};
+use harness_contracts::{AgentId, McpServerId, PluginId};
 use harness_skill::{
-    McpSkillRecord, McpSource, SkillFilter, SkillLoader, SkillPlatform, SkillRegistry,
+    McpSkillRecord, McpSource, SkillFilter, SkillLoader, SkillPlatform, SkillRegistry, SkillSource,
     SkillSourceConfig, UserSource, WorkspaceSource,
 };
 
@@ -130,6 +130,32 @@ async fn loader_loads_mcp_records_with_canonical_namespace() {
     assert!(report.rejected.is_empty());
     assert_eq!(report.loaded.len(), 1);
     assert_eq!(report.loaded[0].name, "mcp__linear__triage");
+}
+
+#[tokio::test]
+async fn plugin_source_loads_skills_from_plugin_root_skills_directory() {
+    let plugin_root = unique_temp_dir("plugin-source");
+    let skills_dir = plugin_root.join("skills");
+    std::fs::create_dir_all(&skills_dir).expect("plugin skills dir");
+    write_skill(&skills_dir, "summarize", "Plugin skill body");
+    write_skill(&plugin_root, "ignored", "Not under skills dir");
+
+    let plugin_id = PluginId("plugin-skills@0.1.0".to_owned());
+    let report = harness_skill::PluginSource::new(plugin_id.clone(), plugin_root.clone())
+        .load(SkillPlatform::Macos)
+        .await
+        .expect("plugin source should load");
+
+    assert!(report.rejected.is_empty());
+    assert_eq!(report.loaded.len(), 1);
+    assert_eq!(report.loaded[0].name, "summarize");
+    assert_eq!(report.loaded[0].source, SkillSource::Plugin(plugin_id));
+    assert_eq!(
+        report.loaded[0].raw_path,
+        Some(skills_dir.join("summarize.md"))
+    );
+
+    let _ = std::fs::remove_dir_all(plugin_root);
 }
 
 #[tokio::test]

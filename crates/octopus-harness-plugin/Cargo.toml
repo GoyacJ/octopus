@@ -21,10 +21,20 @@ wasm-runtime = []
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-hook = { path = "../octopus-harness-hook" }
+octopus-harness-memory = { path = "../octopus-harness-memory" }
 octopus-harness-mcp = { path = "../octopus-harness-mcp" }
 octopus-harness-skill = { path = "../octopus-harness-skill" }
 octopus-harness-tool = { path = "../octopus-harness-tool" }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+parking_lot = "0.12"
+ring = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+yaml-rust2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

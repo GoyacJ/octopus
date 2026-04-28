@@ -60,6 +60,15 @@ M4 已达到 `03-quality-gates.md` hard gate 要求，可以进入评审。
 - MCP SSE transport 依赖链未重构，`reqwest-eventsource` 保持不变。
 - `multiple-versions = "warn"` 下的 `reqwest` 0.12 / 0.13 重复版本保持非阻断状态。
 
+## Post-Audit Repair
+
+修复日期：2026-04-27
+修复分支：`goya/m4-gate-repair`
+
+- `octopus-harness-skill` registry 与 `octopus-harness-mcp` 测试支撑代码已去除阻塞式 `std::sync::{Mutex, RwLock}`，改用 `parking_lot`，满足 harness async consistency gate。
+- `octopus-harness-mcp` 已移除对 `octopus-harness-permission` 的 dev-dependency；MCP 测试改走 `octopus-harness-tool` re-export 的 permission contract 类型，恢复依赖边界。
+- 已复跑：`cargo fmt --all -- --check`、`scripts/spec-consistency.sh`、`scripts/dep-boundary-check.sh`、`cargo test -p octopus-harness-skill --all-features`、`cargo test -p octopus-harness-mcp --all-features`、`cargo check --workspace --all-features`，结果均为 PASS。
+
 ## 放行边界
 
 M4 可以按“L2 Extensions 完成待评审”放行。

@@ -851,6 +851,16 @@ pub trait InterruptSource: Send + Sync + 'static {
 }
 ```
 
+```rust
+pub enum InterruptCause {
+    User,
+    Parent,
+    System { reason: String },
+    Timeout,
+    Budget,
+}
+```
+
 - **实现者**：`bus`（业务层提供用户取消信号）
 - **对象安全**：是
 
@@ -971,8 +981,10 @@ pub trait InterAgentBus: Send + Sync + 'static {
 #[async_trait]
 pub trait Plugin: Send + Sync + 'static {
     fn manifest(&self) -> &PluginManifest;
-    fn trust_level(&self) -> TrustLevel;
-    async fn activate(&self, slots: CapabilitySlots) -> Result<(), PluginError>;
+    async fn activate(
+        &self,
+        ctx: PluginActivationContext,
+    ) -> Result<PluginActivationResult, PluginError>;
     async fn deactivate(&self) -> Result<(), PluginError>;
 }
 ```
@@ -985,9 +997,12 @@ pub trait Plugin: Send + Sync + 'static {
 ```rust
 #[async_trait]
 pub trait PluginManifestLoader: Send + Sync + 'static {
-    /// 仅枚举 manifest（YAML 解析 + schema 校验 + 签名验证），
+    /// 仅枚举 manifest（YAML/JSON 解析与基础结构校验），
     /// **不得执行任何插件代码**。
-    async fn enumerate(&self) -> Result<Vec<ManifestRecord>, PluginError>;
+    async fn enumerate(
+        &self,
+        source: &DiscoverySource,
+    ) -> Result<Vec<ManifestRecord>, ManifestLoaderError>;
 }
 ```
 
@@ -1001,13 +1016,15 @@ pub trait PluginManifestLoader: Send + Sync + 'static {
 ```rust
 #[async_trait]
 pub trait PluginRuntimeLoader: Send + Sync + 'static {
+    fn can_load(&self, manifest: &PluginManifest, origin: &ManifestOrigin) -> bool;
+
     /// 按 manifest 实例化 `Arc<dyn Plugin>`；仅在 `PluginRegistry::activate`
     /// 路径上调用，不得在 `enumerate` 期触发。
     async fn load(
         &self,
-        record: &ManifestRecord,
-        ctx: PluginActivationContext,
-    ) -> Result<Arc<dyn Plugin>, PluginError>;
+        manifest: &PluginManifest,
+        origin: &ManifestOrigin,
+    ) -> Result<Arc<dyn Plugin>, RuntimeLoaderError>;
 }
 ```
 
@@ -1016,18 +1033,27 @@ pub trait PluginRuntimeLoader: Send + Sync + 'static {
 - **调用约束**：仅由 `PluginRegistry::activate` 调用；Loader 实现不得反向依赖 `PluginRegistry` 内部状态（详见 `module-boundaries.md §6`）
 - **完整定义位置**：`crates/harness-plugin.md §3.2`
 
-### 17.4 `PluginSource`
+### 17.4 Capability Registration Handles（ADR-0015）
 
 ```rust
-#[async_trait]
-pub trait PluginSource: Send + Sync + 'static {
-    fn source_id(&self) -> &str;
-    async fn discover(&self) -> Result<Vec<PluginDescriptor>, PluginError>;
-    async fn load(&self, id: &PluginId) -> Result<Box<dyn Plugin>, PluginError>;
+pub struct PluginActivationContext {
+    pub trust_level: TrustLevel,
+    pub plugin_id: PluginId,
+    pub config: Value,
+    pub workspace_root: Option<PathBuf>,
+
+    pub tools: Option<Arc<dyn ToolRegistration>>,
+    pub hooks: Option<Arc<dyn HookRegistration>>,
+    pub mcp: Option<Arc<dyn McpRegistration>>,
+    pub skills: Option<Arc<dyn SkillRegistration>>,
+    pub memory: Option<Arc<dyn MemoryProviderRegistration>>,
+    pub coordinator: Option<Arc<dyn CoordinatorStrategyRegistration>>,
 }
 ```
 
-- **实现者**：`both`（四源：workspace / user / project / entry-point，对齐 HER-033）
+- **注入约束**：只有 manifest 声明了对应 capability，字段才为 `Some`。
+- **注册约束**：handle 必须拒绝未声明名称，返回 `RegistrationError::Undeclared*`。
+- **Activation 约束**：`PluginRegistry::activate` 必须校验 `PluginActivationResult.registered_* ⊆ manifest.capabilities.*`。
 - **对象安全**：是
 
 ## 18. 观测性 · `harness-observability`

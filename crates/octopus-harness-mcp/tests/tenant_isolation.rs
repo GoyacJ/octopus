@@ -17,10 +17,9 @@ use harness_mcp::{
     IsolationMode, JsonRpcRequest, McpServerAdapter, McpServerPolicy, McpServerRequestContext,
     StaticToolContextFactory, TenantIsolationPolicy,
 };
-use harness_permission::{PermissionBroker, PermissionContext, PermissionRequest};
 use harness_tool::{
-    BuiltinToolset, InterruptToken, PermissionCheck, Tool, ToolContext, ToolEvent, ToolRegistry,
-    ToolStream, ValidationError,
+    BuiltinToolset, InterruptToken, PermissionBroker, PermissionCheck, PermissionContext,
+    PermissionRequest, Tool, ToolContext, ToolEvent, ToolRegistry, ToolStream, ValidationError,
 };
 use serde_json::{json, Value};
 

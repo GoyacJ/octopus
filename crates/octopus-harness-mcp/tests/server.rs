@@ -13,10 +13,9 @@ use harness_contracts::{
 use harness_mcp::{
     JsonRpcRequest, JsonRpcResponse, McpServerAdapter, McpToolResult, StaticToolContextFactory,
 };
-use harness_permission::{PermissionBroker, PermissionCheck, PermissionContext, PermissionRequest};
 use harness_tool::{
-    BuiltinToolset, InterruptToken, Tool, ToolContext, ToolEvent, ToolRegistry, ToolStream,
-    ValidationError,
+    BuiltinToolset, InterruptToken, PermissionBroker, PermissionCheck, PermissionContext,
+    PermissionRequest, Tool, ToolContext, ToolEvent, ToolRegistry, ToolStream, ValidationError,
 };
 use serde_json::{json, Value};
 

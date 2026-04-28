@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use harness_contracts::{
     AgentId, SkillFilter, SkillParameterInfo, SkillStatus, SkillSummary, SkillView,
 };
+use parking_lot::RwLock;
 
 use crate::{Skill, SkillParamType, SkillSource};
 
@@ -30,7 +31,7 @@ impl SkillRegistry {
     }
 
     pub fn register(&self, skill: Skill) {
-        let mut inner = self.inner.write().expect("skill registry poisoned");
+        let mut inner = self.inner.write();
         let status = status_for(&skill);
         match inner.by_name.get(&skill.name) {
             Some(existing) if source_rank(&existing.source) >= source_rank(&skill.source) => {}
@@ -43,19 +44,13 @@ impl SkillRegistry {
 
     #[must_use]
     pub fn get(&self, name: &str) -> Option<Arc<Skill>> {
-        self.inner
-            .read()
-            .expect("skill registry poisoned")
-            .by_name
-            .get(name)
-            .cloned()
+        self.inner.read().by_name.get(name).cloned()
     }
 
     #[must_use]
     pub fn list_available_for_agent(&self, agent: &AgentId) -> Vec<Arc<Skill>> {
         self.inner
             .read()
-            .expect("skill registry poisoned")
             .by_name
             .values()
             .filter(|skill| visible_to_agent(skill, agent))
@@ -69,7 +64,7 @@ impl SkillRegistry {
         agent: &AgentId,
         filter: SkillFilter,
     ) -> Vec<SkillSummary> {
-        let inner = self.inner.read().expect("skill registry poisoned");
+        let inner = self.inner.read();
         inner
             .by_name
             .values()
@@ -114,7 +109,7 @@ impl SkillRegistry {
 
     #[must_use]
     pub fn view(&self, agent: &AgentId, name: &str, full: bool) -> Option<SkillView> {
-        let inner = self.inner.read().expect("skill registry poisoned");
+        let inner = self.inner.read();
         let skill = inner.by_name.get(name)?;
         if !visible_to_agent(skill, agent) {
             return None;

@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,6 +12,7 @@ use harness_mcp::{
     SamplingRequest, SamplingResponse, SamplingUsageSnapshot, MCP_SAMPLING_BUDGET_EXCEEDED_CODE,
     MCP_SAMPLING_DENIED_CODE,
 };
+use parking_lot::Mutex;
 use serde_json::json;
 
 #[test]
@@ -287,13 +288,13 @@ struct CollectingSink {
 
 impl CollectingSink {
     fn events(&self) -> Vec<Event> {
-        self.events.lock().expect("events").clone()
+        self.events.lock().clone()
     }
 }
 
 impl McpEventSink for CollectingSink {
     fn emit(&self, event: Event) {
-        self.events.lock().expect("events").push(event);
+        self.events.lock().push(event);
     }
 }
 

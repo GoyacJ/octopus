@@ -1,18 +1,19 @@
 #![cfg(feature = "sse")]
 
-use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr};
+use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
 use futures::StreamExt;
 use harness_contracts::{McpServerId, McpServerSource};
 use harness_mcp::{
     McpChange, McpClient, McpClientAuth, McpServerSpec, SseTransport, TransportChoice,
 };
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 use tokio::{
     net::TcpListener,
-    sync::{broadcast, oneshot},
+    sync::{mpsc, oneshot},
 };
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 #[tokio::test]
 async fn sse_transport_posts_requests_and_receives_streamed_responses() {
@@ -54,7 +55,8 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
     use axum::{
         body::Bytes,
         extract::State,
-        http::{HeaderMap, StatusCode},
+        http::{header::CONNECTION, HeaderMap, StatusCode},
+        response::IntoResponse,
         response::{sse::Event, Sse},
         routing::{get, post},
         Router,
@@ -62,7 +64,7 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
 
     #[derive(Clone)]
     struct AppState {
-        events: broadcast::Sender<String>,
+        events: Arc<Mutex<Option<mpsc::UnboundedSender<String>>>>,
     }
 
     fn authorized(headers: &HeaderMap) -> bool {
@@ -76,20 +78,14 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
                 == Some("octopus")
     }
 
-    async fn wait_for_event_subscriber(state: &AppState) {
-        for _ in 0..20 {
-            if state.events.receiver_count() > 0 {
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    }
-
     async fn send_event(state: &AppState, data: String) {
-        for _ in 0..20 {
-            wait_for_event_subscriber(state).await;
-            if state.events.send(data.clone()).is_ok() {
-                return;
+        for _ in 0..50 {
+            let sender = state.events.lock().clone();
+            if let Some(sender) = sender {
+                if sender.send(data.clone()).is_ok() {
+                    return;
+                }
+                *state.events.lock() = None;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
@@ -100,7 +96,7 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
         State(state): State<AppState>,
         headers: HeaderMap,
         body: Bytes,
-    ) -> Result<StatusCode, StatusCode> {
+    ) -> Result<impl IntoResponse, StatusCode> {
         if !authorized(&headers) {
             return Err(StatusCode::UNAUTHORIZED);
         }
@@ -141,7 +137,7 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
                 "result": { "content": [{ "type": "text", "text": "sse-found" }], "isError": false }
             }),
             Some("notifications/initialized") | Some("shutdown") => {
-                return Ok(StatusCode::ACCEPTED)
+                return Ok(([(CONNECTION, "close")], StatusCode::ACCEPTED));
             }
             other => json!({
                 "jsonrpc": "2.0",
@@ -150,7 +146,7 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
             }),
         };
         send_event(&state, response.to_string()).await;
-        Ok(StatusCode::ACCEPTED)
+        Ok(([(CONNECTION, "close")], StatusCode::ACCEPTED))
     }
 
     async fn real_stream(
@@ -160,14 +156,16 @@ async fn spawn_sse_fixture() -> (SocketAddr, oneshot::Sender<()>) {
         if !authorized(&headers) {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        let stream = BroadcastStream::new(state.events.subscribe())
-            .filter_map(|data| async move { data.ok() })
-            .map(|data| Ok(Event::default().data(data)));
+        let (sender, receiver) = mpsc::unbounded_channel();
+        *state.events.lock() = Some(sender);
+        let stream =
+            UnboundedReceiverStream::new(receiver).map(|data| Ok(Event::default().data(data)));
         Ok(Sse::new(stream))
     }
 
-    let (sender, _) = broadcast::channel::<String>(32);
-    let state = AppState { events: sender };
+    let state = AppState {
+        events: Arc::new(Mutex::new(None)),
+    };
     let app = Router::new()
         .route("/mcp", post(rpc))
         .route("/mcp/events", get(real_stream))

@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
@@ -14,6 +14,7 @@ use harness_mcp::{
     McpTransport, ReconnectPolicy, TransportChoice,
 };
 use harness_tool::ToolRegistry;
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 use tokio::sync::Notify;
 
@@ -324,13 +325,13 @@ struct RecordingSink {
 
 impl RecordingSink {
     fn events(&self) -> Vec<Event> {
-        self.events.lock().expect("events lock").clone()
+        self.events.lock().clone()
     }
 }
 
 impl McpEventSink for RecordingSink {
     fn emit(&self, event: Event) {
-        self.events.lock().expect("events lock").push(event);
+        self.events.lock().push(event);
     }
 }
 
@@ -366,7 +367,6 @@ impl McpTransport for MockTransport {
         }
         self.outcomes
             .lock()
-            .expect("outcomes lock")
             .pop_front()
             .unwrap_or_else(|| Err(McpError::Connection("no mock outcome".into())))
             .map(|connection| Arc::new(connection) as Arc<dyn McpConnection>)
@@ -401,7 +401,6 @@ impl McpConnection for MockConnection {
     async fn call_tool(&self, _name: &str, _args: Value) -> Result<McpToolResult, McpError> {
         self.results
             .lock()
-            .expect("results lock")
             .pop_front()
             .unwrap_or_else(|| Ok(McpToolResult::text("ok")))
     }

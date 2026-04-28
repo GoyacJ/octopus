@@ -33,3 +33,7 @@ git diff --check
 ## Gate 结论
 
 M3 下层 core 闭环已满足进入评审条件。M4 / M5 仍需 maintainer 明确放行后再启动。
+
+## M5 替换状态
+
+M5-T15 已用 `octopus-harness-engine/tests/e2e_engine.rs` 覆盖正式 engine E2E。`crates/octopus-harness-session/tests/e2e_minimal.rs` 当前不存在，M3 `run_turn.rs` 最小闭环测试保留。

@@ -14,16 +14,33 @@ workspace = true
 
 [features]
 default = []
-replay = []
-otel = []
+replay = ["dep:futures", "dep:serde_json"]
+otel = [
+  "dep:opentelemetry",
+  "dep:opentelemetry-otlp",
+  "dep:opentelemetry_sdk",
+  "dep:tracing-opentelemetry",
+]
 prometheus = []
-redactor = []
+redactor = ["dep:regex"]
 
 [dependencies]
 octopus-harness-contracts = { path = "../octopus-harness-contracts" }
 octopus-harness-journal = { path = "../octopus-harness-journal" }
 async-trait = { workspace = true }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+parking_lot = "0.12"
+regex = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+octopus-harness-journal = { path = "../octopus-harness-journal", features = ["jsonl", "sqlite", "in-memory"] }

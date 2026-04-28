@@ -73,6 +73,9 @@ pub struct PluginCapabilities {
     pub hooks: Vec<HookManifestEntry>,
     pub mcp_servers: Vec<McpManifestEntry>,
     pub memory_provider: Option<MemoryProviderManifestEntry>,
+    /// M5 只声明并占用 plugin 本地 coordinator strategy slot。
+    /// 真实 team / subagent bridge 归 M6。
+    pub coordinator_strategy: Option<CoordinatorStrategyManifestEntry>,
     pub configuration_schema: Option<Value>,
 }
 
@@ -230,6 +233,7 @@ pub enum CapabilitySlot {
 **类型层与运行期双向校验**：
 
 - 插件 manifest 声明 `tools: [a, b]` 但 `hooks: []` → `ctx.hooks == None`；插件没有路径注册 hook
+- 插件 manifest 声明 `coordinator_strategy` → `ctx.coordinator == Some(...)`；未声明则为 `None`
 - 插件试图注册未在 manifest 中声明的工具 `c` → `RegistrationError::UndeclaredTool { name: "c" }` 直接拒绝
 - Activation 完成后，Registry 校验 `registered_* ⊆ declared_*`（注册多于声明拒绝），`pending_declared()` 非空发 Warning（声明而未实现）
 - Plugin deactivate 时，每个 handle 内部记录的"由本插件注册的能力"自动注销，避免"漏删"（HER-035）
@@ -325,19 +329,21 @@ pub trait PluginRuntimeLoader: Send + Sync + 'static {
 
 | Loader | feature 门 | 用途 |
 |---|---|---|
-| `FileManifestLoader` | 默认开启 | 扫 `data/plugins/*/plugin.yaml`、`~/.octopus/plugins/*/plugin.yaml`、`.octopus/plugins/*/plugin.yaml`；只读 YAML/JSON |
-| `CargoExtensionManifestLoader` | 默认开启 | 在 `$PATH` 中找 `octopus-plugin-*`；解析 binary **冷启动冷退出**的元数据子命令输出（如 `--harness-manifest`）。**严禁**调用插件主流程；任何 IPC 形态都视为破坏 §3.1 |
+| `FileManifestLoader` | 默认开启 | 扫 `data/plugins/*/plugin.{json,yaml,yml}`、`~/.octopus/plugins/*/plugin.{json,yaml,yml}`、`.octopus/plugins/*/plugin.{json,yaml,yml}`；只读 YAML/JSON |
+| `InlineManifestLoader` | 测试 / helper | 只返回显式注入的 `ManifestRecord`，不读文件、不执行插件代码 |
+| `CargoExtensionManifestLoader` | 后续卡 | 在 `$PATH` 中找 `octopus-plugin-*`；解析 binary **冷启动冷退出**的元数据子命令输出（如 `--harness-manifest`）。**严禁**调用插件主流程；任何 IPC 形态都视为破坏 §3.1 |
 | `StaticLinkRuntimeLoader` | 永远在 | 编译期链接：从 SDK 内部工厂注册表中查 `name@version` |
-| `DylibRuntimeLoader` | `dynamic-load` | `dlopen` 加载 `.so/.dylib/.dll`，按 ABI-stable 入口取实例 |
-| `CargoExtensionRuntimeLoader` | `dynamic-load` | 派生子进程，按 stdio JSON-RPC 协议代理 `Plugin` trait 调用 |
+| `DylibRuntimeLoader` | `dynamic-load` | M5-T08 仅提供 API / error boundary；真实 `dlopen` 需另行完成 unsafe 治理修订 |
+| `CargoExtensionRuntimeLoader` | 后续卡 | 派生子进程，按 stdio JSON-RPC 协议代理 `Plugin` trait 调用 |
 | `WasmRuntimeLoader` | `wasm-runtime`（实验） | wasmtime 加载 WASI module |
 
 > CargoExtension 元数据子命令的"冷启动冷退出"边界由 `CargoExtensionManifestLoader` 实现独立测试覆盖：禁止在元数据子命令中开 socket / 写非 stdout / 启子进程；超时（默认 1s）即视为破坏约束并落 `ManifestValidationFailedEvent::CargoExtensionMetadataMalformed`。
 
 #### 3.2.2 与 Builder 的装配
 
-- 业务方未注入 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader + CargoExtensionManifestLoader`
-- 业务方未注入 RuntimeLoader 时，SDK 默认绑定 `StaticLinkRuntimeLoader`；feature flag 开启的 loader 自动加入
+- 业务方未注入 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader`
+- 业务方未注入 RuntimeLoader 时，SDK 默认绑定 `StaticLinkRuntimeLoader`
+- `dynamic-load` feature 在 M5-T08 只暴露 `DylibRuntimeLoader` 占位边界；不得绕过全仓 `unsafe_code = forbid`
 - 多个 RuntimeLoader 都 `can_load` 时按声明顺序取第一个；全部 false 抛 `PluginError::ActivateFailed("no runtime loader can handle origin: ...")`
 - Builder 提供 `with_manifest_loader / with_runtime_loader` 注入自定义实现（详见 §14）
 
@@ -542,7 +548,7 @@ pub struct PluginName(String);
 | Slot | 多重性 | 判定准则 |
 |---|---|---|
 | `MemoryProvider` | 独占 | 同时存在两个 MemoryProvider 会导致语义不一致（双写、双读、跨 provider 召回不可解释）。对齐 OC-14 `plugins.slots.memory` |
-| `CoordinatorStrategy` | 独占 | 同 Session 必须只有一种 Coordinator 策略，否则 Subagent 路由不可决定 |
+| `CoordinatorStrategy` | 独占 | 仅当 manifest 声明 `capabilities.coordinator_strategy` 时可占用；M5 只登记 plugin 本地策略，M6 再桥接 Team |
 | `CustomToolset(name)` | 同名独占、不同名可并存 | Toolset 是命名集合，命名相同视为定义冲突 |
 | Tool / Hook / Skill / MCP（非槽位类） | 可叠加 | 由各自 Registry 管理同名裁决（详见 `harness-tool §...` 同名裁决矩阵） |
 
@@ -748,8 +754,8 @@ pub enum EnforcementLevel {
 ```toml
 [features]
 default = []
-dynamic-load = ["dep:libloading"]
-manifest-sign = ["dep:ed25519-dalek"]
+dynamic-load = []
+manifest-sign = []
 wasm-runtime = ["dep:wasmtime"]   # 实验
 ```
 
@@ -839,8 +845,8 @@ pub enum ManifestLoaderError {
 pub enum RuntimeLoaderError {
     #[error("no runtime loader can handle origin: {0:?}")]
     NoMatchingLoader(ManifestOrigin),
-    #[error("dlopen failed: {0}")]
-    Dlopen(String),
+    #[error("runtime loader unsupported: {0}")]
+    Unsupported(String),
     #[error("subprocess spawn failed: {0}")]
     SubprocessSpawn(String),
     #[error("wasm instantiate failed: {0}")]
@@ -897,7 +903,7 @@ let registry = PluginRegistry::builder()
         policy: PluginAdmissionPolicy::AllowAll,
         entries: HashMap::new(),
     })
-    .build();
+    .build()?;
 
 let discovered = registry.discover().await?;
 for plugin in &discovered {
@@ -938,7 +944,7 @@ let registry = PluginRegistry::builder()
         policy: PluginAdmissionPolicy::Allow(allowed_plugin_names()),
         entries: per_plugin_entries(),
     })
-    .build();
+    .build()?;
 
 // 订阅 SignerStore 变更：撤销发生时刷新 discovered，但不强制 deactivate Activated 插件
 let mut events = registry.subscribe_signer_events();
@@ -953,9 +959,9 @@ tokio::spawn(async move {
 
 ### 14.3 互斥规则
 
-- `with_signer_store` 与 `with_trusted_signer` 互斥：先注入 store 后再调 `with_trusted_signer` 会让 builder `panic` 或在 `build()` 期返回 `BuilderError`
+- `with_signer_store` 与 `with_trusted_signer` 互斥：先注入 store 后再调 `with_trusted_signer` 会在 `build()` 期返回 builder error
 - 同一 `PluginRegistryBuilder` 内 `with_manifest_loader` / `with_runtime_loader` 可多次调用；声明顺序即询问顺序
-- 业务方未注入任何 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader + CargoExtensionManifestLoader`
+- 业务方未注入任何 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader`
 
 ## 15. 测试策略
 
@@ -967,7 +973,7 @@ tokio::spawn(async move {
 | 信任域 | User-controlled 注册破坏性 Tool / Exec Hook / 远端 HTTP MCP 被拒 |
 | Discovery 隔离 | 验证 Discovery 阶段无任何子进程 / dlopen / 网络调用（通过 `MockSandboxProbe` 注入断言） |
 | Loader 二分 | 自定义 ManifestLoader 不能产出 `Arc<dyn Plugin>`（类型层断言）；自定义 RuntimeLoader 仅在 `activate` 路径被调用（启动期断言计数器为 0） |
-| CapabilityHandle 越权 | 注册未声明工具 / hook / mcp / skill → `RegistrationError::Undeclared*`；声明 tools 但 ctx.hooks 必须为 None |
+| CapabilityHandle 越权 | 注册未声明工具 / hook / mcp / skill → `RegistrationError::Undeclared*`；声明 tools 但 ctx.hooks 必须为 None；声明 coordinator strategy 时 ctx.coordinator 必须为 Some |
 | Signer 启用窗口 | timestamp 早于 `activated_at` 或 ≥ `retired_at` → `SignatureInvalid("timestamp out of activation window")` |
 | Signer 撤销 | `revoked_at = NOW` 后下次 Discovery 立即落 `SignerRevoked`；已 Activated 的不强制 deactivate（行为日志） |
 | Signer 轮换 | 老 + 新 signer 并行；老 signer 签的存量插件继续可用，新签必须用新 signer |
@@ -1022,7 +1028,7 @@ tokio::spawn(async move {
 | 把 `PluginRejected` 视为 Warning 处理 | 拒绝是终态，业务层应触发告警而非简单忽略 |
 | 复用 `IntegritySigner`（ADR-0013）的 HMAC key 来签 plugin manifest | ADR-0013 是本地权限对称签名；Manifest 签名是上游非对称签名（ADR-0014）；混用会让密钥泄露 blast radius 越界 |
 | 撤销 signer 时强制 `deactivate` 所有 Activated 插件 | ADR-0014 §2.5 明确：撤销不强制下线，避免线上抖动；下次 Discovery 重判 |
-| 把 `with_signer_store` 与 `with_trusted_signer` 同时调用 | Builder 互斥规则（§14.3）；`build()` 期返回 `BuilderError` |
+| 把 `with_signer_store` 与 `with_trusted_signer` 同时调用 | Builder 互斥规则（§14.3）；`build()` 期返回 builder error |
 
 ## 18. 相关
 

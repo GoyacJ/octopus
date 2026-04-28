@@ -77,11 +77,12 @@ pub trait PluginRuntimeLoader: Send + Sync + 'static {
 
 | Loader | 实现 | 用途 |
 |---|---|---|
-| `FileManifestLoader` | 默认 ManifestLoader | 扫 `data/plugins/*/plugin.yaml` / `~/.octopus/plugins/*/plugin.yaml` / `.octopus/plugins/*/plugin.yaml`；只读 YAML/JSON |
-| `CargoExtensionManifestLoader` | 默认 ManifestLoader | 在 `$PATH` 中找 `octopus-plugin-*` 可执行；解析 binary 内嵌 metadata（如 `cargo metadata` JSON 或 `--manifest` 子命令的**冷启动输出**），但**不**调用任何插件主流程 |
+| `FileManifestLoader` | 默认 ManifestLoader | 扫 `data/plugins/*/plugin.{json,yaml,yml}` / `~/.octopus/plugins/*/plugin.{json,yaml,yml}` / `.octopus/plugins/*/plugin.{json,yaml,yml}`；只读 YAML/JSON |
+| `InlineManifestLoader` | 测试 / helper ManifestLoader | 只返回显式注入的 `ManifestRecord`，不读文件、不执行插件代码 |
+| `CargoExtensionManifestLoader` | 后续卡 | 在 `$PATH` 中找 `octopus-plugin-*` 可执行；解析 binary 内嵌 metadata（如 `cargo metadata` JSON 或 `--manifest` 子命令的**冷启动输出**），但**不**调用任何插件主流程 |
 | `StaticLinkRuntimeLoader` | 默认 RuntimeLoader | 编译期链接：`Plugin` 是已存在于二进制内的 type；通过 manifest `name@version` 找到注册过的工厂函数 |
-| `DylibRuntimeLoader` | feature `dynamic-load` | `dlopen` 加载 `.so/.dylib/.dll`，通过 ABI-stable 入口取 `Plugin` 实例 |
-| `CargoExtensionRuntimeLoader` | feature `dynamic-load` | 派生子进程，按 stdio JSON-RPC 协议代理 Plugin trait 调用 |
+| `DylibRuntimeLoader` | feature `dynamic-load` | M5-T08 仅提供 API / error boundary；真实 `dlopen` 需另行完成 unsafe 治理修订 |
+| `CargoExtensionRuntimeLoader` | 后续卡 | 派生子进程，按 stdio JSON-RPC 协议代理 Plugin trait 调用 |
 | `WasmRuntimeLoader` | feature `wasm-runtime`（实验） | wasmtime 加载 WASI module，沙箱内调用 |
 
 > CargoExtensionManifestLoader 的"解析 binary 内嵌 metadata"是**冷启动冷退出**的元数据子命令调用，不进入插件主流程；这一点必须在 SPEC 显式说明（详见落地清单）。如未来认为此调用形态仍然违反 §3.1 硬约束，可将 cargo extension 的 manifest 改为"独立 `plugin.yaml` 与可执行同目录共存"形态——本 ADR 把决定权留给后续 follow-up，但默认实现的边界已锁死。
@@ -96,16 +97,16 @@ impl PluginRegistryBuilder {
     /// 注册 RuntimeLoader（可多个；activate 时按声明顺序询问 can_load）
     pub fn with_runtime_loader(self, loader: Arc<dyn PluginRuntimeLoader>) -> Self;
 
-    /// 默认装配：FileManifestLoader + CargoExtensionManifestLoader
-    ///       + StaticLinkRuntimeLoader（永远在）+ Feature-gated 其他 RuntimeLoader
+    /// M5-T08 默认装配：FileManifestLoader + StaticLinkRuntimeLoader
     pub fn build(self) -> PluginRegistry;
 }
 ```
 
 **装配规则**：
 
-- 业务方未注入任何 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader` + `CargoExtensionManifestLoader`（与现有 §3 四源发现等价）
-- 业务方未注入 RuntimeLoader 时，SDK 默认绑定 `StaticLinkRuntimeLoader`；feature flag 开启的 loader 也会自动加入
+- 业务方未注入任何 ManifestLoader 时，SDK 自动绑定 `FileManifestLoader`
+- 业务方未注入 RuntimeLoader 时，SDK 默认绑定 `StaticLinkRuntimeLoader`
+- `dynamic-load` feature 在 M5-T08 只暴露 `DylibRuntimeLoader` 占位边界；不得绕过全仓 `unsafe_code = forbid`
 - 多个 RuntimeLoader 都 `can_load` 时，按声明顺序取第一个；若全部返回 false，`PluginError::ActivateFailed("no runtime loader can handle origin: ...")`
 
 ### 2.4 Capability-Scoped ActivationContext

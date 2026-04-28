@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -17,8 +17,11 @@ use harness_mcp::{
     McpToolDescriptor, McpToolFilter, McpToolGlob, McpToolResult, ReconnectPolicy, SamplingPolicy,
     StdioEnv, TransportChoice,
 };
-use harness_permission::{PermissionBroker, PermissionContext, PermissionRequest};
-use harness_tool::{InterruptToken, ToolContext, ToolEvent, ToolRegistry};
+use harness_tool::{
+    InterruptToken, PermissionBroker, PermissionContext, PermissionRequest, ToolContext, ToolEvent,
+    ToolRegistry,
+};
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 #[test]
@@ -171,7 +174,6 @@ async fn registry_injects_mcp_tool_wrapper_and_executes_mock_connection() {
     connection
         .results
         .lock()
-        .expect("results lock")
         .push_back(McpToolResult::text("sent"));
 
     let mcp_registry = McpRegistry::new();
@@ -278,7 +280,6 @@ impl McpConnection for MockConnection {
     ) -> Result<McpToolResult, harness_mcp::McpError> {
         self.results
             .lock()
-            .expect("results lock")
             .pop_front()
             .ok_or_else(|| harness_mcp::McpError::Protocol("missing mock result".into()))
     }

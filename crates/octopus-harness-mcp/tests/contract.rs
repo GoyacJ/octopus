@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     convert::Infallible,
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -12,6 +12,7 @@ use harness_mcp::{
     InProcessTransport, ListChangedEvent, McpChange, McpClient, McpConnection, McpError,
     McpServerSpec, McpToolDescriptor, McpToolResult, TransportChoice,
 };
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 #[cfg(feature = "http")]
@@ -325,7 +326,6 @@ impl McpConnection for MockConnection {
     async fn call_tool(&self, _name: &str, _args: Value) -> Result<McpToolResult, McpError> {
         self.results
             .lock()
-            .expect("results")
             .pop_front()
             .ok_or_else(|| McpError::Protocol("missing result".to_owned()))
     }
@@ -346,42 +346,38 @@ async fn spawn_sse_contract_fixture() -> (SocketAddr, tokio::sync::oneshot::Send
     use axum::{
         body::Bytes,
         extract::State,
+        http::{header::CONNECTION, StatusCode},
+        response::IntoResponse,
         response::{sse::Event, Sse},
         routing::{get, post},
         Router,
     };
     use tokio::{
         net::{TcpListener, TcpStream},
-        sync::{broadcast, oneshot},
+        sync::{mpsc, oneshot},
     };
-    use tokio_stream::wrappers::BroadcastStream;
+    use tokio_stream::wrappers::UnboundedReceiverStream;
 
     #[derive(Clone)]
     struct AppState {
-        events: broadcast::Sender<String>,
-    }
-
-    async fn wait_for_event_subscriber(state: &AppState) {
-        for _ in 0..20 {
-            if state.events.receiver_count() > 0 {
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+        events: Arc<Mutex<Option<mpsc::UnboundedSender<String>>>>,
     }
 
     async fn send_event(state: &AppState, data: String) {
-        for _ in 0..20 {
-            wait_for_event_subscriber(state).await;
-            if state.events.send(data.clone()).is_ok() {
-                return;
+        for _ in 0..50 {
+            let sender = state.events.lock().clone();
+            if let Some(sender) = sender {
+                if sender.send(data.clone()).is_ok() {
+                    return;
+                }
+                *state.events.lock() = None;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         panic!("send sse event");
     }
 
-    async fn rpc(State(state): State<AppState>, body: Bytes) -> axum::http::StatusCode {
+    async fn rpc(State(state): State<AppState>, body: Bytes) -> impl IntoResponse {
         let request: Value = serde_json::from_slice(&body).expect("json");
         let response = match request.get("method").and_then(Value::as_str) {
             Some("initialize") => Some(json!({
@@ -423,21 +419,20 @@ async fn spawn_sse_contract_fixture() -> (SocketAddr, tokio::sync::oneshot::Send
         if let Some(response) = response {
             send_event(&state, response.to_string()).await;
         }
-        axum::http::StatusCode::ACCEPTED
+        ([(CONNECTION, "close")], StatusCode::ACCEPTED)
     }
 
     async fn events(
         State(state): State<AppState>,
     ) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
-        Sse::new(
-            BroadcastStream::new(state.events.subscribe())
-                .filter_map(|data| async move { data.ok() })
-                .map(|data| Ok(Event::default().data(data))),
-        )
+        let (sender, receiver) = mpsc::unbounded_channel();
+        *state.events.lock() = Some(sender);
+        Sse::new(UnboundedReceiverStream::new(receiver).map(|data| Ok(Event::default().data(data))))
     }
 
-    let (sender, _) = broadcast::channel::<String>(32);
-    let state = AppState { events: sender };
+    let state = AppState {
+        events: Arc::new(Mutex::new(None)),
+    };
     let app = Router::new()
         .route("/mcp", post(rpc))
         .route("/mcp/events", get(events))
