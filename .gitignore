@@ -28,3 +28,7 @@ crates/rusty-claude-cli/.claw/
 /tmp/
 !/contracts/openapi/octopus.openapi.yaml
 docs/references/
+
+# Local build artifacts
+/apps/octopus-website.zip
+/apps/desktop/src-tauri/bin/octopus-desktop-aarch64-apple-darwin
